@@ -69,4 +69,5 @@ Implementation notes for future work:
 
 - Backend uses CommonJS (`require`), frontend uses ES modules (Vite default)
 - API routes are prefixed with `/api/`
+- Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
 - No features or database tables exist yet — only the scaffold, Supabase connection, and this documentation. Check with the user before introducing new architectural patterns.
