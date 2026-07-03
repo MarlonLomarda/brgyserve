@@ -85,3 +85,8 @@ Implementation notes for future work:
 - Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
 - Database schema lives in `docs/brgyserve-database-schema.md` (source of truth) and is applied via numbered SQL files in `backend/migrations/`, run manually in the Supabase SQL Editor. Keep the doc and migrations in sync.
 - Implemented so far: schema (migrations 001–002) and resident registration with Secretary-approved linking/activation. Check with the user before introducing new architectural patterns.
+
+## Pre-deployment TODO
+
+- Enable Row Level Security (RLS) and write per-role access policies for all tables (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`) before deployment — tables are currently UNRESTRICTED.
+- Delete or rotate the test `secretary1` seed account before real use; its password was shared in plaintext during development.
