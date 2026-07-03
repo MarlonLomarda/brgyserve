@@ -4,8 +4,16 @@ const express = require('express');
 const cors = require('cors');
 const supabase = require('./config/supabase');
 
+const authRoutes = require('./routes/auth');
+const secretaryRoutes = require('./routes/secretary');
+const residentRoutes = require('./routes/residents');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+if (!process.env.JWT_SECRET) {
+  throw new Error('Missing JWT_SECRET. Set it in backend/.env (see .env.example).');
+}
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
@@ -17,6 +25,19 @@ app.get('/api/health', (req, res) => {
     supabase: supabase ? 'client initialized' : 'not connected',
     timestamp: new Date().toISOString(),
   });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/secretary', secretaryRoutes);
+app.use('/api/residents', residentRoutes);
+
+// Express 5 forwards rejected async handlers here automatically
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {

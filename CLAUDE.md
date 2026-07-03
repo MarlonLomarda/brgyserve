@@ -18,7 +18,10 @@ brgyserve/
 ├── backend/           # Express API. Dev server: npm run dev (http://localhost:5000)
 │   ├── src/
 │   │   ├── server.js          # Express entry point
-│   │   └── config/supabase.js # Supabase client (reads keys from .env)
+│   │   ├── config/supabase.js # Supabase client (reads keys from .env)
+│   │   ├── middleware/auth.js # JWT authentication + role guard
+│   │   └── routes/            # auth.js, secretary.js, residents.js
+│   ├── migrations/            # SQL migrations - applied manually via Supabase SQL Editor
 │   ├── .env                   # Real credentials - gitignored, never commit
 │   └── .env.example           # Template documenting required env vars
 └── CLAUDE.md
@@ -34,13 +37,23 @@ brgyserve/
 
 Supabase credentials live in `backend/.env` (see `backend/.env.example` for the required keys). **Never hardcode keys in source files and never commit `.env`.** The service role key bypasses Row Level Security and must only ever be used server-side.
 
+## Auth & Account Approval
+
+- Custom JWT auth (`jsonwebtoken` + `bcryptjs` hashing) against the `users` table — Supabase Auth is NOT used. Requires `JWT_SECRET` (and optional `JWT_EXPIRES_IN`) in `backend/.env`.
+- Resident self-registration (`POST /api/auth/register`) creates a **pending** account: `is_active = false`, `profiles.resident_id = null`. Pending accounts cannot log in.
+- Secretary review (role `secretary`, routes under `/api/secretary/`): list pending accounts, link each to an existing `resident_records` row or create-and-link a new one, then activate. Activation requires a linked resident record.
+- Active residents view their own record via `GET /api/residents/me` through the `profiles.resident_id` link.
+- `authenticate` middleware re-reads the user per request, so deactivating an account locks it out immediately.
+
 ## User Roles (5)
 
-1. **Punong Barangay** — barangay captain; approves/signs documents, oversees operations, views reports
-2. **Barangay Secretary (System Administrator)** — manages the system, user accounts, resident records, and document processing
-3. **Barangay Treasurer** — handles payments, transactions, and financial records
-4. **Barangay Staff** — assists with day-to-day processing of requests and records
-5. **Barangay Resident** — requests documents, books facilities, tracks request status
+Role strings in code and in the `users.role` column always use the lowercase canonical values below, defined in `docs/brgyserve-use-cases.md`. Always say "Punong Barangay", never "Barangay Captain".
+
+1. **Punong Barangay** (`punong_barangay`) — highest approving authority; approves/signs documents, views reports
+2. **Barangay Secretary (System Administrator)** (`secretary`) — manages the system, user accounts, resident records, and document processing
+3. **Barangay Treasurer** (`treasurer`) — handles payments, transactions, and financial records
+4. **Barangay Staff** (`staff`) — assists with day-to-day processing of requests and records
+5. **Barangay Resident** (`resident`) — requests documents, books facilities, tracks request status
 
 ## Main Modules
 
@@ -70,4 +83,5 @@ Implementation notes for future work:
 - Backend uses CommonJS (`require`), frontend uses ES modules (Vite default)
 - API routes are prefixed with `/api/`
 - Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
-- No features or database tables exist yet — only the scaffold, Supabase connection, and this documentation. Check with the user before introducing new architectural patterns.
+- Database schema lives in `docs/brgyserve-database-schema.md` (source of truth) and is applied via numbered SQL files in `backend/migrations/`, run manually in the Supabase SQL Editor. Keep the doc and migrations in sync.
+- Implemented so far: schema (migrations 001–002) and resident registration with Secretary-approved linking/activation. Check with the user before introducing new architectural patterns.
