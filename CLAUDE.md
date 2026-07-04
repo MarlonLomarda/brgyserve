@@ -15,6 +15,12 @@ BrgyServe is a web-based document request and tracking system for **Barangay Ubu
 ```
 brgyserve/
 ├── frontend/          # React app (Vite). Dev server: npm run dev (http://localhost:5173)
+│   ├── src/
+│   │   ├── api/client.js      # fetch wrapper; VITE_API_URL base + Bearer token
+│   │   ├── auth/              # AuthContext.jsx (login/logout, localStorage), roles.js (role → route)
+│   │   ├── components/        # ProtectedRoute.jsx
+│   │   └── pages/             # LoginPage, RegisterPage, RoleLandingPage
+│   └── .env.example           # VITE_API_URL (optional, defaults to localhost:5000)
 ├── backend/           # Express API. Dev server: npm run dev (http://localhost:5000)
 │   ├── src/
 │   │   ├── server.js          # Express entry point
@@ -84,7 +90,7 @@ Implementation notes for future work:
 - API routes are prefixed with `/api/`
 - Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
 - Database schema lives in `docs/brgyserve-database-schema.md` (source of truth) and is applied via numbered SQL files in `backend/migrations/`, run manually in the Supabase SQL Editor. Keep the doc and migrations in sync.
-- Implemented so far: schema (migrations 001–002) and resident registration with Secretary-approved linking/activation. Check with the user before introducing new architectural patterns.
+- Implemented so far: schema (migrations 001–002), resident registration with Secretary-approved linking/activation, and the frontend auth slice (login/registration pages, auth context with localStorage persistence, role-based routing to placeholder landing pages). Check with the user before introducing new architectural patterns.
 
 ## Pre-deployment TODO
 
