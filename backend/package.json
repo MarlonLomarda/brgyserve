@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "match:test": "node scripts/test-name-matching.js"
   },
   "keywords": [
     "barangay",
@@ -21,6 +22,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jaro-winkler": "^0.2.8",
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {

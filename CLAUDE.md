@@ -80,9 +80,11 @@ The capstone's research component detects **duplicate / near-duplicate resident 
 
 **Evaluation:** the component is evaluated with **precision, recall, and F1-score** against a labeled set of known duplicate/non-duplicate pairs.
 
-Implementation notes for future work:
-- `pg_trgm` must be enabled in Supabase: `create extension if not exists pg_trgm;`
-- Blocking threshold (trigram `similarity()`) and final Jaro-Winkler threshold are tunable parameters; the evaluation should report metrics across thresholds.
+Implementation status:
+- Engine implemented in `backend/src/services/nameMatching.js` (`findMatches(first, last, options)`); tunable defaults live in its exported `DEFAULTS` (trigramThreshold 0.3, scoreThreshold 0.85, maxCandidates 50). Do not hardcode thresholds elsewhere — the evaluation sweeps them.
+- Stage 1 runs as the `match_resident_candidates` SQL function (migration 003) called via RPC; it uses `set_limit()` + the `%` operator so the GIN indexes are used with a per-call threshold. Jaro-Winkler comes from the `jaro-winkler` npm package and scores the normalized `first last` string (middle names are stored separately and excluded from scoring).
+- Test harness: `npm run match:test` (backend); seed test data with planted duplicate pairs in `backend/seeds/test_resident_records.sql` (the six planted pairs are the basis for the future labeled evaluation set).
+- Evaluation (precision/recall/F1 across threshold sweeps) not yet built.
 
 ## Conventions
 
