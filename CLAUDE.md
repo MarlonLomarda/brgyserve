@@ -90,7 +90,7 @@ Implementation notes for future work:
 - API routes are prefixed with `/api/`
 - Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
 - Database schema lives in `docs/brgyserve-database-schema.md` (source of truth) and is applied via numbered SQL files in `backend/migrations/`, run manually in the Supabase SQL Editor. Keep the doc and migrations in sync.
-- Implemented so far: schema (migrations 001–002), resident registration with Secretary-approved linking/activation, and the frontend auth slice (login/registration pages, auth context with localStorage persistence, role-based routing to placeholder landing pages). Check with the user before introducing new architectural patterns.
+- Implemented so far: schema (migrations 001–002), resident registration with Secretary-approved linking/activation, the frontend auth slice (login/registration pages, auth context with localStorage persistence, role-based routing), and the Secretary review screen on `/secretary` (pending list, link/create-and-link, activate). Other roles still have placeholder landing pages. Check with the user before introducing new architectural patterns.
 
 ## Pre-deployment TODO
 

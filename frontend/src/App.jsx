@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import RoleLandingPage from './pages/RoleLandingPage';
+import SecretaryReviewPage from './pages/SecretaryReviewPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -21,7 +22,7 @@ export default function App() {
           path={path}
           element={
             <ProtectedRoute role={role}>
-              <RoleLandingPage />
+              {role === 'secretary' ? <SecretaryReviewPage /> : <RoleLandingPage />}
             </ProtectedRoute>
           }
         />
