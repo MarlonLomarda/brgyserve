@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
+const { authenticate, allowPendingPasswordChange } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -98,7 +99,7 @@ router.post('/login', async (req, res) => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('user_id, username, password_hash, email, role, is_active')
+    .select('user_id, username, password_hash, email, role, is_active, must_change_password')
     .eq('username', username)
     .maybeSingle();
   if (error) {
@@ -122,8 +123,52 @@ router.post('/login', async (req, res) => {
 
   res.json({
     token,
-    user: { user_id: user.user_id, username: user.username, email: user.email, role: user.role },
+    user: {
+      user_id: user.user_id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      must_change_password: user.must_change_password,
+    },
   });
+});
+
+// POST /api/auth/change-password — any authenticated user.
+// allowPendingPasswordChange keeps this route reachable for users still on a
+// temporary password (authenticate blocks them everywhere else).
+router.post('/change-password', allowPendingPasswordChange, authenticate, async (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  if (String(new_password).length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('user_id, password_hash')
+    .eq('user_id', req.user.user_id)
+    .single();
+  if (error || !user) {
+    throw new Error(`Failed to load user for password change: ${error?.message || 'not found'}`);
+  }
+
+  const valid = await bcrypt.compare(String(current_password), user.password_hash);
+  if (!valid) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  const password_hash = await bcrypt.hash(String(new_password), 10);
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ password_hash, must_change_password: false })
+    .eq('user_id', req.user.user_id);
+  if (updateError) {
+    throw new Error(`Failed to update password: ${updateError.message}`);
+  }
+
+  res.json({ message: 'Password changed successfully' });
 });
 
 module.exports = router;

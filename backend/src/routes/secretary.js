@@ -1,7 +1,15 @@
+const crypto = require('crypto');
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { findMatches } = require('../services/nameMatching');
+
+// Staff-type roles the Secretary may create accounts for (per the
+// "Authentication & account rules" in docs/brgyserve-use-cases.md, this
+// includes another secretary — succession is a real need). Residents
+// self-register and are deliberately NOT creatable here.
+const STAFF_ROLES = ['secretary', 'punong_barangay', 'treasurer', 'staff'];
 
 const router = express.Router();
 
@@ -9,6 +17,83 @@ router.use(authenticate, requireRole('secretary'));
 
 const PROFILE_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, phone_number';
+
+// POST /api/secretary/accounts — create a staff-type account.
+// The generated temporary password is returned ONCE so the Secretary can hand
+// it over; must_change_password forces the user to replace it on first login.
+router.post('/accounts', async (req, res) => {
+  const {
+    username, email, role,
+    first_name, middle_name, last_name, suffix, phone_number,
+  } = req.body || {};
+
+  const required = { username, email, role, first_name, last_name };
+  const missing = Object.entries(required)
+    .filter(([, v]) => !v || String(v).trim() === '')
+    .map(([k]) => k);
+  if (missing.length) {
+    return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+  }
+  if (!STAFF_ROLES.includes(role)) {
+    return res.status(400).json({
+      error: `role must be one of: ${STAFF_ROLES.join(', ')} (residents self-register)`,
+    });
+  }
+
+  const { data: existing, error: lookupError } = await supabase
+    .from('users')
+    .select('user_id')
+    .eq('username', username)
+    .maybeSingle();
+  if (lookupError) {
+    throw new Error(`Username lookup failed: ${lookupError.message}`);
+  }
+  if (existing) {
+    return res.status(409).json({ error: 'Username is already taken' });
+  }
+
+  const temporaryPassword = `Temp-${crypto.randomBytes(9).toString('base64url')}`;
+  const password_hash = await bcrypt.hash(temporaryPassword, 10);
+
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .insert({
+      username,
+      password_hash,
+      email,
+      email_verified: false,
+      role,
+      must_change_password: true, // forced change on first login
+      is_active: true,            // staff accounts can log in immediately
+    })
+    .select('user_id, username, email, role')
+    .single();
+  if (userError) {
+    if (userError.code === '23505') {
+      return res.status(409).json({ error: 'Username is already taken' });
+    }
+    throw new Error(`Failed to create account: ${userError.message}`);
+  }
+
+  const { error: profileError } = await supabase.from('profiles').insert({
+    user_id: user.user_id,
+    first_name,
+    middle_name: middle_name || null,
+    last_name,
+    suffix: suffix || null,
+    phone_number: phone_number || null,
+  });
+  if (profileError) {
+    await supabase.from('users').delete().eq('user_id', user.user_id);
+    throw new Error(`Failed to create profile: ${profileError.message}`);
+  }
+
+  res.status(201).json({
+    message: 'Account created. Share the temporary password securely; the user must change it on first login.',
+    user,
+    temporary_password: temporaryPassword,
+  });
+});
 
 async function loadResidentAccount(userId) {
   const { data, error } = await supabase

@@ -1,6 +1,122 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { ROLE_LABELS, STAFF_ROLES } from '../auth/roles';
+
+const EMPTY_ACCOUNT_FORM = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  username: '',
+  role: 'staff',
+};
+
+function CreateAccountSection() {
+  const { authFetch } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_ACCOUNT_FORM);
+  const [error, setError] = useState('');
+  const [created, setCreated] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      const data = await authFetch('/secretary/accounts', { method: 'POST', body: form });
+      setCreated(data);
+      setForm(EMPTY_ACCOUNT_FORM);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-card section-card">
+      <div className="pending-head">
+        <div>
+          <h3>Staff accounts</h3>
+          <p className="muted">
+            Create accounts for barangay officials — residents register themselves.
+          </p>
+        </div>
+        <button className="btn secondary" onClick={() => { setOpen(!open); setCreated(null); }}>
+          {open ? 'Close' : 'New staff account'}
+        </button>
+      </div>
+
+      {open && created && (
+        <div className="created-panel">
+          <div className="alert success">{created.message}</div>
+          <dl className="info-grid">
+            <div>
+              <dt>Username</dt>
+              <dd><code>{created.user.username}</code></dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd>{ROLE_LABELS[created.user.role] || created.user.role}</dd>
+            </div>
+            <div className="span-2">
+              <dt>Temporary password (shown only once)</dt>
+              <dd><code className="temp-pass">{created.temporary_password}</code></dd>
+            </div>
+          </dl>
+          <div className="actions">
+            <button className="btn" onClick={() => setCreated(null)}>
+              Create another
+            </button>
+          </div>
+        </div>
+      )}
+
+      {open && !created && (
+        <form onSubmit={handleSubmit} className="account-form">
+          {error && <div className="alert error">{error}</div>}
+          <div className="grid-2">
+            <label>
+              First name
+              <input name="first_name" value={form.first_name} onChange={handleChange} required />
+            </label>
+            <label>
+              Last name
+              <input name="last_name" value={form.last_name} onChange={handleChange} required />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" value={form.email} onChange={handleChange} required />
+            </label>
+            <label>
+              Username
+              <input name="username" value={form.username} onChange={handleChange} required />
+            </label>
+          </div>
+          <label>
+            Role
+            <select name="role" value={form.role} onChange={handleChange}>
+              {STAFF_ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+              ))}
+            </select>
+          </label>
+          <div className="actions">
+            <button className="btn" type="submit" disabled={busy}>
+              {busy ? 'Creating…' : 'Create account'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
 function fullName(p) {
   const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
@@ -227,7 +343,7 @@ export default function SecretaryReviewPage() {
       <header className="dash-header">
         <div>
           <h1>BrgyServe — Secretary</h1>
-          <p className="muted">Pending resident account review</p>
+          <p className="muted">Manage accounts and review pending residents</p>
         </div>
         <div className="dash-user">
           <span className="muted">@{user.username}</span>
@@ -238,6 +354,8 @@ export default function SecretaryReviewPage() {
       </header>
 
       <main className="dash-main">
+        <CreateAccountSection />
+
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
         {listError && <div className="alert error">{listError}</div>}
 

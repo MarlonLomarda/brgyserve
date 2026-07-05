@@ -16,6 +16,10 @@ export const ROLE_LABELS = {
   resident: 'Barangay Resident',
 };
 
+// Staff-type roles the Secretary can create accounts for (residents
+// self-register). Mirrors STAFF_ROLES in the backend secretary routes.
+export const STAFF_ROLES = ['staff', 'treasurer', 'punong_barangay', 'secretary'];
+
 export function roleHome(role) {
   return ROLE_HOME[role] || '/login';
 }

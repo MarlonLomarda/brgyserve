@@ -7,6 +7,7 @@ import { roleHome } from '../auth/roles';
 export default function ProtectedRoute({ role, children }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
   if (role && user.role !== role) return <Navigate to={roleHome(user.role)} replace />;
   return children;
 }

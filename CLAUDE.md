@@ -49,7 +49,9 @@ Supabase credentials live in `backend/.env` (see `backend/.env.example` for the 
 - Resident self-registration (`POST /api/auth/register`) creates a **pending** account: `is_active = false`, `profiles.resident_id = null`. Pending accounts cannot log in.
 - Secretary review (role `secretary`, routes under `/api/secretary/`): list pending accounts, link each to an existing `resident_records` row or create-and-link a new one, then activate. Activation requires a linked resident record.
 - Active residents view their own record via `GET /api/residents/me` through the `profiles.resident_id` link.
-- `authenticate` middleware re-reads the user per request, so deactivating an account locks it out immediately.
+- Staff-type accounts (`secretary`, `punong_barangay`, `treasurer`, `staff`) are created only by the Secretary via `POST /api/secretary/accounts` — active immediately, with a generated temporary password (returned once in the response) and `must_change_password = true`.
+- Forced password change: `authenticate` default-denies every request from a `must_change_password` user with a 403 + `code: 'PASSWORD_CHANGE_REQUIRED'`; only routes wrapped with `allowPendingPasswordChange` (i.e. `POST /api/auth/change-password`) are reachable. The frontend mirrors this by routing such users to `/change-password`.
+- `authenticate` middleware re-reads the user per request, so deactivating an account (or clearing the password flag) takes effect immediately.
 
 ## User Roles (5)
 

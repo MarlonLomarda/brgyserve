@@ -34,6 +34,17 @@ export function AuthProvider({ children }) {
     setAuth(null);
   }, []);
 
+  // Merge changes into the stored user (e.g. clearing must_change_password
+  // after a successful password change).
+  const updateUser = useCallback((patch) => {
+    setAuth((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, user: { ...prev.user, ...patch } };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   // apiFetch with the session token attached. A 401 means the token is
   // expired or revoked, so drop the session.
   const authFetch = useCallback(
@@ -54,9 +65,10 @@ export function AuthProvider({ children }) {
       token: auth?.token ?? null,
       login,
       logout,
+      updateUser,
       authFetch,
     }),
-    [auth, login, logout, authFetch]
+    [auth, login, logout, updateUser, authFetch]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
