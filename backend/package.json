@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "match:test": "node scripts/test-name-matching.js"
+    "match:test": "node scripts/test-name-matching.js",
+    "match:eval": "node scripts/evaluate-matching.js"
   },
   "keywords": [
     "barangay",

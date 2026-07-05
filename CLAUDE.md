@@ -84,7 +84,7 @@ Implementation status:
 - Engine implemented in `backend/src/services/nameMatching.js` (`findMatches(first, last, options)`); tunable defaults live in its exported `DEFAULTS` (trigramThreshold 0.3, scoreThreshold 0.85, maxCandidates 50). Do not hardcode thresholds elsewhere — the evaluation sweeps them.
 - Stage 1 runs as the `match_resident_candidates` SQL function (migration 003) called via RPC; it uses `set_limit()` + the `%` operator so the GIN indexes are used with a per-call threshold. Jaro-Winkler comes from the `jaro-winkler` npm package and scores the normalized `first last` string (middle names are stored separately and excluded from scoring).
 - Test harness: `npm run match:test` (backend); seed test data with planted duplicate pairs in `backend/seeds/test_resident_records.sql` (the six planted pairs are the basis for the future labeled evaluation set).
-- Evaluation (precision/recall/F1 across threshold sweeps) not yet built.
+- Evaluation harness: `npm run match:eval` (backend, `scripts/evaluate-matching.js`) — labeled ground truth manifest mirrors the seed file (6 positive pairs, 624 negative pairs from the 36 seeded records; small initial set to be expanded), runs the real engine, and prints TP/FP/FN/TN + precision/recall/F1 across a Stage 2 threshold sweep. On the current labeled set: perfect separation up to threshold 0.85 (P=R=F1=1.0), recall drops above it. Keep the manifest in sync with the seed file.
 
 ## Conventions
 
