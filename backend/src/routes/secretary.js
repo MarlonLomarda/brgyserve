@@ -1,6 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { findMatches } = require('../services/nameMatching');
 
 const router = express.Router();
 
@@ -39,6 +40,53 @@ router.get('/pending-residents', async (req, res) => {
     throw new Error(`Failed to load pending accounts: ${error.message}`);
   }
   res.json({ pending: data });
+});
+
+// GET /api/secretary/pending-residents/:userId/match-suggestions
+// Ranked fuzzy-match candidates from resident_records for the account's
+// claimed name — the two-stage engine (pg_trgm blocking + Jaro-Winkler
+// scoring) with its DEFAULTS thresholds. Records already linked to another
+// account are flagged so the UI can disable them.
+router.get('/pending-residents/:userId/match-suggestions', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
+
+  const account = await loadResidentAccount(userId);
+  if (!account) {
+    return res.status(404).json({ error: 'Resident account not found' });
+  }
+  const claimed = account.profile || {};
+  if (!claimed.first_name || !claimed.last_name) {
+    return res.status(409).json({ error: 'The account has no claimed name to match on' });
+  }
+
+  const matches = await findMatches(claimed.first_name, claimed.last_name);
+
+  const { data: linkedRows, error: linkedError } = await supabase
+    .from('profiles')
+    .select('resident_id')
+    .not('resident_id', 'is', null);
+  if (linkedError) {
+    throw new Error(`Failed to load linked records: ${linkedError.message}`);
+  }
+  const linkedIds = new Set(linkedRows.map((r) => r.resident_id));
+
+  res.json({
+    claimed,
+    suggestions: matches.map((m) => ({
+      resident_id: m.resident_id,
+      first_name: m.first_name,
+      middle_name: m.middle_name,
+      last_name: m.last_name,
+      suffix: m.suffix,
+      birthdate: m.birthdate,
+      address: m.address,
+      score: m.score,
+      already_linked: linkedIds.has(m.resident_id),
+    })),
+  });
 });
 
 // POST /api/secretary/pending-residents/:userId/link

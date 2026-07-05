@@ -7,6 +7,75 @@ function fullName(p) {
   return p.suffix ? `${name}, ${p.suffix}` : name;
 }
 
+function MatchSuggestions({ account, busy, onAction }) {
+  const { authFetch } = useAuth();
+  const [suggestions, setSuggestions] = useState(null); // null = loading
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await authFetch(
+          `/secretary/pending-residents/${account.user_id}/match-suggestions`
+        );
+        if (!cancelled) setSuggestions(data.suggestions);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+          setSuggestions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account.user_id, authFetch]);
+
+  return (
+    <div className="suggest-section">
+      <h4>Suggested matches from resident records</h4>
+      {suggestions === null ? (
+        <p className="muted">Finding matches…</p>
+      ) : error ? (
+        <div className="alert error">{error}</div>
+      ) : suggestions.length === 0 ? (
+        <p className="muted">
+          No similar resident records found — create a new record below, or link
+          one manually.
+        </p>
+      ) : (
+        <ul className="suggestions">
+          {suggestions.map((s) => (
+            <li key={s.resident_id} className="suggestion">
+              <span className="badge score">{Math.round(s.score * 100)}% match</span>
+              <div className="suggestion-info">
+                <strong>
+                  {fullName(s)} <span className="muted">(record #{s.resident_id})</span>
+                </strong>
+                <span className="muted">
+                  b. {s.birthdate || '—'} · {s.address || '—'}
+                </span>
+              </div>
+              {s.already_linked ? (
+                <span className="muted linked-note">already linked to another account</span>
+              ) : (
+                <button
+                  className="btn secondary"
+                  disabled={busy}
+                  onClick={() => onAction(account, 'link', s.resident_id)}
+                >
+                  Link this record
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function PendingCard({ account, busy, message, onAction }) {
   const [linkId, setLinkId] = useState('');
   const p = account.profile || {};
@@ -40,34 +109,37 @@ function PendingCard({ account, busy, message, onAction }) {
       {message && <div className={`alert ${message.type}`}>{message.text}</div>}
 
       {!linked ? (
-        <div className="actions">
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() => onAction(account, 'create')}
-          >
-            Create new resident record &amp; link
-          </button>
-          <form
-            className="inline-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              onAction(account, 'link', Number(linkId));
-            }}
-          >
-            <input
-              type="number"
-              min="1"
-              placeholder="Existing resident_id"
-              value={linkId}
-              onChange={(e) => setLinkId(e.target.value)}
-              required
-            />
-            <button className="btn secondary" type="submit" disabled={busy}>
-              Link to existing record
+        <>
+          <MatchSuggestions account={account} busy={busy} onAction={onAction} />
+          <div className="actions">
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => onAction(account, 'create')}
+            >
+              Create new resident record &amp; link
             </button>
-          </form>
-        </div>
+            <form
+              className="inline-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onAction(account, 'link', Number(linkId));
+              }}
+            >
+              <input
+                type="number"
+                min="1"
+                placeholder="Or enter a resident_id manually"
+                value={linkId}
+                onChange={(e) => setLinkId(e.target.value)}
+                required
+              />
+              <button className="btn secondary" type="submit" disabled={busy}>
+                Link by ID
+              </button>
+            </form>
+          </div>
+        </>
       ) : (
         <div className="actions">
           <button
