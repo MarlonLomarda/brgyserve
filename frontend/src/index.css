@@ -551,6 +551,53 @@ button.link-button:hover:not(:disabled) {
   border-color: #e2e8f0;
 }
 
+/* Document-request status badges */
+.badge.status-pending {
+  background: #fefce8;
+  color: #a16207;
+  border-color: #fde68a;
+}
+
+.badge.status-approved {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.badge.status-rejected {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.badge.status-ready {
+  background: #ecfeff;
+  color: #0e7490;
+  border-color: #a5f3fc;
+}
+
+.badge.status-claimed {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.badge.status-cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.button-link.inline {
+  display: inline-block;
+  margin-top: 0;
+}
+
+.type-description {
+  margin: -6px 0 14px;
+  font-size: 0.85rem;
+}
+
 .btn.danger {
   color: #b91c1c;
   border-color: #fecaca;

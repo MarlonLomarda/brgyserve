@@ -195,9 +195,10 @@ Stores requests for barangay-issued documents, including document type, requeste
 | requested_by_user_id | bigint | FK → users | No | User who submitted the request. |
 | resident_id | bigint | FK → resident_records | No | Resident for whom the document is requested. |
 | purpose | text | | No | Reason or intended use of the requested document. |
-| status | varchar(50) | | No | Current status (Pending, Under Review, Processing, Ready for Release, Claimed, Rejected). |
+| status | varchar(50) | | No | Current status. Canonical lowercase values (defined in `backend/src/constants/requestStatus.js`): `pending`, `approved`, `rejected`, `ready_for_release`, `claimed`, `cancelled`. |
 | processed_by_user_id | bigint | FK → users | Yes | Staff user who processed the request; null until assigned. |
 | claimed_at | timestamptz | | Yes | When the document was claimed/released; null until claimed. |
+| requested_at | timestamptz | | No | When the request was submitted; defaults to `now()`. Added in migration 005. |
 
 ---
 

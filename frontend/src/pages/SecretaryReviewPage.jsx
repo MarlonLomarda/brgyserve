@@ -334,7 +334,14 @@ export default function SecretaryReviewPage() {
 
   return (
     <div className="dash">
-      <DashHeader subtitle="Manage accounts and review pending residents" />
+      <DashHeader
+        title="BrgyServe — Secretary"
+        subtitle="Manage accounts and review pending residents"
+        nav={[
+          { to: '/secretary', label: 'Resident review', end: true },
+          { to: '/secretary/document-types', label: 'Document types' },
+        ]}
+      />
 
       <main className="dash-main">
         <CreateAccountSection />

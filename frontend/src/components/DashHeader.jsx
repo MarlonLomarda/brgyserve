@@ -1,9 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
-// Shared header for the Secretary dashboard pages: title, section nav,
-// current user, and logout.
-export default function DashHeader({ subtitle }) {
+// Shared dashboard header: title, section nav tabs, current user, logout.
+// nav = [{ to, label, end? }]
+export default function DashHeader({ title, subtitle, nav = [] }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -15,14 +15,17 @@ export default function DashHeader({ subtitle }) {
   return (
     <header className="dash-header">
       <div>
-        <h1>BrgyServe — Secretary</h1>
+        <h1>{title}</h1>
         <p className="muted">{subtitle}</p>
-        <nav className="dash-nav">
-          <NavLink to="/secretary" end>
-            Resident review
-          </NavLink>
-          <NavLink to="/secretary/document-types">Document types</NavLink>
-        </nav>
+        {nav.length > 0 && (
+          <nav className="dash-nav">
+            {nav.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end}>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </div>
       <div className="dash-user">
         <span className="muted">@{user.username}</span>

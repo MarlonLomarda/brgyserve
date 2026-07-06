@@ -5,9 +5,18 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import LoginPage from './pages/LoginPage';
+import MyRequestsPage from './pages/MyRequestsPage';
 import RegisterPage from './pages/RegisterPage';
+import RequestDocumentPage from './pages/RequestDocumentPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
+
+// Per-role home pages; roles without a real screen yet fall back to the
+// placeholder landing page.
+const ROLE_PAGES = {
+  secretary: <SecretaryReviewPage />,
+  resident: <MyRequestsPage />,
+};
 
 export default function App() {
   const { user } = useAuth();
@@ -36,6 +45,14 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/resident/request"
+        element={
+          <ProtectedRoute role="resident">
+            <RequestDocumentPage />
+          </ProtectedRoute>
+        }
+      />
 
       {Object.entries(ROLE_HOME).map(([role, path]) => (
         <Route
@@ -43,7 +60,7 @@ export default function App() {
           path={path}
           element={
             <ProtectedRoute role={role}>
-              {role === 'secretary' ? <SecretaryReviewPage /> : <RoleLandingPage />}
+              {ROLE_PAGES[role] || <RoleLandingPage />}
             </ProtectedRoute>
           }
         />

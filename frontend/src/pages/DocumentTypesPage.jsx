@@ -86,7 +86,14 @@ export default function DocumentTypesPage() {
 
   return (
     <div className="dash">
-      <DashHeader subtitle="Manage the document types residents can request" />
+      <DashHeader
+        title="BrgyServe — Secretary"
+        subtitle="Manage the document types residents can request"
+        nav={[
+          { to: '/secretary', label: 'Resident review', end: true },
+          { to: '/secretary/document-types', label: 'Document types' },
+        ]}
+      />
 
       <main className="dash-main">
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
