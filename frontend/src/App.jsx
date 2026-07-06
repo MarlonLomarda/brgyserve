@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthContext';
 import { ROLE_HOME, roleHome } from './auth/roles';
 import ProtectedRoute from './components/ProtectedRoute';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import DocumentTypesPage from './pages/DocumentTypesPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import RoleLandingPage from './pages/RoleLandingPage';
@@ -25,6 +26,15 @@ export default function App() {
       <Route
         path="/change-password"
         element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />}
+      />
+
+      <Route
+        path="/secretary/document-types"
+        element={
+          <ProtectedRoute role="secretary">
+            <DocumentTypesPage />
+          </ProtectedRoute>
+        }
       />
 
       {Object.entries(ROLE_HOME).map(([role, path]) => (

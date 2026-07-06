@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABELS, STAFF_ROLES } from '../auth/roles';
+import DashHeader from '../components/DashHeader';
 
 const EMPTY_ACCOUNT_FORM = {
   first_name: '',
@@ -272,8 +272,7 @@ function PendingCard({ account, busy, message, onAction }) {
 }
 
 export default function SecretaryReviewPage() {
-  const { user, authFetch, logout } = useAuth();
-  const navigate = useNavigate();
+  const { authFetch } = useAuth();
 
   const [pending, setPending] = useState(null); // null = loading
   const [listError, setListError] = useState('');
@@ -333,25 +332,9 @@ export default function SecretaryReviewPage() {
     }
   }
 
-  function handleLogout() {
-    logout();
-    navigate('/login', { replace: true });
-  }
-
   return (
     <div className="dash">
-      <header className="dash-header">
-        <div>
-          <h1>BrgyServe — Secretary</h1>
-          <p className="muted">Manage accounts and review pending residents</p>
-        </div>
-        <div className="dash-user">
-          <span className="muted">@{user.username}</span>
-          <button className="btn secondary" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
-      </header>
+      <DashHeader subtitle="Manage accounts and review pending residents" />
 
       <main className="dash-main">
         <CreateAccountSection />

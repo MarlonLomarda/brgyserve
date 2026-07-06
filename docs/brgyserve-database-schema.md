@@ -183,6 +183,7 @@ Stores the available document types that can be requested, including name, descr
 | name | varchar(100) | | No | Name of the document type (Barangay Clearance, Certificate of Residency). |
 | description | text | | Yes | Detailed description of the document's purpose. |
 | fee | numeric(10,2) | | No | Cost or processing fee for the document type. |
+| is_active | boolean | | No | Whether the type is offered for new requests; false hides it from residents without deleting request/fee history (types are deactivated, never deleted). Defaults to true. Added in migration 004. |
 
 ### TABLE 12. document_requests
 Stores requests for barangay-issued documents, including document type, requester, intended resident, purpose, status, and fulfillment details.

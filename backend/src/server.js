@@ -7,6 +7,7 @@ const supabase = require('./config/supabase');
 const authRoutes = require('./routes/auth');
 const secretaryRoutes = require('./routes/secretary');
 const residentRoutes = require('./routes/residents');
+const documentTypeRoutes = require('./routes/documentTypes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,6 +31,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/secretary', secretaryRoutes);
 app.use('/api/residents', residentRoutes);
+app.use('/api/document-types', documentTypeRoutes);
 
 // Express 5 forwards rejected async handlers here automatically
 app.use((err, req, res, next) => {
