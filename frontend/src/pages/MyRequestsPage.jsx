@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
 import { RESIDENT_NAV } from '../constants/nav';
-import { statusMeta, formatDate } from '../constants/requestStatus';
+import { statusMeta, chargeMeta, chargeOf, formatDate } from '../constants/requestStatus';
 
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
@@ -93,6 +93,7 @@ export default function MyRequestsPage() {
                 <tbody>
                   {requests.map((r) => {
                     const meta = statusMeta(r.status);
+                    const charge = chargeOf(r);
                     return (
                       <tr key={r.request_id}>
                         <td>
@@ -104,6 +105,14 @@ export default function MyRequestsPage() {
                           <span className={`badge ${meta.className}`}>{meta.label}</span>
                           {r.status === 'rejected' && r.rejection_reason && (
                             <div className="muted reason-note">Reason: {r.rejection_reason}</div>
+                          )}
+                          {charge && (
+                            <div className="muted reason-note">
+                              Amount due: ₱{Number(charge.amount).toFixed(2)} —{' '}
+                              <strong className={`charge-word ${chargeMeta(charge.status).className}`}>
+                                {chargeMeta(charge.status).label}
+                              </strong>
+                            </div>
                           )}
                         </td>
                         <td className="muted">{formatDate(r.requested_at)}</td>

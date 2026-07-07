@@ -250,7 +250,7 @@ Stores all financial charges within the barangay, including fines, document fees
 | household_id | bigint | FK → household_records | Yes | Household responsible (mainly for fines); null for user-based transactions. |
 | user_id | bigint | FK → users | Yes | User who created/requested the transaction; null for system-generated charges. |
 | event_id | bigint | FK → events | Yes | Event associated with the charge (for attendance-rule fines); nullable. |
-| document_request_id | bigint | FK → document_requests | Yes | Related document request; nullable. |
+| document_request_id | bigint | FK → document_requests (UNIQUE) | Yes | Related document request; nullable. UNIQUE so a request has at most one charge (NULLs exempt — fines/rentals unaffected). Added in migration 007. |
 | rental_request_id | bigint | FK → rental_requests | Yes | Related rental request; nullable. |
 | created_at | timestamptz | | No | When the charge was created. |
 

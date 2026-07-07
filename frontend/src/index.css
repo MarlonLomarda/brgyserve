@@ -604,6 +604,20 @@ button.link-button:hover:not(:disabled) {
   max-width: 280px;
 }
 
+/* Inline charge-status words (badge color classes are scoped to .badge) */
+.charge-word.status-pending {
+  color: #a16207;
+}
+
+.charge-word.status-claimed {
+  color: #15803d;
+}
+
+.charge-word.status-cancelled,
+.charge-word.gray {
+  color: #64748b;
+}
+
 .small-note {
   font-size: 0.8rem;
 }

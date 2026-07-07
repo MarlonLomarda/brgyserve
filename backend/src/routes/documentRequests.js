@@ -2,6 +2,7 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { REQUEST_STATUS, REQUEST_STATUSES } = require('../constants/requestStatus');
+const { CHARGE_STATUS, CHARGE_TYPE } = require('../constants/charges');
 const { logSmsNotification } = require('../services/smsNotification');
 
 const router = express.Router();
@@ -9,7 +10,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const REQUEST_FIELDS =
-  'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee )';
+  'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee ), charges ( charge_id, amount, status )';
 
 // Secretary views. document_requests has two FKs to users, so the requester
 // embed must name its FK constraint explicitly.
@@ -17,7 +18,8 @@ const SECRETARY_LIST_FIELDS = `
   request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
   document_types ( document_type_id, name, fee ),
   resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
-  requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email )
+  requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email ),
+  charges ( charge_id, amount, status )
 `;
 
 const SECRETARY_DETAIL_FIELDS = `
@@ -26,7 +28,8 @@ const SECRETARY_DETAIL_FIELDS = `
   resident_records ( resident_id, first_name, middle_name, last_name, suffix, birthdate,
     birthplace, address, sex, civil_status, contact_number, date_registered ),
   requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email ),
-  processed_by:users!document_requests_processed_by_user_id_fkey ( user_id, username )
+  processed_by:users!document_requests_processed_by_user_id_fkey ( user_id, username ),
+  charges ( charge_id, amount, status, created_at )
 `;
 
 // POST /api/document-requests — the logged-in resident submits a request.
@@ -254,7 +257,7 @@ async function decideRequest(req, res, decision) {
 
   const { data: existing, error: loadError } = await supabase
     .from('document_requests')
-    .select('request_id, status, document_types ( name ), resident_records ( contact_number )')
+    .select('request_id, status, requested_by_user_id, document_types ( name, fee ), resident_records ( contact_number )')
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -290,19 +293,60 @@ async function decideRequest(req, res, decision) {
     return res.status(409).json({ error: 'Request was already processed by someone else' });
   }
 
-  // SMS hook — stub only (see services/smsNotification.js); a later
-  // ready-for-release stage adds its own notification at this same point.
   const docName = existing.document_types?.name || 'document';
+  const fee = Number(existing.document_types?.fee ?? 0);
+  let finalRequest = request;
+
+  if (decision === 'approve') {
+    // Stage 4a: approval creates the charge (document fee only for now; fines
+    // become separate FINE-type charge rows later, so this stays one row).
+    // Zero-fee documents (e.g. Certificate of Indigency): the charge is still
+    // created — financial records stay complete — but auto-marked PAID, since
+    // there is nothing to collect and the request should not wait on the
+    // Treasurer before release.
+    const { error: chargeError } = await supabase.from('charges').insert({
+      charge_type: CHARGE_TYPE.DOCUMENT,
+      amount: fee,
+      status: fee > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
+      user_id: existing.requested_by_user_id,
+      document_request_id: id,
+      created_at: new Date().toISOString(),
+    });
+    // 23505 = a charge already exists for this request (UNIQUE
+    // charges.document_request_id, migration 007) — benign, keep going.
+    if (chargeError && chargeError.code !== '23505') {
+      // supabase-js has no transactions, so compensate: revert the approval
+      // rather than leave an approved request without its charge.
+      await supabase
+        .from('document_requests')
+        .update({ status: REQUEST_STATUS.PENDING, processed_by_user_id: null, processed_at: null })
+        .eq('request_id', id);
+      throw new Error(`Approval reverted — failed to create charge: ${chargeError.message}`);
+    }
+
+    // Re-read so the response includes the charge just created.
+    const { data: withCharge } = await supabase
+      .from('document_requests')
+      .select(SECRETARY_DETAIL_FIELDS)
+      .eq('request_id', id)
+      .maybeSingle();
+    if (withCharge) finalRequest = withCharge;
+  }
+
+  // SMS hook — stub only (see services/smsNotification.js); the 4c release
+  // stage adds its ready-for-release notification at this same point.
   logSmsNotification(
     existing.resident_records?.contact_number,
     decision === 'approve'
-      ? `BrgyServe: your ${docName} request has been APPROVED. Please settle the fee at the barangay hall to proceed.`
+      ? fee > 0
+        ? `BrgyServe: your ${docName} request has been APPROVED. Please settle the ₱${fee.toFixed(2)} fee at the barangay hall (cash) or via GCash to proceed.`
+        : `BrgyServe: your ${docName} request has been APPROVED. No fee is required — please wait for the release notice.`
       : `BrgyServe: your ${docName} request has been REJECTED. Reason: ${reason}`
   );
 
   res.json({
     message: `Request ${decision === 'approve' ? 'approved' : 'rejected'}`,
-    request,
+    request: finalRequest,
   });
 }
 

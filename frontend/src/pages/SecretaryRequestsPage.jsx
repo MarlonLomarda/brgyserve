@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
 import { SECRETARY_NAV } from '../constants/nav';
-import { statusMeta, formatDate, STATUS_META } from '../constants/requestStatus';
+import { statusMeta, chargeMeta, chargeOf, formatDate, STATUS_META } from '../constants/requestStatus';
 
 const FILTERS = ['pending', 'all', ...Object.keys(STATUS_META).filter((s) => s !== 'pending')];
 
@@ -64,6 +64,7 @@ function RequestDetail({ id, onBack }) {
 
   const r = request;
   const resident = r?.resident_records;
+  const charge = chargeOf(r);
 
   return (
     <div className="pending-card">
@@ -102,6 +103,25 @@ function RequestDetail({ id, onBack }) {
               <dd>
                 <StatusBadge status={r.status} />
               </dd>
+            </div>
+            <div>
+              <dt>Charge</dt>
+              <dd>
+                {charge ? (
+                  <>
+                    ₱{Number(charge.amount).toFixed(2)}{' '}
+                    <span className={`badge ${chargeMeta(charge.status).className}`}>
+                      {chargeMeta(charge.status).label}
+                    </span>
+                  </>
+                ) : (
+                  <span className="muted">No charge (billed on approval)</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Billed</dt>
+              <dd className="muted">{charge ? formatDate(charge.created_at) : '—'}</dd>
             </div>
             <div>
               <dt>Submitted</dt>

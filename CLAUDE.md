@@ -112,6 +112,7 @@ Implementation status:
 - The **Secretary** moves the request `approved → ready_for_release` (payment verified) and `ready_for_release → claimed` (sets `claimed_at`), per the shared status vocabulary.
 - The SMS notification stub (`logSmsNotification`) fires on `ready_for_release`, same pattern as approve/reject.
 - Build order: **4a** charge creation on approval → **4b** payment record/verify + Treasurer dashboard → **4c** release flow (ready_for_release + claimed).
+- **4a implemented:** approval inserts the charge (`constants/charges.js` — charge statuses are UPPERCASE per Table 15, unlike lowercase request statuses); zero-fee documents get an amount-0 charge auto-marked `PAID` (nothing to collect; must not wait on the Treasurer). No transaction support in supabase-js, so a failed charge insert reverts the approval; migration 007 adds UNIQUE on `charges.document_request_id` (one charge per request, NULLs exempt) and backfills charges for requests approved before 4a. Charges are embedded in `/mine` and Secretary list/detail responses — no separate charge endpoints.
 - SMS notifications are a deliberate stub: `backend/src/services/smsNotification.js` `logSmsNotification()` console-logs where a real provider (Semaphore/Twilio) would send; callers are already wired at approve/reject (and future release). Payments and release are later stages.
 
 ## Pre-deployment TODO
