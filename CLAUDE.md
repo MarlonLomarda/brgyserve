@@ -103,6 +103,15 @@ Implementation status:
 - Implemented: Stage 1 document-type management; Stage 2 resident submit (`POST /api/document-requests`, requires a linked resident record) and tracking (`GET /api/document-requests/mine[/:id]` — filtered by `requested_by_user_id`, so users only ever see their own). Resident screens: `/resident` (My Requests) and `/resident/request`. Migration 005 added `requested_at`.
 - Stage 3 Secretary processing: `GET /api/document-requests[?status=…]` (list across residents), `GET /:id` (detail incl. full resident record for verification), `POST /:id/approve|reject` — Secretary-only; only `pending` may be decided, reject requires a reason (migration 006 added `rejection_reason` + `processed_at`). Screen: `/secretary/requests`. Rejection reason is shown to the resident in My Requests.
 - Resident cancel: `POST /api/document-requests/mine/:id/cancel` — own requests only (404 otherwise), only from `pending` (409 otherwise) → status `cancelled`. Cancel button on pending rows in My Requests. No edit — residents cancel and resubmit.
+
+### Stage 4 (Payment + Release) — planned design
+
+- A `charges` row is created when the Secretary **approves** a document request (`charge_type = 'DOCUMENT'`, `amount` = the document type's fee only for now; the charges table's structure already supports adding fines later).
+- Residents pay at the barangay hall (cash) or via GCash by providing a reference number. Payments are **recorded/verified manually** in `payments` (`payment_method`, `reference_no`) — no payment gateway integration.
+- Both the **Treasurer and the Secretary** can record/verify payments and mark a charge paid (`charges.status = 'PAID'`).
+- The **Secretary** moves the request `approved → ready_for_release` (payment verified) and `ready_for_release → claimed` (sets `claimed_at`), per the shared status vocabulary.
+- The SMS notification stub (`logSmsNotification`) fires on `ready_for_release`, same pattern as approve/reject.
+- Build order: **4a** charge creation on approval → **4b** payment record/verify + Treasurer dashboard → **4c** release flow (ready_for_release + claimed).
 - SMS notifications are a deliberate stub: `backend/src/services/smsNotification.js` `logSmsNotification()` console-logs where a real provider (Semaphore/Twilio) would send; callers are already wired at approve/reject (and future release). Payments and release are later stages.
 
 ## Pre-deployment TODO
