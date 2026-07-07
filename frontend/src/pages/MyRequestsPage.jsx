@@ -9,6 +9,8 @@ export default function MyRequestsPage() {
   const { authFetch } = useAuth();
   const [requests, setRequests] = useState(null); // null = loading
   const [error, setError] = useState('');
+  const [flash, setFlash] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -25,6 +27,26 @@ export default function MyRequestsPage() {
     load();
   }, [load]);
 
+  async function handleCancel(r) {
+    const name = r.document_types?.name || 'document';
+    if (!window.confirm(`Cancel your ${name} request? This cannot be undone — submit a new request if you still need the document.`)) {
+      return;
+    }
+    setFlash(null);
+    setBusyId(r.request_id);
+    try {
+      const data = await authFetch(`/document-requests/mine/${r.request_id}/cancel`, {
+        method: 'POST',
+      });
+      setFlash({ type: 'success', text: data.message });
+      await load();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="dash">
       <DashHeader
@@ -34,6 +56,7 @@ export default function MyRequestsPage() {
       />
 
       <main className="dash-main">
+        {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
         {error && <div className="alert error">{error}</div>}
 
         {requests === null ? (
@@ -64,6 +87,7 @@ export default function MyRequestsPage() {
                     <th className="num">Fee</th>
                     <th>Status</th>
                     <th>Submitted</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -83,6 +107,17 @@ export default function MyRequestsPage() {
                           )}
                         </td>
                         <td className="muted">{formatDate(r.requested_at)}</td>
+                        <td className="row-actions">
+                          {r.status === 'pending' && (
+                            <button
+                              className="btn secondary danger"
+                              disabled={busyId === r.request_id}
+                              onClick={() => handleCancel(r)}
+                            >
+                              {busyId === r.request_id ? 'Cancelling…' : 'Cancel'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

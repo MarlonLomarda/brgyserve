@@ -135,6 +135,51 @@ router.get('/mine/:id', async (req, res) => {
   res.json({ request: data });
 });
 
+// POST /api/document-requests/mine/:id/cancel — the resident withdraws their
+// OWN request while it is still pending. Any other status (or anyone else's
+// request, which 404s via the ownership filter) is refused.
+router.post('/mine/:id/cancel', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid request id' });
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from('document_requests')
+    .select('request_id, status')
+    .eq('request_id', id)
+    .eq('requested_by_user_id', req.user.user_id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load request: ${loadError.message}`);
+  }
+  if (!existing) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+  if (existing.status !== REQUEST_STATUS.PENDING) {
+    return res.status(409).json({
+      error: `Only pending requests can be cancelled — this request is already '${existing.status}'`,
+    });
+  }
+
+  const { data: request, error } = await supabase
+    .from('document_requests')
+    .update({ status: REQUEST_STATUS.CANCELLED })
+    .eq('request_id', id)
+    .eq('requested_by_user_id', req.user.user_id)
+    .eq('status', REQUEST_STATUS.PENDING) // guard: don't cancel a just-decided request
+    .select(REQUEST_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to cancel request: ${error.message}`);
+  }
+  if (!request) {
+    return res.status(409).json({ error: 'Request was already processed and can no longer be cancelled' });
+  }
+
+  res.json({ message: 'Request cancelled', request });
+});
+
 // ---------------------------------------------------------------------------
 // Secretary processing (the Secretary handles the whole document pipeline;
 // Staff and the Punong Barangay only view — the Captain signs physically).
