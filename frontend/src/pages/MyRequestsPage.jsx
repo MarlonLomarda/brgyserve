@@ -2,12 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
+import { RESIDENT_NAV } from '../constants/nav';
 import { statusMeta, formatDate } from '../constants/requestStatus';
-
-const RESIDENT_NAV = [
-  { to: '/resident', label: 'My requests', end: true },
-  { to: '/resident/request', label: 'Request a document' },
-];
 
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
@@ -82,6 +78,9 @@ export default function MyRequestsPage() {
                         <td className="num">₱{Number(r.document_types?.fee ?? 0).toFixed(2)}</td>
                         <td>
                           <span className={`badge ${meta.className}`}>{meta.label}</span>
+                          {r.status === 'rejected' && r.rejection_reason && (
+                            <div className="muted reason-note">Reason: {r.rejection_reason}</div>
+                          )}
                         </td>
                         <td className="muted">{formatDate(r.requested_at)}</td>
                       </tr>

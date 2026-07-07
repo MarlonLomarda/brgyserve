@@ -2,12 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
+import { RESIDENT_NAV } from '../constants/nav';
 import { statusMeta, formatDate } from '../constants/requestStatus';
-
-const RESIDENT_NAV = [
-  { to: '/resident', label: 'My requests', end: true },
-  { to: '/resident/request', label: 'Request a document' },
-];
 
 export default function RequestDocumentPage() {
   const { authFetch } = useAuth();

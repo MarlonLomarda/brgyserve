@@ -100,7 +100,9 @@ Implementation status:
 
 - Agreed workflow: resident submits → Secretary approves/rejects → payment (record/verify) → release. The Punong Barangay only views/signs.
 - Status lifecycle — canonical lowercase values defined in `backend/src/constants/requestStatus.js` (single source of truth; later stages must not invent new strings): `pending` (resident submitted) → `approved` / `rejected` (Secretary review) → `ready_for_release` (payment verified + signed) → `claimed` (released, `claimed_at` set). `cancelled` = withdrawn by the resident.
-- Implemented: Stage 1 document-type management; Stage 2 resident submit (`POST /api/document-requests`, requires a linked resident record) and tracking (`GET /api/document-requests/mine[/:id]` — filtered by `requested_by_user_id`, so users only ever see their own). Resident screens: `/resident` (My Requests) and `/resident/request`. Migration 005 added `requested_at`. Secretary processing, payments, and release are later stages.
+- Implemented: Stage 1 document-type management; Stage 2 resident submit (`POST /api/document-requests`, requires a linked resident record) and tracking (`GET /api/document-requests/mine[/:id]` — filtered by `requested_by_user_id`, so users only ever see their own). Resident screens: `/resident` (My Requests) and `/resident/request`. Migration 005 added `requested_at`.
+- Stage 3 Secretary processing: `GET /api/document-requests[?status=…]` (list across residents), `GET /:id` (detail incl. full resident record for verification), `POST /:id/approve|reject` — Secretary-only; only `pending` may be decided, reject requires a reason (migration 006 added `rejection_reason` + `processed_at`). Screen: `/secretary/requests`. Rejection reason is shown to the resident in My Requests.
+- SMS notifications are a deliberate stub: `backend/src/services/smsNotification.js` `logSmsNotification()` console-logs where a real provider (Semaphore/Twilio) would send; callers are already wired at approve/reject (and future release). Payments and release are later stages.
 
 ## Pre-deployment TODO
 

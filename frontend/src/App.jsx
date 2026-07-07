@@ -9,6 +9,7 @@ import MyRequestsPage from './pages/MyRequestsPage';
 import RegisterPage from './pages/RegisterPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
 import RoleLandingPage from './pages/RoleLandingPage';
+import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
 
 // Per-role home pages; roles without a real screen yet fall back to the
@@ -42,6 +43,14 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <DocumentTypesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/requests"
+        element={
+          <ProtectedRoute role="secretary">
+            <SecretaryRequestsPage />
           </ProtectedRoute>
         }
       />

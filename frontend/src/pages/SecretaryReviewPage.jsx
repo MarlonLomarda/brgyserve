@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABELS, STAFF_ROLES } from '../auth/roles';
 import DashHeader from '../components/DashHeader';
+import { SECRETARY_NAV } from '../constants/nav';
 
 const EMPTY_ACCOUNT_FORM = {
   first_name: '',
@@ -337,10 +338,7 @@ export default function SecretaryReviewPage() {
       <DashHeader
         title="BrgyServe — Secretary"
         subtitle="Manage accounts and review pending residents"
-        nav={[
-          { to: '/secretary', label: 'Resident review', end: true },
-          { to: '/secretary/document-types', label: 'Document types' },
-        ]}
+        nav={SECRETARY_NAV}
       />
 
       <main className="dash-main">

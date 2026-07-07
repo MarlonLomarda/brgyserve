@@ -199,6 +199,8 @@ Stores requests for barangay-issued documents, including document type, requeste
 | processed_by_user_id | bigint | FK → users | Yes | Staff user who processed the request; null until assigned. |
 | claimed_at | timestamptz | | Yes | When the document was claimed/released; null until claimed. |
 | requested_at | timestamptz | | No | When the request was submitted; defaults to `now()`. Added in migration 005. |
+| rejection_reason | text | | Yes | Reason entered by the Secretary when rejecting; shown to the resident. Null unless rejected. Added in migration 006. |
+| processed_at | timestamptz | | Yes | When the approve/reject decision was made (pairs with processed_by_user_id). Null until decided. Added in migration 006. |
 
 ---
 

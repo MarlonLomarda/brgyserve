@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
+import { SECRETARY_NAV } from '../constants/nav';
 
 const EMPTY_FORM = { document_type_id: null, name: '', description: '', fee: '' };
 
@@ -89,10 +90,7 @@ export default function DocumentTypesPage() {
       <DashHeader
         title="BrgyServe — Secretary"
         subtitle="Manage the document types residents can request"
-        nav={[
-          { to: '/secretary', label: 'Resident review', end: true },
-          { to: '/secretary/document-types', label: 'Document types' },
-        ]}
+        nav={SECRETARY_NAV}
       />
 
       <main className="dash-main">

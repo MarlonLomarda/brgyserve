@@ -598,6 +598,56 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+.reason-note {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  max-width: 280px;
+}
+
+.small-note {
+  font-size: 0.8rem;
+}
+
+.truncate {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-head select {
+  width: auto;
+  margin-top: 0;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.reject-form {
+  margin-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.char-counter {
+  font-size: 0.8rem;
+  text-align: right;
+  margin: -8px 0 8px;
+}
+
+.char-counter.at-limit {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* Free-text content (purpose, rejection reasons, addresses) must never
+   overflow its container, even as one long unbroken string. */
+.info-grid dd,
+.data-table td,
+.reason-note,
+.alert {
+  overflow-wrap: anywhere;
+}
+
 .btn.danger {
   color: #b91c1c;
   border-color: #fecaca;
