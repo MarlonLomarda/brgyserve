@@ -253,6 +253,9 @@ Stores all financial charges within the barangay, including fines, document fees
 | document_request_id | bigint | FK → document_requests (UNIQUE) | Yes | Related document request; nullable. UNIQUE so a request has at most one charge (NULLs exempt — fines/rentals unaffected). Added in migration 007. |
 | rental_request_id | bigint | FK → rental_requests | Yes | Related rental request; nullable. |
 | created_at | timestamptz | | No | When the charge was created. |
+| declared_method | varchar(20) | | Yes | Payment method declared by the resident, awaiting verification: `onsite`, `gcash`. Added in migration 008. |
+| declared_reference | varchar(100) | | Yes | GCash reference number submitted by the resident; copied to payments.reference_no on verification. Added in migration 008. |
+| declared_at | timestamptz | | Yes | When the resident declared their payment. Added in migration 008. |
 
 ### TABLE 16. payments
 Stores payment transactions for charges, including amount paid, payment method, reference details, and the staff member who processed it.
@@ -262,7 +265,7 @@ Stores payment transactions for charges, including amount paid, payment method, 
 | payment_id | bigint | PK | No | Uniquely identifies each payment transaction. |
 | charge_id | bigint | FK → charges | No | Charge being paid. |
 | amount | numeric(10,2) | | No | Amount paid for the charge. |
-| payment_method | varchar(20) | | No | Method of payment (Online, Onsite). |
+| payment_method | varchar(20) | | No | Method of payment. Canonical lowercase values (defined in `backend/src/constants/charges.js`): `onsite` (cash at the barangay hall), `gcash` (reference number, record/verify only — no gateway). |
 | reference_no | varchar(100) | | Yes | Reference number for the transaction (receipt number or gateway ID). |
 | received_by_user_id | bigint | FK → users | Yes | Staff user who recorded the payment; null for online automated payments. |
 | created_at | timestamptz | | No | When the payment was recorded. |

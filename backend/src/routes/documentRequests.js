@@ -2,7 +2,7 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { REQUEST_STATUS, REQUEST_STATUSES } = require('../constants/requestStatus');
-const { CHARGE_STATUS, CHARGE_TYPE } = require('../constants/charges');
+const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { logSmsNotification } = require('../services/smsNotification');
 
 const router = express.Router();
@@ -10,7 +10,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const REQUEST_FIELDS =
-  'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee ), charges ( charge_id, amount, status )';
+  'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
 // Secretary views. document_requests has two FKs to users, so the requester
 // embed must name its FK constraint explicitly.
@@ -19,7 +19,7 @@ const SECRETARY_LIST_FIELDS = `
   document_types ( document_type_id, name, fee ),
   resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
   requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email ),
-  charges ( charge_id, amount, status )
+  charges ( charge_id, amount, status, declared_method, declared_reference )
 `;
 
 const SECRETARY_DETAIL_FIELDS = `
@@ -29,7 +29,8 @@ const SECRETARY_DETAIL_FIELDS = `
     birthplace, address, sex, civil_status, contact_number, date_registered ),
   requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email ),
   processed_by:users!document_requests_processed_by_user_id_fkey ( user_id, username ),
-  charges ( charge_id, amount, status, created_at )
+  charges ( charge_id, amount, status, created_at, declared_method, declared_reference, declared_at,
+    payments ( payment_id, amount, payment_method, reference_no, created_at ) )
 `;
 
 // POST /api/document-requests — the logged-in resident submits a request.
@@ -181,6 +182,78 @@ router.post('/mine/:id/cancel', async (req, res) => {
   }
 
   res.json({ message: 'Request cancelled', request });
+});
+
+// POST /api/document-requests/mine/:id/pay — the resident declares HOW they
+// are paying: 'onsite' (cash at the barangay hall) or 'gcash' (submits a
+// reference number). This does NOT mark the charge paid — the declaration is
+// stored on the charge (declared_*), and only Treasurer/Secretary
+// verification creates a payments row and flips the charge to PAID.
+// Declarations can be re-submitted while UNPAID (e.g. mistyped reference).
+router.post('/mine/:id/pay', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid request id' });
+  }
+
+  const method = String(req.body?.method ?? '').toLowerCase();
+  const reference = String(req.body?.reference_no ?? '').trim();
+  if (method !== PAYMENT_METHOD.ONSITE && method !== PAYMENT_METHOD.GCASH) {
+    return res.status(400).json({ error: "method must be 'onsite' or 'gcash'" });
+  }
+  if (method === PAYMENT_METHOD.GCASH && !reference) {
+    return res.status(400).json({ error: 'A GCash reference number is required' });
+  }
+  if (reference.length > 100) {
+    return res.status(400).json({ error: 'Reference number must be 100 characters or fewer' });
+  }
+
+  const { data: request, error: loadError } = await supabase
+    .from('document_requests')
+    .select('request_id, status, charges ( charge_id, amount, status )')
+    .eq('request_id', id)
+    .eq('requested_by_user_id', req.user.user_id) // own requests only
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load request: ${loadError.message}`);
+  }
+  if (!request) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
+  const charge = Array.isArray(request.charges) ? request.charges[0] : request.charges;
+  if (!charge) {
+    return res.status(409).json({ error: 'This request has no charge yet — it must be approved first' });
+  }
+  if (charge.status !== CHARGE_STATUS.UNPAID) {
+    return res.status(409).json({ error: `This charge is already ${charge.status.toLowerCase()}` });
+  }
+
+  const { data: updated, error } = await supabase
+    .from('charges')
+    .update({
+      declared_method: method,
+      declared_reference: method === PAYMENT_METHOD.GCASH ? reference : null,
+      declared_at: new Date().toISOString(),
+    })
+    .eq('charge_id', charge.charge_id)
+    .eq('status', CHARGE_STATUS.UNPAID) // guard: not if just verified
+    .select('charge_id, amount, status, declared_method, declared_reference, declared_at')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to record payment declaration: ${error.message}`);
+  }
+  if (!updated) {
+    return res.status(409).json({ error: 'This charge was just processed — refresh to see its status' });
+  }
+
+  res.json({
+    message:
+      method === PAYMENT_METHOD.GCASH
+        ? 'GCash reference submitted — awaiting verification by the barangay.'
+        : "Noted — please pay in cash at the barangay hall treasurer's desk.",
+    charge: updated,
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,28 @@ export default function MyRequestsPage() {
     load();
   }, [load]);
 
+  const [payTarget, setPayTarget] = useState(null); // request_id entering a GCash ref
+  const [gcashRef, setGcashRef] = useState('');
+
+  async function handleDeclare(r, method, reference) {
+    setFlash(null);
+    setBusyId(r.request_id);
+    try {
+      const data = await authFetch(`/document-requests/mine/${r.request_id}/pay`, {
+        method: 'POST',
+        body: { method, reference_no: reference },
+      });
+      setFlash({ type: 'success', text: data.message });
+      setPayTarget(null);
+      setGcashRef('');
+      await load();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleCancel(r) {
     const name = r.document_types?.name || 'document';
     if (!window.confirm(`Cancel your ${name} request? This cannot be undone — submit a new request if you still need the document.`)) {
@@ -112,6 +134,12 @@ export default function MyRequestsPage() {
                               <strong className={`charge-word ${chargeMeta(charge.status).className}`}>
                                 {chargeMeta(charge.status).label}
                               </strong>
+                              {charge.status === 'UNPAID' && charge.declared_method === 'gcash' && (
+                                <> · GCash ref {charge.declared_reference} submitted, awaiting verification</>
+                              )}
+                              {charge.status === 'UNPAID' && charge.declared_method === 'onsite' && (
+                                <> · pay in cash at the barangay hall treasurer&apos;s desk</>
+                              )}
                             </div>
                           )}
                         </td>
@@ -126,6 +154,60 @@ export default function MyRequestsPage() {
                               {busyId === r.request_id ? 'Cancelling…' : 'Cancel'}
                             </button>
                           )}
+                          {r.status === 'approved' &&
+                            charge?.status === 'UNPAID' &&
+                            (payTarget === r.request_id ? (
+                              <form
+                                className="inline-form"
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  handleDeclare(r, 'gcash', gcashRef.trim());
+                                }}
+                              >
+                                <input
+                                  value={gcashRef}
+                                  onChange={(e) => setGcashRef(e.target.value)}
+                                  placeholder="GCash reference no."
+                                  maxLength={100}
+                                  required
+                                  autoFocus
+                                />
+                                <button
+                                  className="btn secondary"
+                                  type="submit"
+                                  disabled={busyId === r.request_id}
+                                >
+                                  Submit
+                                </button>
+                                <button
+                                  className="btn secondary"
+                                  type="button"
+                                  onClick={() => setPayTarget(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </form>
+                            ) : (
+                              <>
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handleDeclare(r, 'onsite')}
+                                >
+                                  Pay onsite
+                                </button>
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => {
+                                    setPayTarget(r.request_id);
+                                    setGcashRef('');
+                                  }}
+                                >
+                                  Pay via GCash
+                                </button>
+                              </>
+                            ))}
                         </td>
                       </tr>
                     );

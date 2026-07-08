@@ -35,3 +35,8 @@ export function chargeOf(request) {
   const c = request?.charges;
   return Array.isArray(c) ? c[0] || null : c || null;
 }
+
+export const METHOD_LABELS = {
+  onsite: 'Onsite (cash)',
+  gcash: 'GCash',
+};

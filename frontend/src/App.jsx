@@ -6,17 +6,20 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import LoginPage from './pages/LoginPage';
 import MyRequestsPage from './pages/MyRequestsPage';
+import PaymentsPage from './pages/PaymentsPage';
 import RegisterPage from './pages/RegisterPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
+import { SECRETARY_NAV, TREASURER_NAV } from './constants/nav';
 
 // Per-role home pages; roles without a real screen yet fall back to the
 // placeholder landing page.
 const ROLE_PAGES = {
   secretary: <SecretaryReviewPage />,
   resident: <MyRequestsPage />,
+  treasurer: <PaymentsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />,
 };
 
 export default function App() {
@@ -51,6 +54,14 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <SecretaryRequestsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/payments"
+        element={
+          <ProtectedRoute role="secretary">
+            <PaymentsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
           </ProtectedRoute>
         }
       />
