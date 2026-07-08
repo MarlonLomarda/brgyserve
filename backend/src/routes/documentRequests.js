@@ -426,4 +426,113 @@ async function decideRequest(req, res, decision) {
 router.post('/:id/approve', requireRole('secretary'), (req, res) => decideRequest(req, res, 'approve'));
 router.post('/:id/reject', requireRole('secretary'), (req, res) => decideRequest(req, res, 'reject'));
 
+// ---------------------------------------------------------------------------
+// Stage 4c — release flow. Two Secretary-only transitions complete the
+// lifecycle: approved → ready_for_release (only once the charge is PAID) and
+// ready_for_release → claimed (sets claimed_at). Like approve/reject, each
+// update is re-guarded with .eq('status', …) so concurrent actions can't
+// both win.
+// ---------------------------------------------------------------------------
+
+// POST /api/document-requests/:id/ready-for-release
+router.post('/:id/ready-for-release', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid request id' });
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from('document_requests')
+    .select(
+      'request_id, status, charges ( charge_id, status ), document_types ( name ), resident_records ( contact_number )'
+    )
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load request: ${loadError.message}`);
+  }
+  if (!existing) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+  if (existing.status !== REQUEST_STATUS.APPROVED) {
+    return res.status(409).json({
+      error: `Only approved requests can be marked ready for release — this request is '${existing.status}'`,
+    });
+  }
+
+  // A document is not releasable until its fee is settled. Zero-fee documents
+  // pass automatically (their charge is auto-marked PAID on approval).
+  const charge = Array.isArray(existing.charges) ? existing.charges[0] : existing.charges;
+  if (!charge) {
+    return res.status(409).json({ error: 'This request has no charge — re-check its approval' });
+  }
+  if (charge.status !== CHARGE_STATUS.PAID) {
+    return res.status(409).json({
+      error: `Payment has not been verified yet (charge is ${charge.status}) — record it under Payments first`,
+    });
+  }
+
+  const { data: request, error } = await supabase
+    .from('document_requests')
+    .update({ status: REQUEST_STATUS.READY_FOR_RELEASE })
+    .eq('request_id', id)
+    .eq('status', REQUEST_STATUS.APPROVED)
+    .select(SECRETARY_DETAIL_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to mark ready for release: ${error.message}`);
+  }
+  if (!request) {
+    return res.status(409).json({ error: 'Request status just changed — refresh and try again' });
+  }
+
+  logSmsNotification(
+    existing.resident_records?.contact_number,
+    `BrgyServe: your ${existing.document_types?.name || 'document'} is READY TO CLAIM. Please pick it up at the barangay hall during office hours.`
+  );
+
+  res.json({ message: 'Request marked ready for release — the resident has been notified', request });
+});
+
+// POST /api/document-requests/:id/claim — the resident picked the document up.
+router.post('/:id/claim', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid request id' });
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from('document_requests')
+    .select('request_id, status')
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load request: ${loadError.message}`);
+  }
+  if (!existing) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+  if (existing.status !== REQUEST_STATUS.READY_FOR_RELEASE) {
+    return res.status(409).json({
+      error: `Only requests that are ready for release can be claimed — this request is '${existing.status}'`,
+    });
+  }
+
+  const { data: request, error } = await supabase
+    .from('document_requests')
+    .update({ status: REQUEST_STATUS.CLAIMED, claimed_at: new Date().toISOString() })
+    .eq('request_id', id)
+    .eq('status', REQUEST_STATUS.READY_FOR_RELEASE)
+    .select(SECRETARY_DETAIL_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to mark as claimed: ${error.message}`);
+  }
+  if (!request) {
+    return res.status(409).json({ error: 'Request status just changed — refresh and try again' });
+  }
+
+  res.json({ message: 'Document released — request marked as claimed', request });
+});
+
 module.exports = router;

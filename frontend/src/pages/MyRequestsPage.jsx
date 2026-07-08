@@ -128,6 +128,14 @@ export default function MyRequestsPage() {
                           {r.status === 'rejected' && r.rejection_reason && (
                             <div className="muted reason-note">Reason: {r.rejection_reason}</div>
                           )}
+                          {r.status === 'ready_for_release' && (
+                            <div className="muted reason-note">
+                              Ready to claim — pick it up at the barangay hall during office hours.
+                            </div>
+                          )}
+                          {r.status === 'claimed' && r.claimed_at && (
+                            <div className="muted reason-note">Claimed on {formatDate(r.claimed_at)}.</div>
+                          )}
                           {charge && (
                             <div className="muted reason-note">
                               Amount due: ₱{Number(charge.amount).toFixed(2)} —{' '}

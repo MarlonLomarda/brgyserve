@@ -127,6 +127,12 @@ function RequestDetail({ id, onBack }) {
               <dt>Submitted</dt>
               <dd>{formatDate(r.requested_at)}</dd>
             </div>
+            {r.claimed_at && (
+              <div>
+                <dt>Claimed</dt>
+                <dd>{formatDate(r.claimed_at)}</dd>
+              </div>
+            )}
             <div className="span-2">
               <dt>Purpose</dt>
               <dd>{r.purpose}</dd>
@@ -189,6 +195,36 @@ function RequestDetail({ id, onBack }) {
               </dl>
             )}
           </div>
+
+          {/* Stage 4c release flow: approved + paid → ready_for_release → claimed */}
+          {r.status === 'approved' &&
+            (charge?.status === 'PAID' ? (
+              <div className="actions">
+                <button className="btn" disabled={busy} onClick={() => decide('ready-for-release')}>
+                  {busy ? 'Working…' : 'Mark ready for release'}
+                </button>
+              </div>
+            ) : (
+              <p className="muted">
+                Awaiting payment — verify it under the Payments tab before releasing this document.
+              </p>
+            ))}
+
+          {r.status === 'ready_for_release' && (
+            <div className="actions">
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm('Mark this document as claimed? This records that it was handed to the resident and cannot be undone.')) {
+                    decide('claim');
+                  }
+                }}
+              >
+                {busy ? 'Working…' : 'Mark as claimed'}
+              </button>
+            </div>
+          )}
 
           {r.status === 'pending' && !rejecting && (
             <div className="actions">
