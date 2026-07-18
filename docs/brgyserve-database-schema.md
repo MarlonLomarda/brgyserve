@@ -216,8 +216,9 @@ Stores the barangay-owned items and facilities available for rental, along with 
 | type | varchar(50) | | No | Category of the resource (Facility, Equipment, Furniture). |
 | description | text | | Yes | Detailed description of the resource. |
 | quantity_total | integer | | No | Total number of units owned. |
-| quantity_available | integer | | No | Number of units currently available for rental. |
+| quantity_available | integer | | No | Number of units currently available for rental. Mirrors quantity_total for now; per-time-slot availability is derived from approved bookings against this value. |
 | is_active | boolean | | No | Whether the resource is available for booking or disabled. |
+| fee | numeric(10,2) | | No | Rental fee per unit per booking (facilities are single-unit, so effectively per booking). Added in migration 009. |
 
 ### TABLE 14. rental_requests
 Stores rental and booking requests for barangay items and facilities, including resource, schedule, quantity, purpose, and status.

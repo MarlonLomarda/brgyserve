@@ -4,6 +4,7 @@ export const SECRETARY_NAV = [
   { to: '/secretary/requests', label: 'Document requests' },
   { to: '/secretary/payments', label: 'Payments' },
   { to: '/secretary/document-types', label: 'Document types' },
+  { to: '/secretary/rental-items', label: 'Rental items' },
 ];
 
 export const RESIDENT_NAV = [

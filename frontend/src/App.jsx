@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import RegisterPage from './pages/RegisterPage';
+import RentalItemsPage from './pages/RentalItemsPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
@@ -62,6 +63,14 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PaymentsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/rental-items"
+        element={
+          <ProtectedRoute role="secretary">
+            <RentalItemsPage />
           </ProtectedRoute>
         }
       />
