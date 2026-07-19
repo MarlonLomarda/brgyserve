@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
 import { SECRETARY_NAV } from '../constants/nav';
+import { ITEM_TYPE_LABELS as TYPE_LABELS } from '../constants/rentals';
 
-// Canonical lowercase item types (mirrors backend/src/constants/rentals.js).
 // Facilities are whole venues booked as one unit, so quantity locks to 1.
-const TYPE_LABELS = { facility: 'Facility', equipment: 'Equipment', furniture: 'Furniture' };
 
 const EMPTY_FORM = { item_id: null, name: '', type: 'facility', description: '', quantity_total: '1', fee: '' };
 

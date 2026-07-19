@@ -2,9 +2,11 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { ROLE_HOME, roleHome } from './auth/roles';
 import ProtectedRoute from './components/ProtectedRoute';
+import BookRentalPage from './pages/BookRentalPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import LoginPage from './pages/LoginPage';
+import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import RegisterPage from './pages/RegisterPage';
@@ -79,6 +81,22 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <RequestDocumentPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resident/rentals"
+        element={
+          <ProtectedRoute role="resident">
+            <MyRentalsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resident/book-rental"
+        element={
+          <ProtectedRoute role="resident">
+            <BookRentalPage />
           </ProtectedRoute>
         }
       />

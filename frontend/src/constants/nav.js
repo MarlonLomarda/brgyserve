@@ -10,6 +10,8 @@ export const SECRETARY_NAV = [
 export const RESIDENT_NAV = [
   { to: '/resident', label: 'My requests', end: true },
   { to: '/resident/request', label: 'Request a document' },
+  { to: '/resident/rentals', label: 'My rentals' },
+  { to: '/resident/book-rental', label: 'Book a facility' },
 ];
 
 export const TREASURER_NAV = [{ to: '/treasurer', label: 'Payments', end: true }];
