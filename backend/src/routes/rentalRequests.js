@@ -1,7 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
-const { authenticate } = require('../middleware/auth');
-const { ITEM_TYPE, RENTAL_STATUS } = require('../constants/rentals');
+const { authenticate, requireRole } = require('../middleware/auth');
+const { ITEM_TYPE, RENTAL_STATUS, RENTAL_STATUSES } = require('../constants/rentals');
 const { logSmsNotification } = require('../services/smsNotification');
 
 const router = express.Router();
@@ -10,6 +10,16 @@ router.use(authenticate);
 
 const RENTAL_FIELDS =
   'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, rental_items ( item_id, name, type, fee )';
+
+// Management/staff views: adds the requester (with their profile name) and the
+// item's capacity numbers (the edit form needs them). rental_requests has two
+// FKs to users, so the requester embed must name its constraint.
+const MANAGE_FIELDS = `
+  request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
+  rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
+  requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
+    profiles ( first_name, middle_name, last_name, suffix ) )
+`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -26,9 +36,11 @@ const dateFmt = new Intl.DateTimeFormat('en-PH', { timeZone: TZ, dateStyle: 'med
 // (existing 2pm-6pm vs requested 6pm-9pm) NOT overlap.
 // Only non-cancelled bookings hold units ('completed' rentals are in the past
 // and can never overlap a future slot anyway, since backdated bookings are
-// refused). beforeId limits the check to rows inserted earlier (see the
-// concurrency note in the POST handler).
-async function overlappingBookings(itemId, startIso, endIso, beforeId = null) {
+// refused) — which is also what makes cancelling free the slot.
+// Options: beforeId limits the check to rows inserted earlier (POST
+// concurrency, see below); excludeId ignores one booking — used when EDITING
+// so a booking never conflicts with its own current slot.
+async function overlappingBookings(itemId, startIso, endIso, { beforeId = null, excludeId = null } = {}) {
   let query = supabase
     .from('rental_requests')
     .select('request_id, quantity_requested, start_datetime, end_datetime')
@@ -38,6 +50,7 @@ async function overlappingBookings(itemId, startIso, endIso, beforeId = null) {
     .gt('end_datetime', startIso)
     .order('start_datetime', { ascending: true });
   if (beforeId !== null) query = query.lt('request_id', beforeId);
+  if (excludeId !== null) query = query.neq('request_id', excludeId);
   const { data, error } = await query;
   if (error) throw new Error(`Conflict check failed: ${error.message}`);
   return data;
@@ -54,48 +67,81 @@ function conflictMessage(item, quantity, overlapping) {
   return `Only ${free} of ${item.quantity_available} ${item.name} ${free === 1 ? 'is' : 'are'} available for that time — you asked for ${quantity}.`;
 }
 
+// THE conflict check — shared by resident booking (POST) and Secretary edits
+// (PUT), so there is exactly one implementation of the availability rules.
+// Returns null when the slot fits, or the refusal message when it doesn't.
+async function findConflict(item, quantity, startIso, endIso, opts = {}) {
+  const overlapping = await overlappingBookings(item.item_id, startIso, endIso, opts);
+  if (unitsUsed(overlapping) + quantity > item.quantity_available) {
+    return conflictMessage(item, quantity, overlapping);
+  }
+  return null;
+}
+
+// Field validation shared by booking and editing. Returns { error } or the
+// parsed values. Same-day bookings by construction: one date, two times.
+function parseBookingBody(body) {
+  const date = String(body?.date ?? '').trim();
+  const startTime = String(body?.start_time ?? '').trim();
+  const endTime = String(body?.end_time ?? '').trim();
+  const purpose = String(body?.purpose ?? '').trim();
+  const quantity = body?.quantity_requested === undefined ? 1 : Number(body?.quantity_requested);
+
+  if (!DATE_RE.test(date)) {
+    return { error: 'date must be in YYYY-MM-DD format' };
+  }
+  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+    return { error: 'start_time and end_time must be in HH:MM (24-hour) format' };
+  }
+  if (!purpose) {
+    return { error: 'purpose is required' };
+  }
+  if (purpose.length > 1000) {
+    return { error: 'purpose must be 1000 characters or fewer' };
+  }
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    return { error: 'quantity_requested must be a whole number of at least 1' };
+  }
+
+  const start = new Date(`${date}T${startTime}:00+08:00`);
+  const end = new Date(`${date}T${endTime}:00+08:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { error: 'Invalid date or time' };
+  }
+  if (end <= start) {
+    return { error: 'End time must be after the start time (bookings run within one day)' };
+  }
+  if (start <= new Date()) {
+    return { error: 'The booking must start in the future' };
+  }
+
+  return { start, end, startIso: start.toISOString(), endIso: end.toISOString(), purpose, quantity };
+}
+
+// Item-dependent rules shared by booking and editing.
+function itemQuantityError(item, quantity) {
+  if (item.type === ITEM_TYPE.FACILITY && quantity !== 1) {
+    return `The ${item.name} is booked as a whole — quantity must be 1`;
+  }
+  if (quantity > item.quantity_available) {
+    return `Only ${item.quantity_available} unit${item.quantity_available === 1 ? '' : 's'} of ${item.name} exist${item.quantity_available === 1 ? 's' : ''} — you asked for ${quantity}`;
+  }
+  return null;
+}
+
 // POST /api/rental-requests — the resident books an item. SELF-SERVICE: the
 // conflict check runs here at submission, and a passing request is confirmed
 // instantly (no Secretary approval step).
 router.post('/', async (req, res) => {
   const itemId = Number(req.body?.item_id);
-  const date = String(req.body?.date ?? '').trim();
-  const startTime = String(req.body?.start_time ?? '').trim();
-  const endTime = String(req.body?.end_time ?? '').trim();
-  const purpose = String(req.body?.purpose ?? '').trim();
-  const quantity = req.body?.quantity_requested === undefined ? 1 : Number(req.body?.quantity_requested);
-
   if (!Number.isInteger(itemId)) {
     return res.status(400).json({ error: 'An item_id is required' });
   }
-  if (!DATE_RE.test(date)) {
-    return res.status(400).json({ error: 'date must be in YYYY-MM-DD format' });
+  const parsed = parseBookingBody(req.body);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
   }
-  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
-    return res.status(400).json({ error: 'start_time and end_time must be in HH:MM (24-hour) format' });
-  }
-  if (!purpose) {
-    return res.status(400).json({ error: 'purpose is required' });
-  }
-  if (purpose.length > 1000) {
-    return res.status(400).json({ error: 'purpose must be 1000 characters or fewer' });
-  }
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    return res.status(400).json({ error: 'quantity_requested must be a whole number of at least 1' });
-  }
-
-  // Same-day bookings by construction: one date, two times on it.
-  const start = new Date(`${date}T${startTime}:00+08:00`);
-  const end = new Date(`${date}T${endTime}:00+08:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return res.status(400).json({ error: 'Invalid date or time' });
-  }
-  if (end <= start) {
-    return res.status(400).json({ error: 'End time must be after the start time (bookings run within one day)' });
-  }
-  if (start <= new Date()) {
-    return res.status(400).json({ error: 'The booking must start in the future' });
-  }
+  const { start, end, startIso, endIso, purpose, quantity } = parsed;
 
   // Bookings are for verified residents — same rule as document requests.
   const { data: profile, error: profileError } = await supabase
@@ -127,25 +173,18 @@ router.post('/', async (req, res) => {
   if (!item.is_active) {
     return res.status(400).json({ error: 'That item is not currently available for rental' });
   }
-  if (item.type === ITEM_TYPE.FACILITY && quantity !== 1) {
-    return res.status(400).json({ error: `The ${item.name} is booked as a whole — quantity must be 1` });
+  const quantityError = itemQuantityError(item, quantity);
+  if (quantityError) {
+    return res.status(400).json({ error: quantityError });
   }
-  if (quantity > item.quantity_available) {
-    return res.status(400).json({
-      error: `Only ${item.quantity_available} unit${item.quantity_available === 1 ? '' : 's'} of ${item.name} exist${item.quantity_available === 1 ? 's' : ''} — you asked for ${quantity}`,
-    });
-  }
-
-  const startIso = start.toISOString();
-  const endIso = end.toISOString();
 
   // CONFLICT CHECK, pass 1 (pre-insert): capacity for the slot is
   // quantity_available; units used = sum of quantity_requested over
   // overlapping non-cancelled bookings. Facilities are the same math with
   // capacity 1 — any overlap fills the slot.
-  const overlapping = await overlappingBookings(itemId, startIso, endIso);
-  if (unitsUsed(overlapping) + quantity > item.quantity_available) {
-    return res.status(409).json({ error: conflictMessage(item, quantity, overlapping) });
+  const conflict = await findConflict(item, quantity, startIso, endIso);
+  if (conflict) {
+    return res.status(409).json({ error: conflict });
   }
 
   const { data: created, error: insertError } = await supabase
@@ -171,10 +210,10 @@ router.post('/', async (req, res) => {
   // only rows inserted BEFORE ours (request_id < ours): the earliest insert
   // sees no one ahead of it and always survives; a loser deletes its own row
   // and is refused. Deterministic, and never double-books.
-  const earlier = await overlappingBookings(itemId, startIso, endIso, created.request_id);
-  if (unitsUsed(earlier) + quantity > item.quantity_available) {
+  const lateConflict = await findConflict(item, quantity, startIso, endIso, { beforeId: created.request_id });
+  if (lateConflict) {
     await supabase.from('rental_requests').delete().eq('request_id', created.request_id);
-    return res.status(409).json({ error: conflictMessage(item, quantity, earlier) });
+    return res.status(409).json({ error: lateConflict });
   }
 
   logSmsNotification(
@@ -202,6 +241,204 @@ router.get('/mine', async (req, res) => {
     throw new Error(`Failed to load bookings: ${error.message}`);
   }
   res.json({ requests: data });
+});
+
+// ---------------------------------------------------------------------------
+// Stage 3 — schedule management. Secretary can view/edit/cancel ANY booking;
+// Barangay Staff and the Punong Barangay can VIEW the list and detail but
+// have no write access. Residents never see these (their own bookings only,
+// via /mine above).
+// ---------------------------------------------------------------------------
+
+const VIEW_ROLES = ['secretary', 'staff', 'punong_barangay'];
+
+// GET /api/rental-requests?status=confirmed — all bookings across residents,
+// optionally filtered ('all' or omitted = everything). Ordered by schedule,
+// upcoming-first, so the soonest bookings are at the top of the list.
+router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
+  const status = req.query.status;
+  let query = supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .order('start_datetime', { ascending: false });
+
+  if (status && status !== 'all') {
+    if (!RENTAL_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error: `Unknown status '${status}' (expected one of: ${RENTAL_STATUSES.join(', ')}, or 'all')`,
+      });
+    }
+    query = query.eq('status', status);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`Failed to load bookings: ${error.message}`);
+  }
+  res.json({ requests: data });
+});
+
+// GET /api/rental-requests/:id — one booking's detail (view roles).
+router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+
+  const { data, error } = await supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load booking: ${error.message}`);
+  }
+  if (!data) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  res.json({ request: data });
+});
+
+// PUT /api/rental-requests/:id — Secretary reschedules a booking (date,
+// times, quantity, purpose; the item itself is fixed). The stage 2 conflict
+// check re-runs on the new values with THIS booking excluded from the
+// comparison — otherwise every edit would collide with its own current slot.
+router.put('/:id', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+
+  const parsed = parseBookingBody(req.body);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+  const { startIso, endIso, purpose, quantity } = parsed;
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select('request_id, item_id, status, quantity_requested, start_datetime, end_datetime, purpose')
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  if (booking.status !== RENTAL_STATUS.CONFIRMED) {
+    return res.status(409).json({
+      error: `Only confirmed bookings can be edited — this booking is '${booking.status}'`,
+    });
+  }
+
+  // The item is loaded even if since deactivated: deactivation only blocks
+  // NEW bookings, not managing existing ones.
+  const { data: item, error: itemError } = await supabase
+    .from('rental_items')
+    .select('item_id, name, type, quantity_total, quantity_available, fee')
+    .eq('item_id', booking.item_id)
+    .maybeSingle();
+  if (itemError || !item) {
+    throw new Error(`Failed to load rental item: ${itemError?.message || 'not found'}`);
+  }
+  const quantityError = itemQuantityError(item, quantity);
+  if (quantityError) {
+    return res.status(400).json({ error: quantityError });
+  }
+
+  // Conflict check on the NEW values, excluding this booking's own row.
+  const conflict = await findConflict(item, quantity, startIso, endIso, { excludeId: id });
+  if (conflict) {
+    return res.status(409).json({ error: conflict });
+  }
+
+  const { data: updated, error } = await supabase
+    .from('rental_requests')
+    .update({ start_datetime: startIso, end_datetime: endIso, quantity_requested: quantity, purpose })
+    .eq('request_id', id)
+    .eq('status', RENTAL_STATUS.CONFIRMED) // guard: not if just cancelled
+    .select(MANAGE_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to update booking: ${error.message}`);
+  }
+  if (!updated) {
+    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
+  }
+
+  // Post-update re-check (same compensation idea as the POST route): if a
+  // racing submission landed between check and update, restore the previous
+  // schedule and refuse. Rare double-race leftovers are accepted — a single
+  // Secretary edits, and the POST route's own pass-2 covers the other side.
+  const lateConflict = await findConflict(item, quantity, startIso, endIso, { excludeId: id });
+  if (lateConflict) {
+    await supabase
+      .from('rental_requests')
+      .update({
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+        quantity_requested: booking.quantity_requested,
+        purpose: booking.purpose,
+      })
+      .eq('request_id', id);
+    return res.status(409).json({ error: lateConflict });
+  }
+
+  res.json({ message: 'Booking updated', request: updated });
+});
+
+// POST /api/rental-requests/:id/cancel — Secretary cancels a booking. The
+// conflict check ignores cancelled rows, so the slot/units free up
+// immediately. SMS stub tells the resident, since this is done TO them.
+router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select('request_id, status, requested_by_user_id, start_datetime, rental_items ( name )')
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  if (booking.status !== RENTAL_STATUS.CONFIRMED) {
+    return res.status(409).json({
+      error: `Only confirmed bookings can be cancelled — this booking is '${booking.status}'`,
+    });
+  }
+
+  const { data: cancelled, error } = await supabase
+    .from('rental_requests')
+    .update({ status: RENTAL_STATUS.CANCELLED, processed_by_user_id: req.user.user_id })
+    .eq('request_id', id)
+    .eq('status', RENTAL_STATUS.CONFIRMED)
+    .select(MANAGE_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to cancel booking: ${error.message}`);
+  }
+  if (!cancelled) {
+    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
+  }
+
+  const { data: requesterProfile } = await supabase
+    .from('profiles')
+    .select('resident_records ( contact_number )')
+    .eq('user_id', booking.requested_by_user_id)
+    .maybeSingle();
+  logSmsNotification(
+    requesterProfile?.resident_records?.contact_number,
+    `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`
+  );
+
+  res.json({ message: 'Booking cancelled — the slot has been freed', request: cancelled });
 });
 
 module.exports = router;

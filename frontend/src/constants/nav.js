@@ -5,6 +5,7 @@ export const SECRETARY_NAV = [
   { to: '/secretary/payments', label: 'Payments' },
   { to: '/secretary/document-types', label: 'Document types' },
   { to: '/secretary/rental-items', label: 'Rental items' },
+  { to: '/secretary/rentals', label: 'Rentals' },
 ];
 
 export const RESIDENT_NAV = [
@@ -15,3 +16,9 @@ export const RESIDENT_NAV = [
 ];
 
 export const TREASURER_NAV = [{ to: '/treasurer', label: 'Payments', end: true }];
+
+export const STAFF_NAV = [{ to: '/staff', label: 'Rental bookings', end: true }];
+
+export const PUNONG_BARANGAY_NAV = [
+  { to: '/punong-barangay', label: 'Rental bookings', end: true },
+];

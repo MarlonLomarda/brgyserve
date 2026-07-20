@@ -10,19 +10,25 @@ import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import RegisterPage from './pages/RegisterPage';
+import RentalBookingsPage from './pages/RentalBookingsPage';
 import RentalItemsPage from './pages/RentalItemsPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
-import { SECRETARY_NAV, TREASURER_NAV } from './constants/nav';
+import { PUNONG_BARANGAY_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_NAV } from './constants/nav';
 
 // Per-role home pages; roles without a real screen yet fall back to the
-// placeholder landing page.
+// placeholder landing page. Staff and the Punong Barangay get the read-only
+// rental-bookings view (no canManage) — writes are blocked server-side too.
 const ROLE_PAGES = {
   secretary: <SecretaryReviewPage />,
   resident: <MyRequestsPage />,
   treasurer: <PaymentsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />,
+  staff: <RentalBookingsPage title="BrgyServe — Staff" nav={STAFF_NAV} />,
+  punong_barangay: (
+    <RentalBookingsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
+  ),
 };
 
 export default function App() {
@@ -73,6 +79,14 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <RentalItemsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/rentals"
+        element={
+          <ProtectedRoute role="secretary">
+            <RentalBookingsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
           </ProtectedRoute>
         }
       />
