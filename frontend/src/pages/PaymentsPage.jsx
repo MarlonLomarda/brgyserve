@@ -1,20 +1,43 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
-import { chargeMeta, formatDate, METHOD_LABELS } from '../constants/requestStatus';
+import { chargeMeta, CHARGE_TYPE_LABELS, formatDate, METHOD_LABELS } from '../constants/requestStatus';
+import { formatSchedule } from '../constants/rentals';
 
-// Payment verification queue. Used by BOTH the Treasurer (their landing page)
-// and the Secretary (a Payments tab) — pass the role's title and nav.
-const FILTERS = ['UNPAID', 'PAID', 'all'];
-const FILTER_LABELS = { UNPAID: 'Needs verification', PAID: 'Paid', all: 'All charges' };
+// Payment verification queue for ALL charge types (document fees since stage
+// 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
+// (their landing page) and the Secretary (a Payments tab) — pass the role's
+// title and nav.
+const FILTERS = ['UNPAID', 'PAID', 'VOID', 'all'];
+const FILTER_LABELS = { UNPAID: 'Needs verification', PAID: 'Paid', VOID: 'Void', all: 'All charges' };
+
+function fullName(p) {
+  if (!p) return null;
+  const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
+  if (!name) return null;
+  return p.suffix ? `${name}, ${p.suffix}` : name;
+}
 
 function payerName(charge) {
-  const res = charge.document_requests?.resident_records;
-  if (res) {
-    const name = [res.first_name, res.middle_name, res.last_name].filter(Boolean).join(' ');
-    return res.suffix ? `${name}, ${res.suffix}` : name;
-  }
+  // Document charges carry the verified resident record; rental (and future
+  // fine) charges fall back to the payer account's profile name.
+  const name = fullName(charge.document_requests?.resident_records) || fullName(charge.payer?.profiles);
+  if (name) return name;
   return charge.payer?.username ? `@${charge.payer.username}` : '—';
+}
+
+// What the charge is for, per type.
+function chargeSubject(charge) {
+  if (charge.rental_requests) {
+    return {
+      main: `${charge.rental_requests.rental_items?.name || 'Rental'}${charge.rental_requests.quantity_requested > 1 ? ` × ${charge.rental_requests.quantity_requested}` : ''}`,
+      note: formatSchedule(charge.rental_requests.start_datetime, charge.rental_requests.end_datetime),
+    };
+  }
+  return {
+    main: charge.document_requests?.document_types?.name || charge.charge_type,
+    note: null,
+  };
 }
 
 function declaredInfo(c) {
@@ -54,7 +77,9 @@ function VerifyPanel({ charge, onDone }) {
         <div>
           <h3>Verify payment — charge #{charge.charge_id}</h3>
           <p className="muted">
-            {payerName(charge)} · {charge.document_requests?.document_types?.name || charge.charge_type}
+            {payerName(charge)} · {CHARGE_TYPE_LABELS[charge.charge_type] || charge.charge_type}:{' '}
+            {chargeSubject(charge).main}
+            {chargeSubject(charge).note && <> · {chargeSubject(charge).note}</>}
           </p>
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
@@ -192,7 +217,8 @@ export default function PaymentsPage({ title, nav }) {
                   <thead>
                     <tr>
                       <th>Resident</th>
-                      <th>Document</th>
+                      <th>Type</th>
+                      <th>For</th>
                       <th className="num">Amount</th>
                       <th>Declared payment</th>
                       <th>Status</th>
@@ -209,7 +235,13 @@ export default function PaymentsPage({ title, nav }) {
                             <div className="muted small-note">@{c.payer.username}</div>
                           )}
                         </td>
-                        <td>{c.document_requests?.document_types?.name || c.charge_type}</td>
+                        <td>{CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}</td>
+                        <td>
+                          {chargeSubject(c).main}
+                          {chargeSubject(c).note && (
+                            <div className="muted small-note">{chargeSubject(c).note}</div>
+                          )}
+                        </td>
                         <td className="num">₱{Number(c.amount).toFixed(2)}</td>
                         <td className="muted">{declaredInfo(c) || '—'}</td>
                         <td>

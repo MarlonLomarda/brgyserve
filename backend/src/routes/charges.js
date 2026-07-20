@@ -10,13 +10,20 @@ const router = express.Router();
 // (both roles allowed, per the Stage 4 design).
 router.use(authenticate, requireRole('treasurer', 'secretary'));
 
+// Charges link to their source per type: DOCUMENT via document_requests,
+// RENTAL via rental_requests (stage 4 of Facility Rentals) — whichever is
+// null for a given row simply embeds as null. The payer's profile name covers
+// rentals (no resident_records link on rental_requests).
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
-  payer:users ( user_id, username, email ),
+  payer:users ( user_id, username, email,
+    profiles ( first_name, middle_name, last_name, suffix ) ),
   document_requests ( request_id, purpose, status,
     document_types ( name ),
-    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) )
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
+  rental_requests ( request_id, quantity_requested, start_datetime, end_datetime, status,
+    rental_items ( name ) )
 `;
 
 // GET /api/charges?status=UNPAID|PAID|VOID|all — defaults to UNPAID (the
@@ -61,7 +68,9 @@ router.post('/:id/verify', async (req, res) => {
   const { data: charge, error: loadError } = await supabase
     .from('charges')
     .select(`charge_id, amount, status, declared_method, declared_reference,
-      document_requests ( request_id, document_types ( name ), resident_records ( contact_number ) )`)
+      document_requests ( request_id, document_types ( name ), resident_records ( contact_number ) ),
+      rental_requests ( request_id, rental_items ( name ) ),
+      payer:users ( profiles ( resident_records ( contact_number ) ) )`)
     .eq('charge_id', id)
     .maybeSingle();
   if (loadError) {
@@ -120,11 +129,17 @@ router.post('/:id/verify', async (req, res) => {
   }
 
   // SMS hook — stub only (see services/smsNotification.js). The use cases
-  // call for a confirmation SMS when payment status is updated.
-  const docName = charge.document_requests?.document_types?.name || 'document';
+  // call for a confirmation SMS when payment status is updated. Wording and
+  // contact source depend on what the charge is for.
+  const isRental = !!charge.rental_requests;
+  const contact =
+    charge.document_requests?.resident_records?.contact_number ||
+    charge.payer?.profiles?.resident_records?.contact_number;
   logSmsNotification(
-    charge.document_requests?.resident_records?.contact_number,
-    `BrgyServe: your payment of ₱${Number(charge.amount).toFixed(2)} for the ${docName} request has been received and verified. Please wait for the release notice.`
+    contact,
+    isRental
+      ? `BrgyServe: your payment of ₱${Number(charge.amount).toFixed(2)} for the ${charge.rental_requests?.rental_items?.name || 'rental'} booking has been received and verified.`
+      : `BrgyServe: your payment of ₱${Number(charge.amount).toFixed(2)} for the ${charge.document_requests?.document_types?.name || 'document'} request has been received and verified. Please wait for the release notice.`
   );
 
   res.json({ message: 'Payment recorded — charge marked PAID', payment });

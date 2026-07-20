@@ -2,6 +2,7 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { ITEM_TYPE, RENTAL_STATUS, RENTAL_STATUSES } = require('../constants/rentals');
+const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { logSmsNotification } = require('../services/smsNotification');
 
 const router = express.Router();
@@ -9,7 +10,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const RENTAL_FIELDS =
-  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, rental_items ( item_id, name, type, fee )';
+  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
 // Management/staff views: adds the requester (with their profile name) and the
 // item's capacity numbers (the edit form needs them). rental_requests has two
@@ -18,8 +19,16 @@ const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
-    profiles ( first_name, middle_name, last_name, suffix ) )
+    profiles ( first_name, middle_name, last_name, suffix ) ),
+  charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )
 `;
+
+// Rental fee = item fee (per unit per booking) x quantity — the SAME formula
+// the booking screen shows as "estimated fee", so the charge always matches
+// what the resident saw. Rounded to centavos.
+const rentalAmount = (item, quantity) => Math.round(Number(item.fee) * quantity * 100) / 100;
+
+const chargeOf = (row) => (Array.isArray(row?.charges) ? row.charges[0] || null : row?.charges || null);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -216,6 +225,34 @@ router.post('/', async (req, res) => {
     return res.status(409).json({ error: lateConflict });
   }
 
+  // Stage 4: a confirmed booking always carries exactly one RENTAL charge
+  // (same pattern as document approval). Zero-fee rentals get an amount-0
+  // charge auto-marked PAID, matching the document rule. No transactions in
+  // supabase-js, so compensate: if the charge can't be created, delete the
+  // booking rather than leave a confirmed booking with nothing to collect.
+  const amount = rentalAmount(item, quantity);
+  const { error: chargeError } = await supabase.from('charges').insert({
+    charge_type: CHARGE_TYPE.RENTAL,
+    amount,
+    status: amount > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
+    user_id: req.user.user_id,
+    rental_request_id: created.request_id,
+    created_at: new Date().toISOString(),
+  });
+  // 23505 = a charge already exists for this booking (UNIQUE
+  // charges.rental_request_id, migration 010) — benign, keep going.
+  if (chargeError && chargeError.code !== '23505') {
+    await supabase.from('rental_requests').delete().eq('request_id', created.request_id);
+    throw new Error(`Booking reverted — failed to create its charge: ${chargeError.message}`);
+  }
+
+  // Re-read so the response carries the charge just created.
+  const { data: withCharge } = await supabase
+    .from('rental_requests')
+    .select(RENTAL_FIELDS)
+    .eq('request_id', created.request_id)
+    .maybeSingle();
+
   logSmsNotification(
     profile.resident_records?.contact_number,
     `BrgyServe: your booking is CONFIRMED — ${quantity > 1 ? `${quantity}× ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`
@@ -223,7 +260,77 @@ router.post('/', async (req, res) => {
 
   res.status(201).json({
     message: `Booking confirmed: ${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}.`,
-    request: created,
+    request: withCharge || created,
+  });
+});
+
+// POST /api/rental-requests/mine/:id/pay — the resident declares HOW they are
+// paying for their booking, exactly like the document flow: stored as
+// declared_* on the charge, verified later by the Treasurer/Secretary in the
+// shared payments queue. Re-declarable while the charge stays UNPAID.
+router.post('/mine/:id/pay', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+
+  const method = String(req.body?.method ?? '').toLowerCase();
+  const reference = String(req.body?.reference_no ?? '').trim();
+  if (method !== PAYMENT_METHOD.ONSITE && method !== PAYMENT_METHOD.GCASH) {
+    return res.status(400).json({ error: "method must be 'onsite' or 'gcash'" });
+  }
+  if (method === PAYMENT_METHOD.GCASH && !reference) {
+    return res.status(400).json({ error: 'A GCash reference number is required' });
+  }
+  if (reference.length > 100) {
+    return res.status(400).json({ error: 'Reference number must be 100 characters or fewer' });
+  }
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select('request_id, status, charges ( charge_id, amount, status )')
+    .eq('request_id', id)
+    .eq('requested_by_user_id', req.user.user_id) // own bookings only
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
+  const charge = chargeOf(booking);
+  if (!charge) {
+    return res.status(409).json({ error: 'This booking has no charge yet — contact the barangay' });
+  }
+  if (charge.status !== CHARGE_STATUS.UNPAID) {
+    return res.status(409).json({ error: `This charge is already ${charge.status.toLowerCase()}` });
+  }
+
+  const { data: updated, error } = await supabase
+    .from('charges')
+    .update({
+      declared_method: method,
+      declared_reference: method === PAYMENT_METHOD.GCASH ? reference : null,
+      declared_at: new Date().toISOString(),
+    })
+    .eq('charge_id', charge.charge_id)
+    .eq('status', CHARGE_STATUS.UNPAID) // guard: not if just verified
+    .select('charge_id, amount, status, declared_method, declared_reference, declared_at')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to record payment declaration: ${error.message}`);
+  }
+  if (!updated) {
+    return res.status(409).json({ error: 'This charge was just processed — refresh to see its status' });
+  }
+
+  res.json({
+    message:
+      method === PAYMENT_METHOD.GCASH
+        ? 'GCash reference submitted — awaiting verification by the barangay.'
+        : "Noted — please pay in cash at the barangay hall treasurer's desk.",
+    charge: updated,
   });
 });
 
@@ -385,7 +492,29 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     return res.status(409).json({ error: lateConflict });
   }
 
-  res.json({ message: 'Booking updated', request: updated });
+  // Stage 4: a quantity change changes what is owed (fee × quantity), so an
+  // UNPAID charge is recomputed to match. A PAID charge is left alone — it
+  // records money actually received; any difference after a paid booking is
+  // edited is settled offline by the Treasurer.
+  let response = updated;
+  if (quantity !== booking.quantity_requested) {
+    const { error: chargeError } = await supabase
+      .from('charges')
+      .update({ amount: rentalAmount(item, quantity) })
+      .eq('rental_request_id', id)
+      .eq('status', CHARGE_STATUS.UNPAID);
+    if (chargeError) {
+      throw new Error(`Booking updated but failed to update its charge: ${chargeError.message}`);
+    }
+    const { data: fresh } = await supabase
+      .from('rental_requests')
+      .select(MANAGE_FIELDS)
+      .eq('request_id', id)
+      .maybeSingle();
+    if (fresh) response = fresh;
+  }
+
+  res.json({ message: 'Booking updated', request: response });
 });
 
 // POST /api/rental-requests/:id/cancel — Secretary cancels a booking. The
@@ -419,7 +548,7 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     .update({ status: RENTAL_STATUS.CANCELLED, processed_by_user_id: req.user.user_id })
     .eq('request_id', id)
     .eq('status', RENTAL_STATUS.CONFIRMED)
-    .select(MANAGE_FIELDS)
+    .select('request_id')
     .maybeSingle();
   if (error) {
     throw new Error(`Failed to cancel booking: ${error.message}`);
@@ -427,6 +556,25 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
   if (!cancelled) {
     return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
   }
+
+  // Stage 4: an UNPAID charge on a cancelled booking is VOIDed — nothing is
+  // owed anymore, and VOID (unlike deletion) keeps the billing record while
+  // dropping it off the verification queue. A PAID charge stays PAID: it
+  // records money actually received, and any refund is handled offline.
+  const { error: voidError } = await supabase
+    .from('charges')
+    .update({ status: CHARGE_STATUS.VOID })
+    .eq('rental_request_id', id)
+    .eq('status', CHARGE_STATUS.UNPAID);
+  if (voidError) {
+    throw new Error(`Booking cancelled but failed to void its charge: ${voidError.message}`);
+  }
+
+  const { data: fresh } = await supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
 
   const { data: requesterProfile } = await supabase
     .from('profiles')
@@ -438,7 +586,7 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`
   );
 
-  res.json({ message: 'Booking cancelled — the slot has been freed', request: cancelled });
+  res.json({ message: 'Booking cancelled — the slot has been freed', request: fresh });
 });
 
 module.exports = router;

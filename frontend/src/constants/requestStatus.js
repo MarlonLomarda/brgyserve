@@ -40,3 +40,10 @@ export const METHOD_LABELS = {
   onsite: 'Onsite (cash)',
   gcash: 'GCash',
 };
+
+// charge_type values are UPPERCASE in the DB (Table 15).
+export const CHARGE_TYPE_LABELS = {
+  DOCUMENT: 'Document',
+  RENTAL: 'Rental',
+  FINE: 'Fine',
+};
