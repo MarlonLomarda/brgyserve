@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
 import { RESIDENT_NAV } from '../constants/nav';
 import { chargeMeta, chargeOf } from '../constants/requestStatus';
-import { formatSchedule, rentalMeta } from '../constants/rentals';
+import { displayStatus, formatSchedule, rentalMeta } from '../constants/rentals';
 
 export default function MyRentalsPage() {
   const { authFetch } = useAuth();
@@ -94,7 +94,7 @@ export default function MyRentalsPage() {
                 </thead>
                 <tbody>
                   {requests.map((r) => {
-                    const meta = rentalMeta(r.status);
+                    const meta = rentalMeta(displayStatus(r));
                     const charge = chargeOf(r);
                     return (
                       <tr key={r.request_id}>
@@ -106,6 +106,9 @@ export default function MyRentalsPage() {
                         <td className="muted">{r.purpose}</td>
                         <td>
                           <span className={`badge ${meta.className}`}>{meta.label}</span>
+                          {r.return_note && (
+                            <div className="muted reason-note">Note: {r.return_note}</div>
+                          )}
                           {charge && (
                             <div className="muted reason-note">
                               Amount due: ₱{Number(charge.amount).toFixed(2)} —{' '}
@@ -122,8 +125,7 @@ export default function MyRentalsPage() {
                           )}
                         </td>
                         <td className="row-actions">
-                          {r.status === 'confirmed' &&
-                            charge?.status === 'UNPAID' &&
+                          {charge?.status === 'UNPAID' &&
                             (payTarget === r.request_id ? (
                               <form
                                 className="inline-form"

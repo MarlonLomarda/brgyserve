@@ -232,8 +232,11 @@ Stores rental and booking requests for barangay items and facilities, including 
 | start_datetime | timestamptz | | No | Start date and time of the rental period. |
 | end_datetime | timestamptz | | No | End date and time of the rental period. |
 | purpose | text | | No | Intended use or reason for the rental request. |
-| status | varchar(50) | | No | Current status (Pending, Approved, Rejected, Cancelled). |
-| processed_by_user_id | bigint | FK → users | Yes | Staff user who processed the request; null until assigned. |
+| status | varchar(50) | | No | Current status. Self-service, so no pending/approved: `confirmed`, `cancelled`, `returned`, `returned_late`, `returned_with_issue` (see `constants/rentals.js`). `completed` (facilities) and `overdue` (physical items) are derived at display, never stored. |
+| processed_by_user_id | bigint | FK → users | Yes | Secretary who edited/cancelled the booking; null otherwise. |
+| return_note | text | | Yes | Optional note recorded with a return (e.g. damage). Added in migration 011. |
+| returned_at | timestamptz | | Yes | When Staff recorded the return; null until returned. Added in migration 011. |
+| returned_by_user_id | bigint | FK → users | Yes | Staff user who recorded the return; null until returned. Added in migration 011. |
 
 ---
 

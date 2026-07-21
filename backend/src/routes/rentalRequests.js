@@ -1,7 +1,13 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { ITEM_TYPE, RENTAL_STATUS, RENTAL_STATUSES } = require('../constants/rentals');
+const {
+  ITEM_TYPE,
+  RETURNABLE_TYPES,
+  RENTAL_STATUS,
+  RETURN_OUTCOMES,
+  STORED_RENTAL_STATUSES,
+} = require('../constants/rentals');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { logSmsNotification } = require('../services/smsNotification');
 
@@ -10,16 +16,20 @@ const router = express.Router();
 router.use(authenticate);
 
 const RENTAL_FIELDS =
-  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
+  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
-// Management/staff views: adds the requester (with their profile name) and the
-// item's capacity numbers (the edit form needs them). rental_requests has two
-// FKs to users, so the requester embed must name its constraint.
+// Management/staff views: adds the requester (with their profile name), the
+// item's capacity numbers (the edit form needs them), and the return record.
+// rental_requests has three FKs to users, so each user embed names its
+// constraint.
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
+  return_note, returned_at,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
     profiles ( first_name, middle_name, last_name, suffix ) ),
+  returned_by:users!rental_requests_returned_by_user_id_fkey ( user_id, username,
+    profiles ( first_name, last_name ) ),
   charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )
 `;
 
@@ -29,6 +39,22 @@ const MANAGE_FIELDS = `
 const rentalAmount = (item, quantity) => Math.round(Number(item.fee) * quantity * 100) / 100;
 
 const chargeOf = (row) => (Array.isArray(row?.charges) ? row.charges[0] || null : row?.charges || null);
+
+const isReturnable = (type) => RETURNABLE_TYPES.includes(type);
+
+// Derived display status (stage 5) — NEVER stored. A booking past its end that
+// is still 'confirmed' is either a facility that auto-completes (no physical
+// return) or a physical item that is overdue until Staff mark it returned.
+// Everything else (cancelled, the return outcomes, still-upcoming confirmed)
+// shows its stored status. Computed here so the time-comparison lives in one
+// place; every management/mine response carries `derived_status`.
+function deriveStatus(row) {
+  if (!row) return row;
+  if (row.status !== RENTAL_STATUS.CONFIRMED) return row.status;
+  if (new Date(row.end_datetime) >= new Date()) return RENTAL_STATUS.CONFIRMED;
+  return isReturnable(row.rental_items?.type) ? RENTAL_STATUS.OVERDUE : RENTAL_STATUS.COMPLETED;
+}
+const withDerived = (row) => (row ? { ...row, derived_status: deriveStatus(row) } : row);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -260,7 +286,7 @@ router.post('/', async (req, res) => {
 
   res.status(201).json({
     message: `Booking confirmed: ${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}.`,
-    request: withCharge || created,
+    request: withDerived(withCharge || created),
   });
 });
 
@@ -347,7 +373,7 @@ router.get('/mine', async (req, res) => {
   if (error) {
     throw new Error(`Failed to load bookings: ${error.message}`);
   }
-  res.json({ requests: data });
+  res.json({ requests: data.map(withDerived) });
 });
 
 // ---------------------------------------------------------------------------
@@ -360,29 +386,44 @@ router.get('/mine', async (req, res) => {
 const VIEW_ROLES = ['secretary', 'staff', 'punong_barangay'];
 
 // GET /api/rental-requests?status=confirmed — all bookings across residents,
-// optionally filtered ('all' or omitted = everything). Ordered by schedule,
-// upcoming-first, so the soonest bookings are at the top of the list.
+// optionally filtered, newest-scheduled first. Besides the stored statuses,
+// two VIRTUAL filters are derived from confirmed + past-end bookings:
+// 'overdue' (physical items awaiting return) and 'completed' (facilities that
+// auto-completed). 'all' or omitted = everything.
+const VIRTUAL_FILTERS = [RENTAL_STATUS.OVERDUE, RENTAL_STATUS.COMPLETED];
+
 router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   const status = req.query.status;
+  const isVirtual = VIRTUAL_FILTERS.includes(status);
+
   let query = supabase
     .from('rental_requests')
     .select(MANAGE_FIELDS)
     .order('start_datetime', { ascending: false });
 
-  if (status && status !== 'all') {
-    if (!RENTAL_STATUSES.includes(status)) {
+  if (status && status !== 'all' && !isVirtual) {
+    if (!STORED_RENTAL_STATUSES.includes(status)) {
       return res.status(400).json({
-        error: `Unknown status '${status}' (expected one of: ${RENTAL_STATUSES.join(', ')}, or 'all')`,
+        error: `Unknown status '${status}' (expected one of: ${STORED_RENTAL_STATUSES.join(', ')}, overdue, completed, or 'all')`,
       });
     }
     query = query.eq('status', status);
+  } else if (isVirtual) {
+    // overdue/completed are derived from confirmed bookings past their end —
+    // fetch confirmed, then keep the ones whose derived status matches.
+    query = query.eq('status', RENTAL_STATUS.CONFIRMED);
   }
 
   const { data, error } = await query;
   if (error) {
     throw new Error(`Failed to load bookings: ${error.message}`);
   }
-  res.json({ requests: data });
+
+  let rows = data.map(withDerived);
+  if (isVirtual) {
+    rows = rows.filter((r) => r.derived_status === status);
+  }
+  res.json({ requests: rows });
 });
 
 // GET /api/rental-requests/:id — one booking's detail (view roles).
@@ -403,7 +444,7 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   if (!data) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  res.json({ request: data });
+  res.json({ request: withDerived(data) });
 });
 
 // PUT /api/rental-requests/:id — Secretary reschedules a booking (date,
@@ -514,7 +555,7 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     if (fresh) response = fresh;
   }
 
-  res.json({ message: 'Booking updated', request: response });
+  res.json({ message: 'Booking updated', request: withDerived(response) });
 });
 
 // POST /api/rental-requests/:id/cancel — Secretary cancels a booking. The
@@ -586,7 +627,91 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`
   );
 
-  res.json({ message: 'Booking cancelled — the slot has been freed', request: fresh });
+  res.json({ message: 'Booking cancelled — the slot has been freed', request: withDerived(fresh) });
+});
+
+// ---------------------------------------------------------------------------
+// Stage 5 — return tracking. Barangay Staff (view-only everywhere else in
+// rentals) get exactly ONE write action: recording that a physical item has
+// been returned. Facilities have no return step (they auto-complete). This is
+// deliberately Staff-only — edit/cancel remain Secretary-only above.
+// ---------------------------------------------------------------------------
+
+// POST /api/rental-requests/:id/return — Staff mark a confirmed physical-item
+// booking as returned / returned_late / returned_with_issue (+ optional note).
+router.post('/:id/return', requireRole('staff'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+
+  const outcome = String(req.body?.outcome ?? '').trim().toLowerCase();
+  if (!RETURN_OUTCOMES.includes(outcome)) {
+    return res.status(400).json({ error: `outcome must be one of: ${RETURN_OUTCOMES.join(', ')}` });
+  }
+  const note = String(req.body?.note ?? '').trim() || null;
+  if (note && note.length > 1000) {
+    return res.status(400).json({ error: 'note must be 1000 characters or fewer' });
+  }
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select('request_id, status, requested_by_user_id, rental_items ( name, type )')
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  // Facilities have no return step — they auto-complete after their end.
+  if (!isReturnable(booking.rental_items?.type)) {
+    return res.status(400).json({
+      error: `${booking.rental_items?.name || 'This item'} is a facility — facilities have no return step (they complete automatically after their booked time).`,
+    });
+  }
+  if (booking.status !== RENTAL_STATUS.CONFIRMED) {
+    return res.status(409).json({
+      error: `Only confirmed bookings can be marked returned — this booking is '${booking.status}'`,
+    });
+  }
+
+  const { data: updated, error } = await supabase
+    .from('rental_requests')
+    .update({
+      status: outcome,
+      return_note: note,
+      returned_at: new Date().toISOString(),
+      returned_by_user_id: req.user.user_id,
+    })
+    .eq('request_id', id)
+    .eq('status', RENTAL_STATUS.CONFIRMED) // guard: not if just cancelled
+    .select(MANAGE_FIELDS)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to mark returned: ${error.message}`);
+  }
+  if (!updated) {
+    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
+  }
+
+  const { data: requesterProfile } = await supabase
+    .from('profiles')
+    .select('resident_records ( contact_number )')
+    .eq('user_id', booking.requested_by_user_id)
+    .maybeSingle();
+  const spoken = {
+    [RENTAL_STATUS.RETURNED]: 'returned',
+    [RENTAL_STATUS.RETURNED_LATE]: 'returned (late)',
+    [RENTAL_STATUS.RETURNED_WITH_ISSUE]: 'returned with an issue noted',
+  }[outcome];
+  logSmsNotification(
+    requesterProfile?.resident_records?.contact_number,
+    `BrgyServe: your rental of ${booking.rental_items?.name || 'an item'} has been recorded as ${spoken}. Thank you.`
+  );
+
+  res.json({ message: 'Return recorded', request: withDerived(updated) });
 });
 
 module.exports = router;

@@ -1,17 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
-import { ITEM_TYPE_LABELS, formatSchedule, rentalMeta } from '../constants/rentals';
+import { formatDate } from '../constants/requestStatus';
+import {
+  ITEM_TYPE_LABELS,
+  RETURN_OUTCOMES,
+  displayStatus,
+  formatSchedule,
+  isReturnable,
+  rentalMeta,
+} from '../constants/rentals';
 
 // All-bookings view, shared by three roles: the Secretary manages
-// (canManage — edit/cancel), Barangay Staff and the Punong Barangay get the
-// same list read-only. Pass the role's title and nav like PaymentsPage.
+// (canManage — edit/cancel), Barangay Staff mark physical items returned
+// (canReturn), the Punong Barangay is read-only. Pass the role's title and
+// nav like PaymentsPage.
 
-const FILTERS = ['confirmed', 'cancelled', 'completed', 'all'];
+const FILTERS = [
+  'confirmed',
+  'overdue',
+  'completed',
+  'returned',
+  'returned_late',
+  'returned_with_issue',
+  'cancelled',
+  'all',
+];
 const FILTER_LABELS = {
-  confirmed: 'Confirmed',
+  confirmed: 'Confirmed / upcoming',
+  overdue: 'Overdue (awaiting return)',
+  completed: 'Completed (facilities)',
+  returned: 'Returned',
+  returned_late: 'Returned late',
+  returned_with_issue: 'Returned with issue',
   cancelled: 'Cancelled',
-  completed: 'Completed',
   all: 'All bookings',
 };
 
@@ -137,14 +159,83 @@ function EditPanel({ booking, onDone }) {
   );
 }
 
-export default function RentalBookingsPage({ title, nav, canManage = false }) {
+// Staff record a physical item's return: an outcome + optional note.
+function ReturnPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState('confirmed');
+  const item = booking.rental_items;
+  const [outcome, setOutcome] = useState(RETURN_OUTCOMES[0].value);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      const data = await authFetch(`/rental-requests/${booking.request_id}/return`, {
+        method: 'POST',
+        body: { outcome, note: note.trim() || undefined },
+      });
+      onDone({ type: 'success', text: data.message });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>Mark returned — booking #{booking.request_id}</h3>
+          <p className="muted">
+            {residentName(booking)} · {item?.name} ({ITEM_TYPE_LABELS[item?.type] || item?.type}) ·{' '}
+            {booking.quantity_requested} unit{booking.quantity_requested === 1 ? '' : 's'}
+          </p>
+          <p className="muted">{formatSchedule(booking.start_datetime, booking.end_datetime)}</p>
+        </div>
+        <button className="btn secondary" onClick={() => onDone(null)}>
+          ← Back to list
+        </button>
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <label>
+          Outcome
+          <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+            {RETURN_OUTCOMES.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Note <span className="hint">(optional — e.g. what was damaged or missing)</span>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} />
+        </label>
+        <div className="actions">
+          <button className="btn" type="submit" disabled={busy}>
+            {busy ? 'Recording…' : 'Record return'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export default function RentalBookingsPage({ title, nav, canManage = false, canReturn = false }) {
+  const { authFetch } = useAuth();
+  const [filter, setFilter] = useState(canReturn ? 'overdue' : 'confirmed');
   const [requests, setRequests] = useState(null); // null = loading
   const [listError, setListError] = useState('');
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
+  const [returning, setReturning] = useState(null); // booking being returned
 
   const load = useCallback(async () => {
     setListError('');
@@ -180,13 +271,15 @@ export default function RentalBookingsPage({ title, nav, canManage = false }) {
     }
   }
 
+  const subtitle = canManage
+    ? 'Manage facility and item bookings'
+    : canReturn
+      ? 'Track what is out and record returns'
+      : 'Facility and item bookings (view only)';
+
   return (
     <div className="dash">
-      <DashHeader
-        title={title}
-        subtitle={canManage ? 'Manage facility and item bookings' : 'Facility and item bookings (view only)'}
-        nav={nav}
-      />
+      <DashHeader title={title} subtitle={subtitle} nav={nav} />
 
       <main className="dash-main">
         {editing ? (
@@ -194,6 +287,17 @@ export default function RentalBookingsPage({ title, nav, canManage = false }) {
             booking={editing}
             onDone={(result) => {
               setEditing(null);
+              if (result) {
+                setFlash(result);
+                load();
+              }
+            }}
+          />
+        ) : returning ? (
+          <ReturnPanel
+            booking={returning}
+            onDone={(result) => {
+              setReturning(null);
               if (result) {
                 setFlash(result);
                 load();
@@ -242,12 +346,14 @@ export default function RentalBookingsPage({ title, nav, canManage = false }) {
                       <th className="num">Qty</th>
                       <th>Purpose</th>
                       <th>Status</th>
-                      {canManage && <th></th>}
+                      {(canManage || canReturn) && <th></th>}
                     </tr>
                   </thead>
                   <tbody>
                     {requests.map((r) => {
-                      const meta = rentalMeta(r.status);
+                      const shown = displayStatus(r);
+                      const meta = rentalMeta(shown);
+                      const returnable = isReturnable(r.rental_items?.type);
                       return (
                         <tr key={r.request_id}>
                           <td>
@@ -262,10 +368,18 @@ export default function RentalBookingsPage({ title, nav, canManage = false }) {
                           <td className="muted truncate">{r.purpose}</td>
                           <td>
                             <span className={`badge ${meta.className}`}>{meta.label}</span>
+                            {r.return_note && (
+                              <div className="muted reason-note">Note: {r.return_note}</div>
+                            )}
+                            {r.returned_at && r.returned_by?.username && (
+                              <div className="muted small-note">
+                                by @{r.returned_by.username} on {formatDate(r.returned_at)}
+                              </div>
+                            )}
                           </td>
-                          {canManage && (
+                          {(canManage || canReturn) && (
                             <td className="row-actions">
-                              {r.status === 'confirmed' && (
+                              {canManage && r.status === 'confirmed' && (
                                 <>
                                   <button
                                     className="btn secondary"
@@ -282,6 +396,15 @@ export default function RentalBookingsPage({ title, nav, canManage = false }) {
                                     {busyId === r.request_id ? 'Cancelling…' : 'Cancel'}
                                   </button>
                                 </>
+                              )}
+                              {canReturn && r.status === 'confirmed' && returnable && (
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => setReturning(r)}
+                                >
+                                  Mark returned
+                                </button>
                               )}
                             </td>
                           )}

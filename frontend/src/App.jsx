@@ -25,7 +25,7 @@ const ROLE_PAGES = {
   secretary: <SecretaryReviewPage />,
   resident: <MyRequestsPage />,
   treasurer: <PaymentsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />,
-  staff: <RentalBookingsPage title="BrgyServe — Staff" nav={STAFF_NAV} />,
+  staff: <RentalBookingsPage title="BrgyServe — Staff" nav={STAFF_NAV} canReturn />,
   punong_barangay: (
     <RentalBookingsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
   ),
