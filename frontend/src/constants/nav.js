@@ -1,6 +1,7 @@
 // Dashboard nav tabs per role, shared by every page of that role's area.
 export const SECRETARY_NAV = [
   { to: '/secretary', label: 'Resident review', end: true },
+  { to: '/secretary/residents', label: 'Resident records' },
   { to: '/secretary/requests', label: 'Document requests' },
   { to: '/secretary/payments', label: 'Payments' },
   { to: '/secretary/document-types', label: 'Document types' },

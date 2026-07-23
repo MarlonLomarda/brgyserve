@@ -13,6 +13,7 @@ import RegisterPage from './pages/RegisterPage';
 import RentalBookingsPage from './pages/RentalBookingsPage';
 import RentalItemsPage from './pages/RentalItemsPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
+import ResidentRecordsPage from './pages/ResidentRecordsPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
@@ -50,6 +51,14 @@ export default function App() {
         element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />}
       />
 
+      <Route
+        path="/secretary/residents"
+        element={
+          <ProtectedRoute role="secretary">
+            <ResidentRecordsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/secretary/document-types"
         element={

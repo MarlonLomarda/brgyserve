@@ -7,6 +7,7 @@ const supabase = require('./config/supabase');
 const authRoutes = require('./routes/auth');
 const secretaryRoutes = require('./routes/secretary');
 const residentRoutes = require('./routes/residents');
+const residentRecordRoutes = require('./routes/residentRecords');
 const documentTypeRoutes = require('./routes/documentTypes');
 const documentRequestRoutes = require('./routes/documentRequests');
 const chargeRoutes = require('./routes/charges');
@@ -35,6 +36,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/secretary', secretaryRoutes);
 app.use('/api/residents', residentRoutes);
+app.use('/api/resident-records', residentRecordRoutes);
 app.use('/api/document-types', documentTypeRoutes);
 app.use('/api/document-requests', documentRequestRoutes);
 app.use('/api/charges', chargeRoutes);
