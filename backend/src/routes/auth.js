@@ -90,6 +90,36 @@ router.post('/register', async (req, res) => {
   });
 });
 
+// Why an account with is_active = false cannot log in. Only two paths ever
+// clear that flag — resident self-registration (pending approval) and the
+// resident-record archive cascade — so the two are told apart from existing
+// state, no extra column needed: an account linked to an ARCHIVED
+// resident_records row was deactivated by archiving; a resident that is not
+// (whether or not the Secretary has linked a record yet — linking and
+// activating are separate steps) is still awaiting approval. Anything else
+// gets a safe generic message rather than falling through to the wrong one.
+// The block itself never changes: none of these accounts may log in.
+async function inactiveMessage(user) {
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('resident_id, resident_records ( is_archived )')
+    .eq('user_id', user.user_id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load profile: ${error.message}`);
+  }
+
+  const linked = profile?.resident_records;
+  const isArchived = Array.isArray(linked) ? linked[0]?.is_archived : linked?.is_archived;
+  if (profile?.resident_id && isArchived) {
+    return 'This account has been deactivated. Please contact the Barangay Office.';
+  }
+  if (user.role === 'resident') {
+    return 'Account is pending approval by the Barangay Secretary';
+  }
+  return 'This account is inactive. Please contact the Barangay Office.';
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
@@ -112,7 +142,7 @@ router.post('/login', async (req, res) => {
   }
 
   if (!user.is_active) {
-    return res.status(403).json({ error: 'Account is pending approval by the Barangay Secretary' });
+    return res.status(403).json({ error: await inactiveMessage(user) });
   }
 
   const token = jwt.sign(
