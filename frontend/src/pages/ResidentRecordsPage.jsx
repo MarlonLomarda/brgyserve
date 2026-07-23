@@ -4,15 +4,249 @@ import DashHeader from '../components/DashHeader';
 import { SECRETARY_NAV } from '../constants/nav';
 import { formatDate } from '../constants/requestStatus';
 
-// Stage 1 of Resident Records Management: browse + search the master list.
-// Read-only — add/edit arrive in Stage 2, archiving in Stage 3.
+// Resident Records Management: browse + search the master list (stage 1),
+// add with the fuzzy duplicate check + edit (stage 2). Archiving is stage 3.
+
+const SEX_OPTIONS = ['Male', 'Female'];
+const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'];
+
+const EMPTY_FORM = {
+  first_name: '', middle_name: '', last_name: '', suffix: '',
+  birthdate: '', birthplace: '', address: '', sex: '', civil_status: '',
+  religion: '', educational_attainment: '', contact_number: '',
+};
 
 function fullName(r) {
   const name = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ');
   return r.suffix ? `${name}, ${r.suffix}` : name;
 }
 
-function RecordDetail({ id, onBack }) {
+// Ranked duplicate candidates from the two-stage matching engine. Shown so the
+// Secretary can judge whether this is the same person — never a hard block.
+function DuplicateMatches({ matches }) {
+  if (matches === null) return null;
+  if (matches.length === 0) {
+    return <p className="muted">No likely duplicates found for that name.</p>;
+  }
+  return (
+    <>
+      <p className="muted">
+        {matches.length} existing record{matches.length === 1 ? '' : 's'} may be the same person:
+      </p>
+      <ul className="suggestions">
+        {matches.map((m) => (
+          <li key={m.resident_id} className="suggestion">
+            <span className="badge score">{Math.round(m.score * 100)}% match</span>
+            <div className="suggestion-info">
+              <strong>
+                {fullName(m)} <span className="muted">(record #{m.resident_id})</span>
+              </strong>
+              <span className="muted">
+                b. {m.birthdate || '—'} · {m.address || '—'}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+// One form for both add and edit. `record` null => add mode (runs the
+// duplicate check); otherwise edit mode (no duplicate check — correcting an
+// existing person is not creating a new identity).
+function RecordForm({ record, onDone }) {
+  const { authFetch } = useAuth();
+  const isEdit = !!record;
+  const [form, setForm] = useState(() =>
+    record
+      ? Object.fromEntries(
+          Object.keys(EMPTY_FORM).map((k) => [k, record[k] == null ? '' : String(record[k])])
+        )
+      : { ...EMPTY_FORM }
+  );
+  const [matches, setMatches] = useState(null); // null = not checked yet
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const canCheck = form.first_name.trim() && form.last_name.trim();
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+    // any name edit invalidates a previous check
+    if (name === 'first_name' || name === 'last_name') {
+      setMatches(null);
+      setNeedsConfirm(false);
+    }
+  }
+
+  async function handleCheck() {
+    setError('');
+    setBusy(true);
+    try {
+      const data = await authFetch('/resident-records/check-duplicates', {
+        method: 'POST',
+        body: { first_name: form.first_name, last_name: form.last_name },
+      });
+      setMatches(data.matches);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(confirmDuplicate) {
+    setError('');
+    setBusy(true);
+    try {
+      const data = isEdit
+        ? await authFetch(`/resident-records/${record.resident_id}`, { method: 'PUT', body: form })
+        : await authFetch('/resident-records', {
+            method: 'POST',
+            body: { ...form, confirm_duplicate: confirmDuplicate },
+          });
+      onDone({ type: 'success', text: data.message }, data.record);
+    } catch (err) {
+      // 409 = the server found duplicates and refused to create without an
+      // explicit confirmation; show them and switch to the confirm action.
+      if (err.status === 409 && err.data?.matches) {
+        setMatches(err.data.matches);
+        setNeedsConfirm(true);
+        setError(err.message);
+      } else {
+        setError(err.message);
+      }
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>{isEdit ? `Edit ${fullName(record)}` : 'Add resident record'}</h3>
+          {isEdit && <p className="muted">Record #{record.resident_id}</p>}
+        </div>
+        <button className="btn secondary" onClick={() => onDone(null)}>
+          ← Back to list
+        </button>
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(false);
+        }}
+      >
+        <div className="grid-2">
+          <label>
+            First name
+            <input name="first_name" value={form.first_name} onChange={handleChange} maxLength={100} required />
+          </label>
+          <label>
+            Middle name <span className="hint">(optional)</span>
+            <input name="middle_name" value={form.middle_name} onChange={handleChange} maxLength={100} />
+          </label>
+          <label>
+            Last name
+            <input name="last_name" value={form.last_name} onChange={handleChange} maxLength={100} required />
+          </label>
+          <label>
+            Suffix <span className="hint">(Jr., Sr., III)</span>
+            <input name="suffix" value={form.suffix} onChange={handleChange} maxLength={20} />
+          </label>
+          <label>
+            Birthdate
+            <input
+              name="birthdate"
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={form.birthdate}
+              onChange={handleChange}
+            />
+          </label>
+          <label>
+            Birthplace
+            <input name="birthplace" value={form.birthplace} onChange={handleChange} maxLength={255} />
+          </label>
+          <label>
+            Sex
+            <select name="sex" value={form.sex} onChange={handleChange}>
+              <option value="">—</option>
+              {SEX_OPTIONS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Civil status
+            <select name="civil_status" value={form.civil_status} onChange={handleChange}>
+              <option value="">—</option>
+              {CIVIL_STATUS_OPTIONS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Religion
+            <input name="religion" value={form.religion} onChange={handleChange} maxLength={100} />
+          </label>
+          <label>
+            Educational attainment
+            <input
+              name="educational_attainment"
+              value={form.educational_attainment}
+              onChange={handleChange}
+              maxLength={100}
+            />
+          </label>
+          <label>
+            Contact number
+            <input name="contact_number" value={form.contact_number} onChange={handleChange} maxLength={20} />
+          </label>
+        </div>
+        <label>
+          Address
+          <input name="address" value={form.address} onChange={handleChange} maxLength={255} required />
+        </label>
+
+        {!isEdit && (
+          <div className="suggest-section">
+            <h4>Duplicate check</h4>
+            <p className="muted">
+              Checks the master list for existing records with a similar name before adding.
+            </p>
+            <DuplicateMatches matches={matches} />
+            <div className="actions">
+              <button className="btn secondary" type="button" disabled={!canCheck || busy} onClick={handleCheck}>
+                {busy ? 'Checking…' : 'Check for duplicates'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="actions">
+          {needsConfirm ? (
+            <button className="btn" type="button" disabled={busy} onClick={() => save(true)}>
+              {busy ? 'Adding…' : 'This is a new person — add anyway'}
+            </button>
+          ) : (
+            <button className="btn" type="submit" disabled={busy}>
+              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add resident'}
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RecordDetail({ id, onBack, onEdit }) {
   const { authFetch } = useAuth();
   const [data, setData] = useState(null); // { record, linked_accounts }
   const [error, setError] = useState('');
@@ -42,9 +276,16 @@ function RecordDetail({ id, onBack }) {
           <h3>{r ? fullName(r) : `Resident record #${id}`}</h3>
           {r && <p className="muted">Record #{r.resident_id} · registered {formatDate(r.date_registered)}</p>}
         </div>
-        <button className="btn secondary" onClick={onBack}>
-          ← Back to list
-        </button>
+        <div className="head-actions">
+          {r && !r.is_archived && (
+            <button className="btn secondary" onClick={() => onEdit(r)}>
+              Edit
+            </button>
+          )}
+          <button className="btn secondary" onClick={onBack}>
+            ← Back to list
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -124,7 +365,9 @@ export default function ResidentRecordsPage() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null); // null = loading
   const [error, setError] = useState('');
+  const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [formTarget, setFormTarget] = useState(null); // 'new' | record object
 
   const load = useCallback(async () => {
     setError('');
@@ -166,10 +409,34 @@ export default function ResidentRecordsPage() {
       />
 
       <main className="dash-main">
-        {selectedId ? (
-          <RecordDetail id={selectedId} onBack={() => setSelectedId(null)} />
+        {formTarget ? (
+          <RecordForm
+            record={formTarget === 'new' ? null : formTarget}
+            onDone={(result, record) => {
+              const wasAdd = formTarget === 'new';
+              setFormTarget(null);
+              if (!result) return;
+              setFlash(result);
+              setSelectedId(null);
+              if (wasAdd && record) {
+                // land back on the list with the new record in view: the master
+                // list is paginated by surname, so search for it
+                setSearchInput(record.last_name);
+                setSearch(record.last_name);
+                setPage(1);
+              }
+              load();
+            }}
+          />
+        ) : selectedId ? (
+          <RecordDetail
+            id={selectedId}
+            onBack={() => setSelectedId(null)}
+            onEdit={(record) => setFormTarget(record)}
+          />
         ) : (
           <>
+            {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
             {error && <div className="alert error">{error}</div>}
 
             <div className="list-head">
@@ -193,6 +460,9 @@ export default function ResidentRecordsPage() {
                     Clear
                   </button>
                 )}
+                <button className="btn" type="button" onClick={() => setFormTarget('new')}>
+                  Add resident
+                </button>
               </form>
             </div>
 

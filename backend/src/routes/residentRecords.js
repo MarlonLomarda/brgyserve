@@ -1,6 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { findMatches } = require('../services/nameMatching');
 
 const router = express.Router();
 
@@ -14,6 +15,76 @@ const LIST_FIELDS =
 
 const DEFAULT_PER_PAGE = 25;
 const MAX_PER_PAGE = 100;
+
+// Column limits straight from the schema doc (Table 4).
+const REQUIRED_FIELDS = ['first_name', 'last_name', 'address']; // address is NOT NULL in the DB
+const OPTIONAL_TEXT_FIELDS = [
+  'middle_name', 'suffix', 'birthplace', 'sex', 'civil_status',
+  'religion', 'educational_attainment', 'contact_number',
+];
+const MAX_LENGTH = {
+  first_name: 100, middle_name: 100, last_name: 100, suffix: 20,
+  birthplace: 255, address: 255, sex: 20, civil_status: 50,
+  religion: 100, educational_attainment: 100, contact_number: 20,
+};
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Validates the writable columns; returns { error } or { value }, the same
+// shape document types and rental items use. resident_id, date_registered and
+// is_archived are never client-writable (date_registered is set server-side on
+// create; archiving is stage 3).
+function validateBody(body) {
+  const value = {};
+
+  for (const field of REQUIRED_FIELDS) {
+    const v = String(body?.[field] ?? '').trim();
+    if (!v) return { error: `${field.replace('_', ' ')} is required` };
+    if (v.length > MAX_LENGTH[field]) {
+      return { error: `${field.replace('_', ' ')} must be ${MAX_LENGTH[field]} characters or fewer` };
+    }
+    value[field] = v;
+  }
+
+  for (const field of OPTIONAL_TEXT_FIELDS) {
+    const v = String(body?.[field] ?? '').trim();
+    if (v.length > MAX_LENGTH[field]) {
+      return { error: `${field.replace('_', ' ')} must be ${MAX_LENGTH[field]} characters or fewer` };
+    }
+    value[field] = v || null;
+  }
+
+  const birthdate = String(body?.birthdate ?? '').trim();
+  if (birthdate) {
+    if (!DATE_RE.test(birthdate)) {
+      return { error: 'birthdate must be in YYYY-MM-DD format' };
+    }
+    const parsed = new Date(`${birthdate}T00:00:00+08:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return { error: 'birthdate is not a valid date' };
+    }
+    if (parsed > new Date()) {
+      return { error: 'birthdate cannot be in the future' };
+    }
+    value.birthdate = birthdate;
+  } else {
+    value.birthdate = null;
+  }
+
+  return { value };
+}
+
+// The fields the Secretary needs to judge whether a ranked match is the same
+// person. Mirrors the self-registration suggestion shape in routes/secretary.js.
+const asSuggestion = (m) => ({
+  resident_id: m.resident_id,
+  first_name: m.first_name,
+  middle_name: m.middle_name,
+  last_name: m.last_name,
+  suffix: m.suffix,
+  birthdate: m.birthdate,
+  address: m.address,
+  score: m.score,
+});
 
 // Search terms go into PostgREST .or() filter strings, where commas and
 // parentheses are syntax and %/_ are LIKE wildcards — neutralize all of them
@@ -122,6 +193,113 @@ router.get('/:id', async (req, res) => {
     record,
     linked_accounts: (links || []).map((l) => l.users).filter(Boolean),
   });
+});
+
+// ---------------------------------------------------------------------------
+// Stage 2 — add (with the duplicate check) + edit.
+//
+// The duplicate check REUSES the existing two-stage engine
+// (services/nameMatching.js: pg_trgm blocking + Jaro-Winkler scoring) exactly
+// as resident self-registration does — same call signature, same DEFAULTS
+// (thresholds are never hardcoded here; the evaluation harness sweeps them),
+// same ranked output. Duplicate detection now guards BOTH entry points into
+// the master list.
+//
+// It is deliberately a SOFT check: real barangays do have two different people
+// with the same name, so matches inform the Secretary and require an explicit
+// confirmation — they never hard-block.
+// ---------------------------------------------------------------------------
+
+// POST /api/resident-records/check-duplicates — ranked candidates for a
+// candidate name. Creates nothing; safe to call as often as the UI likes.
+router.post('/check-duplicates', async (req, res) => {
+  const firstName = String(req.body?.first_name ?? '').trim();
+  const lastName = String(req.body?.last_name ?? '').trim();
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'first name and last name are required to check for duplicates' });
+  }
+
+  // No options passed => DEFAULTS, identical to the self-registration path.
+  const matches = await findMatches(firstName, lastName);
+  res.json({ matches: matches.map(asSuggestion) });
+});
+
+// POST /api/resident-records — create a record. The duplicate check re-runs
+// HERE regardless of what the client checked earlier, so the server is the
+// final authority: if there are matches and the client did not send
+// confirm_duplicate, the record is NOT created and the ranked matches come
+// back with a 409 for the Secretary to judge.
+router.post('/', async (req, res) => {
+  const { error: validationError, value } = validateBody(req.body);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  const matches = (await findMatches(value.first_name, value.last_name)).map(asSuggestion);
+  if (matches.length > 0 && req.body?.confirm_duplicate !== true) {
+    return res.status(409).json({
+      error: `${matches.length} existing record${matches.length === 1 ? '' : 's'} may be the same person — review the matches and confirm to add anyway`,
+      matches,
+    });
+  }
+
+  const { data: record, error } = await supabase
+    .from('resident_records')
+    .insert({ ...value, date_registered: new Date().toISOString(), is_archived: false })
+    .select()
+    .single();
+  if (error) {
+    throw new Error(`Failed to create resident record: ${error.message}`);
+  }
+
+  res.status(201).json({ message: 'Resident record created', record, matches });
+});
+
+// PUT /api/resident-records/:id — edit an existing record. No duplicate check:
+// correcting an existing person's details is not creating a new identity, and
+// re-running it here would flag the record against itself. (Reusing
+// findMatches on edit would be a one-line change if that is ever wanted.)
+router.put('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid resident record id' });
+  }
+
+  const { error: validationError, value } = validateBody(req.body);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from('resident_records')
+    .select('resident_id, is_archived')
+    .eq('resident_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load resident record: ${loadError.message}`);
+  }
+  if (!existing) {
+    return res.status(404).json({ error: 'Resident record not found' });
+  }
+  if (existing.is_archived) {
+    return res.status(404).json({ error: 'Resident record is archived and cannot be edited' });
+  }
+
+  const { data: record, error } = await supabase
+    .from('resident_records')
+    .update(value)
+    .eq('resident_id', id)
+    .eq('is_archived', false) // guard: not if just archived
+    .select()
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to update resident record: ${error.message}`);
+  }
+  if (!record) {
+    return res.status(404).json({ error: 'Resident record not found' });
+  }
+
+  res.json({ message: 'Resident record updated', record });
 });
 
 module.exports = router;
