@@ -3,9 +3,17 @@ import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
 import { SECRETARY_NAV } from '../constants/nav';
 import { formatDate } from '../constants/requestStatus';
+import { formatSchedule } from '../constants/rentals';
 
 // Resident Records Management: browse + search the master list (stage 1),
-// add with the fuzzy duplicate check + edit (stage 2). Archiving is stage 3.
+// add with the fuzzy duplicate check + edit (stage 2), archive/unarchive with
+// the linked-account cascade (stage 3).
+
+const ARCHIVED_FILTERS = [
+  { value: 'false', label: 'Active records' },
+  { value: 'true', label: 'Archived records' },
+  { value: 'all', label: 'All records' },
+];
 
 const SEX_OPTIONS = ['Male', 'Female'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'];
@@ -246,40 +254,77 @@ function RecordForm({ record, onDone }) {
   );
 }
 
-function RecordDetail({ id, onBack, onEdit }) {
+function RecordDetail({ id, onBack, onEdit, onChanged }) {
   const { authFetch } = useAuth();
   const [data, setData] = useState(null); // { record, linked_accounts }
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [warning, setWarning] = useState(null); // the 409 dependency payload
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      setData(await authFetch(`/resident-records/${id}`));
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [authFetch, id]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await authFetch(`/resident-records/${id}`);
-        if (!cancelled) setData(result);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authFetch, id]);
+    load();
+  }, [load]);
 
   const r = data?.record;
   const accounts = data?.linked_accounts || [];
+
+  async function act(action, confirm) {
+    setActionError('');
+    setBusy(true);
+    try {
+      const result = await authFetch(`/resident-records/${id}/${action}`, {
+        method: 'POST',
+        body: action === 'archive' ? { confirm_archive: confirm } : undefined,
+      });
+      setWarning(null);
+      await load();
+      onChanged(result.message);
+    } catch (err) {
+      // 409 = there are dependencies (open work and/or a linked account that
+      // will be deactivated); show them and require an explicit confirmation.
+      if (err.status === 409 && err.data?.dependencies) {
+        setWarning(err.data);
+      }
+      setActionError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="pending-card">
       <div className="pending-head">
         <div>
-          <h3>{r ? fullName(r) : `Resident record #${id}`}</h3>
+          <h3>
+            {r ? fullName(r) : `Resident record #${id}`}{' '}
+            {r?.is_archived && <span className="badge gray">Archived</span>}
+          </h3>
           {r && <p className="muted">Record #{r.resident_id} · registered {formatDate(r.date_registered)}</p>}
         </div>
         <div className="head-actions">
           {r && !r.is_archived && (
-            <button className="btn secondary" onClick={() => onEdit(r)}>
-              Edit
+            <>
+              <button className="btn secondary" disabled={busy} onClick={() => onEdit(r)}>
+                Edit
+              </button>
+              <button className="btn secondary danger" disabled={busy} onClick={() => act('archive', false)}>
+                {busy ? 'Working…' : 'Archive'}
+              </button>
+            </>
+          )}
+          {r?.is_archived && (
+            <button className="btn" disabled={busy} onClick={() => act('unarchive')}>
+              {busy ? 'Working…' : 'Unarchive'}
             </button>
           )}
           <button className="btn secondary" onClick={onBack}>
@@ -289,6 +334,62 @@ function RecordDetail({ id, onBack, onEdit }) {
       </div>
 
       {error && <div className="alert error">{error}</div>}
+      {actionError && <div className="alert error">{actionError}</div>}
+
+      {r?.is_archived && (
+        <div className="alert info">
+          This record is archived: it is hidden from the active master list and its linked account
+          cannot log in. Existing document requests and rental bookings are unaffected. Unarchive
+          restores both the record and the account.
+        </div>
+      )}
+
+      {warning && (
+        <div className="suggest-section">
+          <h4>Archiving this record affects:</h4>
+          <ul className="suggestions">
+            {warning.dependencies.documents.map((d) => (
+              <li key={`d${d.request_id}`} className="suggestion">
+                <span className="badge score">Open</span>
+                <div className="suggestion-info">
+                  <strong>{d.document_types?.name || 'Document request'} #{d.request_id}</strong>
+                  <span className="muted">status: {d.status}</span>
+                </div>
+              </li>
+            ))}
+            {warning.dependencies.rentals.map((b) => (
+              <li key={`r${b.request_id}`} className="suggestion">
+                <span className="badge score">Active</span>
+                <div className="suggestion-info">
+                  <strong>{b.rental_items?.name || 'Rental booking'} #{b.request_id}</strong>
+                  <span className="muted">{formatSchedule(b.start_datetime, b.end_datetime)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {warning.dependencies.accounts.length > 0 && (
+            <p>
+              <strong>
+                Account{warning.dependencies.accounts.length === 1 ? '' : 's'}{' '}
+                {warning.dependencies.accounts.map((a) => `@${a.username}`).join(', ')} will be
+                deactivated and can no longer log in.
+              </strong>
+            </p>
+          )}
+          <div className="actions">
+            <button className="btn secondary danger" disabled={busy} onClick={() => act('archive', true)}>
+              {busy
+                ? 'Archiving…'
+                : warning.dependencies.accounts.length
+                  ? 'Archive and deactivate account'
+                  : 'Archive anyway'}
+            </button>
+            <button className="btn secondary" type="button" onClick={() => { setWarning(null); setActionError(''); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {!r ? (
         !error && <p className="muted">Loading record…</p>
@@ -368,11 +469,12 @@ export default function ResidentRecordsPage() {
   const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | record object
+  const [archived, setArchived] = useState('false');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const params = new URLSearchParams({ page: String(page) });
+      const params = new URLSearchParams({ page: String(page), archived });
       if (search) params.set('search', search);
       const result = await authFetch(`/resident-records?${params}`);
       setData(result);
@@ -380,7 +482,7 @@ export default function ResidentRecordsPage() {
       setError(err.message);
       setData({ records: [], total: 0, page: 1, total_pages: 0 });
     }
-  }, [authFetch, page, search]);
+  }, [authFetch, page, search, archived]);
 
   useEffect(() => {
     load();
@@ -433,6 +535,10 @@ export default function ResidentRecordsPage() {
             id={selectedId}
             onBack={() => setSelectedId(null)}
             onEdit={(record) => setFormTarget(record)}
+            onChanged={(message) => {
+              setFlash({ type: 'success', text: message });
+              load();
+            }}
           />
         ) : (
           <>
@@ -460,6 +566,19 @@ export default function ResidentRecordsPage() {
                     Clear
                   </button>
                 )}
+                <select
+                  value={archived}
+                  onChange={(e) => {
+                    setArchived(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  {ARCHIVED_FILTERS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
                 <button className="btn" type="button" onClick={() => setFormTarget('new')}>
                   Add resident
                 </button>
@@ -492,9 +611,14 @@ export default function ResidentRecordsPage() {
                     </thead>
                     <tbody>
                       {records.map((r) => (
-                        <tr key={r.resident_id}>
+                        <tr key={r.resident_id} className={r.is_archived ? 'inactive-row' : ''}>
                           <td>
                             <strong>{fullName(r)}</strong>
+                            {r.is_archived && (
+                              <div>
+                                <span className="badge gray">Archived</span>
+                              </div>
+                            )}
                           </td>
                           <td className="muted">{r.birthdate || '—'}</td>
                           <td className="muted">{r.address}</td>
