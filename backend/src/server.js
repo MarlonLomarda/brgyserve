@@ -13,6 +13,7 @@ const documentRequestRoutes = require('./routes/documentRequests');
 const chargeRoutes = require('./routes/charges');
 const rentalItemRoutes = require('./routes/rentalItems');
 const rentalRequestRoutes = require('./routes/rentalRequests');
+const disputeRoutes = require('./routes/disputes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +43,7 @@ app.use('/api/document-requests', documentRequestRoutes);
 app.use('/api/charges', chargeRoutes);
 app.use('/api/rental-items', rentalItemRoutes);
 app.use('/api/rental-requests', rentalRequestRoutes);
+app.use('/api/disputes', disputeRoutes);
 
 // Express 5 forwards rejected async handlers here automatically
 app.use((err, req, res, next) => {

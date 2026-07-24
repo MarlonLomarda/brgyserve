@@ -4,6 +4,7 @@ import { ROLE_HOME, roleHome } from './auth/roles';
 import ProtectedRoute from './components/ProtectedRoute';
 import BookRentalPage from './pages/BookRentalPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import DisputesPage from './pages/DisputesPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import LoginPage from './pages/LoginPage';
 import MyRentalsPage from './pages/MyRentalsPage';
@@ -96,6 +97,22 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <RentalBookingsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/blotter"
+        element={
+          <ProtectedRoute role="secretary">
+            <DisputesPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/blotter"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <DisputesPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />

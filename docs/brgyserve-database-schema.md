@@ -117,7 +117,7 @@ Stores records of disputes filed within the barangay, including case number, fil
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
 | dispute_id | bigint | PK | No | Uniquely identifies each dispute record. |
-| barangay_case_no | varchar(50) | | No | Official case number assigned by the barangay. |
+| barangay_case_no | varchar(50) | | No | Official case number assigned by the barangay. Enforced unique in the Blotter module (application-level; optional UNIQUE index in migration 012). |
 | time_filed | time | | No | Time the dispute was filed. |
 | date_filed | date | | No | Date the dispute was filed. |
 | filed_for | varchar(255) | | No | Specific complaint or case type (Unjust Vexation, Theft, Physical Injury). |

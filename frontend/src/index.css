@@ -675,6 +675,62 @@ button.link-button:hover:not(:disabled) {
   opacity: 0.6;
 }
 
+/* Blotter: party rows in the case form + the resident picker */
+.party-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.party-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.party-controls label {
+  margin: 0;
+}
+
+.picker-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.picker-results {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 0.35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  font: inherit;
+}
+
+.picker-option:last-child {
+  border-bottom: none;
+}
+
+.picker-option:hover {
+  background: #f8fafc;
+}
+
 @media (max-width: 560px) {
   .info-grid {
     grid-template-columns: 1fr;
