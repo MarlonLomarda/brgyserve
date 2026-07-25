@@ -11,6 +11,7 @@ import LoginPage from './pages/LoginPage';
 import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentsPage from './pages/PaymentsPage';
+import PublicEventsPage from './pages/PublicEventsPage';
 import RegisterPage from './pages/RegisterPage';
 import RentalBookingsPage from './pages/RentalBookingsPage';
 import RentalItemsPage from './pages/RentalItemsPage';
@@ -19,7 +20,7 @@ import ResidentRecordsPage from './pages/ResidentRecordsPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
 import SecretaryReviewPage from './pages/SecretaryReviewPage';
-import { PUNONG_BARANGAY_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_NAV } from './constants/nav';
+import { PUNONG_BARANGAY_NAV, RESIDENT_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_NAV } from './constants/nav';
 
 // Per-role home pages; roles without a real screen yet fall back to the
 // placeholder landing page. Staff and the Punong Barangay get the read-only
@@ -122,6 +123,22 @@ export default function App() {
         element={
           <ProtectedRoute role="staff">
             <EventsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resident/events"
+        element={
+          <ProtectedRoute role="resident">
+            <PublicEventsPage title="BrgyServe — Resident" nav={RESIDENT_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/events"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <PublicEventsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />

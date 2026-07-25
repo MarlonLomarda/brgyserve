@@ -16,6 +16,7 @@ export const RESIDENT_NAV = [
   { to: '/resident/request', label: 'Request a document' },
   { to: '/resident/rentals', label: 'My rentals' },
   { to: '/resident/book-rental', label: 'Book a facility' },
+  { to: '/resident/events', label: 'Events' },
 ];
 
 export const TREASURER_NAV = [{ to: '/treasurer', label: 'Payments', end: true }];
@@ -28,4 +29,5 @@ export const STAFF_NAV = [
 export const PUNONG_BARANGAY_NAV = [
   { to: '/punong-barangay', label: 'Rental bookings', end: true },
   { to: '/punong-barangay/blotter', label: 'Blotter' },
+  { to: '/punong-barangay/events', label: 'Events' },
 ];

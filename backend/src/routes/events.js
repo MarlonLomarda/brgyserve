@@ -5,10 +5,11 @@ const { EVENT_TYPE, EVENT_TYPES, EVENT_STATUS, EVENT_VIEW, EVENT_VIEWS } = requi
 
 const router = express.Router();
 
-// Stage 1 is management only: the Secretary AND Barangay Staff both maintain
-// events and announcements (there is no Punong Barangay approval gate — per
-// the activity diagram the PB and residents only VIEW, which is stage 2).
-router.use(authenticate, requireRole('secretary', 'staff'));
+// Everyone here is authenticated; the role split comes below. Stage 2's
+// read-only viewer routes (/public, residents + Punong Barangay) are declared
+// FIRST, then a role gate makes everything after it Secretary/Staff-only
+// management — the same layering document types and rental items use.
+router.use(authenticate);
 
 const EVENT_FIELDS =
   'event_id, type, title, description, start_datetime, end_datetime, location, date_created, is_archived';
@@ -84,24 +85,28 @@ function validateBody(body) {
   };
 }
 
-// GET /api/events — paginated list.
+// Paginated list, shared by the management list and the read-only viewer list
+// so both always return the same shape and the same derived statuses.
 //   ?type=announcement|activity|all
 //   ?view=active (default) | past | archived | all
 //     active   = not archived AND (announcement OR activity not yet finished)
 //     past     = not archived AND activity whose end_datetime has passed
-//     archived = is_archived true (manual archive only)
+//     archived = is_archived true (manual archive only) — management only
 //   ?search= across title, description, location
 // Ordering: 'active' puts the soonest activity first (start_datetime asc) with
 // announcements — which have no start — after them, newest first; 'past' is
 // most-recently-finished first; 'archived'/'all' are newest-created first.
-router.get('/', async (req, res) => {
+// `publicOnly` (the viewer) restricts the allowed views to active/past and
+// forces archived records out of reach entirely.
+async function listEvents(req, res, { publicOnly }) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Number(req.query.per_page) || DEFAULT_PER_PAGE));
   const from = (page - 1) * perPage;
 
+  const allowedViews = publicOnly ? [EVENT_VIEW.ACTIVE, EVENT_VIEW.PAST] : EVENT_VIEWS;
   const view = String(req.query.view ?? EVENT_VIEW.ACTIVE).toLowerCase();
-  if (!EVENT_VIEWS.includes(view)) {
-    return res.status(400).json({ error: `view must be one of: ${EVENT_VIEWS.join(', ')}` });
+  if (!allowedViews.includes(view)) {
+    return res.status(400).json({ error: `view must be one of: ${allowedViews.join(', ')}` });
   }
   const type = req.query.type;
   if (type && type !== 'all' && !EVENT_TYPES.includes(type)) {
@@ -132,6 +137,11 @@ router.get('/', async (req, res) => {
 
   if (type && type !== 'all') query = query.eq('type', type);
 
+  // Safety net: viewers never see archived records, whatever the view. The
+  // active/past branches already filter them, so this only matters if a new
+  // view is ever added — the invariant then still holds.
+  if (publicOnly) query = query.eq('is_archived', false);
+
   const term = sanitize(String(req.query.search ?? ''));
   if (term) {
     query = query.or(`title.ilike.*${term}*,description.ilike.*${term}*,location.ilike.*${term}*`);
@@ -152,19 +162,51 @@ router.get('/', async (req, res) => {
     per_page: perPage,
     total_pages: Math.ceil((count || 0) / perPage),
   });
-});
+}
 
-// GET /api/events/:id — full detail (archived records stay readable).
-router.get('/:id', async (req, res) => {
+// Shared detail loader. For viewers (`publicOnly`) an archived record is
+// simply not found — archived events must be invisible, not merely hidden
+// from the list.
+async function getEvent(req, res, { publicOnly }) {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id' });
 
-  const { data, error } = await supabase.from('events').select(EVENT_FIELDS).eq('event_id', id).maybeSingle();
+  let query = supabase.from('events').select(EVENT_FIELDS).eq('event_id', id);
+  if (publicOnly) query = query.eq('is_archived', false);
+
+  const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Failed to load event: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Event not found' });
 
   res.json({ event: withStatus(data) });
-});
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2 — READ-ONLY viewer (residents + Punong Barangay). Declared before
+// the management gate below, so these are the only event routes those roles
+// can reach: there is no create/edit/archive path for them at all. Archived
+// records are unreachable here by construction.
+// ---------------------------------------------------------------------------
+const VIEWER_ROLES = ['resident', 'punong_barangay'];
+
+// GET /api/events/public — same shape as the management list; views are
+// limited to 'active' (current + upcoming activities and announcements) and
+// 'past' (finished activities).
+router.get('/public', requireRole(...VIEWER_ROLES), (req, res) => listEvents(req, res, { publicOnly: true }));
+
+// GET /api/events/public/:id — 404 for archived or missing.
+router.get('/public/:id', requireRole(...VIEWER_ROLES), (req, res) => getEvent(req, res, { publicOnly: true }));
+
+// ---------------------------------------------------------------------------
+// Everything below is Secretary/Staff management (stage 1).
+// ---------------------------------------------------------------------------
+router.use(requireRole('secretary', 'staff'));
+
+// GET /api/events — management list (all views incl. archived).
+router.get('/', (req, res) => listEvents(req, res, { publicOnly: false }));
+
+// GET /api/events/:id — full detail (archived records stay readable).
+router.get('/:id', (req, res) => getEvent(req, res, { publicOnly: false }));
 
 // POST /api/events — create (date_created server-set, is_archived false).
 router.post('/', async (req, res) => {
