@@ -93,10 +93,12 @@ Stores details of barangay events and activities, including title, description, 
 | event_id | bigint | PK | No | Uniquely identifies each event record. |
 | title | varchar(255) | | No | Title or name of the event. |
 | description | text | | Yes | Detailed description of the event and its purpose. |
-| start_datetime | timestamptz | | No | Scheduled date and time the event begins. |
-| end_datetime | timestamptz | | No | Scheduled date and time the event ends. |
-| location | varchar(255) | | No | Venue or location where the event takes place. |
+| start_datetime | timestamptz | | Yes | Scheduled date and time the event begins. Required for `activity`, optional for `announcement`; NOT NULL dropped in migration 013. |
+| end_datetime | timestamptz | | Yes | Scheduled date and time the event ends. Required for `activity`, optional for `announcement`; NOT NULL dropped in migration 013. |
+| location | varchar(255) | | Yes | Venue or location where the event takes place; NOT NULL dropped in migration 013. |
 | date_created | timestamptz | | No | Date and time the event record was created. |
+| type | varchar(20) | | No | Record kind: `activity` (timed event) or `announcement` (notice, no schedule required). Added in migration 013. |
+| is_archived | boolean | | No | Whether the record has been manually archived (soft delete). Added in migration 013. |
 
 ### TABLE 6. event_attendees
 Records which residents attended each barangay event.

@@ -6,6 +6,7 @@ import BookRentalPage from './pages/BookRentalPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import DisputesPage from './pages/DisputesPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
+import EventsPage from './pages/EventsPage';
 import LoginPage from './pages/LoginPage';
 import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
@@ -105,6 +106,22 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <DisputesPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/events"
+        element={
+          <ProtectedRoute role="secretary">
+            <EventsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/staff/events"
+        element={
+          <ProtectedRoute role="staff">
+            <EventsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
           </ProtectedRoute>
         }
       />
