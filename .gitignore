@@ -20,3 +20,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# render-test bundle artifact
+frontend/scripts/.report-render-bundle.cjs

@@ -9,6 +9,7 @@ export const SECRETARY_NAV = [
   { to: '/secretary/rentals', label: 'Rentals' },
   { to: '/secretary/blotter', label: 'Blotter' },
   { to: '/secretary/events', label: 'Events' },
+  { to: '/secretary/reports', label: 'Reports' },
 ];
 
 export const RESIDENT_NAV = [
@@ -19,7 +20,10 @@ export const RESIDENT_NAV = [
   { to: '/resident/events', label: 'Events' },
 ];
 
-export const TREASURER_NAV = [{ to: '/treasurer', label: 'Payments', end: true }];
+export const TREASURER_NAV = [
+  { to: '/treasurer', label: 'Payments', end: true },
+  { to: '/treasurer/reports', label: 'Reports' },
+];
 
 export const STAFF_NAV = [
   { to: '/staff', label: 'Rental bookings', end: true },
@@ -30,4 +34,5 @@ export const PUNONG_BARANGAY_NAV = [
   { to: '/punong-barangay', label: 'Rental bookings', end: true },
   { to: '/punong-barangay/blotter', label: 'Blotter' },
   { to: '/punong-barangay/events', label: 'Events' },
+  { to: '/punong-barangay/reports', label: 'Reports' },
 ];

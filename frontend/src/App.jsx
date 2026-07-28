@@ -13,6 +13,7 @@ import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import PublicEventsPage from './pages/PublicEventsPage';
 import RegisterPage from './pages/RegisterPage';
+import ReportsPage from './pages/ReportsPage';
 import RentalBookingsPage from './pages/RentalBookingsPage';
 import RentalItemsPage from './pages/RentalItemsPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
@@ -123,6 +124,30 @@ export default function App() {
         element={
           <ProtectedRoute role="staff">
             <EventsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/reports"
+        element={
+          <ProtectedRoute role="secretary">
+            <ReportsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/treasurer/reports"
+        element={
+          <ProtectedRoute role="treasurer">
+            <ReportsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/reports"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <ReportsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />

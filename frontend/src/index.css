@@ -675,6 +675,82 @@ button.link-button:hover:not(:disabled) {
   opacity: 0.6;
 }
 
+/* Reports: headline tiles, chart cards, and the printable sheet */
+.report-sheet {
+  background: #fff;
+  padding: 0.25rem;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.stat-tile {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: #f9fafb;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 0.15rem;
+}
+
+.chart-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.85rem 1rem 0.5rem;
+  margin-bottom: 1.25rem;
+  background: #fff;
+  break-inside: avoid;
+}
+
+.chart-card h4,
+.report-sheet h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.chart-area {
+  width: 100%;
+}
+
+.inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.inline-label input {
+  margin: 0;
+}
+
+/* Only shown in the PDF/print capture, never on screen */
+.report-print-head {
+  display: none;
+}
+
+@media print {
+  .report-print-head {
+    display: block;
+    text-align: center;
+    margin-bottom: 0.75rem;
+  }
+}
+
 /* Blotter: party rows in the case form + the resident picker */
 .party-row {
   border: 1px solid #e5e7eb;
