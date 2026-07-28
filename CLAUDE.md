@@ -167,7 +167,7 @@ Implementation status:
 - **Auto-hide finished activities is DISPLAY LOGIC ONLY** — a past activity is computed from `end_datetime < now` at query time. `is_archived` is never flipped by time and there is no scheduled job. Status is likewise DERIVED, never stored (`deriveStatus()` adds `status` to every row): announcements are always `posted`; activities are `upcoming | ongoing | past`. **Manual archive is separate** (`PATCH /:id/archive|unarchive`, soft delete only; archived records stay readable in the detail route).
 - **Stage 1 implemented** (management CRUD + archive; **Secretary AND Staff both manage** — no PB approval gate, since the activity diagram has the PB and residents as view-only): `/api/events` behind `requireRole('secretary', 'staff')` — `GET /` (paginated like resident records; `?view=active|past|archived|all`, `?type=`, `?search=` across title/description/location), `GET /:id`, `POST /`, `PUT /:id`, `PATCH /:id/archive|unarchive`. **View semantics:** `active` = not archived AND (announcement OR activity not yet finished); `past` = not archived AND activity past its end; `archived` = `is_archived` true. **Ordering:** active puts the soonest activity first (`start_datetime` asc, nulls last) with announcements after, newest first; past is most-recently-finished first; archived/all are newest-created first. UI: shared `EventsPage` on `/secretary/events` and `/staff/events` — list splits Activities and Announcements into separate sections, the create/edit form's fields adapt to the chosen type, and status badges show Upcoming/Ongoing/Past/Posted/Archived.
 - **Stage 2 implemented** (read-only viewer for `resident` + `punong_barangay`, no migration, no new validation — it only EXPOSES stage 1 data): `GET /api/events/public[/:id]`. The list and detail handlers were factored into shared `listEvents()` / `getEvent()` helpers that both audiences call with a `publicOnly` flag, so the viewer returns the **same shape and the same derived statuses** as management. `publicOnly` limits `?view=` to `active|past` (archived is not an allowed viewer value), adds a belt-and-braces `is_archived = false` filter, and makes the detail route **404 on an archived record** — archived events are invisible to viewers, not merely hidden. The viewer routes are declared BEFORE the `requireRole('secretary','staff')` gate (the layering document types and rental items use), so those roles have no create/edit/archive path at all; the treasurer is excluded from events entirely. UI: `PublicEventsPage` on `/resident/events` and `/punong-barangay/events` — same Activities/Announcements sectioning, search, type filter and Current-&-upcoming/Past views, reusing the stage 1 display constants, with no write actions anywhere.
-- **Not built yet:** attendance (stage 3) — **PARKED**, see below. Build order agreed with the user: **Reporting → GCash gateway → then back to Households + attendance.**
+- **Not built yet:** attendance (stage 3) — **PARKED**, see below. Agreed build order: Reporting (**done**) → **GCash gateway (next)** → Households + attendance → pre-deployment security.
 
 ### Stage 3 (attendance + fines) — decided design, PARKED
 
@@ -197,7 +197,25 @@ Implementation status:
 - **Render-race fix (was a live bug):** switching reports re-renders with the NEW renderer before the effect can refetch, so an untagged payload briefly reached the wrong renderer — each report has a different shape, so it threw and blanked the content area. The fetched payload is now tagged `{ key, data }` and only rendered when `key === selected`. The renderers live in `components/ReportRenderers.jsx`, deliberately free of auth/router/`import.meta.env` so they are pure functions of their data (and directly testable).
 - **Not built:** event participation / attendance reporting, which needs Events stage 3 (see the parked Households + attendance work above).
 
+## GCash Payment Gateway (PayMongo) — NEXT, not started
+
+**Groundwork done:**
+- PayMongo account created, **test mode**. `PAYMONGO_SECRET_KEY` and `PAYMONGO_PUBLIC_KEY` live in `backend/.env` (gitignored) and are documented as empty placeholders in `backend/.env.example`. Read them via `process.env`, same pattern as the Supabase keys — the **secret key is server-only** and must never be logged or sent to the frontend.
+- A live one-off probe confirmed **GCash IS allowed on our test account**: `POST /v1/sources` with `type: gcash` returned **HTTP 200** with a `checkout_url` and `livemode: false`. There is **no e-wallet activation blocker** — that question is settled.
+
+**Open decision 1 — which PayMongo flow.** Not yet decided; to be picked deliberately since it is a defensible design choice:
+- **Sources** — what the probe used; PayMongo's older e-wallet API. Known to work for GCash today.
+- **Payment Intents + Payment Methods** — PayMongo's recommendation for new integrations.
+- **Checkout Sessions** — a fully hosted payment page.
+All three end in the same redirect-then-webhook shape; the choice mainly affects which endpoints are called and how payment is confirmed.
+
+**Open decision 2 — webhooks.** Confirmation arrives by webhook, which needs a **publicly reachable HTTPS URL**, but development runs on `localhost:5000`. Requires a tunnel (ngrok or similar) or a deployed instance, plus **signature verification** on the callback. This is the main engineering hurdle of the module.
+
+**Hard constraint — the manual flow STAYS.** The existing path (cash onsite, or a GCash reference number the resident declares, verified by the Treasurer on the Payments screen) is **not replaced**. The gateway is layered on top as an additional option, and the manual flow remains the fallback if the integration has problems at defense time. Nothing in the charges/payments model should be reworked to accommodate it.
+
 ## Pre-deployment TODO
+
+Current build order: **GCash gateway → Households + attendance (Events stage 3) → the security items below.**
 
 - Enable Row Level Security (RLS) and write per-role access policies for all tables (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`) before deployment — tables are currently UNRESTRICTED.
 - Delete or rotate the test `secretary1` seed account before real use; its password was shared in plaintext during development.
