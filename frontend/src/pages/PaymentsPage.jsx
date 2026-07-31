@@ -41,6 +41,10 @@ function chargeSubject(charge) {
 }
 
 function declaredInfo(c) {
+  // A charge paid through the GCash gateway was never "declared" — it arrived
+  // already confirmed, so say so rather than showing a blank cell.
+  if (c.paymongo_payment_id) return `GCash online · ${c.paymongo_payment_id}`;
+  if (c.paymongo_session_id && c.status === 'UNPAID') return 'GCash online — started, not yet confirmed';
   if (!c.declared_method) return null;
   const label = METHOD_LABELS[c.declared_method] || c.declared_method;
   return c.declared_method === 'gcash' && c.declared_reference
@@ -148,6 +152,26 @@ export default function PaymentsPage({ title, nav }) {
   const [listError, setListError] = useState('');
   const [flash, setFlash] = useState(null);
   const [selected, setSelected] = useState(null); // charge being verified
+  const [recheckingId, setRecheckingId] = useState(null);
+
+  // Safety net for the GCash gateway: PayMongo disables a webhook endpoint
+  // after repeated delivery failures and never replays what was missed, so a
+  // payment can be genuinely made yet never confirmed here. This asks PayMongo
+  // directly and settles the charge through the same server-side path the
+  // webhook uses — so it can never double-record.
+  async function handleRecheck(c) {
+    setFlash(null);
+    setRecheckingId(c.charge_id);
+    try {
+      const data = await authFetch(`/payments/gcash/reconcile/${c.charge_id}`, { method: 'POST' });
+      setFlash({ type: data.settled ? 'success' : 'error', text: data.message });
+      if (data.settled) await load();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setRecheckingId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setListError('');
@@ -254,6 +278,16 @@ export default function PaymentsPage({ title, nav }) {
                           {c.status === 'UNPAID' && (
                             <button className="btn secondary" onClick={() => setSelected(c)}>
                               Verify / record
+                            </button>
+                          )}
+                          {c.status === 'UNPAID' && c.paymongo_session_id && (
+                            <button
+                              className="btn secondary"
+                              disabled={recheckingId === c.charge_id}
+                              onClick={() => handleRecheck(c)}
+                              title="Ask PayMongo whether this online payment went through"
+                            >
+                              {recheckingId === c.charge_id ? 'Checking…' : 'Re-check with PayMongo'}
                             </button>
                           )}
                         </td>

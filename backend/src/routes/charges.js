@@ -17,6 +17,7 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
+  paymongo_session_id, paymongo_payment_id,
   payer:users ( user_id, username, email,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   document_requests ( request_id, purpose, status,

@@ -49,6 +49,28 @@ export default function MyRequestsPage() {
     }
   }
 
+  // Gateway payment: PayMongo hosts the payment page, so we hand the resident
+  // over to it. Nothing is marked paid here — the signed webhook is the only
+  // thing that can do that.
+  async function handlePayOnline(r, charge) {
+    setFlash(null);
+    setBusyId(r.request_id);
+    try {
+      const data = await authFetch('/payments/gcash/checkout', {
+        method: 'POST',
+        body: { charge_id: charge.charge_id },
+      });
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      // A refused checkout often means the charge just changed underneath us —
+      // most importantly the resume interlock discovering it is already paid —
+      // so reload rather than leave a stale row next to the message.
+      setFlash({ type: 'error', text: err.message });
+      setBusyId(null);
+      await load();
+    }
+  }
+
   async function handleCancel(r) {
     const name = r.document_types?.name || 'document';
     if (!window.confirm(`Cancel your ${name} request? This cannot be undone — submit a new request if you still need the document.`)) {
@@ -198,6 +220,13 @@ export default function MyRequestsPage() {
                             ) : (
                               <>
                                 <button
+                                  className="btn"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handlePayOnline(r, charge)}
+                                >
+                                  {busyId === r.request_id ? 'Opening GCash…' : 'Pay online via GCash'}
+                                </button>
+                                <button
                                   className="btn secondary"
                                   disabled={busyId === r.request_id}
                                   onClick={() => handleDeclare(r, 'onsite')}
@@ -212,7 +241,7 @@ export default function MyRequestsPage() {
                                     setGcashRef('');
                                   }}
                                 >
-                                  Pay via GCash
+                                  I already paid via GCash
                                 </button>
                               </>
                             ))}

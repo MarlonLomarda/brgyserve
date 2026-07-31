@@ -49,6 +49,27 @@ export default function MyRentalsPage() {
     }
   }
 
+  // Gateway payment: PayMongo hosts the payment page. Nothing is marked paid
+  // here — the signed webhook is the only thing that can do that.
+  async function handlePayOnline(r, charge) {
+    setFlash(null);
+    setBusyId(r.request_id);
+    try {
+      const data = await authFetch('/payments/gcash/checkout', {
+        method: 'POST',
+        body: { charge_id: charge.charge_id },
+      });
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      // A refused checkout often means the charge just changed underneath us —
+      // most importantly the resume interlock discovering it is already paid —
+      // so reload rather than leave a stale row next to the message.
+      setFlash({ type: 'error', text: err.message });
+      setBusyId(null);
+      await load();
+    }
+  }
+
   return (
     <div className="dash">
       <DashHeader
@@ -160,6 +181,13 @@ export default function MyRentalsPage() {
                             ) : (
                               <>
                                 <button
+                                  className="btn"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handlePayOnline(r, charge)}
+                                >
+                                  {busyId === r.request_id ? 'Opening GCash…' : 'Pay online via GCash'}
+                                </button>
+                                <button
                                   className="btn secondary"
                                   disabled={busyId === r.request_id}
                                   onClick={() => handleDeclare(r, 'onsite')}
@@ -174,7 +202,7 @@ export default function MyRentalsPage() {
                                     setGcashRef('');
                                   }}
                                 >
-                                  Pay via GCash
+                                  I already paid via GCash
                                 </button>
                               </>
                             ))}

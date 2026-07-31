@@ -10,6 +10,7 @@ import EventsPage from './pages/EventsPage';
 import LoginPage from './pages/LoginPage';
 import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
+import PaymentResultPage from './pages/PaymentResultPage';
 import PaymentsPage from './pages/PaymentsPage';
 import PublicEventsPage from './pages/PublicEventsPage';
 import RegisterPage from './pages/RegisterPage';
@@ -196,6 +197,17 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <BookRentalPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Where PayMongo redirects after the hosted GCash checkout. The
+          redirect proves nothing — this page reads the charge's real status
+          back from the API. */}
+      <Route
+        path="/resident/payment-result"
+        element={
+          <ProtectedRoute role="resident">
+            <PaymentResultPage />
           </ProtectedRoute>
         }
       />

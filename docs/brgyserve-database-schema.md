@@ -262,6 +262,8 @@ Stores all financial charges within the barangay, including fines, document fees
 | declared_method | varchar(20) | | Yes | Payment method declared by the resident, awaiting verification: `onsite`, `gcash`. Added in migration 008. |
 | declared_reference | varchar(100) | | Yes | GCash reference number submitted by the resident; copied to payments.reference_no on verification. Added in migration 008. |
 | declared_at | timestamptz | | Yes | When the resident declared their payment. Added in migration 008. |
+| paymongo_session_id | varchar(255) | UNIQUE | Yes | PayMongo Checkout Session (`cs_…`) opened for this charge; lets an in-flight checkout be resumed and is what the Treasurer's reconciliation re-checks. Null for charges never paid online. Added in migration 014. |
+| paymongo_payment_id | varchar(255) | UNIQUE | Yes | PayMongo Payment (`pay_…`) from the signature-verified webhook; copied to `payments.reference_no`. UNIQUE is the database-level idempotency guarantee — a repeated webhook delivery can never record the same payment twice. Null for manually paid charges. Added in migration 014. |
 
 ### TABLE 16. payments
 Stores payment transactions for charges, including amount paid, payment method, reference details, and the staff member who processed it.
@@ -271,9 +273,9 @@ Stores payment transactions for charges, including amount paid, payment method, 
 | payment_id | bigint | PK | No | Uniquely identifies each payment transaction. |
 | charge_id | bigint | FK → charges | No | Charge being paid. |
 | amount | numeric(10,2) | | No | Amount paid for the charge. |
-| payment_method | varchar(20) | | No | Method of payment. Canonical lowercase values (defined in `backend/src/constants/charges.js`): `onsite` (cash at the barangay hall), `gcash` (reference number, record/verify only — no gateway). |
-| reference_no | varchar(100) | | Yes | Reference number for the transaction (receipt number or gateway ID). |
-| received_by_user_id | bigint | FK → users | Yes | Staff user who recorded the payment; null for online automated payments. |
+| payment_method | varchar(20) | | No | Method of payment. Canonical lowercase values (defined in `backend/src/constants/charges.js`): `onsite` (cash at the barangay hall), `gcash` (either a resident-declared reference verified by staff, or a PayMongo gateway payment — the two are told apart by `received_by_user_id`). |
+| reference_no | varchar(100) | | Yes | Reference number for the transaction (receipt number, resident-supplied GCash reference, or the PayMongo payment id for gateway payments). |
+| received_by_user_id | bigint | FK → users | Yes | Staff user who recorded the payment; **null for gateway payments**, which no staff member received. This is the discriminator between a manually verified payment and one confirmed by the PayMongo webhook. |
 | created_at | timestamptz | | No | When the payment was recorded. |
 
 ---
