@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { findMatches } = require('../services/nameMatching');
 const { REQUEST_STATUS } = require('../constants/requestStatus');
 const { RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
+const { DEFAULT_PER_PAGE, MAX_PER_PAGE, sanitizeTerm } = require('../utils/listQuery');
 
 const router = express.Router();
 
@@ -14,9 +15,6 @@ router.use(authenticate, requireRole('secretary'));
 
 const LIST_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, contact_number, date_registered, is_archived';
-
-const DEFAULT_PER_PAGE = 25;
-const MAX_PER_PAGE = 100;
 
 // Column limits straight from the schema doc (Table 4).
 const REQUIRED_FIELDS = ['first_name', 'last_name', 'address']; // address is NOT NULL in the DB
@@ -87,11 +85,6 @@ const asSuggestion = (m) => ({
   address: m.address,
   score: m.score,
 });
-
-// Search terms go into PostgREST .or() filter strings, where commas and
-// parentheses are syntax and %/_ are LIKE wildcards — neutralize all of them
-// so user input can't break (or game) the filter.
-const sanitizeTerm = (term) => term.replace(/[,()%_\\]/g, ' ').trim();
 
 // GET /api/resident-records?search=&page=&per_page=&archived= — paginated
 // master list, ordered by surname. `archived` selects which records to show:

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
+import ResidentPicker, { residentName } from '../components/ResidentPicker';
 
 // Blotter (dispute records). Shared by the Secretary (canManage: create / edit
 // / settle) and the Punong Barangay (read-only) — pass the role's title, nav,
@@ -14,93 +15,12 @@ const SETTLED_FILTERS = [
   { value: 'all', label: 'All' },
 ];
 
-function residentName(r) {
-  const name = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ');
-  return r.suffix ? `${name}, ${r.suffix}` : name;
-}
 function partyName(p) {
   if (p.resident_records) return residentName(p.resident_records);
   return [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown';
 }
 const hm = (t) => (t ? String(t).slice(0, 5) : '');
 
-// --- resident picker (reuses the master-list search) -----------------------
-function ResidentPicker({ value, onPick, onClear }) {
-  const { authFetch } = useAuth();
-  const [term, setTerm] = useState('');
-  const [results, setResults] = useState(null);
-  const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    if (value || term.trim().length < 2) {
-      setResults(null);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await authFetch(`/resident-records?search=${encodeURIComponent(term.trim())}&per_page=8`);
-        if (!cancelled) setResults(data.records);
-      } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [term, value, authFetch]);
-
-  if (value) {
-    return (
-      <div className="picker-selected">
-        <span>
-          <strong>{value.label}</strong> <span className="muted">(record #{value.resident_id})</span>
-        </span>
-        <button type="button" className="btn secondary" onClick={onClear}>
-          Change
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <input
-        value={term}
-        onChange={(e) => setTerm(e.target.value)}
-        placeholder="Search the resident master list…"
-      />
-      {term.trim().length >= 2 && (
-        <div className="picker-results">
-          {searching && <p className="muted">Searching…</p>}
-          {results && results.length === 0 && !searching && (
-            <p className="muted">No matching residents.</p>
-          )}
-          {results?.map((r) => (
-            <button
-              key={r.resident_id}
-              type="button"
-              className="picker-option"
-              onClick={() => {
-                onPick({ resident_id: r.resident_id, label: residentName(r) });
-                setTerm('');
-              }}
-            >
-              <strong>{residentName(r)}</strong>{' '}
-              <span className="muted">
-                · {r.birthdate || 'no birthdate'} · {r.address}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // --- one party row in the form ---------------------------------------------
 let partyKeySeq = 0;
