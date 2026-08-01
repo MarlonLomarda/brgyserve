@@ -7,6 +7,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import DisputesPage from './pages/DisputesPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import EventsPage from './pages/EventsPage';
+import HouseholdsPage from './pages/HouseholdsPage';
 import LoginPage from './pages/LoginPage';
 import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
@@ -61,6 +62,14 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <ResidentRecordsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/households"
+        element={
+          <ProtectedRoute role="secretary">
+            <HouseholdsPage />
           </ProtectedRoute>
         }
       />

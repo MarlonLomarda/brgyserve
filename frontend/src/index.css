@@ -815,3 +815,40 @@ button.link-button:hover:not(:disabled) {
     grid-column: auto;
   }
 }
+
+/* Households: rows open the household detail, so signal it. */
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: #f8fafc;
+}
+
+/* Modal — used by the household create form. Every other form in the app is
+   inline; this one overlays so the list stays visible behind it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 24px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.modal {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.modal .list-head {
+  margin-bottom: 16px;
+}

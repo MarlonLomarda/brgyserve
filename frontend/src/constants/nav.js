@@ -2,6 +2,7 @@
 export const SECRETARY_NAV = [
   { to: '/secretary', label: 'Resident review', end: true },
   { to: '/secretary/residents', label: 'Resident records' },
+  { to: '/secretary/households', label: 'Households' },
   { to: '/secretary/requests', label: 'Document requests' },
   { to: '/secretary/payments', label: 'Payments' },
   { to: '/secretary/document-types', label: 'Document types' },
