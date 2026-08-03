@@ -69,7 +69,17 @@ export default function App() {
         path="/secretary/households"
         element={
           <ProtectedRoute role="secretary">
-            <HouseholdsPage />
+            <HouseholdsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Staff see the same views read-only; every write control is absent,
+          and the server refuses the writes regardless. */}
+      <Route
+        path="/staff/households"
+        element={
+          <ProtectedRoute role="staff">
+            <HouseholdsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
           </ProtectedRoute>
         }
       />

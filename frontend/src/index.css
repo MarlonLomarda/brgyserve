@@ -852,3 +852,10 @@ button.link-button:hover:not(:disabled) {
 .modal .list-head {
   margin-bottom: 16px;
 }
+
+/* Households: an ended membership is history — visible but de-emphasised,
+   so it never reads as a current member. */
+.data-table tr.row-ended td {
+  opacity: 0.55;
+  font-style: italic;
+}

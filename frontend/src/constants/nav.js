@@ -28,6 +28,7 @@ export const TREASURER_NAV = [
 
 export const STAFF_NAV = [
   { to: '/staff', label: 'Rental bookings', end: true },
+  { to: '/staff/households', label: 'Households' },
   { to: '/staff/events', label: 'Events' },
 ];
 
