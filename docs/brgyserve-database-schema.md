@@ -101,13 +101,21 @@ Stores details of barangay events and activities, including title, description, 
 | is_archived | boolean | | No | Whether the record has been manually archived (soft delete). Added in migration 013. |
 
 ### TABLE 6. event_attendees
-Records which residents attended each barangay event.
+Records which **households** attended each barangay event. Attendance is per household, not per resident: at an assembly one household signs once, and a household with no signature is fined via `charges.household_id`.
 
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
 | event_attendee_id | bigint | PK | No | Uniquely identifies each attendance record. |
 | event_id | bigint | FK → events | No | Event where the attendance is recorded. |
-| resident_id | bigint | FK → resident_records | No | Resident who attended the event. |
+| household_id | bigint | FK → household_records | No | Household that attended. Replaced `resident_id` in migration 015 — the household is the unit that signs and the unit that is fined. |
+| recorded_at | timestamptz | | No | When the attendance was recorded. Defaults to `now()`. Added in migration 015. |
+| recorded_by_user_id | bigint | FK → users | No | Staff user who marked the household present. Added in migration 015. Attendance is the evidence base for a fine, so a disputed charge must be answerable with who recorded it — matches `payments.received_by_user_id` in type and target, but is NOT NULL because attendance is always recorded by a person. |
+
+**UNIQUE (event_id, household_id)** — added in migration 015. Enforces "one household, one signature" in the schema rather than by application convention, and makes attendance recording idempotent: re-submitting a sheet cannot create a second row for the same household at the same event.
+
+There is deliberately **no present/absent status column**: absence is derived as "no row for this household at this event", which the UNIQUE constraint makes reliable. An explicit absent row would be a second representation of the same fact.
+
+> **Chapter 3 note:** the manuscript's Table 6 still documents the original per-resident `resident_id` column and must be updated to match.
 
 ---
 
