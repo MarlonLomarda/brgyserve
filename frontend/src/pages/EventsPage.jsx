@@ -21,6 +21,8 @@ const EMPTY_FORM = {
   location: '',
   start_datetime: '',
   end_datetime: '',
+  attendance_required: false,
+  fine_amount: '',
 };
 
 // --- create / edit form ----------------------------------------------------
@@ -36,6 +38,8 @@ function EventForm({ event, onDone }) {
           location: event.location || '',
           start_datetime: toDateTimeLocal(event.start_datetime),
           end_datetime: toDateTimeLocal(event.end_datetime),
+          attendance_required: !!event.attendance_required,
+          fine_amount: event.fine_amount == null ? '' : String(event.fine_amount),
         }
       : { ...EMPTY_FORM }
   );
@@ -43,7 +47,19 @@ function EventForm({ event, onDone }) {
   const [busy, setBusy] = useState(false);
 
   const isActivity = form.type === 'activity';
-  const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleChange = (e) => {
+    const { name, type, value, checked } = e.target;
+    setForm((f) => {
+      const next = { ...f, [name]: type === 'checkbox' ? checked : value };
+      // An announcement has no schedule, so it can never take attendance —
+      // clear it rather than sending a value the server would reject.
+      if (name === 'type' && value !== 'activity') {
+        next.attendance_required = false;
+        next.fine_amount = '';
+      }
+      return next;
+    });
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -126,6 +142,39 @@ function EventForm({ event, onDone }) {
               Location
               <input name="location" value={form.location} onChange={handleChange} maxLength={255} />
             </label>
+
+            {/* Attendance is opt-in and only offered for activities. */}
+            <label className="check-row">
+              <input
+                type="checkbox"
+                name="attendance_required"
+                checked={form.attendance_required}
+                onChange={handleChange}
+              />
+              <span>
+                Attendance required
+                <span className="hint"> — record which households attend this activity</span>
+              </span>
+            </label>
+
+            {form.attendance_required && (
+              <label>
+                Fine per absent household <span className="hint">(optional)</span>
+                <input
+                  name="fine_amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.fine_amount}
+                  onChange={handleChange}
+                  placeholder="e.g. 100.00"
+                />
+                <span className="hint">
+                  Leave blank to take attendance without any fine. Fines are generated later as an
+                  explicit action — never automatically.
+                </span>
+              </label>
+            )}
           </>
         ) : (
           <>
@@ -176,7 +225,7 @@ function EventForm({ event, onDone }) {
 }
 
 // --- detail ----------------------------------------------------------------
-function EventDetail({ id, onBack, onEdit, onChanged }) {
+function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
   const { authFetch } = useAuth();
   const [event, setEvent] = useState(null);
   const [error, setError] = useState('');
@@ -225,6 +274,11 @@ function EventDetail({ id, onBack, onEdit, onChanged }) {
           {e && <p className="muted">{EVENT_TYPE_LABELS[e.type]} · posted {formatDate(e.date_created)}</p>}
         </div>
         <div className="head-actions">
+          {e && e.type === 'activity' && e.attendance_required && (
+            <button className="btn" onClick={() => onOpenAttendance(e.event_id)}>
+              Record attendance
+            </button>
+          )}
           {e && !e.is_archived && (
             <button className="btn secondary" disabled={busy} onClick={() => onEdit(e)}>
               Edit
@@ -274,11 +328,270 @@ function EventDetail({ id, onBack, onEdit, onChanged }) {
               <dt>Location</dt>
               <dd>{e.location || '—'}</dd>
             </div>
+            {e.type === 'activity' && (
+              <div className="span-2">
+                <dt>Attendance</dt>
+                <dd>
+                  {e.attendance_required ? (
+                    <>
+                      Required per household
+                      {e.fine_amount != null
+                        ? ` · ₱${Number(e.fine_amount).toFixed(2)} fine per absent household`
+                        : ' · no fine'}
+                    </>
+                  ) : (
+                    'Not tracked for this activity'
+                  )}
+                </dd>
+              </div>
+            )}
             <div className="span-2">
               <dt>Description</dt>
               <dd>{e.description || '—'}</dd>
             </div>
           </dl>
+        </>
+      )}
+    </div>
+  );
+}
+
+// --- attendance roster (stage 3a) ------------------------------------------
+// Used on a phone during an assembly, so the counts are large, the rows stay
+// readable at narrow width, and the tap targets are big. Stage 3d will add a
+// camera scanner to this same screen.
+function AttendanceRoster({ eventId, onBack }) {
+  const { authFetch } = useAuth();
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [flash, setFlash] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (search) params.set('search', search);
+      setData(await authFetch(`/events/${eventId}/attendance?${params}`));
+    } catch (err) {
+      setError(err.message);
+      setData(null);
+    }
+  }, [authFetch, eventId, page, search]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function mark(h) {
+    setFlash(null);
+    setBusyId(h.household_id);
+    try {
+      const result = await authFetch(`/events/${eventId}/attendance`, {
+        method: 'POST',
+        body: { household_id: h.household_id },
+      });
+      // Recording an already-recorded household is a no-op, not an error.
+      setFlash({ type: result.already_recorded ? 'info' : 'success', text: result.message });
+      await load();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function undo(h) {
+    if (!window.confirm(`Remove the attendance record for household #${h.household_id}?`)) return;
+    setFlash(null);
+    setBusyId(h.household_id);
+    try {
+      const result = await authFetch(`/events/${eventId}/attendance/${h.household_id}`, {
+        method: 'DELETE',
+      });
+      setFlash({ type: 'success', text: result.message });
+      await load();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (error) {
+    return (
+      <div className="pending-card">
+        <div className="pending-head">
+          <h3>Attendance</h3>
+          <button className="btn secondary" onClick={onBack}>
+            ← Back
+          </button>
+        </div>
+        <div className="alert error">{error}</div>
+      </div>
+    );
+  }
+  if (!data) return <p className="muted">Loading attendance…</p>;
+
+  const { summary } = data;
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>Attendance — {data.event.title}</h3>
+          <p className="muted">
+            {formatWindow(data.event.start_datetime, data.event.end_datetime)}
+            {data.event.fine_amount != null && (
+              <> · ₱{Number(data.event.fine_amount).toFixed(2)} fine per absent household</>
+            )}
+          </p>
+        </div>
+        <button className="btn secondary" onClick={onBack}>
+          ← Back
+        </button>
+      </div>
+
+      {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+
+      {summary.total_households === 0 ? (
+        <div className="empty">
+          <p>
+            <strong>There are no active households yet.</strong>
+          </p>
+          <p className="muted">
+            Attendance is recorded per household, so the Households module must have at least one
+            active household before a roster can be taken.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* The ratio being worked down during the assembly. */}
+          <div className="roster-summary">
+            <div className="roster-stat">
+              <span className="roster-value">{summary.recorded}</span>
+              <span className="roster-label">Recorded</span>
+            </div>
+            <div className="roster-stat">
+              <span className="roster-value warn">{summary.missing}</span>
+              <span className="roster-label">Still missing</span>
+            </div>
+            <div className="roster-stat">
+              <span className="roster-value muted">{summary.total_households}</span>
+              <span className="roster-label">Active households</span>
+            </div>
+          </div>
+
+          <form
+            className="head-actions"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setPage(1);
+              setSearch(searchInput.trim());
+            }}
+          >
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search head name, address, or household #"
+            />
+            <button className="btn secondary" type="submit">
+              Search
+            </button>
+            {search && (
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  setSearch('');
+                  setPage(1);
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </form>
+
+          {data.households.length === 0 ? (
+            <p className="muted">No households match that search.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table roster-table">
+                <thead>
+                  <tr>
+                    <th>Household</th>
+                    <th>Address</th>
+                    <th className="num">Members</th>
+                    <th>Attendance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.households.map((h) => (
+                    <tr key={h.household_id} className={h.attendance ? 'row-recorded' : undefined}>
+                      <td>
+                        <strong>#{h.household_id}</strong>{' '}
+                        {h.head_name || <span className="muted">no head assigned</span>}
+                      </td>
+                      <td className="muted">{h.address}</td>
+                      <td className="num">{h.member_count}</td>
+                      <td className="roster-action">
+                        {h.attendance ? (
+                          <>
+                            <span className="badge status-claimed">Present</span>{' '}
+                            <span className="muted small-note">
+                              {formatDate(h.attendance.recorded_at)}
+                              {h.attendance.recorded_by_username
+                                ? ` · ${h.attendance.recorded_by_username}`
+                                : ''}
+                            </span>{' '}
+                            <button
+                              className="btn secondary danger"
+                              disabled={busyId === h.household_id}
+                              onClick={() => undo(h)}
+                            >
+                              Undo
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="btn roster-mark"
+                            disabled={busyId === h.household_id}
+                            onClick={() => mark(h)}
+                          >
+                            {busyId === h.household_id ? 'Recording…' : 'Mark present'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.total_pages > 1 && (
+            <div className="list-head">
+              <span className="muted">
+                Page {data.page} of {data.total_pages}
+              </span>
+              <div className="head-actions">
+                <button className="btn secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  ← Previous
+                </button>
+                <button
+                  className="btn secondary"
+                  disabled={page >= data.total_pages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -298,6 +611,7 @@ export default function EventsPage({ title, nav }) {
   const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | event object
+  const [attendanceId, setAttendanceId] = useState(null); // event whose roster is open
 
   const load = useCallback(async () => {
     setError('');
@@ -385,7 +699,9 @@ export default function EventsPage({ title, nav }) {
       <DashHeader title={title} subtitle="Barangay events and announcements" nav={nav} />
 
       <main className="dash-main">
-        {formTarget ? (
+        {attendanceId ? (
+          <AttendanceRoster eventId={attendanceId} onBack={() => setAttendanceId(null)} />
+        ) : formTarget ? (
           <EventForm
             event={formTarget === 'new' ? null : formTarget}
             onDone={(result, event) => {
@@ -401,6 +717,7 @@ export default function EventsPage({ title, nav }) {
             id={selectedId}
             onBack={() => setSelectedId(null)}
             onEdit={(e) => setFormTarget(e)}
+            onOpenAttendance={(id) => setAttendanceId(id)}
             onChanged={(message) => {
               setFlash({ type: 'success', text: message });
               load();

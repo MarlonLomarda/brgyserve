@@ -859,3 +859,109 @@ button.link-button:hover:not(:disabled) {
   opacity: 0.55;
   font-style: italic;
 }
+
+/* ---- Events stage 3a: household attendance roster --------------------------
+   Used on a phone at an assembly, so the counts are large and the tap targets
+   are generous. Stage 3d adds a camera scanner to the same screen. */
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.check-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  flex: none;
+}
+
+.roster-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.roster-stat {
+  flex: 1 1 120px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.roster-value {
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: #16a34a;
+}
+
+.roster-value.warn {
+  color: #b45309;
+}
+
+.roster-value.muted {
+  color: #64748b;
+}
+
+.roster-label {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.roster-table tr.row-recorded td {
+  background: #f0fdf4;
+}
+
+.roster-mark {
+  min-height: 44px;
+  min-width: 132px;
+}
+
+.roster-action .btn {
+  min-height: 40px;
+}
+
+/* Narrow screens: stack each household into a block so nothing is squeezed
+   into an unreadable column, and keep the action full-width. */
+@media (max-width: 640px) {
+  .roster-table thead {
+    display: none;
+  }
+
+  .roster-table,
+  .roster-table tbody,
+  .roster-table tr,
+  .roster-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .roster-table tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+  }
+
+  .roster-table td {
+    border: none;
+    padding: 2px 0;
+  }
+
+  .roster-table td.num {
+    text-align: left;
+  }
+
+  .roster-action .btn,
+  .roster-mark {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
