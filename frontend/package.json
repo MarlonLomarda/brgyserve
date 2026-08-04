@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:reports": "node scripts/test-report-render.cjs"
+    "test:reports": "node scripts/test-report-render.cjs",
+    "test:auth": "node scripts/test-auth-session.cjs"
   },
   "dependencies": {
     "html2canvas": "^1.4.1",
