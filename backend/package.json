@@ -9,6 +9,7 @@
     "match:test": "node scripts/test-name-matching.js",
     "match:eval": "node scripts/evaluate-matching.js",
     "gateway:test": "node scripts/test-gcash-outcomes.js",
+    "fines:test": "node scripts/test-events-fines.js",
     "tunnel": "node scripts/tunnel.js",
     "tunnel:sync": "node scripts/paymongoWebhook.js"
   },

@@ -19,8 +19,16 @@ function fullName(p) {
 }
 
 function payerName(charge) {
-  // Document charges carry the verified resident record; rental (and future
-  // fine) charges fall back to the payer account's profile name.
+  // Document charges carry the verified resident record; rentals fall back to
+  // the payer account's profile name. A FINE is owed by a HOUSEHOLD and often
+  // has no account behind it at all, so it names the head — and if the
+  // household has no head on file, the household number, which always exists.
+  if (charge.charge_type === 'FINE') {
+    return (
+      charge.household_records?.head_name ||
+      (charge.household_id ? `Household #${charge.household_id}` : '—')
+    );
+  }
   const name = fullName(charge.document_requests?.resident_records) || fullName(charge.payer?.profiles);
   if (name) return name;
   return charge.payer?.username ? `@${charge.payer.username}` : '—';
@@ -32,6 +40,12 @@ function chargeSubject(charge) {
     return {
       main: `${charge.rental_requests.rental_items?.name || 'Rental'}${charge.rental_requests.quantity_requested > 1 ? ` × ${charge.rental_requests.quantity_requested}` : ''}`,
       note: formatSchedule(charge.rental_requests.start_datetime, charge.rental_requests.end_datetime),
+    };
+  }
+  if (charge.charge_type === 'FINE') {
+    return {
+      main: `Missed ${charge.events?.title || 'barangay activity'}`,
+      note: charge.household_records?.address || null,
     };
   }
   return {

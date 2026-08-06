@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
-import { formatDate } from '../constants/requestStatus';
+import { chargeMeta, formatDate } from '../constants/requestStatus';
 import {
   EVENT_TYPE_LABELS,
   EVENT_VIEWS,
@@ -356,12 +356,148 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
   );
 }
 
+// --- fines panel (stage 3b) ------------------------------------------------
+// Secretary-only. Raising fines is an explicit decision, so the panel always
+// states exactly who would be charged and how much BEFORE the button is
+// pressed, and explains itself when it cannot proceed instead of hiding.
+function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
+  const s = fines.summary;
+  const raised = fines.households.filter((h) => h.charge);
+  const mismatched = fines.households.filter((h) => h.state === 'mismatch');
+  const peso = (n) => `₱${Number(n).toFixed(2)}`;
+
+  return (
+    <div className="fines-panel">
+      <div className="list-head">
+        <h4>
+          Fines{' '}
+          {s.fine_amount != null && (
+            <span className="muted">· {peso(s.fine_amount)} per absent household</span>
+          )}
+        </h4>
+        {s.to_charge > 0 && !fines.blocked_reason && (
+          <button className="btn" disabled={busyId === 'fines'} onClick={onGenerate}>
+            {busyId === 'fines'
+              ? 'Raising…'
+              : `Generate ${s.to_charge} fine${s.to_charge === 1 ? '' : 's'} · ${peso(s.total_amount)}`}
+          </button>
+        )}
+      </div>
+
+      {/* Attendance and the charge disagree. Nothing resolves this on its own:
+          voiding is permanent for the event, so it takes a deliberate click. */}
+      {mismatched.length > 0 && (
+        <div className="alert error fines-mismatch">
+          <strong>
+            {mismatched.length} household{mismatched.length === 1 ? '' : 's'} marked present but still
+            {mismatched.length === 1 ? ' has' : ' have'} a fine for this activity.
+          </strong>
+          <p>
+            Recording attendance does not change a fine. Review each one and void it if the fine is
+            wrong — voiding is permanent for this activity and cannot be undone.
+          </p>
+          <ul className="mismatch-list">
+            {mismatched.map((h) => (
+              <li key={h.household_id}>
+                <span>
+                  <strong>#{h.household_id}</strong>{' '}
+                  {h.head_name || <span className="muted">no head assigned</span>} ·{' '}
+                  {peso(h.charge.amount)} {chargeMeta(h.charge.status).label.toLowerCase()}
+                </span>
+                {h.charge.status === 'UNPAID' ? (
+                  <button
+                    className="btn secondary danger"
+                    disabled={busyId === h.household_id}
+                    onClick={() => onVoid(h)}
+                  >
+                    {busyId === h.household_id ? 'Voiding…' : 'Void this fine'}
+                  </button>
+                ) : (
+                  <span className="muted small-note">
+                    Already paid — it cannot be voided here. Refunds are handled at the Barangay
+                    Office.
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {fines.blocked_reason ? (
+        <p className="muted">{fines.blocked_reason}</p>
+      ) : (
+        <p className="muted">
+          {s.to_charge > 0 ? (
+            <>
+              <strong>{s.to_charge}</strong> household{s.to_charge === 1 ? '' : 's'} would be charged{' '}
+              {peso(s.total_amount)} in total.
+            </>
+          ) : (
+            <>Nothing to raise — every active household is recorded present or already has a fine.</>
+          )}
+          {s.registered_after > 0 && (
+            <>
+              {' '}
+              {s.registered_after} household{s.registered_after === 1 ? '' : 's'} registered after this
+              activity ended and {s.registered_after === 1 ? 'is' : 'are'} not counted.
+            </>
+          )}
+        </p>
+      )}
+
+      {raised.length > 0 && (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Household</th>
+                <th className="num">Amount</th>
+                <th>Status</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {raised.map((h) => {
+                const meta = chargeMeta(h.charge.status);
+                return (
+                  <tr key={h.household_id}>
+                    <td>
+                      <strong>#{h.household_id}</strong>{' '}
+                      {h.head_name || <span className="muted">no head assigned</span>}
+                    </td>
+                    <td className="num">{peso(h.charge.amount)}</td>
+                    <td>
+                      <span className={`badge ${meta.className}`}>{meta.label}</span>
+                    </td>
+                    <td className="roster-action">
+                      {h.charge.status === 'UNPAID' && (
+                        <button
+                          className="btn secondary danger"
+                          disabled={busyId === h.household_id}
+                          onClick={() => onVoid(h)}
+                        >
+                          Void
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- attendance roster (stage 3a) ------------------------------------------
 // Used on a phone during an assembly, so the counts are large, the rows stay
 // readable at narrow width, and the tap targets are big. Stage 3d will add a
 // camera scanner to this same screen.
 function AttendanceRoster({ eventId, onBack }) {
-  const { authFetch } = useAuth();
+  const { authFetch, user } = useAuth();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -369,6 +505,21 @@ function AttendanceRoster({ eventId, onBack }) {
   const [error, setError] = useState('');
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  // Fines are Secretary-only (stage 3b). Staff still record attendance here,
+  // they just never see the money side; the server refuses them regardless.
+  const canFine = user?.role === 'secretary';
+  const [fines, setFines] = useState(null);
+
+  const loadFines = useCallback(async () => {
+    if (!canFine) return;
+    try {
+      setFines(await authFetch(`/events/${eventId}/fines`));
+    } catch {
+      // A roster that works matters more than the fines panel; failing here
+      // must not blank the screen the assembly is being run from.
+      setFines(null);
+    }
+  }, [authFetch, eventId, canFine]);
 
   const load = useCallback(async () => {
     setError('');
@@ -386,6 +537,10 @@ function AttendanceRoster({ eventId, onBack }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadFines();
+  }, [loadFines]);
+
   async function mark(h) {
     setFlash(null);
     setBusyId(h.household_id);
@@ -397,6 +552,52 @@ function AttendanceRoster({ eventId, onBack }) {
       // Recording an already-recorded household is a no-op, not an error.
       setFlash({ type: result.already_recorded ? 'info' : 'success', text: result.message });
       await load();
+      await loadFines();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function generateFines() {
+    const s = fines?.summary;
+    const ok = window.confirm(
+      `Raise ${s.to_charge} fine${s.to_charge === 1 ? '' : 's'} of ₱${Number(s.fine_amount).toFixed(2)} ` +
+        `(₱${Number(s.total_amount).toFixed(2)} total)?\n\n` +
+        'Each absent household will owe this at the Barangay Office. ' +
+        'Households already recorded present are not charged.'
+    );
+    if (!ok) return;
+    setFlash(null);
+    setBusyId('fines');
+    try {
+      const result = await authFetch(`/events/${eventId}/fines`, { method: 'POST' });
+      setFlash({ type: 'success', text: result.message });
+      await loadFines();
+    } catch (err) {
+      setFlash({ type: 'error', text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function voidFine(row) {
+    if (
+      !window.confirm(
+        `Void the ₱${Number(row.charge.amount).toFixed(2)} fine for household #${row.household_id}?\n\n` +
+          'This cannot be undone — no replacement fine can be raised for this activity afterwards.'
+      )
+    )
+      return;
+    setFlash(null);
+    setBusyId(row.household_id);
+    try {
+      const result = await authFetch(`/events/${eventId}/fines/${row.household_id}/void`, {
+        method: 'POST',
+      });
+      setFlash({ type: 'success', text: result.message });
+      await loadFines();
     } catch (err) {
       setFlash({ type: 'error', text: err.message });
     } finally {
@@ -414,6 +615,7 @@ function AttendanceRoster({ eventId, onBack }) {
       });
       setFlash({ type: 'success', text: result.message });
       await load();
+      await loadFines();
     } catch (err) {
       setFlash({ type: 'error', text: err.message });
     } finally {
@@ -437,6 +639,12 @@ function AttendanceRoster({ eventId, onBack }) {
   if (!data) return <p className="muted">Loading attendance…</p>;
 
   const { summary } = data;
+  // Households marked present that still carry a live fine. Flagged on the row
+  // too, so the clash is visible where the attendance edit was made and not
+  // only in the panel above.
+  const mismatchIds = new Set(
+    (fines?.households || []).filter((h) => h.state === 'mismatch').map((h) => h.household_id)
+  );
 
   return (
     <div className="pending-card">
@@ -484,6 +692,8 @@ function AttendanceRoster({ eventId, onBack }) {
               <span className="roster-label">Active households</span>
             </div>
           </div>
+
+          {canFine && fines && <FinesPanel fines={fines} busyId={busyId} onGenerate={generateFines} onVoid={voidFine} />}
 
           <form
             className="head-actions"
@@ -542,6 +752,11 @@ function AttendanceRoster({ eventId, onBack }) {
                         {h.attendance ? (
                           <>
                             <span className="badge status-claimed">Present</span>{' '}
+                            {mismatchIds.has(h.household_id) && (
+                              <span className="badge status-rejected" title="Marked present but still has a fine for this activity">
+                                Fine outstanding
+                              </span>
+                            )}{' '}
                             <span className="muted small-note">
                               {formatDate(h.attendance.recorded_at)}
                               {h.attendance.recorded_by_username

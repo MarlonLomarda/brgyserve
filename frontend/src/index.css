@@ -965,3 +965,50 @@ button.link-button:hover:not(:disabled) {
     margin-top: 8px;
   }
 }
+
+/* Fines panel on the attendance roster (Events stage 3b). Secretary-only —
+   set apart from the roster because raising a charge is a different kind of
+   act from ticking someone present. */
+.fines-panel {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+}
+
+.fines-panel h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.fines-panel > p {
+  margin: 6px 0 0;
+}
+
+.fines-panel .table-wrap {
+  margin-top: 12px;
+}
+
+/* Attendance/fine mismatch: present, yet still holding a live fine. Nothing
+   resolves this automatically — voiding is permanent, so it takes a click. */
+.fines-mismatch p {
+  margin: 6px 0 8px;
+  font-weight: normal;
+}
+
+.mismatch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mismatch-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #fecaca;
+}

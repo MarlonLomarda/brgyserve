@@ -1,7 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { CHARGE_STATUS, PAYMENT_METHOD } = require('../constants/charges');
+const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { logSmsNotification } = require('../services/smsNotification');
 
 const router = express.Router();
@@ -11,21 +11,60 @@ const router = express.Router();
 router.use(authenticate, requireRole('treasurer', 'secretary'));
 
 // Charges link to their source per type: DOCUMENT via document_requests,
-// RENTAL via rental_requests (stage 4 of Facility Rentals) — whichever is
-// null for a given row simply embeds as null. The payer's profile name covers
-// rentals (no resident_records link on rental_requests).
+// RENTAL via rental_requests (stage 4 of Facility Rentals), FINE via
+// event_id + household_id (Events stage 3b) — whichever is null for a given
+// row simply embeds as null. The payer's profile name covers rentals (no
+// resident_records link on rental_requests).
+//
+// A FINE may have NO payer account at all: it is owed by a household, and
+// most households have no linked account (charges.user_id is nullable for
+// exactly this reason). Its household and event are embedded so the queue can
+// still say who owes what; the head's name is resolved separately below.
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
-  paymongo_session_id, paymongo_payment_id,
+  paymongo_session_id, paymongo_payment_id, household_id,
   payer:users ( user_id, username, email,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   document_requests ( request_id, purpose, status,
     document_types ( name ),
     resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
   rental_requests ( request_id, quantity_requested, start_datetime, end_datetime, status,
-    rental_items ( name ) )
+    rental_items ( name ) ),
+  events ( event_id, title, start_datetime, end_datetime ),
+  household_records ( household_id, address )
 `;
+
+// The head's name lives two joins away from a charge (household_members ->
+// resident_records) and cannot be embedded with a "current head only" filter,
+// so it is resolved in one extra query over the charges actually being
+// returned. Mutates the rows in place, adding household_records.head_name.
+async function attachHouseholdHeads(charges) {
+  const ids = [...new Set(charges.filter((c) => c.household_id).map((c) => c.household_id))];
+  if (!ids.length) return;
+
+  const { data: heads, error } = await supabase
+    .from('household_members')
+    .select('household_id, resident_records ( first_name, middle_name, last_name, suffix, contact_number )')
+    .eq('role', 'Head')
+    .is('date_ended', null)
+    .in('household_id', ids);
+  if (error) throw new Error(`Failed to load household heads: ${error.message}`);
+
+  const byHousehold = new Map(
+    (heads || []).map((h) => [
+      h.household_id,
+      Array.isArray(h.resident_records) ? h.resident_records[0] : h.resident_records,
+    ])
+  );
+  for (const c of charges) {
+    if (!c.household_records) continue;
+    const r = byHousehold.get(c.household_id);
+    const name = r ? [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ') : null;
+    c.household_records.head_name = r?.suffix && name ? `${name}, ${r.suffix}` : name || null;
+    c.household_records.head_contact = r?.contact_number || null;
+  }
+}
 
 // GET /api/charges?status=UNPAID|PAID|VOID|all — defaults to UNPAID (the
 // verification queue: plain unpaid charges plus those with a submitted-but-
@@ -52,6 +91,7 @@ router.get('/', async (req, res) => {
   if (error) {
     throw new Error(`Failed to load charges: ${error.message}`);
   }
+  await attachHouseholdHeads(data || []);
   res.json({ charges: data });
 });
 
@@ -68,9 +108,10 @@ router.post('/:id/verify', async (req, res) => {
 
   const { data: charge, error: loadError } = await supabase
     .from('charges')
-    .select(`charge_id, amount, status, declared_method, declared_reference,
+    .select(`charge_id, charge_type, amount, status, declared_method, declared_reference, household_id,
       document_requests ( request_id, document_types ( name ), resident_records ( contact_number ) ),
       rental_requests ( request_id, rental_items ( name ) ),
+      events ( event_id, title ),
       payer:users ( profiles ( resident_records ( contact_number ) ) )`)
     .eq('charge_id', id)
     .maybeSingle();
@@ -132,16 +173,32 @@ router.post('/:id/verify', async (req, res) => {
   // SMS hook — stub only (see services/smsNotification.js). The use cases
   // call for a confirmation SMS when payment status is updated. Wording and
   // contact source depend on what the charge is for.
-  const isRental = !!charge.rental_requests;
-  const contact =
+  const peso = `₱${Number(charge.amount).toFixed(2)}`;
+  let contact =
     charge.document_requests?.resident_records?.contact_number ||
     charge.payer?.profiles?.resident_records?.contact_number;
-  logSmsNotification(
-    contact,
-    isRental
-      ? `BrgyServe: your payment of ₱${Number(charge.amount).toFixed(2)} for the ${charge.rental_requests?.rental_items?.name || 'rental'} booking has been received and verified.`
-      : `BrgyServe: your payment of ₱${Number(charge.amount).toFixed(2)} for the ${charge.document_requests?.document_types?.name || 'document'} request has been received and verified. Please wait for the release notice.`
-  );
+  let message;
+  if (charge.charge_type === CHARGE_TYPE.FINE) {
+    // A fine is owed by a household, which often has no account at all — so
+    // the contact comes from the household's head, not from the payer link.
+    if (!contact && charge.household_id) {
+      const { data: head } = await supabase
+        .from('household_members')
+        .select('resident_records ( contact_number )')
+        .eq('household_id', charge.household_id)
+        .eq('role', 'Head')
+        .is('date_ended', null)
+        .maybeSingle();
+      const r = Array.isArray(head?.resident_records) ? head.resident_records[0] : head?.resident_records;
+      contact = r?.contact_number;
+    }
+    message = `BrgyServe: your payment of ${peso} for the attendance fine for "${charge.events?.title || 'a barangay activity'}" has been received and verified. Thank you.`;
+  } else if (charge.rental_requests) {
+    message = `BrgyServe: your payment of ${peso} for the ${charge.rental_requests?.rental_items?.name || 'rental'} booking has been received and verified.`;
+  } else {
+    message = `BrgyServe: your payment of ${peso} for the ${charge.document_requests?.document_types?.name || 'document'} request has been received and verified. Please wait for the release notice.`;
+  }
+  logSmsNotification(contact, message);
 
   res.json({ message: 'Payment recorded — charge marked PAID', payment });
 });

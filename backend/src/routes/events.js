@@ -3,6 +3,8 @@ const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { EVENT_TYPE, EVENT_TYPES, EVENT_STATUS, EVENT_VIEW, EVENT_VIEWS } = require('../constants/events');
 const { HOUSEHOLD_ROLE } = require('../constants/households');
+const { CHARGE_STATUS, CHARGE_TYPE } = require('../constants/charges');
+const { logSmsNotification } = require('../services/smsNotification');
 const { searchWords, parsePaging, pageResponse } = require('../utils/listQuery');
 
 const router = express.Router();
@@ -355,7 +357,7 @@ async function requireAttendanceEvent(req, res) {
   }
   const { data: event, error } = await supabase
     .from('events')
-    .select('event_id, title, type, attendance_required, fine_amount, start_datetime, end_datetime')
+    .select('event_id, title, type, attendance_required, fine_amount, start_datetime, end_datetime, is_archived')
     .eq('event_id', id)
     .maybeSingle();
   if (error) throw new Error(`Failed to load event: ${error.message}`);
@@ -557,6 +559,11 @@ router.post('/:id/attendance', async (req, res) => {
     throw new Error(`Failed to record attendance: ${error.message}`);
   }
 
+  // RECORDING ATTENDANCE NEVER TOUCHES A CHARGE. Money must not move as a side
+  // effect of an attendance edit. If this household already has a live fine
+  // for this event the two now disagree, and that MISMATCH is surfaced on the
+  // roster (see GET /:id/fines) for the Secretary to resolve deliberately —
+  // voiding is manual, and permanent for the event once done.
   const by = (Array.isArray(inserted.recorded_by) ? inserted.recorded_by[0] : inserted.recorded_by)?.username;
   res.status(201).json({
     message: `Household #${householdId} recorded present.`,
@@ -599,6 +606,349 @@ router.delete('/:id/attendance/:householdId', async (req, res) => {
   res.json({
     message: `Household #${householdId} is no longer marked present.`,
     household_id: householdId,
+  });
+});
+
+// ===========================================================================
+// STAGE 3b — FINES FOR ABSENT HOUSEHOLDS
+//
+// A fine is an ordinary row in the EXISTING charges table (charge_type FINE,
+// linked by event_id + household_id), so the Treasurer settles it on the same
+// Payments screen as document and rental fees. There is no parallel payment
+// path and nothing about the charges/payments model changed.
+//
+// GENERATION IS AN EXPLICIT SECRETARY ACTION. It is never triggered by a
+// timer, by the event ending, or by recording attendance. Money must not
+// appear on a household's record because a clock ticked over — somebody
+// decides to raise the fines, and the roster they are deciding from is
+// visible on screen at that moment.
+//
+// SAFE TO RE-RUN. The partial unique index charges_event_household_unique
+// (migration 016) means at most one charge can exist per (event, household),
+// so a second run cannot double-charge. The route pre-filters against the
+// charges already on file so it can REPORT accurately, and treats a 23505
+// from a concurrent run as "already fined" rather than an error.
+//
+// VOIDING IS MANUAL, ALWAYS. Recording attendance never voids a fine, and
+// nothing else changes a charge as a side effect. The reason is the index
+// above: because it covers (event_id, household_id) whatever the status, a
+// void is PERMANENT for that event — no replacement charge can ever be raised
+// for that pair. Anything automatic would let a mis-tapped "Mark present"
+// destroy a chargeable fine for good, and undoing the attendance would not
+// bring it back. So when attendance and a live fine disagree, the roster
+// reports the MISMATCH (state 'mismatch') and the Secretary decides.
+//
+// Fines are Secretary-only, unlike attendance recording which Staff also do.
+// Staff mark the roster; raising a charge against a household is a different
+// kind of act.
+// ===========================================================================
+
+// Why generation is not possible right now, or null if it is. Kept separate
+// from the routes so the preview can EXPLAIN the block instead of just
+// refusing — the Secretary needs to know what to fix.
+function fineBlocker(event) {
+  if (event.is_archived) {
+    return 'This activity is archived. Unarchive it before raising fines.';
+  }
+  const amount = event.fine_amount === null || event.fine_amount === undefined
+    ? null
+    : Number(event.fine_amount);
+  if (!(amount > 0)) {
+    return 'No fine amount is set for this activity. Attendance is being tracked, but there is nothing to charge.';
+  }
+  if (!event.end_datetime) {
+    return 'This activity has no end time, so it is not possible to say who missed it.';
+  }
+  if (new Date(event.end_datetime).getTime() > Date.now()) {
+    return 'This activity has not finished yet. Fines can only be raised once it has ended.';
+  }
+  return null;
+}
+
+// Everything the fine routes need about who should be fined, computed from
+// live attendance. Absence is DERIVED here exactly as it is everywhere else:
+// a household is absent iff it has no event_attendees row for this event.
+//
+// Neither query uses .in() on a household id list. At barangay scale that
+// list runs to four figures, which does not survive being serialised into a
+// PostgREST query string — the same reason GET /unassigned-residents computes
+// its difference in Node.
+async function collectFineTargets(event) {
+  const { data: households, error: hErr } = await supabase
+    .from('household_records')
+    .select('household_id, address, registered_at')
+    .eq('is_active', true);
+  if (hErr) throw new Error(`Failed to load households: ${hErr.message}`);
+
+  const { data: present, error: pErr } = await supabase
+    .from('event_attendees')
+    .select('household_id')
+    .eq('event_id', event.event_id);
+  if (pErr) throw new Error(`Failed to load attendance: ${pErr.message}`);
+  const presentIds = new Set((present || []).map((p) => p.household_id));
+
+  // Any charge already raised for this event, whatever its status. A VOID one
+  // still counts as handled: the unique index would refuse a replacement, and
+  // a voided fine is a decision not to charge, not an omission to fix.
+  const { data: existing, error: cErr } = await supabase
+    .from('charges')
+    .select('charge_id, household_id, status, amount')
+    .eq('event_id', event.event_id)
+    .not('household_id', 'is', null);
+  if (cErr) throw new Error(`Failed to load existing fines: ${cErr.message}`);
+  const chargeByHousehold = new Map((existing || []).map((c) => [c.household_id, c]));
+
+  // Heads (for the payer link and the name/contact) — fetched whole rather
+  // than filtered by id, since there is at most one head per household.
+  const { data: heads, error: mErr } = await supabase
+    .from('household_members')
+    .select('household_id, resident_id, resident_records ( first_name, middle_name, last_name, suffix, contact_number )')
+    .eq('role', HOUSEHOLD_ROLE.HEAD)
+    .is('date_ended', null);
+  if (mErr) throw new Error(`Failed to load household heads: ${mErr.message}`);
+  const headByHousehold = new Map((heads || []).map((h) => [h.household_id, h]));
+
+  const { data: profiles, error: prErr } = await supabase
+    .from('profiles')
+    .select('user_id, resident_id')
+    .not('resident_id', 'is', null);
+  if (prErr) throw new Error(`Failed to load accounts: ${prErr.message}`);
+  const userByResident = new Map((profiles || []).map((p) => [p.resident_id, p.user_id]));
+
+  const endedAt = event.end_datetime ? new Date(event.end_datetime).getTime() : null;
+
+  const rows = (households || []).map((h) => {
+    const head = headByHousehold.get(h.household_id) || null;
+    const headResident = head
+      ? Array.isArray(head.resident_records) ? head.resident_records[0] : head.resident_records
+      : null;
+    // A household registered AFTER the assembly finished cannot have attended
+    // it, so it must never be fined for missing it.
+    const registeredAfter =
+      endedAt !== null && h.registered_at && new Date(h.registered_at).getTime() > endedAt;
+    const charge = chargeByHousehold.get(h.household_id) || null;
+    const present = presentIds.has(h.household_id);
+    // The household is marked present AND still owes (or has paid) a fine for
+    // this event. Nothing resolves this automatically — see the attendance
+    // route: an attendance edit never changes money. A VOID charge is not a
+    // mismatch, since nothing is owed.
+    const mismatch = !!charge && present && charge.status !== CHARGE_STATUS.VOID;
+
+    let state;
+    if (mismatch) state = 'mismatch';
+    else if (charge) state = 'already_charged';
+    else if (present) state = 'present';
+    else if (registeredAfter) state = 'registered_after';
+    else state = 'to_charge';
+
+    return {
+      household_id: h.household_id,
+      address: h.address,
+      head_name: fullName(headResident),
+      head_contact: headResident?.contact_number || null,
+      user_id: head ? userByResident.get(head.resident_id) ?? null : null,
+      present,
+      state,
+      charge: charge
+        ? { charge_id: charge.charge_id, status: charge.status, amount: charge.amount }
+        : null,
+    };
+  });
+
+  return rows;
+}
+
+const fineSummary = (rows, amount) => {
+  const toCharge = rows.filter((r) => r.state === 'to_charge');
+  return {
+    fine_amount: amount,
+    active_households: rows.length,
+    present: rows.filter((r) => r.state === 'present').length,
+    registered_after: rows.filter((r) => r.state === 'registered_after').length,
+    already_charged: rows.filter((r) => r.state === 'already_charged').length,
+    // Present, yet holding a live fine. Needs a human decision, so it is
+    // counted separately and never folded into any other bucket.
+    mismatch: rows.filter((r) => r.state === 'mismatch').length,
+    to_charge: toCharge.length,
+    total_amount: amount === null ? null : Number((toCharge.length * amount).toFixed(2)),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/events/:id/fines — what would happen, without changing anything.
+//
+// Deliberately does NOT refuse when fines cannot be raised: it reports
+// can_generate + blocked_reason so the screen can say why. Refusing with a 400
+// would leave the Secretary staring at an error with no idea what to fix.
+// ---------------------------------------------------------------------------
+router.get('/:id/fines', requireRole('secretary'), async (req, res) => {
+  const event = await requireAttendanceEvent(req, res);
+  if (!event) return undefined;
+
+  const rows = await collectFineTargets(event);
+  const blocked = fineBlocker(event);
+  const amount = event.fine_amount === null ? null : Number(event.fine_amount);
+
+  res.json({
+    event: {
+      event_id: event.event_id,
+      title: event.title,
+      start_datetime: event.start_datetime,
+      end_datetime: event.end_datetime,
+      fine_amount: amount,
+      is_archived: event.is_archived,
+    },
+    can_generate: !blocked && rows.some((r) => r.state === 'to_charge'),
+    blocked_reason: blocked,
+    summary: fineSummary(rows, amount),
+    households: rows,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/events/:id/fines — raise the fines. Secretary-only, explicit.
+// ---------------------------------------------------------------------------
+router.post('/:id/fines', requireRole('secretary'), async (req, res) => {
+  const event = await requireAttendanceEvent(req, res);
+  if (!event) return undefined;
+
+  const blocked = fineBlocker(event);
+  if (blocked) return res.status(409).json({ error: blocked });
+
+  const amount = Number(event.fine_amount);
+  const rows = await collectFineTargets(event);
+  const targets = rows.filter((r) => r.state === 'to_charge');
+
+  if (!targets.length) {
+    return res.status(409).json({
+      error: 'There is nobody to fine — every active household is either recorded present or already has a charge for this activity.',
+      summary: fineSummary(rows, amount),
+    });
+  }
+
+  const now = new Date().toISOString();
+  const toInsert = targets.map((t) => ({
+    charge_type: CHARGE_TYPE.FINE,
+    amount,
+    status: CHARGE_STATUS.UNPAID,
+    event_id: event.event_id,
+    household_id: t.household_id,
+    // The head's account when they have one, so the fine shows up in their own
+    // view and can be paid online. Most households have no account at all
+    // (8 of 47 residents did at last count) — hence charges.user_id being
+    // nullable, and hence fines keying off the household, not the user.
+    user_id: t.user_id,
+    created_at: now,
+  }));
+
+  // Chunked so one oversized request cannot be built. A 23505 can only come
+  // from a concurrent second run, since the set was just filtered against the
+  // charges on file; that chunk falls back to one insert per household so the
+  // rest still lands and the collision is reported as "already fined".
+  const CHUNK = 200;
+  const created = [];
+  const collided = [];
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const chunk = toInsert.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from('charges').insert(chunk).select('charge_id, household_id');
+    if (!error) {
+      created.push(...data);
+      continue;
+    }
+    if (error.code !== '23505') throw new Error(`Failed to raise fines: ${error.message}`);
+    for (const row of chunk) {
+      const one = await supabase.from('charges').insert(row).select('charge_id, household_id').single();
+      if (!one.error) created.push(one.data);
+      else if (one.error.code === '23505') collided.push(row.household_id);
+      else throw new Error(`Failed to raise fines: ${one.error.message}`);
+    }
+  }
+
+  // SMS hook — stub only (see services/smsNotification.js), one per household
+  // actually fined, which is what a real provider call would be.
+  const byHousehold = new Map(targets.map((t) => [t.household_id, t]));
+  for (const c of created) {
+    const t = byHousehold.get(c.household_id);
+    logSmsNotification(
+      t?.head_contact,
+      `BrgyServe: your household was not recorded at "${event.title}". A fine of ₱${amount.toFixed(2)} is now due. Please settle it at the Barangay Office.`
+    );
+  }
+
+  const after = await collectFineTargets(event);
+  res.status(201).json({
+    message:
+      `Raised ${created.length} fine${created.length === 1 ? '' : 's'} of ₱${amount.toFixed(2)} ` +
+      `(₱${(created.length * amount).toFixed(2)} total)` +
+      (collided.length ? `. ${collided.length} were already fined by someone else just now.` : '.'),
+    created: created.length,
+    already_fined: collided.length,
+    total_amount: Number((created.length * amount).toFixed(2)),
+    summary: fineSummary(after, amount),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/events/:id/fines/:householdId/void — cancel one fine.
+//
+// VOID, never delete: the charge is a financial record and the rest of the
+// system voids rather than removes (a cancelled rental booking does the same).
+// A PAID fine is refused — money that has been received is a fact, and refunds
+// are handled offline, exactly as with rentals.
+//
+// This is the ONLY way a fine is ever voided — nothing does it automatically.
+//
+// A voided fine is FINAL for that event. The unique index is on
+// (event_id, household_id) regardless of status, so no replacement charge can
+// be raised for that pair afterwards. That permanence is exactly why the
+// action is manual: it is a decision not to fine this household for this
+// assembly, and it cannot be walked back.
+// ---------------------------------------------------------------------------
+router.post('/:id/fines/:householdId/void', requireRole('secretary'), async (req, res) => {
+  const event = await requireAttendanceEvent(req, res);
+  if (!event) return undefined;
+
+  const householdId = Number(req.params.householdId);
+  if (!Number.isInteger(householdId)) {
+    return res.status(400).json({ error: 'Invalid household id' });
+  }
+
+  const { data: charge, error: loadErr } = await supabase
+    .from('charges')
+    .select('charge_id, status, amount')
+    .eq('event_id', event.event_id)
+    .eq('household_id', householdId)
+    .maybeSingle();
+  if (loadErr) throw new Error(`Failed to load the fine: ${loadErr.message}`);
+  if (!charge) {
+    return res.status(404).json({ error: 'That household has no fine for this activity' });
+  }
+  if (charge.status === CHARGE_STATUS.PAID) {
+    return res.status(409).json({
+      error: 'This fine has already been paid and cannot be voided. Refunds are handled at the Barangay Office.',
+    });
+  }
+  if (charge.status === CHARGE_STATUS.VOID) {
+    return res.json({ message: 'That fine was already void.', charge_id: charge.charge_id, already_void: true });
+  }
+
+  const { data: voided, error } = await supabase
+    .from('charges')
+    .update({ status: CHARGE_STATUS.VOID })
+    .eq('charge_id', charge.charge_id)
+    .eq('status', CHARGE_STATUS.UNPAID)
+    .select('charge_id')
+    .maybeSingle();
+  if (error) throw new Error(`Failed to void the fine: ${error.message}`);
+  if (!voided) {
+    return res.status(409).json({ error: 'That fine was just changed by someone else — reload and try again.' });
+  }
+
+  res.json({
+    message: `Fine of ₱${Number(charge.amount).toFixed(2)} for household #${householdId} is now void.`,
+    charge_id: charge.charge_id,
+    household_id: householdId,
+    already_void: false,
   });
 });
 
