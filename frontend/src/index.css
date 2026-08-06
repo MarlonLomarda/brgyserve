@@ -1079,7 +1079,41 @@ button.link-button:hover:not(:disabled) {
 }
 
 .data-table .col-purpose .cell-clamp {
-  display: block;
   max-width: 300px;
+}
+
+/* The clamp itself. It has to sit on an element INSIDE the cell because
+   max-width on a <td> is ignored by table layout. overflow-wrap makes a long
+   unbroken token breakable, which collapses the column's min-content; the
+   min-width on the cell then puts the floor back at a chosen value. Nothing
+   is ever truncated — the text wraps onto more lines and every character
+   stays in the DOM and selectable. */
+.data-table .cell-clamp {
+  display: block;
   overflow-wrap: anywhere;
+}
+
+/* Payments queue. Both columns carry structural tokens that cannot be broken
+   at a space: usernames (26 chars measured) and PayMongo payment ids, which
+   are always 28 chars. Unbounded they demanded 204.3 and 266.3, pushing the
+   "All charges" view to 1285.1 against a 1130 container. These floors were
+   derived by sweeping candidate values: 140 + 130 lands the table at 1084.5,
+   leaving 45.5px of margin. Sized for a real PayMongo id, NOT for the current
+   demo rows — deleting the gwtest_* accounts does not make this unnecessary,
+   because the first genuine verified GCash payment puts the column straight
+   back where it was. */
+.data-table .col-resident {
+  min-width: 140px;
+}
+
+.data-table .col-resident .cell-clamp {
+  max-width: 170px;
+}
+
+.data-table .col-declared {
+  min-width: 130px;
+}
+
+.data-table .col-declared .cell-clamp {
+  max-width: 200px;
 }

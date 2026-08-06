@@ -254,11 +254,11 @@ export default function PaymentsPage({ title, nav }) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Resident</th>
+                      <th className="col-resident">Resident</th>
                       <th>Type</th>
                       <th>For</th>
                       <th className="num">Amount</th>
-                      <th>Declared payment</th>
+                      <th className="col-declared">Declared payment</th>
                       <th>Status</th>
                       <th className="col-billed">Billed</th>
                       <th></th>
@@ -267,11 +267,13 @@ export default function PaymentsPage({ title, nav }) {
                   <tbody>
                     {charges.map((c) => (
                       <tr key={c.charge_id}>
-                        <td>
-                          <strong>{payerName(c)}</strong>
-                          {c.payer?.username && (
-                            <div className="muted small-note">@{c.payer.username}</div>
-                          )}
+                        <td className="col-resident">
+                          <div className="cell-clamp">
+                            <strong>{payerName(c)}</strong>
+                            {c.payer?.username && (
+                              <div className="muted small-note">@{c.payer.username}</div>
+                            )}
+                          </div>
                         </td>
                         <td>{CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}</td>
                         <td>
@@ -281,7 +283,9 @@ export default function PaymentsPage({ title, nav }) {
                           )}
                         </td>
                         <td className="num">₱{Number(c.amount).toFixed(2)}</td>
-                        <td className="muted">{declaredInfo(c) || '—'}</td>
+                        <td className="muted col-declared">
+                          <span className="cell-clamp">{declaredInfo(c) || '—'}</span>
+                        </td>
                         <td>
                           <span className={`badge ${chargeMeta(c.status).className}`}>
                             {chargeMeta(c.status).label}
