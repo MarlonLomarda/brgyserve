@@ -127,7 +127,7 @@ export default function MyRequestsPage() {
                 <thead>
                   <tr>
                     <th>Document</th>
-                    <th>Purpose</th>
+                    <th className="col-purpose">Purpose</th>
                     <th className="num">Fee</th>
                     <th>Status</th>
                     <th>Submitted</th>
@@ -143,7 +143,9 @@ export default function MyRequestsPage() {
                         <td>
                           <strong>{r.document_types?.name || '—'}</strong>
                         </td>
-                        <td className="muted">{r.purpose}</td>
+                        <td className="muted col-purpose">
+                          <span className="cell-clamp">{r.purpose}</span>
+                        </td>
                         <td className="num">₱{Number(r.document_types?.fee ?? 0).toFixed(2)}</td>
                         <td>
                           <span className={`badge ${meta.className}`}>{meta.label}</span>

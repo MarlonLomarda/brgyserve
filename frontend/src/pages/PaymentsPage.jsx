@@ -260,7 +260,7 @@ export default function PaymentsPage({ title, nav }) {
                       <th className="num">Amount</th>
                       <th>Declared payment</th>
                       <th>Status</th>
-                      <th>Billed</th>
+                      <th className="col-billed">Billed</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -287,7 +287,7 @@ export default function PaymentsPage({ title, nav }) {
                             {chargeMeta(c.status).label}
                           </span>
                         </td>
-                        <td className="muted">{formatDate(c.created_at)}</td>
+                        <td className="muted col-billed">{formatDate(c.created_at)}</td>
                         <td className="row-actions">
                           {c.status === 'UNPAID' && (
                             <button className="btn secondary" onClick={() => setSelected(c)}>

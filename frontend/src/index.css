@@ -235,9 +235,21 @@ a {
 }
 
 .dash-main {
-  max-width: 860px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 24px;
+}
+
+/* Forms and read-only detail panels must NOT stretch to the full dashboard
+   width — a 1080px single-line input is unreadable. .pending-card is the
+   shared panel class, but it is overloaded: seven screens nest a table inside
+   one, including the attendance roster. The :not(:has(.table-wrap)) exclusion
+   caps only the panels that hold forms/detail content and leaves every
+   table-bearing panel at full width. If a browser lacks :has() the whole rule
+   is ignored, which degrades to the previous full-width behaviour rather than
+   breaking anything. */
+.pending-card:not(:has(.table-wrap)) {
+  max-width: 720px;
 }
 
 .muted {
@@ -538,10 +550,32 @@ button.link-button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* Action cells size themselves from their buttons, so they must be able to
+   wrap. A cell holding two long-labelled buttons — the payments queue has
+   "Verify / record" next to "Re-check with PayMongo" — otherwise demands the
+   full width of both on one line and REFUSES to shrink (flex items default to
+   min-width: auto), starving every text column in the same table. Wrapping
+   drops that demand to the widest single button.
+   flex-start keeps buttons level with the top-aligned cells beside them
+   instead of stretching down a tall row. */
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+  align-items: flex-start;
+  /* flex-wrap drops this cell's min-content to the widest SINGLE button, so
+     the table algorithm happily allots less than two buttons need and they
+     stack even when the table has hundreds of pixels spare (measured on
+     Document types: 282.9px surplus, actions still stacked). This floor asks
+     for enough to keep two ordinary buttons on one line. Cells that already
+     need more than this — the payments queue at 227.7 — are unaffected. */
+  min-width: 200px;
+}
+
+/* Labels stay on one line; the cell wraps between buttons rather than inside
+   them. */
+.row-actions .btn {
   white-space: nowrap;
 }
 
@@ -656,10 +690,19 @@ button.link-button:hover:not(:disabled) {
 /* Free-text content (purpose, rejection reasons, addresses) must never
    overflow its container, even as one long unbroken string. */
 .info-grid dd,
-.data-table td,
 .reason-note,
 .alert {
   overflow-wrap: anywhere;
+}
+
+/* Table cells use break-word, NOT anywhere. Both break a long unbroken string
+   so it cannot overflow, but `anywhere` ALSO drops the cell's min-content
+   contribution to a single character. That lets the automatic table layout
+   crush a text column to ~3 characters ("Doc/ume/nt") whenever another column
+   in the same table refuses to shrink. `break-word` keeps the overflow
+   protection without letting columns collapse. */
+.data-table td {
+  overflow-wrap: break-word;
 }
 
 .btn.danger {
@@ -1011,4 +1054,32 @@ button.link-button:hover:not(:disabled) {
   gap: 8px;
   padding: 6px 0;
   border-top: 1px solid #fecaca;
+}
+
+/* ---- column-specific sizing -----------------------------------------------
+   Both are scoped by their own class, not nth-child, so reordering a column
+   cannot silently move the rule to a different one. */
+
+/* Payments queue: the billed timestamp reads on one line. Measured cost is
+   +100.6px of table min-content (936 -> 1036.6), which fits the widened
+   container. The date FORMAT is deliberately unchanged — the short form was
+   measured as worse (89.8 vs 73.2 min-content). */
+.data-table .col-billed {
+  white-space: nowrap;
+}
+
+/* My Requests: free text the resident typed. min-width stops the column being
+   starved to a few characters; the inner clamp stops one pathological
+   unbroken token from demanding the whole table (a 433-character token
+   measured at 2127px, 77% of that table). overflow-wrap: anywhere lives on
+   the inner element so the break applies to the text while the cell keeps its
+   own floor. */
+.data-table .col-purpose {
+  min-width: 220px;
+}
+
+.data-table .col-purpose .cell-clamp {
+  display: block;
+  max-width: 300px;
+  overflow-wrap: anywhere;
 }
