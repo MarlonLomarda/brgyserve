@@ -9,6 +9,7 @@ const secretaryRoutes = require('./routes/secretary');
 const residentRoutes = require('./routes/residents');
 const residentRecordRoutes = require('./routes/residentRecords');
 const householdRoutes = require('./routes/households');
+const myHouseholdRoutes = require('./routes/myHousehold');
 const documentTypeRoutes = require('./routes/documentTypes');
 const documentRequestRoutes = require('./routes/documentRequests');
 const chargeRoutes = require('./routes/charges');
@@ -52,6 +53,10 @@ app.use('/api/secretary', secretaryRoutes);
 app.use('/api/residents', residentRoutes);
 app.use('/api/resident-records', residentRecordRoutes);
 app.use('/api/households', householdRoutes);
+// Separate from /api/households on purpose: that router is Secretary/Staff
+// only, while this one is resident-only and derives the household from the
+// session rather than taking an id.
+app.use('/api/my-household', myHouseholdRoutes);
 app.use('/api/document-types', documentTypeRoutes);
 app.use('/api/document-requests', documentRequestRoutes);
 app.use('/api/charges', chargeRoutes);

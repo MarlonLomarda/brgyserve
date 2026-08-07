@@ -19,6 +19,7 @@ export const RESIDENT_NAV = [
   { to: '/resident/rentals', label: 'My rentals' },
   { to: '/resident/book-rental', label: 'Book a facility' },
   { to: '/resident/events', label: 'Events' },
+  { to: '/resident/household', label: 'My household' },
 ];
 
 export const TREASURER_NAV = [

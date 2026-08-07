@@ -1117,3 +1117,32 @@ button.link-button:hover:not(:disabled) {
 .data-table .col-declared .cell-clamp {
   max-width: 200px;
 }
+
+/* Events stage 3c: the resident's household QR code. The code is the only
+   thing on the page, so it is centred and given a plain white quiet zone —
+   scanners need the light margin around the pattern to lock on. */
+.qr-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.qr-frame {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  line-height: 0;
+}
+
+.qr-caption {
+  margin: 8px 0 0;
+  font-weight: 600;
+}
+
+.qr-panel .small-note {
+  margin: 0;
+}

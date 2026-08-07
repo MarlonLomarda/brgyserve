@@ -9,6 +9,7 @@ import DocumentTypesPage from './pages/DocumentTypesPage';
 import EventsPage from './pages/EventsPage';
 import HouseholdsPage from './pages/HouseholdsPage';
 import LoginPage from './pages/LoginPage';
+import MyHouseholdPage from './pages/MyHouseholdPage';
 import MyRentalsPage from './pages/MyRentalsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentResultPage from './pages/PaymentResultPage';
@@ -216,6 +217,16 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <BookRentalPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Events stage 3c — the household QR a resident presents at an
+          assembly. Resident-only; there is no Secretary-side QR view. */}
+      <Route
+        path="/resident/household"
+        element={
+          <ProtectedRoute role="resident">
+            <MyHouseholdPage />
           </ProtectedRoute>
         }
       />
