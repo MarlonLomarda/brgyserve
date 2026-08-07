@@ -24,3 +24,4 @@ Thumbs.db
 # render-test bundle artifacts
 frontend/scripts/.report-render-bundle.cjs
 frontend/scripts/.auth-session-bundle.cjs
+frontend/scripts/.scanner-bundle.cjs

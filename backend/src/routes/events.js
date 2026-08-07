@@ -492,21 +492,116 @@ router.get('/:id/attendance', async (req, res) => {
   });
 });
 
+// ===========================================================================
+// STAGE 3d — SCANNING THE HOUSEHOLD QR CODE
+//
+// The resident presents the code from /resident/household (stage 3c) and the
+// Secretary or Staff scans it here. THE TOKEN IS THE ONLY THING THAT CROSSES:
+// the client sends no household id alongside it, and the server would not
+// trust one if it did — the household is whatever household_qr says owns that
+// token. qr_token is UNIQUE (migration 001), so it identifies exactly one
+// household or none at all.
+//
+// Scanning is not a second way to record attendance, only a second way to
+// NAME the household: both paths converge on the one insert below, so what a
+// scan writes and what a tap writes can never drift apart.
+// ===========================================================================
+
+// A UUID is 36 characters; the cap only stops absurd input reaching the query.
+const QR_TOKEN_MAX_LENGTH = 100;
+
+// Resolves a scanned or typed token to a household id, or sends the response
+// and returns null. Tokens are minted with crypto.randomUUID(), which is
+// always lowercase, so case-folding makes the typed fallback forgiving
+// without any risk of folding two distinct tokens together.
+async function resolveQrToken(rawToken, res) {
+  if (typeof rawToken !== 'string' || !rawToken.trim()) {
+    res.status(400).json({ error: 'Scan a QR code or type its token.' });
+    return null;
+  }
+  const token = rawToken.trim().toLowerCase();
+  if (token.length > QR_TOKEN_MAX_LENGTH) {
+    res.status(400).json({ error: 'That is not a valid household QR token.' });
+    return null;
+  }
+
+  // Read the row whatever its state, so a deactivated code can be told apart
+  // from one that was never issued — the operator needs to do something
+  // different in each case.
+  const { data: qr, error } = await supabase
+    .from('household_qr')
+    .select('household_id, is_active')
+    .eq('qr_token', token)
+    .maybeSingle();
+  if (error) throw new Error(`Failed to look up the QR code: ${error.message}`);
+
+  if (!qr) {
+    res.status(404).json({
+      error: 'That QR code is not recognised. Find the household in the list and mark it present by hand.',
+      qr_unknown: true,
+    });
+    return null;
+  }
+  if (!qr.is_active) {
+    res.status(409).json({
+      error: 'That QR code has been deactivated. Find the household in the list and mark it present by hand.',
+      qr_inactive: true,
+    });
+    return null;
+  }
+  return qr.household_id;
+}
+
+// Whose household was just recorded. A scanner is pointed at a code, not at a
+// person, so the reply has to name the household for the operator to check
+// against whoever is standing in front of them. Never fails the recording: a
+// household with no head is a data problem, not a reason to refuse a signature.
+async function householdHeadName(householdId) {
+  const { data, error } = await supabase
+    .from('household_members')
+    .select('resident_records ( first_name, middle_name, last_name, suffix )')
+    .eq('household_id', householdId)
+    .eq('role', HOUSEHOLD_ROLE.HEAD)
+    .is('date_ended', null)
+    .maybeSingle();
+  if (error || !data) return null;
+  const resident = Array.isArray(data.resident_records) ? data.resident_records[0] : data.resident_records;
+  return fullName(resident);
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/events/:id/attendance — record one household present.
 //
+// Takes EITHER a household_id (tapping "Mark present" in the roster) or a
+// qr_token (the scanner, stage 3d) — exactly one, never both.
+//
 // Recording twice is HARMLESS by design: the unique constraint turns the
 // second attempt into a no-op that reports when it was first recorded and by
-// whom. Stage 3d adds camera scanning to this screen, where a household's QR
-// will be scanned repeatedly — that must never look like an error.
+// whom. That matters most for scanning, where a code lingering in front of
+// the camera is read over and over and must never look like an error.
 // ---------------------------------------------------------------------------
 router.post('/:id/attendance', async (req, res) => {
   const event = await requireAttendanceEvent(req, res);
   if (!event) return undefined;
 
-  const householdId = Number(req.body?.household_id);
-  if (!Number.isInteger(householdId)) {
-    return res.status(400).json({ error: 'A valid household_id is required' });
+  const hasToken = req.body?.qr_token !== undefined;
+  const hasId = req.body?.household_id !== undefined;
+  if (hasToken && hasId) {
+    return res.status(400).json({ error: 'Send either a household_id or a qr_token, not both' });
+  }
+
+  let householdId;
+  if (hasToken) {
+    householdId = await resolveQrToken(req.body.qr_token, res);
+    if (householdId === null) return undefined;
+  } else {
+    if (!hasId) {
+      return res.status(400).json({ error: 'Send a household_id or a qr_token' });
+    }
+    householdId = Number(req.body.household_id);
+    if (!Number.isInteger(householdId)) {
+      return res.status(400).json({ error: 'A valid household_id is required' });
+    }
   }
 
   const { data: household, error: hErr } = await supabase
@@ -521,6 +616,12 @@ router.post('/:id/attendance', async (req, res) => {
       error: `Household #${householdId} is inactive and cannot be marked present.`,
     });
   }
+
+  // Identifies the household in every reply below, so a scan can be eyeballed
+  // against the person presenting the code.
+  const headName = await householdHeadName(householdId);
+  const label = `Household #${householdId}${headName ? ` — ${headName}` : ''}`;
+  const identity = { household_id: householdId, head_name: headName, address: household.address };
 
   const { data: inserted, error } = await supabase
     .from('event_attendees')
@@ -545,7 +646,7 @@ router.post('/:id/attendance', async (req, res) => {
       const by = (Array.isArray(existing?.recorded_by) ? existing.recorded_by[0] : existing?.recorded_by)?.username;
       return res.json({
         message:
-          `Household #${householdId} was already recorded present` +
+          `${label} was already recorded present` +
           (existing?.recorded_at ? ` at ${new Date(existing.recorded_at).toLocaleString('en-PH')}` : '') +
           (by ? ` by ${by}` : '') +
           '.',
@@ -554,6 +655,7 @@ router.post('/:id/attendance', async (req, res) => {
           ? { recorded_at: existing.recorded_at, recorded_by_username: by ?? null }
           : null,
         household_id: householdId,
+        household: identity,
       });
     }
     throw new Error(`Failed to record attendance: ${error.message}`);
@@ -566,10 +668,11 @@ router.post('/:id/attendance', async (req, res) => {
   // voiding is manual, and permanent for the event once done.
   const by = (Array.isArray(inserted.recorded_by) ? inserted.recorded_by[0] : inserted.recorded_by)?.username;
   res.status(201).json({
-    message: `Household #${householdId} recorded present.`,
+    message: `${label} recorded present.`,
     already_recorded: false,
     attendance: { recorded_at: inserted.recorded_at, recorded_by_username: by ?? null },
     household_id: householdId,
+    household: identity,
   });
 });
 

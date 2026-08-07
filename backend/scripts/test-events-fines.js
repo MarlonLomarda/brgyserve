@@ -79,16 +79,40 @@ const HOUR = 3600 * 1000;
   if (!health) return;
 
   const created = { events: [], households: [] };
+
+  // A delete that silently fails leaves real rows behind for good, so every
+  // one is checked and reported rather than assumed.
+  const scrub = async (table, column, id) => {
+    const { error } = await db.from(table).delete().eq(column, id);
+    if (error) console.warn(`  cleanup: ${table} where ${column}=${id} — ${error.message}`);
+  };
+
+  // payments FK to charges, so a paid charge cannot be deleted while its
+  // payment exists. This lives in cleanup() rather than inline in the test
+  // body on purpose: if the suite throws between verifying a payment and
+  // removing it, an inline delete never runs, and the orphaned payment then
+  // blocks the charge delete permanently — with nothing reporting it.
+  const scrubPaymentsFor = async (column, id) => {
+    const { data: own, error } = await db.from('charges').select('charge_id').eq(column, id);
+    if (error) {
+      console.warn(`  cleanup: could not list charges where ${column}=${id} — ${error.message}`);
+      return;
+    }
+    for (const c of own || []) await scrub('payments', 'charge_id', c.charge_id);
+  };
+
   const cleanup = async () => {
     for (const id of created.events) {
-      await db.from('charges').delete().eq('event_id', id);
-      await db.from('event_attendees').delete().eq('event_id', id);
-      await db.from('events').delete().eq('event_id', id);
+      await scrubPaymentsFor('event_id', id);
+      await scrub('charges', 'event_id', id);
+      await scrub('event_attendees', 'event_id', id);
+      await scrub('events', 'event_id', id);
     }
     for (const id of created.households) {
-      await db.from('charges').delete().eq('household_id', id);
-      await db.from('event_attendees').delete().eq('household_id', id);
-      await db.from('household_records').delete().eq('household_id', id);
+      await scrubPaymentsFor('household_id', id);
+      await scrub('charges', 'household_id', id);
+      await scrub('event_attendees', 'household_id', id);
+      await scrub('household_records', 'household_id', id);
     }
   };
 
@@ -342,20 +366,33 @@ const HOUR = 3600 * 1000;
       check('  the charge is PAID', after?.status === 'PAID');
       const { data: pay } = await db.from('payments').select('payment_id, amount, received_by_user_id').eq('charge_id', payable.charge_id).maybeSingle();
       check('  one payments row exists, attributed to the verifier', !!pay && pay.received_by_user_id !== null, `payment #${pay?.payment_id}`);
-      if (pay) await db.from('payments').delete().eq('payment_id', pay.payment_id);
+      // Deliberately NOT deleted here — cleanup() owns it, so it is removed
+      // even if something below throws first.
     } else {
       check('a payable fine was available', false, 'none found');
     }
   } finally {
     section('cleanup');
     await cleanup();
-    const { count: leftCharges } = await db
-      .from('charges').select('*', { count: 'exact', head: true }).eq('charge_type', 'FINE');
+    // Scoped to the events THIS RUN created, exactly like the two assertions
+    // below. Counting every charge_type='FINE' in the database also counts the
+    // barangay's real fines, so it fails permanently once stage 3b is used for
+    // real — and "fixing" that by making cleanup delete every FINE charge
+    // would destroy real money records.
+    let leftCharges = 0;
+    for (const id of created.events) {
+      const { count } = await db
+        .from('charges')
+        .select('*', { count: 'exact', head: true })
+        .eq('charge_type', 'FINE')
+        .eq('event_id', id);
+      leftCharges += count || 0;
+    }
     const { data: leftEvents } = await db.from('events').select('event_id').ilike('title', 'TEST 3b%');
     const { data: leftHh } = await db.from('household_records').select('household_id').ilike('address', 'TEST 3b%');
     check('no test events left behind', (leftEvents || []).length === 0, JSON.stringify(leftEvents));
     check('no test households left behind', (leftHh || []).length === 0, JSON.stringify(leftHh));
-    check('no FINE charges left behind', leftCharges === 0, `${leftCharges} remain`);
+    check('no FINE charges left behind by this run', leftCharges === 0, `${leftCharges} remain`);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

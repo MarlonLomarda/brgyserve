@@ -9,11 +9,13 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:reports": "node scripts/test-report-render.cjs",
-    "test:auth": "node scripts/test-auth-session.cjs"
+    "test:auth": "node scripts/test-auth-session.cjs",
+    "test:scan": "node scripts/test-scanner.cjs"
   },
   "dependencies": {
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
+    "jsqr": "^1.4.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

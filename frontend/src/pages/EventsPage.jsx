@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import AttendanceScanner from '../components/AttendanceScanner';
 import DashHeader from '../components/DashHeader';
 import { chargeMeta, formatDate } from '../constants/requestStatus';
 import {
@@ -492,10 +493,11 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
   );
 }
 
-// --- attendance roster (stage 3a) ------------------------------------------
+// --- attendance roster (stages 3a + 3d) ------------------------------------
 // Used on a phone during an assembly, so the counts are large, the rows stay
-// readable at narrow width, and the tap targets are big. Stage 3d will add a
-// camera scanner to this same screen.
+// readable at narrow width, and the tap targets are big. Stage 3d adds the QR
+// scanner to this same screen: scanning and tapping "Mark present" are two
+// ways to name a household, and both post to the one attendance route.
 function AttendanceRoster({ eventId, onBack }) {
   const { authFetch, user } = useAuth();
   const [page, setPage] = useState(1);
@@ -505,6 +507,7 @@ function AttendanceRoster({ eventId, onBack }) {
   const [error, setError] = useState('');
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [scanning, setScanning] = useState(false);
   // Fines are Secretary-only (stage 3b). Staff still record attendance here,
   // they just never see the money side; the server refuses them regardless.
   const canFine = user?.role === 'secretary';
@@ -559,6 +562,30 @@ function AttendanceRoster({ eventId, onBack }) {
       setBusyId(null);
     }
   }
+
+  // The scanner's one link to the API. Stable identity on purpose: it feeds
+  // the scanner's decode loop, which would otherwise be torn down and rebuilt
+  // on every render of this page.
+  const submitToken = useCallback(
+    async (token) => {
+      try {
+        const result = await authFetch(`/events/${eventId}/attendance`, {
+          method: 'POST',
+          body: { qr_token: token },
+        });
+        // Not awaited — the roster catching up must not hold up the next scan.
+        load();
+        loadFines();
+        return {
+          type: result.already_recorded ? 'info' : 'success',
+          text: result.message,
+        };
+      } catch (err) {
+        return { type: 'error', text: err.message };
+      }
+    },
+    [authFetch, eventId, load, loadFines]
+  );
 
   async function generateFines() {
     const s = fines?.summary;
@@ -692,6 +719,17 @@ function AttendanceRoster({ eventId, onBack }) {
               <span className="roster-label">Active households</span>
             </div>
           </div>
+
+          {/* Stage 3d. The primary action at an assembly, so it sits directly
+              under the counts and above the fines panel, which is a job for
+              after the event rather than during it. */}
+          {scanning ? (
+            <AttendanceScanner onScan={submitToken} onClose={() => setScanning(false)} />
+          ) : (
+            <button className="btn scan-open" type="button" onClick={() => setScanning(true)}>
+              Scan QR code
+            </button>
+          )}
 
           {canFine && fines && <FinesPanel fines={fines} busyId={busyId} onGenerate={generateFines} onVoid={voidFine} />}
 

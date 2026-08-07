@@ -27,7 +27,21 @@ if (!process.env.JWT_SECRET) {
   throw new Error('Missing JWT_SECRET. Set it in backend/.env (see .env.example).');
 }
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+// FRONTEND_URL is a comma-separated allowlist of browser origins. Production
+// sets exactly one; local device testing (a phone reaching the dev server over
+// the LAN) adds a second there rather than here, so the temporary address
+// lives in the gitignored .env and never enters the repo.
+//
+// Deliberately NEVER a wildcard, and deliberately not widened by a NODE_ENV
+// check: NODE_ENV is unset in this project, so "not production" would be the
+// default state and the relaxed branch would be live on any server that
+// forgot to set it. An allowlist that has to be named is the safer default.
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({ origin: allowedOrigins }));
 
 // PayMongo's webhook is verified by an HMAC computed over the EXACT bytes it
 // sent, so it needs the raw body and must be registered BEFORE express.json()

@@ -1009,6 +1009,99 @@ button.link-button:hover:not(:disabled) {
   }
 }
 
+/* QR scanner on the attendance roster (Events stage 3d). Distinct from the
+   amber fines panel: scanning is what happens DURING the assembly, fines are
+   what happens after it. */
+.scan-open {
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 16px;
+}
+
+.scan-panel {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 16px 16px;
+  margin-bottom: 16px;
+}
+
+.scan-panel h4 {
+  margin: 0;
+}
+
+.scan-stage {
+  position: relative;
+  max-width: 420px;
+  margin: 12px auto;
+  background: #0f172a;
+  border-radius: 10px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.scan-video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: cover;
+}
+
+/* A sighting aid only — the decoder reads the whole frame, so a code outside
+   this square still scans. */
+.scan-reticle {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: 62%;
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+/* Live resolution readout. Small, but it is the only positive confirmation
+   that frames are arriving — its absence is the symptom of a dead camera. */
+.scan-status {
+  text-align: center;
+  margin: -4px 0 0;
+}
+
+.scan-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+}
+
+.scan-placeholder .btn {
+  min-height: 44px;
+}
+
+.scan-manual {
+  margin-top: 12px;
+}
+
+.scan-manual label {
+  display: block;
+  font-size: 0.85rem;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.scan-manual input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.scan-manual .btn {
+  min-height: 44px;
+}
+
 /* Fines panel on the attendance roster (Events stage 3b). Secretary-only —
    set apart from the roster because raising a charge is a different kind of
    act from ticking someone present. */
