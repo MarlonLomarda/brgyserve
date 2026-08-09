@@ -8,6 +8,7 @@ import DisputesPage from './pages/DisputesPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import EventsPage from './pages/EventsPage';
 import HouseholdsPage from './pages/HouseholdsPage';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import MyHouseholdPage from './pages/MyHouseholdPage';
 import MyRentalsPage from './pages/MyRentalsPage';
@@ -51,6 +52,12 @@ export default function App() {
 
   return (
     <Routes>
+      {/* The public landing page. Deliberately NOT wrapped in a redirect for
+          signed-in users: it offers them a link to their own dashboard rather
+          than bouncing them, so "/" stays reachable mid-session and this page
+          never becomes a third opinion about where a user belongs. */}
+      <Route path="/" element={<LandingPage />} />
+
       <Route path="/login" element={user ? <Navigate to={home} replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to={home} replace /> : <RegisterPage />} />
       <Route

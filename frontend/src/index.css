@@ -1239,3 +1239,521 @@ button.link-button:hover:not(:disabled) {
 .qr-panel .small-note {
   margin: 0;
 }
+
+/* ==========================================================================
+   Public landing page ("/") — the only screen that renders with no session.
+   Every rule here is prefixed .landing so nothing in this block can reach an
+   authenticated screen. Colours, radii and the font stack are the values
+   already used elsewhere in this file, not a second palette.
+
+   The nav is deliberately NOT .dash-nav: that class has no wrap rule and no
+   breakpoint, which is the deferred mobile bug. This one collapses to a
+   hamburger at 640px, the breakpoint the attendance roster already uses.
+
+   Grids use auto-fit/minmax rather than extra breakpoints, so the only media
+   query in this block is the nav one.
+   ========================================================================== */
+
+.landing {
+  min-height: 100vh;
+  background: #fff;
+}
+
+/* ---------- nav ---------- */
+.landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.landing-nav-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.landing-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.landing-logo span {
+  color: #2563eb;
+}
+
+.landing-menu-btn {
+  display: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-menu-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.landing-menu-icon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 20px;
+  height: 16px;
+}
+
+.landing-menu-icon span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  border-radius: 2px;
+  background: #334155;
+}
+
+/* Three bars fold into a cross while the menu is open. */
+.landing-menu-icon.is-open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.landing-menu-icon.is-open span:nth-child(2) {
+  opacity: 0;
+}
+
+.landing-menu-icon.is-open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.landing-nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.landing-nav-links a {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+}
+
+.landing-nav-links a:hover {
+  color: #1d4ed8;
+}
+
+.landing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.landing-nav-user {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.landing-nav-login {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+/* .button-link is the shared primary-button anchor; in the nav it must not be
+   a full-width block. */
+.landing-cta {
+  display: inline-block;
+  width: auto;
+  margin-top: 0;
+  padding: 9px 16px;
+  font-size: 0.92rem;
+}
+
+/* ---------- hero ---------- */
+.landing-hero {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  scroll-margin-top: 72px;
+}
+
+.landing-hero-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 64px 24px 72px;
+  text-align: center;
+}
+
+/* The barangay name is long; it must be free to wrap on a phone. */
+.landing-hero .badge {
+  white-space: normal;
+}
+
+.landing-title {
+  margin: 20px 0 0;
+  font-size: clamp(2.25rem, 8vw, 3.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.landing-tagline {
+  margin: 12px auto 0;
+  max-width: 560px;
+  font-size: clamp(1rem, 3.4vw, 1.2rem);
+  font-weight: 600;
+  color: #334155;
+}
+
+.landing-lede {
+  margin: 18px auto 0;
+  max-width: 620px;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: #64748b;
+}
+
+.landing-hero-cta {
+  display: inline-block;
+  width: auto;
+  margin-top: 28px;
+  padding: 13px 30px;
+  font-size: 1rem;
+}
+
+/* ---------- sections ---------- */
+.landing-section {
+  scroll-margin-top: 68px;
+}
+
+.landing-section-alt {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.landing-section-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 56px 24px;
+}
+
+.landing-section-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 1.9rem);
+  letter-spacing: -0.01em;
+  color: #0f172a;
+  text-align: center;
+}
+
+.landing-section-lede {
+  margin: 10px auto 34px;
+  max-width: 560px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.landing-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.landing-grid-services {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.landing-grid-steps {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------- service cards ---------- */
+.landing-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-top: 3px solid #2563eb;
+}
+
+.landing-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.landing-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+/* ---------- steps ---------- */
+.landing-step {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.landing-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+}
+
+.landing-step h3 {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.landing-step p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+/* ---------- faq ---------- */
+.landing-faq-inner {
+  max-width: 760px;
+}
+
+.landing-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.landing-faq-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.landing-faq-item summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.97rem;
+  color: #1e293b;
+  list-style: none;
+}
+
+.landing-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.landing-faq-item summary:hover {
+  color: #1d4ed8;
+}
+
+/* Chevron drawn in CSS — no icon dependency. */
+.landing-faq-item summary::after {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.landing-faq-item[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.landing-faq-item[open] summary {
+  color: #1d4ed8;
+}
+
+.landing-faq-item p {
+  margin: 0;
+  padding: 0 18px 18px;
+  font-size: 0.93rem;
+  line-height: 1.7;
+  color: #64748b;
+}
+
+/* ---------- footer ---------- */
+.landing-footer {
+  background: #0f172a;
+  color: #cbd5e1;
+}
+
+.landing-footer-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 44px 24px 28px;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.landing-footer-brand {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.landing-footer-head {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.landing-footer-line {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.landing-footer-placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.landing-footer-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing-footer-links a {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.landing-footer-links a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.landing-footer-note {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 16px 24px 28px;
+  border-top: 1px solid #1e293b;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* ---------- phone: collapse the nav to a hamburger ---------- */
+@media (max-width: 640px) {
+  .landing-menu-btn {
+    display: inline-flex;
+  }
+
+  .landing-nav-menu {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding-bottom: 6px;
+  }
+
+  .landing-nav-menu.is-open {
+    display: flex;
+  }
+
+  .landing-nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .landing-nav-links a {
+    padding: 13px 2px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .landing-nav-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-top: 14px;
+  }
+
+  .landing-nav-user {
+    padding: 0 2px;
+  }
+
+  .landing-cta,
+  .landing-nav-login {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 12px 16px;
+    min-height: 44px;
+  }
+
+  .landing-nav-login {
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+  }
+
+  .landing-hero-inner {
+    padding: 44px 20px 52px;
+  }
+
+  .landing-section-inner {
+    padding: 44px 20px;
+  }
+
+  .landing-hero-cta {
+    display: block;
+    width: 100%;
+  }
+}
