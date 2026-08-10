@@ -1,3 +1,11 @@
+import {
+  Banknote,
+  CalendarCheck,
+  ChartColumn,
+  FileText,
+  QrCode,
+  Scale,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -19,30 +27,38 @@ import { roleHome } from '../auth/roles';
 // SANDBOX, so payment is described as cash or a GCash reference verified by
 // the Treasurer, which is what actually happens.
 
+// Icons are DECORATIVE — every card already says what it is in words, so they
+// are hidden from screen readers rather than described twice.
 const SERVICES = [
   {
     title: 'Document Requests',
     body: 'Request barangay clearances, certificates and permits, and follow each one through to release.',
+    Icon: FileText,
   },
   {
     title: 'Facility Rentals',
     body: 'Reserve barangay facilities and equipment, with availability checked as you book.',
+    Icon: CalendarCheck,
   },
   {
     title: 'Payments',
     body: 'Fees for documents and rentals, recorded and verified by the Barangay Treasurer.',
+    Icon: Banknote,
   },
   {
     title: 'QR Attendance',
     body: 'Households present a QR code at barangay assemblies for staff to scan.',
+    Icon: QrCode,
   },
   {
     title: 'Blotter and Dispute Records',
     body: 'Incident and complaint records kept by the Barangay Secretary.',
+    Icon: Scale,
   },
   {
     title: 'Reports and Records',
     body: 'Resident records and operational reports for barangay officials.',
+    Icon: ChartColumn,
   },
 ];
 
@@ -216,10 +232,13 @@ export default function LandingPage() {
             What Barangay Ubujan handles through BrgyServe today.
           </p>
           <div className="landing-grid landing-grid-services">
-            {SERVICES.map((service) => (
-              <article className="landing-card" key={service.title}>
-                <h3>{service.title}</h3>
-                <p>{service.body}</p>
+            {SERVICES.map(({ title, body, Icon }) => (
+              <article className="landing-card" key={title}>
+                <span className="landing-card-icon" aria-hidden="true">
+                  <Icon size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+                </span>
+                <h3>{title}</h3>
+                <p>{body}</p>
               </article>
             ))}
           </div>

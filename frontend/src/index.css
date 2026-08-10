@@ -1496,6 +1496,42 @@ button.link-button:hover:not(:disabled) {
   padding: 22px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   border-top: 3px solid #2563eb;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+/* Decorative lift only. These cards are NOT links and must not read as one,
+   so there is no cursor change and nothing here is applied to table rows —
+   a row that moves while you scan a list of residents is a nuisance. */
+.landing-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
+}
+
+/* Anyone who has asked for reduced motion gets the deeper shadow but no
+   movement at all. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-card {
+    transition: box-shadow 150ms ease;
+  }
+
+  .landing-card:hover {
+    transform: none;
+  }
+}
+
+/* Same tint, border and colour as .landing-step-num, so the two sections read
+   as one system — a rounded square here rather than a circle. */
+.landing-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  margin-bottom: 14px;
 }
 
 .landing-card h3 {
@@ -1546,6 +1582,111 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.92rem;
   line-height: 1.6;
   color: #64748b;
+}
+
+/* ---------- entrance (service cards + steps, on load only) ----------
+
+   THE BASE STATE OF EVERY CARD AND STEP IS FULLY VISIBLE. `opacity: 0`
+   appears ONLY inside the keyframes below — there is no static rule anywhere
+   that hides these elements. The fill mode is `backwards`, never `forwards`,
+   so the hidden state exists only while an animation is actually pending or
+   running.
+
+   That is the guarantee: if the animation never runs — animations disabled,
+   keyframes unsupported, the stylesheet arriving in an order nobody planned
+   for — the element is painted at its ordinary visible state. There is no
+   path that leaves content stranded at opacity 0 waiting to be released.
+
+   There is deliberately no `to` block: the animation resolves to each
+   element's own computed values, so it hands transform back cleanly and
+   cannot fight the hover lift. */
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.landing-card,
+.landing-step {
+  animation: landing-rise 450ms ease-out backwards;
+}
+
+/* 100ms apart, so the last of six starts at 500ms and settles at 950ms —
+   the whole entrance is still done inside a second. */
+.landing-grid-services .landing-card:nth-child(2),
+.landing-grid-steps .landing-step:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.landing-grid-services .landing-card:nth-child(3),
+.landing-grid-steps .landing-step:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.landing-grid-services .landing-card:nth-child(4),
+.landing-grid-steps .landing-step:nth-child(4) {
+  animation-delay: 300ms;
+}
+
+.landing-grid-services .landing-card:nth-child(5) {
+  animation-delay: 400ms;
+}
+
+.landing-grid-services .landing-card:nth-child(6) {
+  animation-delay: 500ms;
+}
+
+/* The hero rises in the same way, but slightly quicker: it is already in
+   front of the visitor on load rather than being scrolled to, so it should
+   not keep them waiting. 400ms with 80ms between elements puts the button —
+   the last of the five — settled at 720ms.
+
+   The shorthand must stay ABOVE the delays below: `animation` resets
+   animation-delay to 0, so writing it afterwards would wipe the stagger. */
+.landing-hero .badge,
+.landing-title,
+.landing-tagline,
+.landing-lede,
+.landing-hero-cta {
+  animation: landing-rise 400ms ease-out backwards;
+}
+
+.landing-title {
+  animation-delay: 80ms;
+}
+
+.landing-tagline {
+  animation-delay: 160ms;
+}
+
+.landing-lede {
+  animation-delay: 240ms;
+}
+
+.landing-hero-cta {
+  animation-delay: 320ms;
+}
+
+/* No entrance at all for reduced motion. Because the hidden state lives only
+   in the keyframes, switching the animation off leaves everything visible
+   immediately — nothing needs resetting.
+
+   This block MUST come after the rules above: a media query adds no
+   specificity, so source order is what decides. Placed earlier it loses to
+   the animation shorthand and silently does nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-card,
+  .landing-step,
+  /* Must repeat the descendant selector exactly — `.badge` alone would be a
+     weaker match than `.landing-hero .badge` above and would lose. */
+  .landing-hero .badge,
+  .landing-title,
+  .landing-tagline,
+  .landing-lede,
+  .landing-hero-cta {
+    animation: none;
+  }
 }
 
 /* ---------- faq ---------- */
