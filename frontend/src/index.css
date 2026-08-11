@@ -2123,3 +2123,67 @@ button.link-button:hover:not(:disabled) {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Layout fixes found in the 601377c walkthrough. All additive: no existing
+   rule is modified, and the protected desktop geometry (.dash-main 1180px,
+   the 720px form cap and its :has(.table-wrap) exclusion, .row-actions
+   200px, Billed nowrap, Purpose 300px, Resident 170px) is untouched.
+   ========================================================================== */
+
+/* ISSUE 2 — My Requests: a long purpose grew the row hundreds of pixels tall.
+   .col-purpose and .cell-clamp were already applied; the width bound was
+   never the problem. .cell-clamp only WRAPS text (overflow-wrap: anywhere) —
+   it has no truncation at all, so 720 characters inside a 300px column became
+   a very tall cell.
+
+   The Secretary's equivalent column uses .truncate (max-width 240px, one line,
+   ellipsis). Switching to that here would change the tuned 300px geometry the
+   desktop layout was verified against, so instead this keeps the width and
+   caps the HEIGHT: three lines, then an ellipsis. Same outcome — clean data is
+   no longer what keeps the row from ballooning. */
+.data-table .col-purpose .cell-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+/* ISSUE 3 — Payments: "@juan_test_mr4iarw" with a lone "h" on the next line.
+   .cell-clamp sets overflow-wrap: anywhere so the resident's NAME can wrap
+   inside 170px, which is right. A username is a single unbreakable token and
+   should be cut with an ellipsis instead.
+
+   Scoped to .small-note inside a clamped cell, which today is exactly the
+   username line under the payer's name — the name itself is a direct child
+   and keeps wrapping normally. */
+.data-table .cell-clamp .small-note {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ISSUE 5 — Resident records: birthdates broke as "1992-04-" / "17".
+   Same treatment as .col-billed, which already does this for its dates. */
+.data-table .col-date {
+  white-space: nowrap;
+}
+
+/* ISSUE 6 — Secretary review at 390px: the "Linked to record #5" pill ran past
+   the card edge. .pending-head is a flex row with no wrap, and .badge is
+   white-space: nowrap, so the badge could neither move nor shrink.
+
+   Only below 640px: the head is allowed to wrap so the badge drops under the
+   name, and the badge may break onto a second line rather than be clipped —
+   the record number has to stay readable. Desktop is unaffected. */
+@media (max-width: 640px) {
+  .pending-head {
+    flex-wrap: wrap;
+  }
+
+  .pending-head .badge {
+    white-space: normal;
+  }
+}

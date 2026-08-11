@@ -602,7 +602,7 @@ export default function ResidentRecordsPage() {
                     <thead>
                       <tr>
                         <th>Name</th>
-                        <th>Birthdate</th>
+                        <th className="col-date">Birthdate</th>
                         <th>Address</th>
                         <th>Contact</th>
                         <th>Account</th>
@@ -620,7 +620,7 @@ export default function ResidentRecordsPage() {
                               </div>
                             )}
                           </td>
-                          <td className="muted">{r.birthdate || '—'}</td>
+                          <td className="muted col-date">{r.birthdate || '—'}</td>
                           <td className="muted">{r.address}</td>
                           <td className="muted">{r.contact_number || '—'}</td>
                           <td>
