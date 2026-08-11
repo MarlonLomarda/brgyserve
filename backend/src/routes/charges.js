@@ -2,7 +2,8 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
-const { logSmsNotification } = require('../services/smsNotification');
+const { notify } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
 
 const router = express.Router();
 
@@ -170,10 +171,10 @@ router.post('/:id/verify', async (req, res) => {
     throw new Error(`Charge reverted to UNPAID — failed to record payment: ${payError.message}`);
   }
 
-  // SMS hook — stub only (see services/smsNotification.js). The use cases
-  // call for a confirmation SMS when payment status is updated. Wording and
-  // contact source depend on what the charge is for.
-  const peso = `₱${Number(charge.amount).toFixed(2)}`;
+  // Recorded, not sent (SMS_MODE=SIMULATED). Runs after the payment row and
+  // the PAID status are both committed; notify() never throws.
+  // "PHP" not the peso sign — see services/notifications.js on GSM encoding.
+  const peso = `PHP ${Number(charge.amount).toFixed(2)}`;
   let contact =
     charge.document_requests?.resident_records?.contact_number ||
     charge.payer?.profiles?.resident_records?.contact_number;
@@ -198,7 +199,14 @@ router.post('/:id/verify', async (req, res) => {
   } else {
     message = `BrgyServe: your payment of ${peso} for the ${charge.document_requests?.document_types?.name || 'document'} request has been received and verified. Please wait for the release notice.`;
   }
-  logSmsNotification(contact, message);
+  await notify({
+    userId: charge.user_id ?? null,
+    householdId: charge.household_id ?? null,
+    destination: contact,
+    relatedType: RELATED_TYPE.CHARGE,
+    relatedTo: id,
+    message,
+  });
 
   res.json({ message: 'Payment recorded — charge marked PAID', payment });
 });

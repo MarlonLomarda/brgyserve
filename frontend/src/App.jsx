@@ -12,6 +12,7 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import MyHouseholdPage from './pages/MyHouseholdPage';
 import MyRentalsPage from './pages/MyRentalsPage';
+import NotificationsPage from './pages/NotificationsPage';
 import MyRequestsPage from './pages/MyRequestsPage';
 import PaymentResultPage from './pages/PaymentResultPage';
 import PaymentsPage from './pages/PaymentsPage';
@@ -152,6 +153,14 @@ export default function App() {
         element={
           <ProtectedRoute role="staff">
             <EventsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/secretary/notifications"
+        element={
+          <ProtectedRoute role="secretary">
+            <NotificationsPage />
           </ProtectedRoute>
         }
       />

@@ -299,10 +299,10 @@ Stores notifications sent to users or households via SMS or email, including del
 | type | varchar(20) | | No | Type of notification (SMS, EMAIL). |
 | user_id | bigint | FK → users | Yes | User recipient; null if sent to a household. |
 | household_id | bigint | FK → household_records | Yes | Household recipient; null if sent to a specific user. |
-| destination | varchar(255) | | No | Target contact address (phone number or email). |
+| destination | varchar(255) | | No | Target contact address (phone number or email). NOT NULL, so a SKIPPED row (no number on record) stores an empty string and the status carries the reason. |
 | subject | varchar(255) | | Yes | Subject line (mainly for email); null for SMS. |
 | message | text | | No | Content/body of the notification. |
-| status | varchar(50) | | No | Delivery status (PENDING, SENT, FAILED). |
+| status | varchar(50) | | No | Delivery status: PENDING, SIMULATED, SENT, FAILED, SKIPPED. **SIMULATED** = composed, addressed and recorded but deliberately not transmitted (the default, `SMS_MODE=SIMULATED`); it is a separate value from SENT so the log never reports a delivery that did not happen. **SKIPPED** = the recipient has no contact number on record, so there was nothing to send to; the row is still written, because who the barangay cannot reach is worth knowing. |
 | provider_response | text | | Yes | Response from the SMS/email provider (message ID, error details). |
 | related_type | varchar(50) | | Yes | Type of related record (CHARGE, EVENT, DOCUMENT_REQUEST, RENTAL_REQUEST). |
 | related_to | bigint | | Yes | ID of the related record (polymorphic — not an enforced FK). |

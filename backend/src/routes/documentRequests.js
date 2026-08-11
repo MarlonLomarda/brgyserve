@@ -3,7 +3,8 @@ const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { REQUEST_STATUS, REQUEST_STATUSES } = require('../constants/requestStatus');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
-const { logSmsNotification } = require('../services/smsNotification');
+const { notify } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
 
 const router = express.Router();
 
@@ -406,16 +407,22 @@ async function decideRequest(req, res, decision) {
     if (withCharge) finalRequest = withCharge;
   }
 
-  // SMS hook — stub only (see services/smsNotification.js); the 4c release
-  // stage adds its ready-for-release notification at this same point.
-  logSmsNotification(
-    existing.resident_records?.contact_number,
-    decision === 'approve'
-      ? fee > 0
-        ? `BrgyServe: your ${docName} request has been APPROVED. Please settle the ₱${fee.toFixed(2)} fee at the barangay hall (cash) or via GCash to proceed.`
-        : `BrgyServe: your ${docName} request has been APPROVED. No fee is required — please wait for the release notice.`
-      : `BrgyServe: your ${docName} request has been REJECTED. Reason: ${reason}`
-  );
+  // Recorded, not sent (SMS_MODE=SIMULATED). Runs AFTER the approval and its
+  // charge are committed, and notify() never throws, so nothing here can undo
+  // the decision above. "PHP" rather than the peso sign keeps the message
+  // inside the GSM alphabet and therefore inside one SMS segment.
+  await notify({
+    userId: existing.requested_by_user_id,
+    destination: existing.resident_records?.contact_number,
+    relatedType: RELATED_TYPE.DOCUMENT_REQUEST,
+    relatedTo: id,
+    message:
+      decision === 'approve'
+        ? fee > 0
+          ? `BrgyServe: your ${docName} request has been APPROVED. Please settle the PHP ${fee.toFixed(2)} fee at the barangay hall (cash) or via GCash to proceed.`
+          : `BrgyServe: your ${docName} request has been APPROVED. No fee is required - please wait for the release notice.`
+        : `BrgyServe: your ${docName} request has been REJECTED. Reason: ${reason}`,
+  });
 
   res.json({
     message: `Request ${decision === 'approve' ? 'approved' : 'rejected'}`,
@@ -486,12 +493,17 @@ router.post('/:id/ready-for-release', requireRole('secretary'), async (req, res)
     return res.status(409).json({ error: 'Request status just changed — refresh and try again' });
   }
 
-  logSmsNotification(
-    existing.resident_records?.contact_number,
-    `BrgyServe: your ${existing.document_types?.name || 'document'} is READY TO CLAIM. Please pick it up at the barangay hall during office hours.`
-  );
+  await notify({
+    userId: existing.requested_by_user_id,
+    destination: existing.resident_records?.contact_number,
+    relatedType: RELATED_TYPE.DOCUMENT_REQUEST,
+    relatedTo: id,
+    message: `BrgyServe: your ${existing.document_types?.name || 'document'} is READY TO CLAIM. Please pick it up at the barangay hall during office hours.`,
+  });
 
-  res.json({ message: 'Request marked ready for release — the resident has been notified', request });
+  // Wording changed deliberately: sending is simulated, so the old
+  // "the resident has been notified" was a claim the system cannot make.
+  res.json({ message: 'Request marked ready for release', request });
 });
 
 // POST /api/document-requests/:id/claim — the resident picked the document up.

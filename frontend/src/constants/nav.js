@@ -10,6 +10,7 @@ export const SECRETARY_NAV = [
   { to: '/secretary/rentals', label: 'Rentals' },
   { to: '/secretary/blotter', label: 'Blotter' },
   { to: '/secretary/events', label: 'Events' },
+  { to: '/secretary/notifications', label: 'Notifications' },
   { to: '/secretary/reports', label: 'Reports' },
 ];
 

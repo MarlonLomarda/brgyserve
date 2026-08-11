@@ -4,7 +4,8 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { EVENT_TYPE, EVENT_TYPES, EVENT_STATUS, EVENT_VIEW, EVENT_VIEWS } = require('../constants/events');
 const { HOUSEHOLD_ROLE } = require('../constants/households');
 const { CHARGE_STATUS, CHARGE_TYPE } = require('../constants/charges');
-const { logSmsNotification } = require('../services/smsNotification');
+const { notifyMany } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
 const { searchWords, parsePaging, pageResponse } = require('../utils/listQuery');
 
 const router = express.Router();
@@ -967,16 +968,25 @@ router.post('/:id/fines', requireRole('secretary'), async (req, res) => {
     }
   }
 
-  // SMS hook — stub only (see services/smsNotification.js), one per household
-  // actually fined, which is what a real provider call would be.
+  // Recorded, not sent. One notification per household actually fined, but a
+  // SINGLE insert: an assembly can cover every household in the barangay, and
+  // that must not become a write each. notifyMany() never throws, and this
+  // runs after the charges are committed, so a notification failure cannot
+  // unmake a fine.
   const byHousehold = new Map(targets.map((t) => [t.household_id, t]));
-  for (const c of created) {
-    const t = byHousehold.get(c.household_id);
-    logSmsNotification(
-      t?.head_contact,
-      `BrgyServe: your household was not recorded at "${event.title}". A fine of ₱${amount.toFixed(2)} is now due. Please settle it at the Barangay Office.`
-    );
-  }
+  await notifyMany(
+    created.map((c) => {
+      const t = byHousehold.get(c.household_id);
+      return {
+        userId: t?.user_id ?? null,
+        householdId: c.household_id,
+        destination: t?.head_contact,
+        relatedType: RELATED_TYPE.EVENT,
+        relatedTo: event.event_id,
+        message: `BrgyServe: your household was not recorded at "${event.title}". A fine of PHP ${amount.toFixed(2)} is now due. Please settle it at the Barangay Office.`,
+      };
+    })
+  );
 
   const after = await collectFineTargets(event);
   res.status(201).json({

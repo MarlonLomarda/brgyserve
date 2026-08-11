@@ -1898,3 +1898,46 @@ button.link-button:hover:not(:disabled) {
     width: 100%;
   }
 }
+
+/* Notifications log (Secretary). Reuses the shared table, badge and summary
+   classes; only the mode banner and the message column need anything new.
+
+   The message column gets its OWN class rather than reusing .col-purpose —
+   that one is clamped to 300px for My Requests, and widening it here would
+   silently change that screen too. */
+.notif-mode {
+  margin-bottom: 16px;
+}
+
+.notif-filters {
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.notif-filters select {
+  width: auto;
+  margin-top: 0;
+}
+
+.notif-filters input {
+  width: auto;
+  flex: 1 1 200px;
+  margin-top: 0;
+  min-width: 0;
+}
+
+.data-table .col-message {
+  min-width: 260px;
+}
+
+.data-table .col-message .cell-clamp {
+  max-width: 420px;
+}
+
+/* Inline expander inside the message cell — small, so it never competes with
+   the row's own content. */
+.notif-more {
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  min-height: 0;
+}

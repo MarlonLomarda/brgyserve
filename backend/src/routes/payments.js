@@ -2,7 +2,8 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
-const { logSmsNotification } = require('../services/smsNotification');
+const { notify } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
 const {
   createCheckoutSession,
   retrieveCheckoutSession,
@@ -169,13 +170,21 @@ async function settlePaidCharge(charge, payment, { source }) {
     throw new Error(`Charge reverted to UNPAID — failed to record payment: ${payError.message}`);
   }
 
+  // Recorded, not sent (SMS_MODE=SIMULATED). Deliberately after the payment
+  // row is committed: settlePaidCharge is the single funnel all three settle
+  // triggers pass through, and notify() cannot throw, so a notification
+  // problem can never strand a charge that PayMongo has already collected.
   const isRental = !!embedded(charge.rental_requests);
-  logSmsNotification(
-    contactFor(charge),
-    isRental
+  await notify({
+    userId: charge.user_id ?? null,
+    householdId: charge.household_id ?? null,
+    destination: contactFor(charge),
+    relatedType: RELATED_TYPE.CHARGE,
+    relatedTo: charge.charge_id,
+    message: isRental
       ? `BrgyServe: your GCash payment of PHP ${Number(charge.amount).toFixed(2)} for the ${chargeLabel(charge)} booking has been received.`
-      : `BrgyServe: your GCash payment of PHP ${Number(charge.amount).toFixed(2)} for the ${chargeLabel(charge)} request has been received. Please wait for the release notice.`
-  );
+      : `BrgyServe: your GCash payment of PHP ${Number(charge.amount).toFixed(2)} for the ${chargeLabel(charge)} request has been received. Please wait for the release notice.`,
+  });
   console.log(`[paymongo] charge ${charge.charge_id} PAID via ${source} (payment ${payment.paymentId})`);
 
   return { outcome: SETTLE_OUTCOME.RECORDED, payment: paymentRow };

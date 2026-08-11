@@ -190,7 +190,7 @@ router.post('/pending-residents/:userId/link', async (req, res) => {
 
   const { data: resident, error: residentError } = await supabase
     .from('resident_records')
-    .select('resident_id, first_name, last_name, is_archived')
+    .select('resident_id, first_name, last_name, is_archived, contact_number')
     .eq('resident_id', residentId)
     .maybeSingle();
   if (residentError) {
@@ -215,7 +215,35 @@ router.post('/pending-residents/:userId/link', async (req, res) => {
     throw new Error(`Failed to link resident record: ${linkError.message}`);
   }
 
-  res.json({ message: 'Profile linked to resident record', user_id: userId, resident_id: residentId });
+  // BUG FIX: the contact number a resident gives at registration lands in
+  // profiles.phone_number. The create-and-link path copies it into the
+  // resident record; THIS path used to drop it silently, so linking to an
+  // existing record with no number on file lost the only number the barangay
+  // had — and every notification reads resident_records.contact_number.
+  //
+  // The record still wins on conflict: this only fills a blank, it never
+  // overwrites a number the Secretary entered. Failure is non-fatal, because
+  // the link itself succeeded and that is what the caller asked for.
+  let contactBackfilled = false;
+  const claimed = account.profile?.phone_number;
+  if (claimed && !String(resident.contact_number || '').trim()) {
+    const { error: backfillError } = await supabase
+      .from('resident_records')
+      .update({ contact_number: claimed })
+      .eq('resident_id', residentId);
+    if (backfillError) {
+      console.error(`[secretary/link] contact backfill failed: ${backfillError.message}`);
+    } else {
+      contactBackfilled = true;
+    }
+  }
+
+  res.json({
+    message: 'Profile linked to resident record',
+    user_id: userId,
+    resident_id: residentId,
+    contact_backfilled: contactBackfilled,
+  });
 });
 
 // POST /api/secretary/pending-residents/:userId/create-resident

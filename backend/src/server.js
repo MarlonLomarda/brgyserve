@@ -10,6 +10,7 @@ const residentRoutes = require('./routes/residents');
 const residentRecordRoutes = require('./routes/residentRecords');
 const householdRoutes = require('./routes/households');
 const myHouseholdRoutes = require('./routes/myHousehold');
+const notificationRoutes = require('./routes/notifications');
 const documentTypeRoutes = require('./routes/documentTypes');
 const documentRequestRoutes = require('./routes/documentRequests');
 const chargeRoutes = require('./routes/charges');
@@ -80,6 +81,7 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Express 5 forwards rejected async handlers here automatically
 app.use((err, req, res, next) => {

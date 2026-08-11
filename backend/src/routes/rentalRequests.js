@@ -9,7 +9,8 @@ const {
   STORED_RENTAL_STATUSES,
 } = require('../constants/rentals');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
-const { logSmsNotification } = require('../services/smsNotification');
+const { notify } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
 
 const router = express.Router();
 
@@ -279,10 +280,15 @@ router.post('/', async (req, res) => {
     .eq('request_id', created.request_id)
     .maybeSingle();
 
-  logSmsNotification(
-    profile.resident_records?.contact_number,
-    `BrgyServe: your booking is CONFIRMED — ${quantity > 1 ? `${quantity}× ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`
-  );
+  // Recorded, not sent. "-" and "x" instead of an em dash and a multiplication
+  // sign: both are outside the GSM alphabet and would double the message cost.
+  await notify({
+    userId: req.user.user_id,
+    destination: profile.resident_records?.contact_number,
+    relatedType: RELATED_TYPE.RENTAL_REQUEST,
+    relatedTo: created.request_id,
+    message: `BrgyServe: your booking is CONFIRMED - ${quantity > 1 ? `${quantity}x ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`,
+  });
 
   res.status(201).json({
     message: `Booking confirmed: ${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}.`,
@@ -622,10 +628,13 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     .select('resident_records ( contact_number )')
     .eq('user_id', booking.requested_by_user_id)
     .maybeSingle();
-  logSmsNotification(
-    requesterProfile?.resident_records?.contact_number,
-    `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`
-  );
+  await notify({
+    userId: booking.requested_by_user_id,
+    destination: requesterProfile?.resident_records?.contact_number,
+    relatedType: RELATED_TYPE.RENTAL_REQUEST,
+    relatedTo: id,
+    message: `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`,
+  });
 
   res.json({ message: 'Booking cancelled — the slot has been freed', request: withDerived(fresh) });
 });
@@ -706,10 +715,13 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
     [RENTAL_STATUS.RETURNED_LATE]: 'returned (late)',
     [RENTAL_STATUS.RETURNED_WITH_ISSUE]: 'returned with an issue noted',
   }[outcome];
-  logSmsNotification(
-    requesterProfile?.resident_records?.contact_number,
-    `BrgyServe: your rental of ${booking.rental_items?.name || 'an item'} has been recorded as ${spoken}. Thank you.`
-  );
+  await notify({
+    userId: booking.requested_by_user_id,
+    destination: requesterProfile?.resident_records?.contact_number,
+    relatedType: RELATED_TYPE.RENTAL_REQUEST,
+    relatedTo: id,
+    message: `BrgyServe: your rental of ${booking.rental_items?.name || 'an item'} has been recorded as ${spoken}. Thank you.`,
+  });
 
   res.json({ message: 'Return recorded', request: withDerived(updated) });
 });
