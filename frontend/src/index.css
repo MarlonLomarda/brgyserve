@@ -1941,3 +1941,185 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.78rem;
   min-height: 0;
 }
+
+/* ==========================================================================
+   Mobile navigation drawer (<= 900px)
+
+   The dashboard nav is a horizontal row (.dash-nav). The Secretary's is 12
+   items, which cannot sit in a row on a phone — and nav icons would make each
+   item wider still, so this has to land before any of that.
+
+   NOTHING ABOVE 900px CHANGES. Every new class below defaults to
+   display:none outside any media query, and the only existing selector this
+   block touches is .dash-nav, exclusively inside max-width:900px. The
+   verified desktop rules — .dash-main's 1180px, the 720px form cap and its
+   :has(.table-wrap) exclusion, .row-actions min-width, .col-billed nowrap and
+   the Purpose/Resident/Declared cell bounds — are not referenced here at all.
+   ========================================================================== */
+
+.dash-menu-btn,
+.dash-backdrop,
+.dash-drawer {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .dash-header {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .dash-header h1 {
+    font-size: 1.05rem;
+  }
+
+  /* The tab row is what the drawer replaces. */
+  .dash-nav {
+    display: none;
+  }
+
+  /* Shown in the drawer's footer instead, where there is room for it. */
+  .dash-username {
+    display: none;
+  }
+
+  .dash-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .dash-menu-btn:hover:not(:disabled) {
+    background: #f8fafc;
+  }
+
+  .dash-menu-icon {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 20px;
+    height: 16px;
+  }
+
+  .dash-menu-icon span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: #334155;
+  }
+
+  .dash-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .dash-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    width: min(84vw, 300px);
+    height: 100vh;
+    height: 100dvh; /* keeps the full height under mobile browser chrome */
+    background: #fff;
+    border-right: 1px solid #e2e8f0;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+    /* The drawer is only in the DOM while open, so the animation has no
+       hidden resting state to get stuck in: it starts off-screen and resolves
+       to the element's own position. No forwards fill, nothing to reset. */
+    animation: dash-drawer-in 180ms ease-out;
+  }
+
+  .dash-drawer:focus {
+    outline: none;
+  }
+
+  .dash-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    flex: none;
+  }
+
+  .dash-drawer-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .dash-drawer-close {
+    min-height: 40px;
+  }
+
+  /* The item list is what scrolls when a 12-item nav overflows a short
+     phone screen; the header and footer stay put. */
+  .dash-drawer-nav {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+  }
+
+  .dash-drawer-nav a {
+    display: block;
+    padding: 13px 16px;
+    min-height: 44px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #334155;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+
+  .dash-drawer-nav a:hover {
+    background: #f8fafc;
+    color: #1d4ed8;
+  }
+
+  .dash-drawer-nav a.active {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-left-color: #1d4ed8;
+  }
+
+  .dash-drawer-foot {
+    flex: none;
+    padding: 14px 16px;
+    border-top: 1px solid #e2e8f0;
+  }
+}
+
+@keyframes dash-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+/* Reduced motion: the drawer appears in place. Because the off-screen state
+   lives only in the keyframes, switching the animation off leaves it visible
+   rather than needing anything reset. Placed after the rule it overrides —
+   a media query adds no specificity, so source order is what decides. */
+@media (prefers-reduced-motion: reduce) {
+  .dash-drawer {
+    animation: none;
+  }
+}
