@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { API_BASE_URL } from './config';
 
 export class ApiError extends Error {
   // `data` is the parsed error body, so callers can read fields the API sends
@@ -14,7 +14,7 @@ export class ApiError extends Error {
 export async function apiFetch(path, { method = 'GET', body, token } = {}) {
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers: {
         ...(body ? { 'Content-Type': 'application/json' } : {}),

@@ -37,6 +37,11 @@ if (!process.env.JWT_SECRET) {
 // check: NODE_ENV is unset in this project, so "not production" would be the
 // default state and the relaxed branch would be live on any server that
 // forgot to set it. An allowlist that has to be named is the safer default.
+//
+// This is a LIST and nothing else. The single origin residents are redirected
+// back to after a GCash payment is PUBLIC_FRONTEND_URL (routes/payments.js) —
+// splitting them is what stops a second allowlist entry from corrupting the
+// redirect URL.
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())

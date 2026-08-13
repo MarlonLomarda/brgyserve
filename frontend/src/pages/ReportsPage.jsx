@@ -5,12 +5,13 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import { defaultRange, reportsForRole } from '../constants/reports';
 import { RENDERERS, isEmpty } from '../components/ReportRenderers';
 import { exportReportPdf } from '../utils/exportPdf';
+// The CSV export below calls fetch directly rather than going through
+// authFetch, so it needs the base URL itself — imported, never redeclared.
+import { API_BASE_URL } from '../api/config';
 
 // Reporting: read-only aggregation. The Secretary sees administrative reports,
 // the Treasurer financial ones, and the Punong Barangay sees both (oversight).
 // The API enforces the same split — this page only decides what is offered.
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function ReportsPage({ title, nav }) {
   const { authFetch, token, user } = useAuth();
@@ -63,7 +64,7 @@ export default function ReportsPage({ title, nav }) {
     setExporting(true);
     try {
       const params = new URLSearchParams({ from: range.from, to: range.to, format: 'csv' });
-      const res = await fetch(`${API_BASE}/reports/${selected}?${params}`, {
+      const res = await fetch(`${API_BASE_URL}/reports/${selected}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
