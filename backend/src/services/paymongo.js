@@ -54,7 +54,11 @@ async function call(endpoint, init = {}) {
 
 // Creates the hosted checkout page for one charge.
 // `amount` is in PESOS here and converted once, at this boundary.
-async function createCheckoutSession({ amount, description, lineItemName, referenceNumber, successUrl, cancelUrl, metadata }) {
+// `billing` is optional and pre-fills Name/Email/Phone on the hosted page.
+// Pass it only when there is something to say: PayMongo stores what it is given
+// verbatim, so an empty string is recorded as an empty string rather than
+// treated as absent — omitting a field is not the same as blanking it.
+async function createCheckoutSession({ amount, description, lineItemName, referenceNumber, successUrl, cancelUrl, metadata, billing }) {
   const body = await call('/checkout_sessions', {
     method: 'POST',
     body: JSON.stringify({
@@ -79,6 +83,8 @@ async function createCheckoutSession({ amount, description, lineItemName, refere
           show_description: true,
           show_line_items: true,
           metadata,
+          // data.attributes.billing — optional, as are all of its sub-fields.
+          ...(billing ? { billing } : {}),
         },
       },
     }),

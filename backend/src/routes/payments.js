@@ -28,9 +28,10 @@ const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, user_id,
   paymongo_session_id, paymongo_payment_id,
   document_requests ( request_id, document_types ( name ),
-    resident_records ( contact_number ) ),
+    resident_records ( first_name, middle_name, last_name, suffix, contact_number ) ),
   rental_requests ( request_id, rental_items ( name ) ),
-  payer:users ( profiles ( resident_records ( contact_number ) ) )
+  payer:users ( email,
+    profiles ( resident_records ( first_name, middle_name, last_name, suffix, contact_number ) ) )
 `;
 
 const embedded = (value) => (Array.isArray(value) ? value[0] : value);
@@ -54,6 +55,53 @@ function contactFor(charge) {
     charge.payer?.profiles?.resident_records?.contact_number ||
     null
   );
+}
+
+// The resident's name as the barangay records it.
+function residentName(record) {
+  if (!record) return null;
+  const parts = [record.first_name, record.middle_name, record.last_name, record.suffix]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+  return parts.length ? parts.join(' ') : null;
+}
+
+// Pre-fill for PayMongo's hosted page (data.attributes.billing — optional, and
+// so is every sub-field). Without it the page renders three empty inputs, so
+// the browser offers to autofill them with whoever owns the device, and
+// whatever is typed becomes the payer on the receipt.
+//
+// Missing fields are OMITTED, never sent blank: PayMongo stores what it is
+// given verbatim, so an empty string is recorded as an empty string rather
+// than treated as absent. Only 5 of 47 active residents have a contact number
+// on file, so partial billing is the normal case and not an edge case.
+//
+// Returns undefined when nothing at all is known, which reproduces the previous
+// request byte for byte — no billing key is sent. There is deliberately no
+// placeholder name.
+function billingFor(charge) {
+  const billing = {};
+
+  // Same document-then-payer precedence contactFor uses, so in the ordinary
+  // case the name and the number come off the same resident record.
+  const name =
+    residentName(embedded(charge.document_requests)?.resident_records) ||
+    residentName(charge.payer?.profiles?.resident_records);
+  if (name) billing.name = name;
+
+  const email = String(charge.payer?.email || '').trim();
+  if (email) billing.email = email;
+
+  // Reuses the existing phone rule rather than restating it: contact_number on
+  // the resident record is the source of truth (profiles.phone_number is only
+  // what the resident claimed at registration). It is stored as 09XXXXXXXXX,
+  // which is exactly what the hosted page wants — that field is a plain text
+  // input with no country-code selector, so converting to +63 would only show
+  // the resident a format they did not enter.
+  const phone = String(contactFor(charge) || '').trim();
+  if (phone) billing.phone = phone;
+
+  return Object.keys(billing).length ? billing : undefined;
 }
 
 // The ONE origin a resident is redirected back to after paying. Deliberately
@@ -358,6 +406,9 @@ router.post('/gcash/checkout', async (req, res) => {
       cancelUrl,
       // How the webhook finds its way back to this charge.
       metadata: { charge_id: String(chargeId), charge_type: charge.charge_type },
+      // Pre-fills the payer so the receipt names the resident, not whoever the
+      // browser would have autofilled. Undefined when nothing is known.
+      billing: billingFor(charge),
     });
   } catch (e) {
     if (e.paymongo) return res.status(502).json({ error: `GCash checkout could not be started: ${e.message}` });
