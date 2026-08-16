@@ -482,12 +482,26 @@ button.link-button:hover:not(:disabled) {
   margin-top: 12px;
 }
 
+/* The row MUST be allowed to break. Without wrapping, a flex row refuses to
+   shrink below the SUM of its items' min-content — measured at 874px for the
+   Secretary's 12 items. The header then demands 874 + 16 gap + 145 for
+   .dash-user + 48 padding = 1083px, so at any narrower viewport .dash-user is
+   pushed past the right edge and the whole DOCUMENT scrolls sideways: leave it
+   unscrolled and "Log out" is cut off, scroll right and the title is.
+   Wrapping drops that floor to the widest SINGLE item, so the header just gets
+   taller instead. Below 900px none of this applies — the drawer replaces the
+   row entirely. */
 .dash-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-top: 8px;
 }
 
+/* Each label stays on one line, so the row breaks BETWEEN items and never
+   inside one. Without this the flex row compresses every item to its widest
+   word, which is what produced "Resident / records" and "Document / requests"
+   — five of the twelve broke that way, measured at 1200px and 1300px. */
 .dash-nav a {
   font-size: 0.9rem;
   font-weight: 600;
@@ -495,6 +509,7 @@ button.link-button:hover:not(:disabled) {
   color: #64748b;
   padding-bottom: 2px;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
 .dash-nav a:hover {
@@ -1246,9 +1261,9 @@ button.link-button:hover:not(:disabled) {
    authenticated screen. Colours, radii and the font stack are the values
    already used elsewhere in this file, not a second palette.
 
-   The nav is deliberately NOT .dash-nav: that class has no wrap rule and no
-   breakpoint, which is the deferred mobile bug. This one collapses to a
-   hamburger at 640px, the breakpoint the attendance roster already uses.
+   The nav is deliberately NOT .dash-nav: that one is the dashboard's own row,
+   which wraps above 900px and becomes a drawer below it. This one collapses to
+   a hamburger at 640px, the breakpoint the attendance roster already uses.
 
    Grids use auto-fit/minmax rather than extra breakpoints, so the only media
    query in this block is the nav one.
