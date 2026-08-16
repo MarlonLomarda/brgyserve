@@ -61,8 +61,13 @@ function DataTable({ title, columns, rows }) {
           <table className="data-table">
             <thead>
               <tr>
+                {/* columns is a MIXED array: plain strings for text columns,
+                    num()-wrapped objects for numeric ones. The key needs the
+                    same normalisation the cell content below already uses —
+                    keyed on the object itself, every numeric column
+                    stringifies to "[object Object]" and they collide. */}
                 {columns.map((c) => (
-                  <th key={c} className={c.numeric ? 'num' : ''}>
+                  <th key={c.label ?? c} className={c.numeric ? 'num' : ''}>
                     {c.label ?? c}
                   </th>
                 ))}
