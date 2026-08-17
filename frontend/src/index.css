@@ -252,6 +252,29 @@ a {
   max-width: 720px;
 }
 
+/* A screen whose whole content is one narrow column, not a table page.
+   .capped-column is a LAYOUT INTENT, not a page name, and is currently on
+   exactly one <main> (Secretary Resident review).
+
+   The cards there are already capped by the rule above, but .list-head, the
+   alerts and the empty state are direct children of .dash-main — a React
+   fragment wraps two of them in the JSX but produces no DOM node, so they sit
+   at the same level. Left alone they span the full 1132px while the cards stop
+   at 720, which put the Refresh button 412px to the right of the cards it
+   refreshes.
+
+   Deliberately NOT listing .pending-card here: it is capped by the rule above
+   and would only double-apply. p.muted (the loading line) and .pending-list are
+   left full width — the first is a single short line, the second only holds
+   cards that are capped already.
+
+   COUPLED TO THE 720px ABOVE. The two values must stay equal or the column
+   stops lining up, and this file has no CSS variables to bind them. Change one,
+   change the other. */
+.dash-main.capped-column > :is(.list-head, .alert, .empty) {
+  max-width: 720px;
+}
+
 .muted {
   color: #64748b;
   font-size: 0.9rem;

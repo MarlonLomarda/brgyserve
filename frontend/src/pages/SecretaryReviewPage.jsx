@@ -341,7 +341,7 @@ export default function SecretaryReviewPage() {
         nav={SECRETARY_NAV}
       />
 
-      <main className="dash-main">
+      <main className="dash-main capped-column">
         <CreateAccountSection />
 
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
