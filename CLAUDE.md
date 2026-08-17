@@ -52,6 +52,19 @@ Supabase credentials live in `backend/.env` (see `backend/.env.example` for the 
 
 The frontend needs `VITE_API_URL` — the API origin **including** the `/api` suffix. It is **required for every build**: `vite.config.js` throws rather than let a build fall back to `http://localhost:5000/api`, which used to deploy green while every request in the browser pointed at a machine that is not there. Locally that means `frontend/.env` must exist (gitignored); on Vercel the value comes from the project's Environment Variables panel. **This reverses the older "delete `frontend/.env` before building" rule** — deleting it now fails the build, which is the point. The dev server keeps the localhost fallback.
 
+## Deployment
+
+The system is live on two hosts, each deploying from `main`.
+
+- **Frontend — `https://brgyserve.vercel.app`** (Vercel). **Root Directory `frontend`**, which is why `vercel.json` lives in `frontend/` and not at the repo root — at the root Vercel would never read it, and the SPA rewrite would silently not apply. `VITE_API_URL` is set to `https://brgyserve-api.onrender.com/api` in the project's Environment Variables panel; the `/api` suffix is part of the value, not appended by the client.
+- **Backend — `https://brgyserve-api.onrender.com`** (Render). **Root Directory `backend`**, build `npm install`, start `npm start`, **Free tier**, Singapore region. **13 environment variables**, including `FRONTEND_URL` and `PUBLIC_FRONTEND_URL` — both the Vercel origin, but they are not interchangeable: `FRONTEND_URL` is the **comma-separated CORS allowlist** (`server.js`), `PUBLIC_FRONTEND_URL` is the **single origin the resident is redirected back to** after a GCash payment (`routes/payments.js`), which a list cannot express. `PUBLIC_BASE_URL` is the Render origin, and is what the PayMongo webhook is registered against. The `.env.example` mnemonic still applies: `PUBLIC_BASE_URL` is where PayMongo reaches us, `PUBLIC_FRONTEND_URL` is where the resident is sent back to.
+
+**The Free tier sleeps after about 15 minutes idle, and the first request after that takes 30–45 seconds** (measured, not estimated). **Before any demo, open `https://brgyserve-api.onrender.com/api/health` about five minutes ahead** so the instance is awake and the first real click is not the one that pays for it.
+
+**A cold backend returns 502 on the CORS preflight.** The browser console reports that as a **CORS error** and the app shows "Cannot reach the server", so it reads exactly like a misconfiguration — **it is not one, and there is nothing in the CORS setup to fix.** The instance is asleep and the preflight `OPTIONS` never reached it. Wake it and retry. This cost real debugging time once; it is recorded so it does not cost it twice.
+
+**Local development no longer receives PayMongo webhooks.** The single webhook points at Render (see the Dev tunnel section — `npm run tunnel` must never be run again), so a GCash payment made against a local backend is never delivered to it. Those charges settle through the Treasurer's **"Re-check with PayMongo"** on the Payments screen, which re-reads the checkout session and settles through the same `settlePaidCharge()` the webhook uses. That is the intended local workflow now, not a workaround.
+
 ## Auth & Account Approval
 
 - Custom JWT auth (`jsonwebtoken` + `bcryptjs` hashing) against the `users` table — Supabase Auth is NOT used. Requires `JWT_SECRET` (and optional `JWT_EXPIRES_IN`) in `backend/.env`.
@@ -116,6 +129,43 @@ Implementation status:
 - Commit messages must never include AI attribution lines ("Co-authored-by: Claude", "Generated with Claude Code", or similar)
 - Database schema lives in `docs/brgyserve-database-schema.md` (source of truth) and is applied via numbered SQL files in `backend/migrations/`, run manually in the Supabase SQL Editor. Keep the doc and migrations in sync.
 - Implemented so far: the base schema + auth slice (migrations 001–004; 005–011 were added incrementally and are documented in their module sections), resident registration with Secretary-approved linking/activation, the frontend auth slice (login/registration pages, auth context with localStorage persistence, role-based routing), the Secretary review screen on `/secretary` (pending list with ranked fuzzy-match suggestions via `GET /api/secretary/pending-residents/:userId/match-suggestions`, link/create-and-link, activate), and document-type management on `/secretary/document-types` (`/api/document-types`: active list for any authenticated user; `/all` + create/update/deactivate/reactivate Secretary-only — types are deactivated, never deleted, to preserve future request history; migration 004 added `is_active`), the resident document-request screens and the full Document Requests pipeline (see Document Requests section, incl. the Treasurer's Payments landing page), and the complete Facility Rentals module on `/secretary/rental-items` + the shared rental-bookings views (stages 1–5: rental-item management, self-service booking with conflict check, Secretary schedule management, payment through the charges system, and Staff return tracking — see that section; migrations 009–011). All five roles now have real landing pages (Staff: rental bookings with the return action; the Punong Barangay: the read-only rental-bookings list). Blotter/dispute records on `/secretary/blotter` (manage) + `/punong-barangay/blotter` (view-only) — see that section; optional migration 012. Check with the user before introducing new architectural patterns.
+
+## Standing Rules
+
+How work is done in this repository, as distinct from how code is written (see Conventions).
+
+- **Never start the backend or frontend dev server.** The developer starts them. The `npm run dev` lines under Commands and Repository Structure record *how* they are started, not permission to start them — assume a server on :5000 or :5173 is one somebody else is using. Verification that needs a browser uses a `file://` harness loading the real `index.css`, driven by headless Chrome over CDP, which starts no server at all.
+- **Never use `git add .` — stage explicitly by path**, every time. That is what keeps `frontend/.env`, `dist/` and the ignored bundles in `frontend/scripts/` out of a commit by construction rather than by luck.
+- **Build prompts and commit prompts are separate.** A build ends with the edit made and verified, the working tree dirty and **nothing staged**; the commit follows in its own prompt. Committing inside a build prompt removes the review step the separation exists for.
+- **Diagnose before any structural change.** Measure, report what was found, propose candidates, let the developer choose. This has caught real errors more than once — including a proposed diff that would not have compiled, and a test harness that "passed" against code already known to be broken. A harness that does not reproduce the bug proves nothing when it passes: **always run it against the pre-fix code first.**
+- **Commit messages:** subject line plus three or four bullets, plain language, **no attribution trailers** (see also Conventions).
+- **A JSX comment cannot go inside an implicit-return arrow function.** In `{columns.map((c) => (` … `))}` the callback returns a single expression, so a `{/* … */}` placed beside the element makes two sibling expressions with no wrapper and **the Vite build fails**. Put the comment on the line above the `.map(` call instead.
+
+## Frontend Layout
+
+**No CSS variables exist in this codebase and none are to be introduced.** Values are literal. This is a live constraint rather than a style preference — the `capped-column` coupling below would be a one-line binding if variables were available, and instead has to be held by a comment.
+
+### The protected desktop rules
+
+Six rules, **verified across 58 filter states in `fdaf80a` / `7eba429`**. They are the most fragile thing in the codebase: each was derived by sweeping candidate values against real content rather than chosen, and changing one breaks table layouts that no automated test covers. **Do not change them.**
+
+- **`.dash-main { max-width: 1180px }`** — the page column bound (`index.css:253`).
+- **`.pending-card:not(:has(.table-wrap)) { max-width: 720px }`** — the form cap, **with its `:has(.table-wrap)` exclusion**: a card containing a table must not be capped or the table is squeezed (`index.css:266`).
+- **`.row-actions { min-width: 200px }`** — the action-column floor, sized to keep two ordinary buttons on one line (`index.css:626`).
+- **`.data-table .col-billed { white-space: nowrap }`** — billed dates never break (`index.css:1213`).
+- **`.data-table .col-purpose .cell-clamp { max-width: 300px }`** (`index.css:1227`).
+- **`.data-table .col-resident .cell-clamp { max-width: 170px }`** (`index.css:1255`).
+
+**The payments column system was tuned against a 1130px container.** Unbounded, the username and PayMongo-id columns demanded 204.3 and 266.3 and pushed the "All charges" view to 1285.1; the 140 + 130 floors land the table at **1084.5, leaving about 45.5px of slack**. That margin is the entire budget, which is why these values cannot be nudged "a little". The comment at `index.css:1242` records the derivation — including that the sizing is for a **real 28-character PayMongo id**, not for the current demo rows, so removing the `gwtest_*` accounts does not make it unnecessary.
+
+**The drawer breakpoint is declared twice, with nothing keeping the two in sync:** `@media (max-width: 900px)` in `index.css` and `const DRAWER_BREAKPOINT = 900` at `components/DashHeader.jsx:18`. Changing one alone desynchronises the CSS drawer from the JS that closes it on resize. They also do not measure the same thing — **a media query measures the layout viewport, while `window.innerWidth` includes the scrollbar** — so on Windows the two disagree by roughly 15px. The JS only closes an already-open drawer above the breakpoint, so today that mismatch is harmless, but it is a real band where the two disagree.
+
+### Layout fixes, 16–17 Aug 2026
+
+- **`b5b070c` — nav row wrapping.** `flex-wrap: wrap` on `.dash-nav`, `white-space: nowrap` on `.dash-nav a`. The header was pushing the whole dashboard past the viewport between roughly 900 and 1300px.
+- **`25fe20b` — duplicate React key in `ReportRenderers`.** `key={c.label ?? c}`. The `columns` array is **mixed** — plain strings for text columns, `num()`-wrapped objects for numeric ones — so every numeric column stringified to `[object Object]` and collided. **`npm run test:reports` structurally cannot catch this class of bug:** it renders through `react-dom/server`, and **React's duplicate-key validation runs only in the client reconciler**. Catching a key bug requires mounting.
+- **`7a606e9` — `capped-column` on Secretary Resident review.** Caps `.list-head`, `.alert` and `.empty` to 720px so they line up with the cards below them. **Coupled to the 720px form cap: the two values must stay equal**, and with no CSS variable to bind them the comment beside the rule is the only thing recording the link.
+- **`ab12fc7` — `white-space: nowrap` on `.dash-user .btn`.** "Log out" was breaking into "Log / out": the label contains a space, so its min-content is its widest word — "Log" — and flex shrinking took it there. `.row-actions .btn` already does the same thing for the same reason.
 
 ## Document Requests
 
@@ -314,7 +364,7 @@ Attendance applies to `activity` records only, never announcements; Secretary + 
 - **CSV export:** `?format=csv` on the **same endpoint** (one convention everywhere), so role checks and the date range apply identically to JSON and CSV. Sends `text/csv` + `Content-Disposition: attachment` with a `<report>-<from>-to-<to>.csv` filename, a UTF-8 BOM so Excel renders the peso sign, and a barangay/period/generated header block above the sections.
 - **PDF export: client-side, `html2canvas` + `jsPDF`** — chosen so the recharts SVGs appear exactly as rendered on screen (a server-side rebuild would mean re-implementing every chart). `utils/exportPdf.js` captures the report node at 2× scale, draws an A4 header (barangay name, report title, period covered, generated timestamp) and a page-numbered footer, and **slices across pages at `data-pdf-block` boundaries so a chart is never cut in half**.
 - **UI:** shared `ReportsPage` on `/secretary/reports`, `/treasurer/reports`, `/punong-barangay/reports` — a report picker (grouped Administrative/Financial, filtered to the role), from/to date controls, headline stat tiles, recharts line/bar charts, and a plain table of the same numbers underneath so they are checkable. Loading, error, and empty ("No data for this period") states are all handled — an empty range renders the empty state, never a broken chart.
-- **Render test:** `cd frontend && npm run test:reports` (needs the backend on :5000). The API tests never mounted the components, which is how a payload from one report reached another report's renderer and blanked the screen in the browser while every API test passed. This bundles the real components with the project's own bundler and server-renders each against LIVE data, plus mounts the `ErrorBoundary` in jsdom — **React error boundaries do not catch during SSR**, so boundary behaviour is only verifiable with a client mount. Cross-report payloads are asserted to throw, as a regression guard.
+- **Render test:** `cd frontend && npm run test:reports` (needs the backend on :5000). The API tests never mounted the components, which is how a payload from one report reached another report's renderer and blanked the screen in the browser while every API test passed. This bundles the real components with the project's own bundler and server-renders each against LIVE data, plus mounts the `ErrorBoundary` in jsdom — **React error boundaries do not catch during SSR**, so boundary behaviour is only verifiable with a client mount. Cross-report payloads are asserted to throw, as a regression guard. **Limit of what it covers:** the per-report checks server-render, so duplicate-key bugs are structurally invisible to them — React validates keys only in the client reconciler (see `25fe20b` under Frontend Layout).
 - **Render-race fix (was a live bug):** switching reports re-renders with the NEW renderer before the effect can refetch, so an untagged payload briefly reached the wrong renderer — each report has a different shape, so it threw and blanked the content area. The fetched payload is now tagged `{ key, data }` and only rendered when `key === selected`. The renderers live in `components/ReportRenderers.jsx`, deliberately free of auth/router/`import.meta.env` so they are pure functions of their data (and directly testable).
 - **Not built:** event participation / attendance reporting, which needs Events stage 3 (see the parked Households + attendance work above).
 
@@ -363,6 +413,35 @@ The rest of this section is kept as the record of how webhook delivery worked du
 - **Screen:** `/secretary/notifications` (Secretary-only — it exposes contact numbers and message content). Read-only: no re-send, no delete, no POST route. Filters by status and by what the message relates to; summary counts run over the whole log, not the page.
 - **Test: `cd backend && npm run notif:test`** — no server, no network, `SMS_MODE` forced to SIMULATED. The centrepiece is failure isolation: the `notifications` table is sabotaged to throw, a real document-request approval is invoked through its actual route handler, and the test asserts the approval still returns **200**, the request is still `approved`, the charge still exists, and no notification row was written (proving the failure was real and not skipped).
 
+## Test Accounts
+
+The working accounts used for development and the demo. **Do not delete, rename or repurpose them.**
+
+- `secretary1` — Secretary
+- `treasurer1` — Treasurer
+- `staff1` — Staff
+- `JK` — Punong Barangay
+- `juan_test_mr4iarwh` — resident; also the household-QR demo (household 7, see Events stage 3c)
+- `rad` — resident, Rodrigo Bautista. **No phone number on file**, deliberately: it is the account that exercises the "omit a missing field rather than send an empty string" path in the PayMongo billing prefill.
+- `gateway_demo` — resident, for the GCash gateway walkthrough
+
+`secretary1` and `JK` still need their passwords rotated — see Outstanding work below.
+
+## Protected Data — never delete or modify
+
+**These records are the research contribution's evidence base and its live demonstration. Deleting them breaks `npm run match:eval` and the defense demo.** This section exists because Outstanding work lists removing the `gwtest_*` accounts, and a cleanup pass could plausibly sweep these up alongside them: they look like test data, and they are not disposable.
+
+The six planted evaluation pairs in `backend/seeds/test_resident_records.sql` — mirrored by the ground-truth manifest in `scripts/evaluate-matching.js`, and **the two must stay in sync**:
+
+- **Santos / Santoz** — single-character substitution
+- **Rodrigo / Rodirgo** — transposition
+- **Anabelle / Anabele** — dropped double letter
+- **Niño / Nino** — with and without the tilde; the encoding-inconsistency case
+- **Maria Elena / Ma. Elena** — the Filipino abbreviation convention
+- **Juan Miguel Torralba Dela Cruz / Juan Dela Cruz** — full name against a short form
+
+Also **the Wilfredo Ampolokio demo account**, which scores **97%** against the resident record Wilfredo Fuentes Ampoloquio. It is the live, on-screen demonstration that the two-stage matcher works on real data and not only on seeded pairs — nothing else in the dataset substitutes for it.
+
 ## Outstanding work on the live system
 
 **The system is deployed** — frontend on Vercel (`https://brgyserve.vercel.app`), backend on Render (`https://brgyserve-api.onrender.com`). Every module is built, so the items below are housekeeping on a running system rather than blockers before launch. They are still live-system work: real accounts and real payment plumbing are in play, so treat them accordingly.
@@ -370,4 +449,14 @@ The rest of this section is kept as the record of how webhook delivery worked du
 - **RLS is now ENABLED on all 19 tables, with ZERO policies written.** With RLS on and no policy to permit anything, direct table access through the anon/publishable key is denied by default — previously that key could read *and* write 17 of the 19. The backend is unaffected because the **service role key bypasses RLS entirely**, and authorization was never in the database anyway: it lives in the Express layer (`authenticate` + `requireRole`). **Still outstanding:** per-role policies (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`), needed only if anything is ever given direct database access. Note they cannot key off `auth.uid()` — auth here is custom JWT, not Supabase Auth, so it is permanently NULL.
 - Rotate the passwords for the test `secretary1` and `JK` accounts — they were shared in plaintext during development and the system is now reachable from the internet.
 - **PayMongo stays in SANDBOX — going live is explicitly NOT a to-do.** Putting real money through a student capstone demo is out of scope, so the `sk_test_`/`pk_test_` keys stay as they are. (For reference, if that ever changed it would mean swapping in live keys, re-registering the webhook against the deployed origin for a new `secret_key`, and confirming the signature check compares against `li=` rather than `te=` — the code already selects on live-vs-test but has only ever run against test keys.)
-- Remove the `gwtest_*` resident accounts and their document requests/charges created while testing the gateway end to end.
+- Remove the `gwtest_*` resident accounts and their document requests/charges created while testing the gateway end to end. **Check Protected Data first** — that cleanup must not touch the matching evaluation pairs or the Ampolokio demo account, and it does not make the payments column floors unnecessary (`index.css:1242`).
+
+## Decided Against — do not revisit
+
+Each of these was investigated, measured, and deliberately left as it is. They are recorded so the same ground is not covered a second time.
+
+- **The payments table overflowing `.table-wrap` below about 1135px.** It is correct at **1280 and 1920, so no demo resolution is affected**, and `.table-wrap { overflow-x: auto }` already provides the scroll. Hiding columns was rejected on domain grounds: **"Declared payment" is precisely what the Treasurer checks against GCash** before verifying, so hiding it would make the screen useless for its main task. Shortening the button labels was **measured impossible** — with every button removed the Actions column still measures exactly 200px, its `.row-actions` floor, so that approach can recover at most 27.7px against a 91px gap at 1024.
+- **Row dividers not painting under the action column.** Diagnosed by rasterising the rendered page: a `display: flex` `<td>` is not stretched to its row's full height, and **the shortfall varies with row content**, so no single shadow offset can cover it. Both remaining fixes change table-cell display app-wide — a blast radius out of all proportion to a cosmetic divider.
+- **Semaphore SMS.** The minimum top-up is **1,000 credits at PHP 560** for a demo that sends roughly 20 messages. **`SMS_MODE` stays `SIMULATED`.** The provider seam described under Notifications is real and still one function body; the decision is that it will not be exercised, not that it does not exist.
+- **`pg_trgm` living in the `public` schema**, which Supabase's advisor flags. Moving it **drops the GIN trigram indexes Stage 1 blocking depends on** — the whole performance argument of the two-stage design. The warning stands; the extension stays.
+- **The search input collapsing at 500px on `.list-head` screens.** Pre-existing, unrelated to any recent change, and nothing is demoed at 500px.
