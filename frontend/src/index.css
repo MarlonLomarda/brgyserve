@@ -234,6 +234,21 @@ a {
   gap: 12px;
 }
 
+/* "Log out" contains a SPACE, so its min-content is the width of "Log" — not
+   of the whole label. .dash-header is a nowrap flex row and .dash-user carries
+   the defaults (flex-shrink: 1, min-width: auto), so as soon as the row is
+   tight the button is squeezed toward that min-content and breaks mid-label:
+   measured as "Log / out" from 1280px right down to the 900px drawer
+   breakpoint, and again below ~420px on a phone. nowrap raises the button's
+   min-content to the whole label, so the row hands it its full width instead
+   of folding it.
+
+   Same fix for the same reason as `.row-actions .btn` further down this file:
+   there the labels stay on one line and the CELL wraps between buttons. */
+.dash-user .btn {
+  white-space: nowrap;
+}
+
 .dash-main {
   max-width: 1180px;
   margin: 0 auto;
