@@ -16,14 +16,14 @@ BrgyServe is a web-based document request and tracking system for **Barangay Ubu
 brgyserve/
 ├── frontend/          # React app (Vite). Dev server: npm run dev (http://localhost:5173)
 │   ├── src/
-│   │   ├── api/client.js      # fetch wrapper; VITE_API_URL base + Bearer token
+│   │   ├── api/               # config.js (API_BASE_URL — the one definition), client.js (fetch wrapper + Bearer token)
 │   │   ├── auth/              # AuthContext.jsx (login/logout, localStorage), roles.js (role → route)
 │   │   ├── components/        # ProtectedRoute.jsx, DashHeader.jsx (shared dashboard header + nav)
 │   │   ├── constants/         # nav tabs per role; status/charge/rental/report display metadata
 │   │   ├── utils/             # exportPdf.js (client-side report PDF: html2canvas + jsPDF)
 │   │   └── pages/             # one .jsx per screen: auth, resident (requests/rentals), Secretary tabs, payments, bookings
 │   ├── scripts/               # test-report-render.cjs (npm run test:reports)
-│   └── .env.example           # VITE_API_URL (optional, defaults to localhost:5000)
+│   └── .env.example           # VITE_API_URL (REQUIRED — npm run build fails without it)
 ├── backend/           # Express API. Dev server: npm run dev (http://localhost:5000)
 │   ├── src/
 │   │   ├── server.js          # Express entry point
@@ -49,6 +49,8 @@ brgyserve/
 ## Environment / Secrets
 
 Supabase credentials live in `backend/.env` (see `backend/.env.example` for the required keys). **Never hardcode keys in source files and never commit `.env`.** The service role key bypasses Row Level Security and must only ever be used server-side.
+
+The frontend needs `VITE_API_URL` — the API origin **including** the `/api` suffix. It is **required for every build**: `vite.config.js` throws rather than let a build fall back to `http://localhost:5000/api`, which used to deploy green while every request in the browser pointed at a machine that is not there. Locally that means `frontend/.env` must exist (gitignored); on Vercel the value comes from the project's Environment Variables panel. **This reverses the older "delete `frontend/.env` before building" rule** — deleting it now fails the build, which is the point. The dev server keeps the localhost fallback.
 
 ## Auth & Account Approval
 
@@ -334,12 +336,18 @@ Attendance applies to `activity` records only, never announcements; Secretary + 
 - **The redirect is NOT proof of payment.** `PaymentResultPage` (`/resident/payment-result`) reads the charge's real status back from the API and polls until the webhook lands; if confirmation never arrives it tells the resident **not to pay again** and to show their GCash receipt to the Treasurer. Residents see three clearly distinguished options: **"Pay online via GCash"** (gateway), "Pay onsite", and **"I already paid via GCash"** (the unchanged manual reference flow).
 - **Verified end to end against the live sandbox** (27/28 + 9 authorisation + 8 signature checks, plus a full manual browser run-through): a real test GCash payment → PAID charge with one `payments` row (`gcash`, reference = the `pay_…` id, `received_by_user_id` NULL) visible on the Treasurer's screen; duplicate webhook delivery → `already_recorded`, still one row; Treasurer-settled-first → no second row, manual record kept; webhook disabled → charge stranded UNPAID → reconcile recovers it, and reconciling twice is a no-op. Forged, tampered, replayed and stale-signature requests are all rejected. **Known PayMongo sandbox defect:** their "Fail Test Payment" endpoint (`/sources/{id}/fail`) returns HTTP 500 for GCash sources — their bug, not ours; the resulting state is still correct (source stays `pending`, charge stays UNPAID, no `payments` row), which is also what an abandoned checkout produces. On PayMongo's hosted test page the button to click is **"Authorize Test Payment"**; avoid "Fail Test Payment" because of that defect.
 
-### Dev tunnel (webhook reachability)
+### Dev tunnel (webhook reachability) — HISTORICAL, DO NOT RUN
+
+**NEVER run `npm run tunnel` again — it breaks payments on the live system.** There is only ever ONE PayMongo webhook, and it is now registered against the deployed Render origin (`https://brgyserve-api.onrender.com`). `npm run tunnel` repoints *that* webhook at a fresh temporary cloudflared hostname, which stops existing the moment the terminal closes. PayMongo would then deliver every GCash payment into nothing and charges would silently stop settling — with no error anywhere to show for it, because a webhook that is never delivered looks exactly like a resident who abandoned checkout. (Reconciliation could recover them one at a time, but only once somebody noticed.)
+
+**`npm run tunnel:sync -- https://brgyserve-api.onrender.com` is the safe command**, and the fix if the webhook is ever found pointing somewhere else. It takes the **base origin** (the script appends `/api/payments/gcash/webhook` itself), updates the webhook in place, and is **idempotent** — given the url it already holds it reports "already points at this url" and changes nothing. `PAYMONGO_WEBHOOK_SECRET` survives the update unchanged, so no redeploy follows.
+
+The rest of this section is kept as the record of how webhook delivery worked during development; the mechanics still explain why there is exactly one permanent webhook.
 
 - Webhooks need a public HTTPS URL but dev runs on `localhost:5000`. **cloudflared quick tunnels** (`winget install --id Cloudflare.cloudflared`) — free, no account, clean install. ngrok was rejected: Windows Defender flags its download.
 - **PayMongo validates the URL when it is registered** (a placeholder is rejected with `url could not be resolved`), and quick tunnels hand out a new random hostname per start — but `PUT /v1/webhooks/{id}` can change a webhook's url in place. **Verified empirically: the `secret_key` SURVIVES the PUT unchanged and is also readable from `GET`.** So there is exactly ONE webhook, forever; each tunnel start just repoints it, and `PAYMONGO_WEBHOOK_SECRET` never changes (no API restart needed). This matters because PayMongo can only *disable* webhooks, never delete them.
 - `npm run tunnel` (backend) starts cloudflared, reads the hostname from its metrics server at `/quicktunnel`, waits for the hostname to actually resolve before registering (a fresh one is not immediately live), repoints the webhook, and **re-enables it if PayMongo had auto-disabled it**. It **adopts an already-running cloudflared** rather than starting a second one — which is also the fallback if spawning one fails. `npm run tunnel:sync <url>` repoints without a tunnel. `PUBLIC_BASE_URL`, `PAYMONGO_WEBHOOK_ID` and `PAYMONGO_WEBHOOK_SECRET` are written to `.env` automatically; no hostname is ever hardcoded.
-- **This is dev scaffolding.** Cloudflare states quick tunnels are testing-only (no uptime guarantee). On deployment, set `PUBLIC_BASE_URL` to the real origin, run `npm run tunnel:sync` once, and drop the tunnel from the workflow.
+- **This was dev scaffolding, and it has been dropped.** Cloudflare states quick tunnels are testing-only (no uptime guarantee). That step is done: `PUBLIC_BASE_URL` is the Render origin, `tunnel:sync` was run against it, and the tunnel is out of the workflow for good — see the warning at the top of this section.
 
 ## Notifications
 
@@ -355,11 +363,11 @@ Attendance applies to `activity` records only, never announcements; Secretary + 
 - **Screen:** `/secretary/notifications` (Secretary-only — it exposes contact numbers and message content). Read-only: no re-send, no delete, no POST route. Filters by status and by what the message relates to; summary counts run over the whole log, not the page.
 - **Test: `cd backend && npm run notif:test`** — no server, no network, `SMS_MODE` forced to SIMULATED. The centrepiece is failure isolation: the `notifications` table is sabotaged to throw, a real document-request approval is invoked through its actual route handler, and the test asserts the approval still returns **200**, the request is still `approved`, the charge still exists, and no notification row was written (proving the failure was real and not skipped).
 
-## Pre-deployment TODO
+## Outstanding work on the live system
 
-Events stage 3 is complete, so the security items below are what remains.
+**The system is deployed** — frontend on Vercel (`https://brgyserve.vercel.app`), backend on Render (`https://brgyserve-api.onrender.com`). Every module is built, so the items below are housekeeping on a running system rather than blockers before launch. They are still live-system work: real accounts and real payment plumbing are in play, so treat them accordingly.
 
-- Enable Row Level Security (RLS) and write per-role access policies for all tables (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`) before deployment — tables are currently UNRESTRICTED.
-- Rotate the passwords for the test `secretary1` and `JK` accounts before real use; they were shared in plaintext during development.
+- **RLS is now ENABLED on all 19 tables, with ZERO policies written.** With RLS on and no policy to permit anything, direct table access through the anon/publishable key is denied by default — previously that key could read *and* write 17 of the 19. The backend is unaffected because the **service role key bypasses RLS entirely**, and authorization was never in the database anyway: it lives in the Express layer (`authenticate` + `requireRole`). **Still outstanding:** per-role policies (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`), needed only if anything is ever given direct database access. Note they cannot key off `auth.uid()` — auth here is custom JWT, not Supabase Auth, so it is permanently NULL.
+- Rotate the passwords for the test `secretary1` and `JK` accounts — they were shared in plaintext during development and the system is now reachable from the internet.
 - **PayMongo stays in SANDBOX — going live is explicitly NOT a to-do.** Putting real money through a student capstone demo is out of scope, so the `sk_test_`/`pk_test_` keys stay as they are. (For reference, if that ever changed it would mean swapping in live keys, re-registering the webhook against the deployed origin for a new `secret_key`, and confirming the signature check compares against `li=` rather than `te=` — the code already selects on live-vs-test but has only ever run against test keys.)
 - Remove the `gwtest_*` resident accounts and their document requests/charges created while testing the gateway end to end.
