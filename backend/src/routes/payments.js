@@ -66,6 +66,41 @@ function residentName(record) {
   return parts.length ? parts.join(' ') : null;
 }
 
+// The BARE 10-digit national mobile number (9171234567) for the PayMongo
+// billing prefill ONLY — no country code, no leading zero.
+//
+// WHY THAT SHAPE: PayMongo renders "+63" as a FIXED LABEL BESIDE the input, not
+// inside it, and their own placeholder in that field reads "917 123 4567". The
+// label supplies the country code, so the input must carry only what follows
+// it. Verified by screenshot of their hosted checkout page on 18 Aug 2026.
+//
+// DO NOT "FIX" THIS BACK TO E.164. That was tried first: sending
+// "+639171234567" rendered as
+//     +63  +639171234567
+// which composes to +63639171234567 — worse than the original bug it replaced
+// (a stored "09171234567" showing as "+63 09171234567", one digit too many).
+//
+// This describes their CURRENT UI, not a documented contract. The field has now
+// changed behaviour twice — it was once a plain text input with no country
+// label at all — so re-check the rendered page rather than this comment if the
+// prefill ever looks wrong again.
+//
+// Returns null for anything it cannot parse, so an unrecognised number is
+// OMITTED rather than sent malformed — the rule billingFor already follows for
+// a number that is absent. A wrong number on a payment record is worse than no
+// number.
+//
+// Deliberately NOT applied inside contactFor(): that is also the SMS
+// destination (see notify() in settlePaidCharge), which needs the dialable
+// local form, and this change is scoped to what PayMongo is told.
+function toNationalMobileDigits(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^0\d{10}$/.test(digits)) return digits.slice(1); // 09XXXXXXXXX — every number on file
+  if (/^63\d{10}$/.test(digits)) return digits.slice(2); // 63XXXXXXXXXX, or an already-+63 value
+  if (/^9\d{9}$/.test(digits)) return digits; // 9XXXXXXXXX — already the wanted shape
+  return null;
+}
+
 // Pre-fill for PayMongo's hosted page (data.attributes.billing — optional, and
 // so is every sub-field). Without it the page renders three empty inputs, so
 // the browser offers to autofill them with whoever owns the device, and
@@ -92,13 +127,14 @@ function billingFor(charge) {
   const email = String(charge.payer?.email || '').trim();
   if (email) billing.email = email;
 
-  // Reuses the existing phone rule rather than restating it: contact_number on
-  // the resident record is the source of truth (profiles.phone_number is only
-  // what the resident claimed at registration). It is stored as 09XXXXXXXXX,
-  // which is exactly what the hosted page wants — that field is a plain text
-  // input with no country-code selector, so converting to +63 would only show
-  // the resident a format they did not enter.
-  const phone = String(contactFor(charge) || '').trim();
+  // contact_number on the resident record is the source of truth
+  // (profiles.phone_number is only what the resident claimed at registration).
+  // It is stored as 09XXXXXXXXX and sent as the bare national number, because
+  // PayMongo's own "+63" label sits beside the field — see
+  // toNationalMobileDigits above for why, and for how firm that reasoning is.
+  // An unparseable number yields null and is omitted, exactly as an absent one
+  // already was.
+  const phone = toNationalMobileDigits(contactFor(charge));
   if (phone) billing.phone = phone;
 
   return Object.keys(billing).length ? billing : undefined;
