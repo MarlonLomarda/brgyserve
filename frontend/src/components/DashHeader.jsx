@@ -18,6 +18,11 @@ import { ROLE_LABELS } from '../auth/roles';
 // constants/nav.js and are not forked here.
 const DRAWER_BREAKPOINT = 900;
 
+// The product name alone, matching the static <title> in index.html. That is
+// what the tab reads before React mounts, and on the pages that do not render
+// this header (landing, login, register, change-password).
+const BASE_TITLE = 'BrgyServe';
+
 export default function DashHeader({ title, subtitle, nav = [] }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -36,6 +41,22 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
     setOpen(false);
     toggleRef.current?.focus();
   };
+
+  // The browser tab label. PAGE NAME FIRST, because tabs truncate from the
+  // right: "BrgyServe — Pay…" would leave every tab looking alike, which is the
+  // problem this exists to fix.
+  //
+  // The cleanup matters most on logout, which unmounts this header onto
+  // /login — without it the tab would keep the last dashboard screen's name on
+  // a page that is not it. Moving between two dashboard routes is safe because
+  // React flushes every cleanup in a commit before any new effect, so the
+  // incoming page's title is always written last.
+  useEffect(() => {
+    document.title = `${title} — ${BASE_TITLE}`;
+    return () => {
+      document.title = BASE_TITLE;
+    };
+  }, [title]);
 
   // Close on ANY route change, whatever caused it — a nav tap, a redirect, or
   // the browser's back button.
