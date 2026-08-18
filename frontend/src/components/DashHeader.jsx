@@ -98,38 +98,53 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
   // handler so tapping the CURRENT route still dismisses it — a route change
   // alone would not fire in that case.
   const navLinks = (onNavigate) =>
-    nav.map((item) => (
-      <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-        {item.label}
-      </NavLink>
-    ));
+    nav.map((item) => {
+      const Icon = item.icon;
+
+      return (
+        <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
+          <Icon size={24} />
+          {item.label}
+        </NavLink>
+      );
+    });
+
+  // look for the active nav link so we can use its icon hehe
+  const activeNavLink = nav.find((item) =>
+    item.end
+      ? location.pathname === item.to
+      : location.pathname.startsWith(item.to),
+  );
+
+  const ActiveNavIcon = activeNavLink?.icon;
 
   return (
     <>
       <header className="dash-header">
         {nav.length > 0 && (
-          <button
-            ref={toggleRef}
-            type="button"
-            className="dash-menu-btn"
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            aria-controls="dash-drawer"
-            onClick={() => setOpen((wasOpen) => !wasOpen)}
-          >
-            <span className="dash-menu-icon" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </button>
-        )}
+          <section className="dash-header-section">
+            <button
+              ref={toggleRef}
+              type="button"
+              className="dash-menu-btn"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              aria-controls="dash-drawer"
+              onClick={() => setOpen((wasOpen) => !wasOpen)}
+            >
+              <span className="dash-menu-icon" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
 
-        <div>
-          <h1>{title}</h1>
-          <p className="muted">{subtitle}</p>
-          {nav.length > 0 && <nav className="dash-nav">{navLinks()}</nav>}
-        </div>
+            <div>
+              <h1>{title}</h1>
+              <p className="muted">{subtitle}</p>
+            </div>
+          </section>
+        )}
 
         <div className="dash-user">
           <span className="muted dash-username">@{user.username}</span>
@@ -161,7 +176,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
                 onClick={closeAndRefocus}
                 aria-label="Close menu"
               >
-                <IoCloseSharp size={20}/>
+                <IoCloseSharp size={20} />
               </button>
               <span className="dash-drawer-title">
                 {ROLE_LABELS[user.role] || "BrgyServe"}
