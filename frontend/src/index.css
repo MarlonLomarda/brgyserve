@@ -4,7 +4,12 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   background: #f1f5f9;
   color: #1e293b;
 }
@@ -217,10 +222,15 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
-  padding: 16px 24px;
+  padding: 1.5rem 1rem;
+}
+
+.dash-header-section {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
 }
 
 .dash-header h1 {
@@ -293,7 +303,7 @@ a {
 .muted {
   color: #64748b;
   font-size: 0.9rem;
-  margin: 0;
+  margin: 5px 0 0 0;
 }
 
 .btn {
@@ -966,7 +976,7 @@ button.link-button:hover:not(:disabled) {
   margin-top: 14px;
 }
 
-.check-row input[type='checkbox'] {
+.check-row input[type="checkbox"] {
   width: 20px;
   height: 20px;
   margin: 2px 0 0;
@@ -1549,7 +1559,9 @@ button.link-button:hover:not(:disabled) {
   padding: 22px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   border-top: 3px solid #2563eb;
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 /* Decorative lift only. These cards are NOT links and must not read as one,
@@ -2016,150 +2028,147 @@ button.link-button:hover:not(:disabled) {
   display: none;
 }
 
-@media (max-width: 900px) {
-  .dash-header {
-    padding: 12px 16px;
-    gap: 12px;
-  }
+/* this is where the old media query with max-width 900px started */
+.dash-header h1 {
+  font-size: 1.05rem;
+}
 
-  .dash-header h1 {
-    font-size: 1.05rem;
-  }
+/* The tab row is what the drawer replaces. */
+.dash-nav {
+  display: none;
+}
 
-  /* The tab row is what the drawer replaces. */
-  .dash-nav {
-    display: none;
-  }
+/* Shown in the drawer's footer instead, where there is room for it. */
+.dash-username {
+  display: none;
+}
 
-  /* Shown in the drawer's footer instead, where there is room for it. */
-  .dash-username {
-    display: none;
-  }
+.dash-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
 
-  .dash-menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-  }
+.dash-menu-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
 
-  .dash-menu-btn:hover:not(:disabled) {
-    background: #f8fafc;
-  }
+.dash-menu-icon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 20px;
+  height: 16px;
+}
 
-  .dash-menu-icon {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 4px;
-    width: 20px;
-    height: 16px;
-  }
+.dash-menu-icon span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: #334155;
+}
 
-  .dash-menu-icon span {
-    display: block;
-    width: 100%;
-    height: 2px;
-    border-radius: 2px;
-    background: #334155;
-  }
+.dash-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.5);
+}
 
-  .dash-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: rgba(15, 23, 42, 0.5);
-  }
-
-  .dash-drawer {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 50;
-    width: min(84vw, 300px);
-    height: 100vh;
-    height: 100dvh; /* keeps the full height under mobile browser chrome */
-    background: #fff;
-    border-right: 1px solid #e2e8f0;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
-    /* The drawer is only in the DOM while open, so the animation has no
+.dash-drawer {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  width: min(84vw, 300px);
+  height: 100vh;
+  height: 100dvh; /* keeps the full height under mobile browser chrome */
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  /* The drawer is only in the DOM while open, so the animation has no
        hidden resting state to get stuck in: it starts off-screen and resolves
        to the element's own position. No forwards fill, nothing to reset. */
-    animation: dash-drawer-in 180ms ease-out;
-  }
-
-  .dash-drawer:focus {
-    outline: none;
-  }
-
-  .dash-drawer-head {
-    display: flex;
-    align-items: center;
-    /* justify-content: space-between; */
-    gap: 12px;
-    padding: 14px 16px;
-    border-bottom: 1px solid #e2e8f0;
-    flex: none;
-  }
-
-  .dash-drawer-title {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #1e293b;
-  }
-
-  .dash-drawer-close {
-    min-height: 40px;
-  }
-
-  /* The item list is what scrolls when a 12-item nav overflows a short
-     phone screen; the header and footer stay put. */
-  .dash-drawer-nav {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    display: flex;
-    flex-direction: column;
-    padding: 8px 0;
-  }
-
-  .dash-drawer-nav a {
-    display: block;
-    padding: 13px 16px;
-    min-height: 44px;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #334155;
-    text-decoration: none;
-    border-left: 3px solid transparent;
-  }
-
-  .dash-drawer-nav a:hover {
-    background: #f8fafc;
-    color: #1d4ed8;
-  }
-
-  .dash-drawer-nav a.active {
-    color: #1d4ed8;
-    background: #eff6ff;
-    border-left-color: #1d4ed8;
-  }
-
-  .dash-drawer-foot {
-    flex: none;
-    padding: 14px 16px;
-    border-top: 1px solid #e2e8f0;
-  }
+  animation: dash-drawer-in 180ms ease-out;
 }
+
+.dash-drawer:focus {
+  outline: none;
+}
+
+.dash-drawer-head {
+  display: flex;
+  align-items: center;
+  /* justify-content: space-between; */
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  flex: none;
+}
+
+.dash-drawer-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dash-drawer-close {
+  min-height: 40px;
+}
+
+/* The item list is what scrolls when a 12-item nav overflows a short
+     phone screen; the header and footer stay put. */
+.dash-drawer-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+}
+
+.dash-drawer-nav a {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 13px 16px;
+  min-height: 44px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+
+.dash-drawer-nav a:hover {
+  background: #f8fafc;
+  color: #1d4ed8;
+}
+
+.dash-drawer-nav a.active {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-left-color: #1d4ed8;
+}
+
+.dash-drawer-foot {
+  flex: none;
+  padding: 14px 16px;
+  border-top: 1px solid #e2e8f0;
+}
+/* this is where the old media query with max-width 900px ended -francis */
 
 @keyframes dash-drawer-in {
   from {
