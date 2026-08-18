@@ -2104,7 +2104,7 @@ button.link-button:hover:not(:disabled) {
   .dash-drawer-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    /* justify-content: space-between; */
     gap: 12px;
     padding: 14px 16px;
     border-bottom: 1px solid #e2e8f0;
