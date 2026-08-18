@@ -312,7 +312,7 @@ export default function SecretaryRequestsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Secretary"
+        title="Document requests"
         subtitle="Process document requests"
         nav={SECRETARY_NAV}
       />

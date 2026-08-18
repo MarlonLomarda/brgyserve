@@ -102,7 +102,7 @@ export default function RentalItemsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Secretary"
+        title="Rental items"
         subtitle="Manage the facilities and items residents can rent"
         nav={SECRETARY_NAV}
       />
@@ -112,7 +112,11 @@ export default function RentalItemsPage() {
         {listError && <div className="alert error">{listError}</div>}
 
         <div className="list-head">
-          <h2>Rental items</h2>
+          <h2>
+            {items === null
+              ? 'Rental items'
+              : `${items.length} rental item${items.length === 1 ? '' : 's'}`}
+          </h2>
           <div className="head-actions">
             <button className="btn secondary" onClick={load}>
               Refresh

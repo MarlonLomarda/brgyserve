@@ -505,7 +505,7 @@ export default function ResidentRecordsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Secretary"
+        title="Resident records"
         subtitle="Resident master list"
         nav={SECRETARY_NAV}
       />

@@ -88,7 +88,7 @@ export default function DocumentTypesPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Secretary"
+        title="Document types"
         subtitle="Manage the document types residents can request"
         nav={SECRETARY_NAV}
       />
@@ -98,7 +98,11 @@ export default function DocumentTypesPage() {
         {listError && <div className="alert error">{listError}</div>}
 
         <div className="list-head">
-          <h2>Document types</h2>
+          <h2>
+            {types === null
+              ? 'Document types'
+              : `${types.length} document type${types.length === 1 ? '' : 's'}`}
+          </h2>
           <div className="head-actions">
             <button className="btn secondary" onClick={load}>
               Refresh

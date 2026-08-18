@@ -73,7 +73,7 @@ export default function MyRentalsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Resident"
+        title="My rentals"
         subtitle="Your facility and item bookings"
         nav={RESIDENT_NAV}
       />

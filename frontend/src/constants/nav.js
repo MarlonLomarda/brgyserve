@@ -7,7 +7,7 @@ export const SECRETARY_NAV = [
   { to: '/secretary/payments', label: 'Payments' },
   { to: '/secretary/document-types', label: 'Document types' },
   { to: '/secretary/rental-items', label: 'Rental items' },
-  { to: '/secretary/rentals', label: 'Rentals' },
+  { to: '/secretary/rentals', label: 'Rental bookings' },
   { to: '/secretary/blotter', label: 'Blotter' },
   { to: '/secretary/events', label: 'Events' },
   { to: '/secretary/notifications', label: 'Notifications' },

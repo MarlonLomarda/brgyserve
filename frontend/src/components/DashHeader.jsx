@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { ROLE_LABELS } from '../auth/roles';
 
 // Shared dashboard header: title, section nav tabs, current user, logout.
 // nav = [{ to, label, end? }]
@@ -129,7 +130,12 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
             tabIndex={-1}
           >
             <div className="dash-drawer-head">
-              <span className="dash-drawer-title">BrgyServe</span>
+              {/* The role, not the product name: below 900px the nav row and
+                  the username are both hidden, so this is the only place left
+                  that can say which account you are signed in as. */}
+              <span className="dash-drawer-title">
+                {ROLE_LABELS[user.role] || 'BrgyServe'}
+              </span>
               <button
                 type="button"
                 className="btn secondary dash-drawer-close"

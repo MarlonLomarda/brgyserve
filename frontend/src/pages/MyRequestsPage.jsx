@@ -94,7 +94,7 @@ export default function MyRequestsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Resident"
+        title="My requests"
         subtitle="Track your barangay document requests"
         nav={RESIDENT_NAV}
       />

@@ -336,7 +336,7 @@ export default function SecretaryReviewPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Secretary"
+        title="Resident review"
         subtitle="Manage accounts and review pending residents"
         nav={SECRETARY_NAV}
       />

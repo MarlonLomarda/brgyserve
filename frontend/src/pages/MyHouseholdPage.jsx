@@ -50,7 +50,7 @@ export default function MyHouseholdPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Resident"
+        title="My household"
         subtitle="Your household QR code"
         nav={RESIDENT_NAV}
       />

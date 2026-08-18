@@ -76,8 +76,8 @@ export default function PaymentResultPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Resident"
-        subtitle="GCash payment"
+        title="GCash payment"
+        subtitle="Your online payment for a barangay charge"
         nav={RESIDENT_NAV}
       />
 

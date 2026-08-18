@@ -61,7 +61,7 @@ export default function RequestDocumentPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="BrgyServe — Resident"
+        title="Request a document"
         subtitle="Request an official barangay document"
         nav={RESIDENT_NAV}
       />

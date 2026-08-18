@@ -34,10 +34,10 @@ import { PUNONG_BARANGAY_NAV, RESIDENT_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_
 const ROLE_PAGES = {
   secretary: <SecretaryReviewPage />,
   resident: <MyRequestsPage />,
-  treasurer: <PaymentsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />,
-  staff: <RentalBookingsPage title="BrgyServe — Staff" nav={STAFF_NAV} canReturn />,
+  treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
+  staff: <RentalBookingsPage title="Rental bookings" nav={STAFF_NAV} canReturn />,
   punong_barangay: (
-    <RentalBookingsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
+    <RentalBookingsPage title="Rental bookings" nav={PUNONG_BARANGAY_NAV} />
   ),
 };
 
@@ -78,7 +78,7 @@ export default function App() {
         path="/secretary/households"
         element={
           <ProtectedRoute role="secretary">
-            <HouseholdsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+            <HouseholdsPage title="Households" nav={SECRETARY_NAV} canManage />
           </ProtectedRoute>
         }
       />
@@ -88,7 +88,7 @@ export default function App() {
         path="/staff/households"
         element={
           <ProtectedRoute role="staff">
-            <HouseholdsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
+            <HouseholdsPage title="Households" nav={STAFF_NAV} />
           </ProtectedRoute>
         }
       />
@@ -112,7 +112,7 @@ export default function App() {
         path="/secretary/payments"
         element={
           <ProtectedRoute role="secretary">
-            <PaymentsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+            <PaymentsPage title="Payments" nav={SECRETARY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -128,7 +128,7 @@ export default function App() {
         path="/secretary/rentals"
         element={
           <ProtectedRoute role="secretary">
-            <RentalBookingsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+            <RentalBookingsPage title="Rental bookings" nav={SECRETARY_NAV} canManage />
           </ProtectedRoute>
         }
       />
@@ -136,7 +136,7 @@ export default function App() {
         path="/secretary/blotter"
         element={
           <ProtectedRoute role="secretary">
-            <DisputesPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} canManage />
+            <DisputesPage title="Blotter" nav={SECRETARY_NAV} canManage />
           </ProtectedRoute>
         }
       />
@@ -144,7 +144,7 @@ export default function App() {
         path="/secretary/events"
         element={
           <ProtectedRoute role="secretary">
-            <EventsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+            <EventsPage title="Events" nav={SECRETARY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -152,7 +152,7 @@ export default function App() {
         path="/staff/events"
         element={
           <ProtectedRoute role="staff">
-            <EventsPage title="BrgyServe — Staff" nav={STAFF_NAV} />
+            <EventsPage title="Events" nav={STAFF_NAV} />
           </ProtectedRoute>
         }
       />
@@ -168,7 +168,7 @@ export default function App() {
         path="/secretary/reports"
         element={
           <ProtectedRoute role="secretary">
-            <ReportsPage title="BrgyServe — Secretary" nav={SECRETARY_NAV} />
+            <ReportsPage title="Reports" nav={SECRETARY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -176,7 +176,7 @@ export default function App() {
         path="/treasurer/reports"
         element={
           <ProtectedRoute role="treasurer">
-            <ReportsPage title="BrgyServe — Treasurer" nav={TREASURER_NAV} />
+            <ReportsPage title="Reports" nav={TREASURER_NAV} />
           </ProtectedRoute>
         }
       />
@@ -184,7 +184,7 @@ export default function App() {
         path="/punong-barangay/reports"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ReportsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
+            <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -192,7 +192,7 @@ export default function App() {
         path="/resident/events"
         element={
           <ProtectedRoute role="resident">
-            <PublicEventsPage title="BrgyServe — Resident" nav={RESIDENT_NAV} />
+            <PublicEventsPage title="Events" nav={RESIDENT_NAV} />
           </ProtectedRoute>
         }
       />
@@ -200,7 +200,7 @@ export default function App() {
         path="/punong-barangay/events"
         element={
           <ProtectedRoute role="punong_barangay">
-            <PublicEventsPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
+            <PublicEventsPage title="Events" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -208,7 +208,7 @@ export default function App() {
         path="/punong-barangay/blotter"
         element={
           <ProtectedRoute role="punong_barangay">
-            <DisputesPage title="BrgyServe — Punong Barangay" nav={PUNONG_BARANGAY_NAV} />
+            <DisputesPage title="Blotter" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />
