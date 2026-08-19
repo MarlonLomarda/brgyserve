@@ -190,6 +190,59 @@ export default function PaymentResultPage() {
 
         {recheckMsg && <div className={`alert ${recheckMsg.kind}`}>{recheckMsg.text}</div>}
 
+        {/* The helper line and BOTH check buttons sit under ONE `!paid` guard,
+            rather than three parallel ones, so the explanation cannot outlive
+            the buttons it describes. The navigation links are always shown,
+            which is why they keep a row of their own below.
+
+            Spacing does the grouping: 1rem above the helper line separates it
+            from the status table, 8px below ties it to its buttons. Without
+            that the line would sit directly under the table and read as a
+            caption for it — .row-actions is justify-content: flex-end, so the
+            buttons are right-aligned and cannot be lined up with body text
+            without a new rule. */}
+        {!paid && (
+          <>
+            <p className="muted" style={{ marginTop: '1rem' }}>
+              “Check again” looks for a confirmation we may already have received. “Ask GCash”
+              contacts GCash itself — use that one if the wait is taking too long.
+            </p>
+            <div className="row-actions" style={{ marginTop: '8px' }}>
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  attemptsRef.current = 0;
+                  setError('');
+                  check();
+                }}
+              >
+                Check again
+              </button>
+              {/* Deliberately a SEPARATE action from "Check again", not a
+                  replacement. That one re-reads our own record and is right for
+                  the normal case, where the webhook is seconds away. This one
+                  asks GCash — the helper line above now carries the "directly"
+                  that used to be in this label, so it only has to name the
+                  other system.
+
+                  The seconds are padded with a figure space (U+2007, the width
+                  of a digit) so the button does not change width when the
+                  countdown ticks from 10 to 9. */}
+              <button
+                className="btn secondary"
+                onClick={askGcash}
+                disabled={recheckBusy || cooldown > 0}
+              >
+                {recheckBusy
+                  ? 'Asking GCash…'
+                  : cooldown > 0
+                    ? `Ask GCash (${String(cooldown).padStart(2, ' ')}s)`
+                    : 'Ask GCash'}
+              </button>
+            </div>
+          </>
+        )}
+
         <div className="row-actions" style={{ marginTop: '1rem' }}>
           <Link className="button-link inline" to="/resident">
             Back to my requests
@@ -197,36 +250,6 @@ export default function PaymentResultPage() {
           <Link className="button-link inline" to="/resident/rentals">
             My rentals
           </Link>
-          {!paid && (
-            <button
-              className="btn secondary"
-              onClick={() => {
-                attemptsRef.current = 0;
-                setError('');
-                check();
-              }}
-            >
-              Check again
-            </button>
-          )}
-          {/* Deliberately a SEPARATE action from "Check again", not a
-              replacement. That one re-reads our own record and is right for the
-              normal case, where the webhook is seconds away. This one asks
-              GCash — named explicitly, so someone who has paid and is worried
-              can tell the two apart and knows this is the one that can help. */}
-          {!paid && (
-            <button
-              className="btn secondary"
-              onClick={askGcash}
-              disabled={recheckBusy || cooldown > 0}
-            >
-              {recheckBusy
-                ? 'Asking GCash…'
-                : cooldown > 0
-                  ? `Ask GCash directly (${cooldown}s)`
-                  : 'Ask GCash directly'}
-            </button>
-          )}
         </div>
       </main>
     </div>
