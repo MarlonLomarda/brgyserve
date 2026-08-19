@@ -485,6 +485,74 @@ router.get('/gcash/status/:chargeId', async (req, res) => {
   });
 });
 
+// POST /api/payments/gcash/recheck/:chargeId — the RESIDENT's own re-check, for
+// the one case the status route above cannot help with: PayMongo collected the
+// money but the webhook never arrived, so the local row says UNPAID and polling
+// it will keep saying UNPAID however many times the resident asks.
+//
+// AUTHORIZATION — strictly NARROWER than the checkout-resume interlock above,
+// which already lets an owning resident trigger settlePaidCharge today:
+//   - same ownership rule, and someone else's charge 404s rather than 403s, so
+//     this cannot be used to probe which charge ids exist;
+//   - unlike resume it CANNOT open a checkout session — it only asks about one
+//     that already exists, so it can never start a payment;
+//   - it is NOT the staff reconcile route with its role guard relaxed. That one
+//     deliberately has NO ownership check, which is exactly why it stays
+//     treasurer/secretary only. Do not merge the two.
+//
+// Settles through settlePaidCharge like every other trigger, so it inherits the
+// same three idempotency layers and cannot double-record. Reuses RESUME_MESSAGES
+// rather than adding a third map: that wording is already written for a resident
+// who has just paid, and gateway:test already enforces that it covers every
+// outcome and never claims success for one where the money was not applied.
+router.post('/gcash/recheck/:chargeId', async (req, res) => {
+  const chargeId = Number(req.params.chargeId);
+  if (!Number.isInteger(chargeId)) {
+    return res.status(400).json({ error: 'Invalid charge id' });
+  }
+
+  const charge = await loadCharge(chargeId);
+  if (!charge || charge.user_id !== req.user.user_id) {
+    return res.status(404).json({ error: 'Charge not found' });
+  }
+  if (!charge.paymongo_session_id) {
+    // There is genuinely nothing to ask about. Say so, rather than returning a
+    // cheerful "no payment found" that reads as "GCash says you did not pay".
+    return res.status(409).json({
+      error:
+        'No online payment was started for this charge, so there is nothing to check with GCash. If you paid at the barangay hall, the treasurer records that manually.',
+    });
+  }
+
+  let session;
+  try {
+    session = await retrieveCheckoutSession(charge.paymongo_session_id);
+  } catch (e) {
+    return res.status(502).json({ error: `Could not reach GCash right now: ${e.message}` });
+  }
+
+  const payment = paidPaymentOf(session);
+  if (!payment) {
+    // Not an error: an abandoned or still-open checkout looks exactly like this.
+    return res.json({
+      settled: false,
+      message:
+        'GCash has no completed payment for this charge yet, so it is still unpaid. If your GCash account was charged, do not pay again — show your receipt to the barangay treasurer.',
+    });
+  }
+
+  const result = await settlePaidCharge(charge, payment, {
+    source: `resident recheck by ${req.user.username}`,
+  });
+  res.json({
+    settled: result.outcome === SETTLE_OUTCOME.RECORDED,
+    outcome: result.outcome,
+    message:
+      RESUME_MESSAGES[result.outcome] ||
+      'This charge could not be settled online — please contact the Barangay Office.',
+  });
+});
+
 // POST /api/payments/gcash/reconcile/:chargeId — Treasurer/Secretary safety
 // net. PayMongo disables a webhook endpoint after repeated delivery failures
 // and never replays the events missed in the meantime, so a tunnel or server

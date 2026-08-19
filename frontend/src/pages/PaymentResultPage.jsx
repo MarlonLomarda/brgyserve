@@ -16,6 +16,12 @@ import { chargeMeta } from '../constants/requestStatus';
 const POLL_INTERVAL_MS = 2000;
 const POLL_ATTEMPTS = 10; // ~20s, then stop and let them refresh
 
+// "Ask GCash directly" makes an outbound PayMongo request per press, and there
+// is no rate limiting on the API, so the button locks briefly after each click.
+// Long enough to stop a flood, short enough not to feel broken to someone who
+// is worried about money.
+const RECHECK_COOLDOWN_S = 10;
+
 export default function PaymentResultPage() {
   const { authFetch } = useAuth();
   const [params] = useSearchParams();
@@ -70,6 +76,39 @@ export default function PaymentResultPage() {
       if (timer) clearTimeout(timer);
     };
   }, [chargeId, check, result]);
+
+  // The poll above only re-reads OUR record. This asks PayMongo itself, which
+  // is the only thing that can help when the webhook never arrived — the local
+  // row would otherwise say UNPAID for ever.
+  const [recheckBusy, setRecheckBusy] = useState(false);
+  const [recheckMsg, setRecheckMsg] = useState(null); // { kind, text }
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const timer = setTimeout(() => setCooldown((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  async function askGcash() {
+    setRecheckBusy(true);
+    setRecheckMsg(null);
+    setError('');
+    try {
+      const data = await authFetch(`/payments/gcash/recheck/${chargeId}`, { method: 'POST' });
+      setRecheckMsg({ kind: data.settled ? 'success' : '', text: data.message });
+      // ONE source of truth for the charge itself: re-read it through the same
+      // status endpoint the poll uses, rather than trusting this response to
+      // describe the row. If a poll is in flight they cannot disagree — both
+      // read the same record after the settlement has been committed.
+      await check();
+    } catch (err) {
+      setRecheckMsg({ kind: 'error', text: err.message });
+    } finally {
+      setRecheckBusy(false);
+      setCooldown(RECHECK_COOLDOWN_S);
+    }
+  }
 
   const paid = charge?.status === 'PAID';
 
@@ -149,6 +188,8 @@ export default function PaymentResultPage() {
           </div>
         )}
 
+        {recheckMsg && <div className={`alert ${recheckMsg.kind}`}>{recheckMsg.text}</div>}
+
         <div className="row-actions" style={{ marginTop: '1rem' }}>
           <Link className="button-link inline" to="/resident">
             Back to my requests
@@ -166,6 +207,24 @@ export default function PaymentResultPage() {
               }}
             >
               Check again
+            </button>
+          )}
+          {/* Deliberately a SEPARATE action from "Check again", not a
+              replacement. That one re-reads our own record and is right for the
+              normal case, where the webhook is seconds away. This one asks
+              GCash — named explicitly, so someone who has paid and is worried
+              can tell the two apart and knows this is the one that can help. */}
+          {!paid && (
+            <button
+              className="btn secondary"
+              onClick={askGcash}
+              disabled={recheckBusy || cooldown > 0}
+            >
+              {recheckBusy
+                ? 'Asking GCash…'
+                : cooldown > 0
+                  ? `Ask GCash directly (${cooldown}s)`
+                  : 'Ask GCash directly'}
             </button>
           )}
         </div>
