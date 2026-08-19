@@ -103,7 +103,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
       return (
         <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-          <Icon size={24} />
+          <Icon size={20} />
           {item.label}
         </NavLink>
       );

@@ -21,39 +21,51 @@ export const SECRETARY_NAV = [
     label: "Document requests",
     icon: IoDocumentsSharp,
   },
-  { to: '/secretary/payments', label: 'Payments', icon: MdPayments  },
-  { to: '/secretary/document-types', label: 'Document types', icon: MdEditDocument },
-  { to: '/secretary/rental-items', label: 'Rental items', icon: FaBoxes },
-  { to: '/secretary/rentals', label: 'Rental bookings', icon: FaCalendarAlt },
-  { to: '/secretary/blotter', label: 'Blotter', icon: FaAddressBook },
-  { to: '/secretary/events', label: 'Events', icon: FaPeopleCarry },
-  { to: '/secretary/notifications', label: 'Notifications', icon: MdNotificationsActive },
-  { to: '/secretary/reports', label: 'Reports', icon: IoMdAnalytics },
+  { to: "/secretary/payments", label: "Payments", icon: MdPayments },
+  {
+    to: "/secretary/document-types",
+    label: "Document types",
+    icon: MdEditDocument,
+  },
+  { to: "/secretary/rental-items", label: "Rental items", icon: FaBoxes },
+  { to: "/secretary/rentals", label: "Rental bookings", icon: FaCalendarAlt },
+  { to: "/secretary/blotter", label: "Blotter", icon: FaAddressBook },
+  { to: "/secretary/events", label: "Events", icon: FaPeopleCarry },
+  {
+    to: "/secretary/notifications",
+    label: "Notifications",
+    icon: MdNotificationsActive,
+  },
+  { to: "/secretary/reports", label: "Reports", icon: IoMdAnalytics },
 ];
 
 export const RESIDENT_NAV = [
-  { to: "/resident", label: "My requests", end: true },
-  { to: "/resident/request", label: "Request a document" },
-  { to: "/resident/rentals", label: "My rentals" },
-  { to: "/resident/book-rental", label: "Book a facility" },
-  { to: "/resident/events", label: "Events" },
-  { to: "/resident/household", label: "My household" },
+  { to: "/resident", label: "My requests", end: true, icon: IoDocumentsSharp },
+  { to: "/resident/request", label: "Request a document", icon: MdEditDocument },
+  { to: "/resident/rentals", label: "My rentals", icon: FaBoxes },
+  {
+    to: "/resident/book-rental",
+    label: "Book a facility",
+    icon: FaCalendarAlt,
+  },
+  { to: "/resident/events", label: "Events", icon: FaPeopleCarry },
+  { to: "/resident/household", label: "My household", icon: BsHousesFill },
 ];
 
 export const TREASURER_NAV = [
-  { to: "/treasurer", label: "Payments", end: true },
-  { to: "/treasurer/reports", label: "Reports" },
+  { to: "/treasurer", label: "Payments", end: true, icon: MdPayments },
+  { to: "/treasurer/reports", label: "Reports", icon: IoMdAnalytics },
 ];
 
 export const STAFF_NAV = [
-  { to: "/staff", label: "Rental bookings", end: true },
-  { to: "/staff/households", label: "Households" },
-  { to: "/staff/events", label: "Events" },
+  { to: "/staff", label: "Rental bookings", end: true, icon: FaCalendarAlt },
+  { to: "/staff/households", label: "Households", icon: BsHousesFill },
+  { to: "/staff/events", label: "Events", icon: FaPeopleCarry },
 ];
 
 export const PUNONG_BARANGAY_NAV = [
-  { to: "/punong-barangay", label: "Rental bookings", end: true },
-  { to: "/punong-barangay/blotter", label: "Blotter" },
-  { to: "/punong-barangay/events", label: "Events" },
-  { to: "/punong-barangay/reports", label: "Reports" },
+  { to: "/punong-barangay", label: "Rental bookings", end: true, icon: FaCalendarAlt },
+  { to: "/punong-barangay/blotter", label: "Blotter", icon: FaAddressBook },
+  { to: "/punong-barangay/events", label: "Events", icon: FaPeopleCarry },
+  { to: "/punong-barangay/reports", label: "Reports", icon: IoMdAnalytics },
 ];
