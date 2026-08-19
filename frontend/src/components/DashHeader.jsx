@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
-import { ROLE_LABELS } from '../auth/roles';
+import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { ROLE_LABELS } from "../auth/roles";
+import { IoCloseSharp } from "react-icons/io5";
 
 // Shared dashboard header: title, section nav tabs, current user, logout.
 // nav = [{ to, label, end? }]
@@ -33,7 +34,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
   function handleLogout() {
     logout();
-    navigate('/login', { replace: true });
+    navigate("/login", { replace: true });
   }
 
   const close = () => setOpen(false);
@@ -69,7 +70,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
     if (!open) return undefined;
 
     const onKey = (event) => {
-      if (event.key === 'Escape') closeAndRefocus();
+      if (event.key === "Escape") closeAndRefocus();
     };
     // Resizing past the breakpoint while open would leave the drawer hidden
     // by CSS but the body still locked, so close it rather than strand the page.
@@ -77,18 +78,18 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
       if (window.innerWidth > DRAWER_BREAKPOINT) setOpen(false);
     };
 
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onResize);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
 
     // Captured, not assumed to be '': restoring a value the page did not have
     // would be its own bug.
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     drawerRef.current?.focus();
 
     return () => {
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onResize);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
@@ -97,38 +98,53 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
   // handler so tapping the CURRENT route still dismisses it — a route change
   // alone would not fire in that case.
   const navLinks = (onNavigate) =>
-    nav.map((item) => (
-      <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-        {item.label}
-      </NavLink>
-    ));
+    nav.map((item) => {
+      const Icon = item.icon;
+
+      return (
+        <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
+          <Icon size={20} />
+          {item.label}
+        </NavLink>
+      );
+    });
+
+  // look for the active nav link so we can use its icon hehe
+  const activeNavLink = nav.find((item) =>
+    item.end
+      ? location.pathname === item.to
+      : location.pathname.startsWith(item.to),
+  );
+
+  const ActiveNavIcon = activeNavLink?.icon;
 
   return (
     <>
       <header className="dash-header">
         {nav.length > 0 && (
-          <button
-            ref={toggleRef}
-            type="button"
-            className="dash-menu-btn"
-            aria-label={open ? 'Close menu' : 'Open menu'}
-            aria-expanded={open}
-            aria-controls="dash-drawer"
-            onClick={() => setOpen((wasOpen) => !wasOpen)}
-          >
-            <span className="dash-menu-icon" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </button>
-        )}
+          <section className="dash-header-section">
+            <button
+              ref={toggleRef}
+              type="button"
+              className="dash-menu-btn"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              aria-controls="dash-drawer"
+              onClick={() => setOpen((wasOpen) => !wasOpen)}
+            >
+              <span className="dash-menu-icon" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
 
-        <div>
-          <h1>{title}</h1>
-          <p className="muted">{subtitle}</p>
-          {nav.length > 0 && <nav className="dash-nav">{navLinks()}</nav>}
-        </div>
+            <div>
+              <h1>{title}</h1>
+              <p className="muted">{subtitle}</p>
+            </div>
+          </section>
+        )}
 
         <div className="dash-user">
           <span className="muted dash-username">@{user.username}</span>
@@ -154,17 +170,17 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               {/* The role, not the product name: below 900px the nav row and
                   the username are both hidden, so this is the only place left
                   that can say which account you are signed in as. */}
-              <span className="dash-drawer-title">
-                {ROLE_LABELS[user.role] || 'BrgyServe'}
-              </span>
               <button
                 type="button"
                 className="btn secondary dash-drawer-close"
                 onClick={closeAndRefocus}
                 aria-label="Close menu"
               >
-                Close
+                <IoCloseSharp size={20} />
               </button>
+              <span className="dash-drawer-title">
+                {ROLE_LABELS[user.role] || "BrgyServe"}
+              </span>
             </div>
 
             <nav className="dash-drawer-nav">{navLinks(close)}</nav>
