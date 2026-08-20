@@ -19,7 +19,7 @@ brgyserve/
 │   │   ├── api/               # config.js (API_BASE_URL — the one definition), client.js (fetch wrapper + Bearer token)
 │   │   ├── auth/              # AuthContext.jsx (login/logout, localStorage), roles.js (role → route)
 │   │   ├── components/        # ProtectedRoute.jsx, DashHeader.jsx (shared dashboard header + nav)
-│   │   ├── constants/         # nav tabs per role; status/charge/rental/report display metadata
+│   │   ├── constants/         # drawer nav items per role (label + react-icons icon); status/charge/rental/report display metadata
 │   │   ├── utils/             # exportPdf.js (client-side report PDF: html2canvas + jsPDF)
 │   │   └── pages/             # one .jsx per screen: auth, resident (requests/rentals), Secretary tabs, payments, bookings
 │   ├── scripts/               # test-report-render.cjs (npm run test:reports)
@@ -147,27 +147,49 @@ How work is done in this repository, as distinct from how code is written (see C
 
 **No CSS variables exist in this codebase and none are to be introduced.** Values are literal. This is a live constraint rather than a style preference — the `capped-column` coupling below would be a one-line binding if variables were available, and instead has to be held by a comment.
 
+**Spacing or layout wanted by ONE screen goes on a scoped selector, never on a shared utility class.** The worked example is `.muted`: it carries no margin (`index.css:318`), and the dashboard header's subtitle gap lives on `.dash-header .muted` (`index.css:248`) instead. `.muted` is on **163 elements across 24 files** — helper text, empty states, table captions, loading lines — so a margin added to the utility itself lands on all of them at once. That is exactly what happened in `07cc26d`, which set `margin: 5px 0 0 0` on `.muted` to space one header subtitle; `e83e56c` reverted it and scoped it. Specificity does the work — `.dash-header .muted` is (0,2,0) against (0,1,0), so it wins regardless of source order and the scoped rule can sit with the other `.dash-header` rules rather than being wedged in beside `.muted`.
+
 ### The protected desktop rules
 
 Six rules, **verified across 58 filter states in `fdaf80a` / `7eba429`**. They are the most fragile thing in the codebase: each was derived by sweeping candidate values against real content rather than chosen, and changing one breaks table layouts that no automated test covers. **Do not change them.**
 
-- **`.dash-main { max-width: 1180px }`** — the page column bound (`index.css:253`).
-- **`.pending-card:not(:has(.table-wrap)) { max-width: 720px }`** — the form cap, **with its `:has(.table-wrap)` exclusion**: a card containing a table must not be capped or the table is squeezed (`index.css:266`).
-- **`.row-actions { min-width: 200px }`** — the action-column floor, sized to keep two ordinary buttons on one line (`index.css:626`).
-- **`.data-table .col-billed { white-space: nowrap }`** — billed dates never break (`index.css:1213`).
-- **`.data-table .col-purpose .cell-clamp { max-width: 300px }`** (`index.css:1227`).
-- **`.data-table .col-resident .cell-clamp { max-width: 170px }`** (`index.css:1255`).
+Line numbers below are current as of `22d7f35`. They have drifted twice already (the merge of PR #2 and the fix pass after it), so **check the selector, not the line**, if one does not land where it says.
 
-**The payments column system was tuned against a 1130px container.** Unbounded, the username and PayMongo-id columns demanded 204.3 and 266.3 and pushed the "All charges" view to 1285.1; the 140 + 130 floors land the table at **1084.5, leaving about 45.5px of slack**. That margin is the entire budget, which is why these values cannot be nudged "a little". The comment at `index.css:1242` records the derivation — including that the sizing is for a **real 28-character PayMongo id**, not for the current demo rows, so removing the `gwtest_*` accounts does not make it unnecessary.
+- **`.dash-main { max-width: 1180px }`** — the page column bound (`index.css:273`).
+- **`.pending-card:not(:has(.table-wrap)) { max-width: 720px }`** — the form cap, **with its `:has(.table-wrap)` exclusion**: a card containing a table must not be capped or the table is squeezed (`index.css:287`).
+- **`.row-actions { min-width: 200px }`** — the action-column floor, sized to keep two ordinary buttons on one line (`index.css:651`).
+- **`.data-table .col-billed { white-space: nowrap }`** — billed dates never break (`index.css:1238`).
+- **`.data-table .col-purpose .cell-clamp { max-width: 300px }`** (`index.css:1252`).
+- **`.data-table .col-resident .cell-clamp { max-width: 170px }`** (`index.css:1280`).
 
-**The drawer breakpoint is declared twice, with nothing keeping the two in sync:** `@media (max-width: 900px)` in `index.css` and `const DRAWER_BREAKPOINT = 900` at `components/DashHeader.jsx:18`. Changing one alone desynchronises the CSS drawer from the JS that closes it on resize. They also do not measure the same thing — **a media query measures the layout viewport, while `window.innerWidth` includes the scrollbar** — so on Windows the two disagree by roughly 15px. The JS only closes an already-open drawer above the breakpoint, so today that mismatch is harmless, but it is a real band where the two disagree.
+**The payments column system was tuned against a 1130px container.** Unbounded, the username and PayMongo-id columns demanded 204.3 and 266.3 and pushed the "All charges" view to 1285.1; the 140 + 130 floors land the table at **1084.5, leaving about 45.5px of slack**. That margin is the entire budget, which is why these values cannot be nudged "a little". The comment at `index.css:1271` records the derivation — including that the sizing is for a **real 28-character PayMongo id**, not for the current demo rows, so removing the `gwtest_*` accounts does not make it unnecessary.
+
+**The rules are unchanged; the header above them is not.** They were swept across 58 filter states in `fdaf80a` / `7eba429` against a dashboard that still had a horizontal nav row, an `@media (max-width: 900px)` block and a 1.25rem `h1`. None of that survives (see the next section). All six were **re-verified present with their original values at `22d7f35`**, and the sweep's conclusions still hold, because the nav row lived in `.dash-header` while every one of these rules governs `.dash-main` or a table column inside it — different elements. `.dash-main` is still `max-width: 1180px` with `padding: 24px`, so the **1132px content box** the payments budget was derived against is untouched. What changed is the provenance: nobody has re-swept 58 filter states against the current header, so treat the numbers as verified and the screenshots behind them as historical.
+
+### Dashboard navigation — drawer only
+
+**The drawer is the ONLY navigation, at every width.** This is current behaviour as of `22d7f35`, not a phase:
+
+- **There is no horizontal tab row.** `07cc26d` deleted `<nav className="dash-nav">` from `DashHeader.jsx`. The only `dash-nav` string left in any `.jsx` file is a comment.
+- **There is no breakpoint anywhere.** `07cc26d` also unwrapped `@media (max-width: 900px)`, and `e83e56c` removed `DRAWER_BREAKPOINT` from `DashHeader.jsx`. `grep -rn '\b900\b' frontend/src` returns nothing. Every rule in the drawer block of `index.css` is unconditional — read a `display: none` there as "on every screen", not "on small ones".
+- **The hamburger is always visible** (`.dash-menu-btn { display: inline-flex }`, `index.css:2074`), overriding the reset above it.
+- **`.dash-username` is hidden in the header at every width** (`index.css:2070`). The signed-in account shows only in the drawer's footer, which is why the drawer head carries the role label as well.
+- **`.dash-header h1` renders at 1.05rem everywhere** — `index.css:2057` overrides the 1.25rem at `index.css:239`. Same specificity, later wins.
+- **There is deliberately NO resize handler.** One used to close the drawer above 900px, which was right while the tab row took over at that width — closing simply handed navigation back. With the drawer as the only navigation, that same close took away the user's only way to move around the app, mid-drag, with nothing replacing it. Removed in `e83e56c`. **Do not add one back.**
+- `.dash-nav { display: none }` (`index.css:2064`) is kept as a backstop so a re-added tab row cannot appear alongside the drawer by accident.
 
 ### Layout fixes, 16–17 Aug 2026
 
-- **`b5b070c` — nav row wrapping.** `flex-wrap: wrap` on `.dash-nav`, `white-space: nowrap` on `.dash-nav a`. The header was pushing the whole dashboard past the viewport between roughly 900 and 1300px.
+- **`b5b070c` — nav row wrapping. SUPERSEDED by `07cc26d`, kept as history.** `flex-wrap: wrap` on `.dash-nav`, `white-space: nowrap` on `.dash-nav a`. The header was pushing the whole dashboard past the viewport between roughly 900 and 1300px. **Both declarations are still in the file** (`index.css:557-562`) **and both are dead**: the element is no longer rendered, and `.dash-nav { display: none }` at `index.css:2064` would hide it anyway. Left in place rather than deleted because they are the backstop's companions — if a tab row is ever reinstated, this is the wrapping behaviour it needs, and the bug it fixed is real and would return. Do not cite this entry as evidence of current behaviour.
 - **`25fe20b` — duplicate React key in `ReportRenderers`.** `key={c.label ?? c}`. The `columns` array is **mixed** — plain strings for text columns, `num()`-wrapped objects for numeric ones — so every numeric column stringified to `[object Object]` and collided. **`npm run test:reports` structurally cannot catch this class of bug:** it renders through `react-dom/server`, and **React's duplicate-key validation runs only in the client reconciler**. Catching a key bug requires mounting.
 - **`7a606e9` — `capped-column` on Secretary Resident review.** Caps `.list-head`, `.alert` and `.empty` to 720px so they line up with the cards below them. **Coupled to the 720px form cap: the two values must stay equal**, and with no CSS variable to bind them the comment beside the rule is the only thing recording the link.
-- **`ab12fc7` — `white-space: nowrap` on `.dash-user .btn`.** "Log out" was breaking into "Log / out": the label contains a space, so its min-content is its widest word — "Log" — and flex shrinking took it there. `.row-actions .btn` already does the same thing for the same reason.
+- **`ab12fc7` — `white-space: nowrap` on `.dash-user .btn`.** "Log out" was breaking into "Log / out": the label contains a space, so its min-content is its widest word — "Log" — and flex shrinking took it there. `.row-actions .btn` already does the same thing for the same reason. **Still live** — this one survived the navigation rework unchanged.
+
+### Navigation rework, 19–20 Aug 2026
+
+- **`4596592` — merge of PR #2 (branch `francis`, 8 commits).** The desktop navigation change: `07cc26d` removed the `.dash-nav` tab row and unwrapped `@media (max-width: 900px)`, making the drawer the only navigation at every width; `43f94f7` + `c196ee8` added per-item icons via **`react-icons` ^5.7.0** (nav items now carry an `icon:` in `constants/nav.js`); `040c81c` + `51febb9` reordered the drawer head to `[X] Role`, packed left; `2c6d7c1` + `07cc26d` retuned `.dash-header` padding and added `.dash-header-section`. `21ab696` added **no dependencies** despite its subject — it is lockfile churn only. `44ed8e4` changed the dev API port to 3000, which `22d7f35` reverted.
+- **`e83e56c` — drawer stays open across the 900px width.** Removed the resize handler that closed it above 900px and the now-unreferenced `DRAWER_BREAKPOINT`; scoped the `.muted` margin to `.dash-header .muted`; rewrote the comments in `DashHeader.jsx` and `index.css` that still described a horizontal nav above 900px. Also removed `activeNavLink`/`ActiveNavIcon` (computed, never used) and made the nav icon render conditionally, so an item without an `icon` degrades to a plain label instead of throwing `Element type is invalid` and blanking all 19 dashboard screens — **neither of those two is mentioned in the commit message.**
+- **`22d7f35` — restored the dev API port to 5000.** `44ed8e4` had changed only the frontend side of a two-sided value: the backend listens on 5000 (`server.js:25`) and `vite.config.js`'s own error text names 5000. Dev-only either way — the build throws without `VITE_API_URL`, so no deployed bundle was ever affected.
 
 ## Document Requests
 
@@ -455,7 +477,7 @@ Also **the Wilfredo Ampolokio demo account**, which scores **97%** against the r
 - **RLS is now ENABLED on all 19 tables, with ZERO policies written.** With RLS on and no policy to permit anything, direct table access through the anon/publishable key is denied by default — previously that key could read *and* write 17 of the 19. The backend is unaffected because the **service role key bypasses RLS entirely**, and authorization was never in the database anyway: it lives in the Express layer (`authenticate` + `requireRole`). **Still outstanding:** per-role policies (`secretary`, `punong_barangay`, `treasurer`, `staff`, `resident`), needed only if anything is ever given direct database access. Note they cannot key off `auth.uid()` — auth here is custom JWT, not Supabase Auth, so it is permanently NULL.
 - Rotate the passwords for the test `secretary1` and `JK` accounts — they were shared in plaintext during development and the system is now reachable from the internet.
 - **PayMongo stays in SANDBOX — going live is explicitly NOT a to-do.** Putting real money through a student capstone demo is out of scope, so the `sk_test_`/`pk_test_` keys stay as they are. (For reference, if that ever changed it would mean swapping in live keys, re-registering the webhook against the deployed origin for a new `secret_key`, and confirming the signature check compares against `li=` rather than `te=` — the code already selects on live-vs-test but has only ever run against test keys.)
-- Remove the `gwtest_*` resident accounts and their document requests/charges created while testing the gateway end to end. **Check Protected Data first** — that cleanup must not touch the matching evaluation pairs or the Ampolokio demo account, and it does not make the payments column floors unnecessary (`index.css:1242`).
+- Remove the `gwtest_*` resident accounts and their document requests/charges created while testing the gateway end to end. **Check Protected Data first** — that cleanup must not touch the matching evaluation pairs or the Ampolokio demo account, and it does not make the payments column floors unnecessary (`index.css:1271`).
 
 ## Decided Against — do not revisit
 
@@ -467,3 +489,4 @@ Each of these was investigated, measured, and deliberately left as it is. They a
 - **Semaphore SMS.** The minimum top-up is **1,000 credits at PHP 560** for a demo that sends roughly 20 messages. **`SMS_MODE` stays `SIMULATED`.** The provider seam described under Notifications is real and still one function body; the decision is that it will not be exercised, not that it does not exist.
 - **`pg_trgm` living in the `public` schema**, which Supabase's advisor flags. Moving it **drops the GIN trigram indexes Stage 1 blocking depends on** — the whole performance argument of the two-stage design. The warning stands; the extension stays.
 - **The search input collapsing at 500px on `.list-head` screens.** Pre-existing, unrelated to any recent change, and nothing is demoed at 500px.
+- **The 1420px fixed desktop sidebar** that was to replace the horizontal nav row. **The drawer is the permanent desktop navigation instead, at every width** (see Frontend Layout). One nav implementation rather than two, no breakpoint to keep in sync between CSS and JS — the pair that used to disagree by ~15px on Windows is simply gone — and no new element competing for horizontal space, so `.dash-main`'s 1180px cap and the 720px form cap are untouched and the payments column budget keeps its full 1132px content box. A sidebar would have reopened all three.
