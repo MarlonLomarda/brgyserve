@@ -241,6 +241,14 @@ a {
   font-size: 1.25rem;
 }
 
+/* Separates the subtitle from the h1 above it. SCOPED ON PURPOSE: .muted is a
+   shared utility on 163 elements across the app, so this spacing is set here
+   rather than on .muted itself, where it would land on every helper line,
+   empty state and table caption in the system. */
+.dash-header .muted {
+  margin: 5px 0 0 0;
+}
+
 .dash-user {
   display: flex;
   align-items: center;
@@ -303,10 +311,14 @@ a {
   max-width: 720px;
 }
 
+/* A SHARED UTILITY: 163 usages across 24 files — helper text, empty states,
+   table captions, loading lines. Margin stays 0 here. Spacing that only one
+   screen wants belongs on a scoped selector (see .dash-header .muted), because
+   anything added to this rule lands on all 163 at once. */
 .muted {
   color: #64748b;
   font-size: 0.9rem;
-  margin: 5px 0 0 0;
+  margin: 0;
 }
 
 .btn {
@@ -2011,18 +2023,27 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* ==========================================================================
-   Mobile navigation drawer (<= 900px)
+   Navigation drawer — THE ONLY NAVIGATION, AT EVERY WIDTH
 
-   The dashboard nav is a horizontal row (.dash-nav). The Secretary's is 12
-   items, which cannot sit in a row on a phone — and nav icons would make each
-   item wider still, so this has to land before any of that.
+   This started life as a mobile-only drawer inside @media (max-width: 900px),
+   sitting behind a horizontal tab row (.dash-nav) that took over above it.
+   07cc26d removed the tab row from the markup and unwrapped this whole block
+   from its media query, so the hamburger and drawer are now what a 1920px
+   desktop gets as well as a phone. There is no breakpoint left in this file.
 
-   NOTHING ABOVE 900px CHANGES. Every new class below defaults to
-   display:none outside any media query, and the only existing selector this
-   block touches is .dash-nav, exclusively inside max-width:900px. The
-   verified desktop rules — .dash-main's 1180px, the 720px form cap and its
-   :has(.table-wrap) exclusion, .row-actions min-width, .col-billed nowrap and
-   the Purpose/Resident/Declared cell bounds — are not referenced here at all.
+   Everything from here to the end of the drawer section is therefore
+   UNCONDITIONAL. Read it that way: a `display: none` below hides an element
+   on every screen, not just small ones.
+
+   The .dash-menu-btn / .dash-backdrop / .dash-drawer reset immediately below
+   is now redundant — each is re-declared visible further down — but it is left
+   in place because the drawer and backdrop are only mounted while open, and a
+   stray default of `none` is the safer thing to leave lying around.
+
+   The verified desktop rules are still untouched by this block: .dash-main's
+   1180px, the 720px form cap and its :has(.table-wrap) exclusion,
+   .row-actions min-width, .col-billed nowrap and the Purpose/Resident/Declared
+   cell bounds are not referenced here at all.
    ========================================================================== */
 
 .dash-menu-btn,
@@ -2031,17 +2052,21 @@ button.link-button:hover:not(:disabled) {
   display: none;
 }
 
-/* this is where the old media query with max-width 900px started */
+/* Overrides the 1.25rem set with the other .dash-header rules. Applies at all
+   widths now, so this IS the dashboard title size everywhere. */
 .dash-header h1 {
   font-size: 1.05rem;
 }
 
-/* The tab row is what the drawer replaces. */
+/* The horizontal tab row this drawer replaced. The element is no longer
+   rendered by DashHeader.jsx at all; the rule is kept as a backstop so a
+   re-added .dash-nav cannot appear alongside the drawer by accident. */
 .dash-nav {
   display: none;
 }
 
-/* Shown in the drawer's footer instead, where there is room for it. */
+/* Hidden in the header at every width; shown in the drawer's footer instead,
+   where there is room for it. */
 .dash-username {
   display: none;
 }
@@ -2171,7 +2196,8 @@ button.link-button:hover:not(:disabled) {
   padding: 14px 16px;
   border-top: 1px solid #e2e8f0;
 }
-/* this is where the old media query with max-width 900px ended -francis */
+
+/* — end of the drawer section. Everything above applies at every width. — */
 
 @keyframes dash-drawer-in {
   from {

@@ -4,20 +4,18 @@ import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../auth/roles";
 import { IoCloseSharp } from "react-icons/io5";
 
-// Shared dashboard header: title, section nav tabs, current user, logout.
-// nav = [{ to, label, end? }]
+// Shared dashboard header: title, current user, logout, and the slide-in
+// navigation drawer.
+// nav = [{ to, label, icon?, end? }]
 //
-// Below 900px the horizontal tab row is replaced by a slide-in drawer. The
-// Secretary nav is 12 items and simply cannot sit in a row on a phone.
+// THE DRAWER IS THE ONLY NAVIGATION, AT EVERY WIDTH. There is no horizontal
+// tab row any more: the .dash-nav element was removed in 07cc26d and the
+// @media (max-width: 900px) block that used to hide it went with it, so the
+// hamburger, the backdrop and the drawer are what a 1920px desktop gets as
+// well as a phone. Nothing in this component is width-conditional — there is
+// no breakpoint constant here because there is no breakpoint to mirror.
 //
-// The desktop markup is deliberately untouched: the drawer, its backdrop and
-// the hamburger are ADDITIONAL elements that default to display:none, and
-// .dash-nav is hidden only inside the max-width:900px media query. Nothing
-// above the breakpoint changes.
-//
-// Both navs map over the SAME `nav` prop — the item definitions live in
-// constants/nav.js and are not forked here.
-const DRAWER_BREAKPOINT = 900;
+// The item definitions live in constants/nav.js and are not forked here.
 
 // The product name alone, matching the static <title> in index.html. That is
 // what the tab reads before React mounts, and on the pages that do not render
@@ -66,20 +64,21 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
   }, [location.pathname]);
 
   // Escape, body-scroll lock and focus, all only while the drawer is open.
+  //
+  // There is deliberately NO resize handler. One used to close the drawer above
+  // 900px, and that was right while the horizontal tab row took over at that
+  // width — closing the drawer simply handed navigation back to the row. With
+  // the drawer as the ONLY navigation, the same close would take away the
+  // user's only way to move around the app, mid-drag and with nothing
+  // replacing it. A window crossing any width now changes nothing here.
   useEffect(() => {
     if (!open) return undefined;
 
     const onKey = (event) => {
       if (event.key === "Escape") closeAndRefocus();
     };
-    // Resizing past the breakpoint while open would leave the drawer hidden
-    // by CSS but the body still locked, so close it rather than strand the page.
-    const onResize = () => {
-      if (window.innerWidth > DRAWER_BREAKPOINT) setOpen(false);
-    };
 
     document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", onResize);
 
     // Captured, not assumed to be '': restoring a value the page did not have
     // would be its own bug.
@@ -89,34 +88,30 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
     return () => {
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", onResize);
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
 
-  // One definition, rendered in both places. The drawer passes a close
-  // handler so tapping the CURRENT route still dismisses it — a route change
-  // alone would not fire in that case.
+  // Rendered in one place now — the drawer — but kept as a function because it
+  // takes the close handler: tapping the CURRENT route must still dismiss the
+  // drawer, and a route change alone would not fire in that case.
   const navLinks = (onNavigate) =>
     nav.map((item) => {
+      // Rendered CONDITIONALLY. Every item in constants/nav.js carries an icon
+      // today, but an unconditional <Icon /> on an item without one throws
+      // "Element type is invalid" for undefined — and because this header is on
+      // all 19 dashboard screens, that one missing property would blank the
+      // whole app rather than one row. A missing icon now degrades to the plain
+      // label instead.
       const Icon = item.icon;
 
       return (
         <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-          <Icon size={20} />
+          {Icon && <Icon size={20} />}
           {item.label}
         </NavLink>
       );
     });
-
-  // look for the active nav link so we can use its icon hehe
-  const activeNavLink = nav.find((item) =>
-    item.end
-      ? location.pathname === item.to
-      : location.pathname.startsWith(item.to),
-  );
-
-  const ActiveNavIcon = activeNavLink?.icon;
 
   return (
     <>
@@ -167,9 +162,6 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
             tabIndex={-1}
           >
             <div className="dash-drawer-head">
-              {/* The role, not the product name: below 900px the nav row and
-                  the username are both hidden, so this is the only place left
-                  that can say which account you are signed in as. */}
               <button
                 type="button"
                 className="btn secondary dash-drawer-close"
@@ -178,6 +170,10 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               >
                 <IoCloseSharp size={20} />
               </button>
+              {/* The role, not the product name. .dash-username hides the
+                  header's @username at every width now, so this and the
+                  drawer's own footer are the only things left on screen that
+                  say which account you are signed in as. */}
               <span className="dash-drawer-title">
                 {ROLE_LABELS[user.role] || "BrgyServe"}
               </span>
