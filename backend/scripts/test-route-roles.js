@@ -194,13 +194,26 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
     check(`  staff row omits ${col}`, !(col in staffRow));
   }
   check('  staff row omits date_registered', !('date_registered' in staffRow));
-  check('  staff row account is null (lookup skipped)', staffRow.account === null, JSON.stringify(staffRow.account));
+
+  // WITHHELD MEANS ABSENT. `account: null` used to be the one field that was
+  // withheld by being nulled rather than removed, which made a withheld value
+  // indistinguishable from a genuine absence — the client cannot tell, so it
+  // rendered a column of em dashes asserting nobody had registered.
+  check('  staff row does NOT contain the key "account"', !('account' in staffRow),
+    Object.keys(staffRow).join(', '));
+  check('  PB row DOES contain the key "account"', 'account' in pbRow,
+    Object.keys(pbRow).join(', '));
+
   check('  PB row DOES include contact_number', 'contact_number' in pbRow);
   check('  PB row DOES include date_registered', 'date_registered' in pbRow);
-  check('  staff row keeps the 8 permitted columns',
-    ['resident_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'birthdate', 'address', 'is_archived']
-      .every((c) => c in staffRow),
-    Object.keys(staffRow).join(', '));
+
+  // EXACTLY the eight, not merely "at least" — an extra key is what this whole
+  // section exists to catch.
+  const PERMITTED_8 = ['resident_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'birthdate', 'address', 'is_archived'];
+  const staffRowKeys = Object.keys(staffRow);
+  check('  staff row has EXACTLY the 8 permitted columns',
+    staffRowKeys.length === 8 && PERMITTED_8.every((c) => staffRowKeys.includes(c)),
+    `${staffRowKeys.length} key(s): ${staffRowKeys.join(', ')}`);
 
   // Whole-payload sweep, same reasoning as the document-request list below:
   // catches a contact detail arriving through an embed nothing here names.
@@ -227,9 +240,18 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
     for (const col of RESTRICTED) {
       check(`  staff detail omits ${col}`, !(col in (staffDetail.body.record || {})));
     }
-    check('  staff detail linked_accounts is empty', Array.isArray(staffDetail.body.linked_accounts) && staffDetail.body.linked_accounts.length === 0);
-    check('  response SHAPE is stable (linked_accounts present for both)',
-      Array.isArray(staffDetail.body.linked_accounts) && Array.isArray(pbDetail.body.linked_accounts));
+    // WITHHELD MEANS ABSENT. These two replace an earlier pair that asserted
+    // linked_accounts was an empty array for staff and that the shape stayed
+    // "stable" across roles. That stability was the bug: [] is the positive
+    // claim "this resident has no account", indistinguishable from a real
+    // empty result, and it rendered as "has not registered online" on records
+    // that have one. A varying shape a client can detect beats a constant one
+    // that lies.
+    check('  staff detail does NOT contain the key "linked_accounts"',
+      !('linked_accounts' in staffDetail.body), Object.keys(staffDetail.body).join(', '));
+    check('  PB detail DOES contain the key "linked_accounts"',
+      'linked_accounts' in pbDetail.body, Object.keys(pbDetail.body).join(', '));
+    check('  PB linked_accounts is a real array', Array.isArray(pbDetail.body.linked_accounts));
     for (const col of RESTRICTED) {
       check(`  PB detail INCLUDES ${col}`, col in (pbDetail.body.record || {}));
     }

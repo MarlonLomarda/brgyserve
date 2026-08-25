@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
-import { SECRETARY_NAV } from '../constants/nav';
 import { statusMeta, chargeMeta, chargeOf, formatDate, STATUS_META } from '../constants/requestStatus';
 
+// Document request processing. Shared by three roles: the Secretary passes
+// canManage and gets the four workflow actions; Staff and the Punong Barangay
+// view only, with every write control ABSENT (the server keeps all four
+// transitions on requireRole('secretary') regardless).
+//
+// The SERVER also narrows what comes back — a Staff response drops the
+// resident's birthplace, sex, civil_status, contact_number and date_registered
+// and the requester's email. This component renders whatever it was handed and
+// never checks the viewer's role to decide: `key in object` tests the DATA.
+
 const FILTERS = ['pending', 'all', ...Object.keys(STATUS_META).filter((s) => s !== 'pending')];
+
+// Resident rows that may be absent depending on the viewer's projection.
+const OPTIONAL_RESIDENT_FIELDS = [
+  { key: 'birthdate', label: 'Birthdate' },
+  { key: 'birthplace', label: 'Birthplace' },
+  { key: 'sex', label: 'Sex' },
+  { key: 'civil_status', label: 'Civil status' },
+  { key: 'contact_number', label: 'Contact number' },
+];
 
 function personName(p) {
   if (!p) return null;
@@ -17,7 +35,7 @@ function StatusBadge({ status }) {
   return <span className={`badge ${meta.className}`}>{meta.label}</span>;
 }
 
-function RequestDetail({ id, onBack }) {
+function RequestDetail({ id, canManage, onBack }) {
   const { authFetch } = useAuth();
   const [request, setRequest] = useState(null); // null = loading
   const [error, setError] = useState('');
@@ -73,7 +91,8 @@ function RequestDetail({ id, onBack }) {
           <h3>Request #{id}</h3>
           {r && (
             <p className="muted">
-              @{r.requester?.username} · {r.requester?.email}
+              @{r.requester?.username}
+              {r.requester?.email && ` · ${r.requester.email}`}
             </p>
           )}
         </div>
@@ -155,6 +174,12 @@ function RequestDetail({ id, onBack }) {
 
           <div className="suggest-section">
             <h4>Linked resident record (verify the requester)</h4>
+            {/* Rows below are rendered only when the response carried them. Sex
+                and civil status were one combined row before; they are separate
+                now so either can be dropped on its own. (The comment sits here,
+                not inside the ternary branch — a JSX comment beside an element
+                in a parenthesised branch makes two sibling expressions with no
+                wrapper and the build fails.) */}
             {!resident ? (
               <p className="muted">No resident record linked.</p>
             ) : (
@@ -166,28 +191,18 @@ function RequestDetail({ id, onBack }) {
                     <span className="muted">(record #{resident.resident_id})</span>
                   </dd>
                 </div>
-                <div>
-                  <dt>Birthdate</dt>
-                  <dd>{resident.birthdate || '—'}</dd>
-                </div>
-                <div>
-                  <dt>Birthplace</dt>
-                  <dd>{resident.birthplace || '—'}</dd>
-                </div>
-                <div>
-                  <dt>Sex / Civil status</dt>
-                  <dd>
-                    {resident.sex || '—'} / {resident.civil_status || '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Contact number</dt>
-                  <dd>{resident.contact_number || '—'}</dd>
-                </div>
-                <div>
-                  <dt>Registered</dt>
-                  <dd>{formatDate(resident.date_registered)}</dd>
-                </div>
+                {OPTIONAL_RESIDENT_FIELDS.filter((f) => f.key in resident).map((f) => (
+                  <div key={f.key}>
+                    <dt>{f.label}</dt>
+                    <dd>{resident[f.key] || '—'}</dd>
+                  </div>
+                ))}
+                {'date_registered' in resident && (
+                  <div>
+                    <dt>Registered</dt>
+                    <dd>{formatDate(resident.date_registered)}</dd>
+                  </div>
+                )}
                 <div className="span-2">
                   <dt>Address</dt>
                   <dd>{resident.address || '—'}</dd>
@@ -197,7 +212,8 @@ function RequestDetail({ id, onBack }) {
           </div>
 
           {/* Stage 4c release flow: approved + paid → ready_for_release → claimed */}
-          {r.status === 'approved' &&
+          {canManage &&
+            r.status === 'approved' &&
             (charge?.status === 'PAID' ? (
               <div className="actions">
                 <button className="btn" disabled={busy} onClick={() => decide('ready-for-release')}>
@@ -210,7 +226,7 @@ function RequestDetail({ id, onBack }) {
               </p>
             ))}
 
-          {r.status === 'ready_for_release' && (
+          {canManage && r.status === 'ready_for_release' && (
             <div className="actions">
               <button
                 className="btn"
@@ -226,7 +242,7 @@ function RequestDetail({ id, onBack }) {
             </div>
           )}
 
-          {r.status === 'pending' && !rejecting && (
+          {canManage && r.status === 'pending' && !rejecting && (
             <div className="actions">
               <button className="btn" disabled={busy} onClick={() => decide('approve')}>
                 {busy ? 'Working…' : 'Approve request'}
@@ -241,7 +257,7 @@ function RequestDetail({ id, onBack }) {
             </div>
           )}
 
-          {r.status === 'pending' && rejecting && (
+          {canManage && r.status === 'pending' && rejecting && (
             <form
               className="reject-form"
               onSubmit={(e) => {
@@ -286,7 +302,7 @@ function RequestDetail({ id, onBack }) {
   );
 }
 
-export default function SecretaryRequestsPage() {
+export default function SecretaryRequestsPage({ title, nav, canManage = false }) {
   const { authFetch } = useAuth();
   const [filter, setFilter] = useState('pending');
   const [requests, setRequests] = useState(null); // null = loading
@@ -312,15 +328,16 @@ export default function SecretaryRequestsPage() {
   return (
     <div className="dash">
       <DashHeader
-        title="Document requests"
-        subtitle="Process document requests"
-        nav={SECRETARY_NAV}
+        title={title}
+        subtitle={canManage ? 'Process document requests' : 'Document requests across residents'}
+        nav={nav}
       />
 
       <main className="dash-main">
         {selectedId ? (
           <RequestDetail
             id={selectedId}
+            canManage={canManage}
             onBack={(refresh) => {
               setSelectedId(null);
               if (refresh) load();
@@ -390,7 +407,7 @@ export default function SecretaryRequestsPage() {
                             className="btn secondary"
                             onClick={() => setSelectedId(r.request_id)}
                           >
-                            Review
+                            {canManage ? 'Review' : 'View'}
                           </button>
                         </td>
                       </tr>

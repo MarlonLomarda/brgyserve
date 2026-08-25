@@ -1,13 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import DashHeader from '../components/DashHeader';
-import { SECRETARY_NAV } from '../constants/nav';
 import { formatDate } from '../constants/requestStatus';
 import { formatSchedule } from '../constants/rentals';
 
 // Resident Records Management: browse + search the master list (stage 1),
 // add with the fuzzy duplicate check + edit (stage 2), archive/unarchive with
 // the linked-account cascade (stage 3).
+//
+// Shared by three roles, like RentalBookingsPage/DisputesPage/HouseholdsPage:
+// the Secretary passes canManage, Staff and the Punong Barangay do not. Every
+// write control is ABSENT rather than disabled, and the server refuses the
+// writes regardless (all five write routes are requireRole('secretary')).
+//
+// SEPARATELY from canManage, the SERVER decides which COLUMNS come back: a
+// Staff response omits birthplace, sex, civil_status, religion,
+// educational_attainment, contact_number and date_registered, and carries
+// account: null / linked_accounts: []. This component therefore renders what
+// it was given and never asks who the viewer is — `key in record` is a test of
+// the DATA, not of the role. Adding a role check here would put a second
+// opinion next to the server's, free to disagree with it.
+
+// Detail rows that may or may not be present depending on the viewer's
+// projection. Order matches the old fixed markup.
+const OPTIONAL_DETAIL_FIELDS = [
+  { key: 'birthdate', label: 'Birthdate' },
+  { key: 'birthplace', label: 'Birthplace' },
+  { key: 'sex', label: 'Sex' },
+  { key: 'civil_status', label: 'Civil status' },
+  { key: 'religion', label: 'Religion' },
+  { key: 'educational_attainment', label: 'Educational attainment' },
+  { key: 'contact_number', label: 'Contact number' },
+];
 
 const ARCHIVED_FILTERS = [
   { value: 'false', label: 'Active records' },
@@ -254,7 +278,7 @@ function RecordForm({ record, onDone }) {
   );
 }
 
-function RecordDetail({ id, onBack, onEdit, onChanged }) {
+function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
   const { authFetch } = useAuth();
   const [data, setData] = useState(null); // { record, linked_accounts }
   const [error, setError] = useState('');
@@ -276,6 +300,11 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
   }, [load]);
 
   const r = data?.record;
+  // Presence, not contents: a response that OMITS linked_accounts was not told
+  // about them, which is a different fact from an empty array meaning "this
+  // resident has no account". Only the latter may claim "not registered
+  // online" on screen; the former renders no section at all.
+  const showAccounts = !!data && 'linked_accounts' in data;
   const accounts = data?.linked_accounts || [];
 
   async function act(action, confirm) {
@@ -309,10 +338,15 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
             {r ? fullName(r) : `Resident record #${id}`}{' '}
             {r?.is_archived && <span className="badge gray">Archived</span>}
           </h3>
-          {r && <p className="muted">Record #{r.resident_id} · registered {formatDate(r.date_registered)}</p>}
+          {r && (
+            <p className="muted">
+              Record #{r.resident_id}
+              {'date_registered' in r && ` · registered ${formatDate(r.date_registered)}`}
+            </p>
+          )}
         </div>
         <div className="head-actions">
-          {r && !r.is_archived && (
+          {canManage && r && !r.is_archived && (
             <>
               <button className="btn secondary" disabled={busy} onClick={() => onEdit(r)}>
                 Edit
@@ -322,7 +356,7 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
               </button>
             </>
           )}
-          {r?.is_archived && (
+          {canManage && r?.is_archived && (
             <button className="btn" disabled={busy} onClick={() => act('unarchive')}>
               {busy ? 'Working…' : 'Unarchive'}
             </button>
@@ -344,7 +378,7 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
         </div>
       )}
 
-      {warning && (
+      {canManage && warning && (
         <div className="suggest-section">
           <h4>Archiving this record affects:</h4>
           <ul className="suggestions">
@@ -395,35 +429,17 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
         !error && <p className="muted">Loading record…</p>
       ) : (
         <>
+          {/* Only the fields the response actually carried. A row whose key is
+              absent is not rendered at all, rather than rendering an em dash
+              that would read as "we checked and there is nothing on file" —
+              which is a different statement from "you were not sent this". */}
           <dl className="info-grid">
-            <div>
-              <dt>Birthdate</dt>
-              <dd>{r.birthdate || '—'}</dd>
-            </div>
-            <div>
-              <dt>Birthplace</dt>
-              <dd>{r.birthplace || '—'}</dd>
-            </div>
-            <div>
-              <dt>Sex</dt>
-              <dd>{r.sex || '—'}</dd>
-            </div>
-            <div>
-              <dt>Civil status</dt>
-              <dd>{r.civil_status || '—'}</dd>
-            </div>
-            <div>
-              <dt>Religion</dt>
-              <dd>{r.religion || '—'}</dd>
-            </div>
-            <div>
-              <dt>Educational attainment</dt>
-              <dd>{r.educational_attainment || '—'}</dd>
-            </div>
-            <div>
-              <dt>Contact number</dt>
-              <dd>{r.contact_number || '—'}</dd>
-            </div>
+            {OPTIONAL_DETAIL_FIELDS.filter((f) => f.key in r).map((f) => (
+              <div key={f.key}>
+                <dt>{f.label}</dt>
+                <dd>{r[f.key] || '—'}</dd>
+              </div>
+            ))}
             <div>
               <dt>Archived</dt>
               <dd>{r.is_archived ? 'Yes' : 'No'}</dd>
@@ -434,32 +450,38 @@ function RecordDetail({ id, onBack, onEdit, onChanged }) {
             </div>
           </dl>
 
-          <div className="suggest-section">
-            <h4>Linked user account</h4>
-            {accounts.length === 0 ? (
-              <p className="muted">
-                Not linked to any account — this resident has not registered online.
-              </p>
-            ) : (
-              accounts.map((a) => (
-                <p key={a.user_id}>
-                  <strong>@{a.username}</strong> <span className="muted">· {a.email}</span>{' '}
-                  {a.is_active ? (
-                    <span className="badge">Active</span>
-                  ) : (
-                    <span className="badge gray">Inactive</span>
-                  )}
+          {/* The whole section, heading included, is withheld when the response
+              did not carry linked_accounts — rendering the heading alone would
+              still imply we looked and found nothing. */}
+          {showAccounts && (
+            <div className="suggest-section">
+              <h4>Linked user account</h4>
+              {accounts.length === 0 ? (
+                <p className="muted">
+                  Not linked to any account — this resident has not registered online.
                 </p>
-              ))
-            )}
-          </div>
+              ) : (
+                accounts.map((a) => (
+                  <p key={a.user_id}>
+                    <strong>@{a.username}</strong>
+                    {a.email && <span className="muted"> · {a.email}</span>}{' '}
+                    {a.is_active ? (
+                      <span className="badge">Active</span>
+                    ) : (
+                      <span className="badge gray">Inactive</span>
+                    )}
+                  </p>
+                ))
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-export default function ResidentRecordsPage() {
+export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState(''); // the applied search
@@ -502,16 +524,22 @@ export default function ResidentRecordsPage() {
 
   const records = data?.records;
 
+  // Column visibility follows the DATA, not the role: a withheld field is
+  // simply not a key on a narrowed row, so the column is dropped rather than
+  // filled with em dashes that would read as "nobody has a number on file" /
+  // "nobody has registered online" — a positive claim the payload cannot
+  // support. `account` only became detectable this way once the server stopped
+  // sending it as null; before that a withheld value and a genuine absence
+  // were indistinguishable here.
+  const showContact = !!records?.some((r) => 'contact_number' in r);
+  const showAccount = !!records?.some((r) => 'account' in r);
+
   return (
     <div className="dash">
-      <DashHeader
-        title="Resident records"
-        subtitle="Resident master list"
-        nav={SECRETARY_NAV}
-      />
+      <DashHeader title={title} subtitle="Resident master list" nav={nav} />
 
       <main className="dash-main">
-        {formTarget ? (
+        {canManage && formTarget ? (
           <RecordForm
             record={formTarget === 'new' ? null : formTarget}
             onDone={(result, record) => {
@@ -533,6 +561,7 @@ export default function ResidentRecordsPage() {
         ) : selectedId ? (
           <RecordDetail
             id={selectedId}
+            canManage={canManage}
             onBack={() => setSelectedId(null)}
             onEdit={(record) => setFormTarget(record)}
             onChanged={(message) => {
@@ -579,9 +608,11 @@ export default function ResidentRecordsPage() {
                     </option>
                   ))}
                 </select>
-                <button className="btn" type="button" onClick={() => setFormTarget('new')}>
-                  Add resident
-                </button>
+                {canManage && (
+                  <button className="btn" type="button" onClick={() => setFormTarget('new')}>
+                    Add resident
+                  </button>
+                )}
               </form>
             </div>
 
@@ -604,8 +635,8 @@ export default function ResidentRecordsPage() {
                         <th>Name</th>
                         <th className="col-date">Birthdate</th>
                         <th>Address</th>
-                        <th>Contact</th>
-                        <th>Account</th>
+                        {showContact && <th>Contact</th>}
+                        {showAccount && <th>Account</th>}
                         <th></th>
                       </tr>
                     </thead>
@@ -622,14 +653,16 @@ export default function ResidentRecordsPage() {
                           </td>
                           <td className="muted col-date">{r.birthdate || '—'}</td>
                           <td className="muted">{r.address}</td>
-                          <td className="muted">{r.contact_number || '—'}</td>
-                          <td>
-                            {r.account ? (
-                              <span className="badge">@{r.account.username}</span>
-                            ) : (
-                              <span className="muted">—</span>
-                            )}
-                          </td>
+                          {showContact && <td className="muted">{r.contact_number || '—'}</td>}
+                          {showAccount && (
+                            <td>
+                              {r.account ? (
+                                <span className="badge">@{r.account.username}</span>
+                              ) : (
+                                <span className="muted">—</span>
+                              )}
+                            </td>
+                          )}
                           <td className="row-actions">
                             <button
                               className="btn secondary"

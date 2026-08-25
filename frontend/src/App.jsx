@@ -70,7 +70,26 @@ export default function App() {
         path="/secretary/residents"
         element={
           <ProtectedRoute role="secretary">
-            <ResidentRecordsPage />
+            <ResidentRecordsPage title="Resident records" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Staff and the Punong Barangay read the master list; no canManage, so
+          every write control is absent. The server narrows what Staff receive
+          (no contact details, no linked account) — see routes/residentRecords.js. */}
+      <Route
+        path="/staff/residents"
+        element={
+          <ProtectedRoute role="staff">
+            <ResidentRecordsPage title="Resident records" nav={STAFF_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/residents"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <ResidentRecordsPage title="Resident records" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />
@@ -104,7 +123,25 @@ export default function App() {
         path="/secretary/requests"
         element={
           <ProtectedRoute role="secretary">
-            <SecretaryRequestsPage />
+            <SecretaryRequestsPage title="Document requests" nav={SECRETARY_NAV} canManage />
+          </ProtectedRoute>
+        }
+      />
+      {/* View-only for both: approve/reject/ready-for-release/claim stay
+          Secretary-only server-side as well. */}
+      <Route
+        path="/staff/requests"
+        element={
+          <ProtectedRoute role="staff">
+            <SecretaryRequestsPage title="Document requests" nav={STAFF_NAV} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/requests"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <SecretaryRequestsPage title="Document requests" nav={PUNONG_BARANGAY_NAV} />
           </ProtectedRoute>
         }
       />

@@ -60,12 +60,24 @@ export const TREASURER_NAV = [
 export const STAFF_NAV = [
   { to: "/staff", label: "Rental bookings", end: true, icon: FaCalendarAlt },
   { to: "/staff/households", label: "Households", icon: BsHousesFill },
+  { to: "/staff/residents", label: "Resident records", icon: IoMdListBox },
+  { to: "/staff/requests", label: "Document requests", icon: IoDocumentsSharp },
   { to: "/staff/events", label: "Events", icon: FaPeopleCarry },
 ];
 
 export const PUNONG_BARANGAY_NAV = [
   { to: "/punong-barangay", label: "Rental bookings", end: true, icon: FaCalendarAlt },
   { to: "/punong-barangay/blotter", label: "Blotter", icon: FaAddressBook },
+  {
+    to: "/punong-barangay/residents",
+    label: "Resident records",
+    icon: IoMdListBox,
+  },
+  {
+    to: "/punong-barangay/requests",
+    label: "Document requests",
+    icon: IoDocumentsSharp,
+  },
   { to: "/punong-barangay/events", label: "Events", icon: FaPeopleCarry },
   { to: "/punong-barangay/reports", label: "Reports", icon: IoMdAnalytics },
 ];

@@ -187,9 +187,8 @@ router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   // whole page via profiles.resident_id.
   //
   // SKIPPED ENTIRELY FOR STAFF: the linked account is one of the things Staff
-  // may not see, so the lookup is not merely stripped from the response — it
-  // is never run. Every row then carries account: null, which the list already
-  // renders as "no account badge".
+  // may not see, so the lookup is not merely stripped from the response — it is
+  // never run.
   let accountsByResident = {};
   if (data.length > 0 && !isStaff(req)) {
     const { data: links, error: linkError } = await supabase
@@ -204,8 +203,19 @@ router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
     );
   }
 
+  // WITHHELD MEANS ABSENT, NOT NULL. Every other field Staff may not see is
+  // simply missing from the row, and the client drops a column when
+  // `key in row` is false. `account: null` was the one exception, and it read
+  // as a POSITIVE claim — an Account column of em dashes says "none of these
+  // residents has registered online", which is false and unfalsifiable from
+  // the payload: a genuine absence and a withheld value looked identical.
+  // Omitting the key makes withholding detectable, so the column disappears
+  // instead of lying. Note this is only the response SHAPE — the lookup above
+  // is still skipped, so nothing extra is read either.
+  const withAccount = (r) => (isStaff(req) ? r : { ...r, account: accountsByResident[r.resident_id] || null });
+
   res.json({
-    records: data.map((r) => ({ ...r, account: accountsByResident[r.resident_id] || null })),
+    records: data.map(withAccount),
     total: count,
     page,
     per_page: perPage,
@@ -236,11 +246,20 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   }
 
   // The linked account is withheld from Staff, so the lookup is skipped rather
-  // than filtered — same reasoning as the list route above. linked_accounts
-  // stays present as an empty array so the response SHAPE does not vary by
-  // role, only its contents: a client that maps over it needs no role check.
+  // than filtered, and the KEY IS OMITTED — not returned as an empty array.
+  //
+  // An earlier version returned [] to keep the response shape constant across
+  // roles. That was wrong for exactly the reason `account: null` was wrong on
+  // the list route: [] is not "nothing to say", it is the positive claim THIS
+  // RESIDENT HAS NO ACCOUNT, and the client cannot tell it apart from a real
+  // empty result. It rendered as "Not linked to any account — this resident
+  // has not registered online" on records that demonstrably have one.
+  //
+  // A stable shape that asserts something false is worse than a shape that
+  // varies honestly. Absence is the only representation of "withheld" that a
+  // client can detect, and `'linked_accounts' in data` is how it does so.
   if (isStaff(req)) {
-    return res.json({ record, linked_accounts: [] });
+    return res.json({ record });
   }
 
   // profiles.resident_id has no UNIQUE constraint, so tolerate (and surface)
