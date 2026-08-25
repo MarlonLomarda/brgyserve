@@ -8,13 +8,57 @@ const { DEFAULT_PER_PAGE, MAX_PER_PAGE, sanitizeTerm } = require('../utils/listQ
 
 const router = express.Router();
 
-// The resident master list is Secretary-only end to end: Staff, the Punong
-// Barangay, and residents must not browse it (residents see their own record
-// via GET /api/residents/me).
-router.use(authenticate, requireRole('secretary'));
+// PER-ROUTE GUARDS, NOT A ROUTER-LEVEL ONE. This file used to open with
+// `router.use(authenticate, requireRole('secretary'))`, which made every route
+// Secretary-only by default. The Punong Barangay and Staff now READ the master
+// list, so the gate moved onto each route individually — the same migration
+// Households made at its stage 2.
+//
+// THE COST OF THAT MOVE: this file no longer fails closed. A route added below
+// without an explicit requireRole(...) is readable by ANY authenticated user,
+// residents included. `npm run roles:test` asserts every route in this file
+// declares a guard, so that mistake fails a test instead of shipping.
+//
+// Residents are excluded from all of it and keep GET /api/residents/me.
+router.use(authenticate);
+
+// Roles that may READ. Writes stay requireRole('secretary') and must never be
+// widened to this list.
+const VIEW_ROLES = ['secretary', 'punong_barangay', 'staff'];
+
+// ---------------------------------------------------------------------------
+// DATA MINIMIZATION — the first role-varying response body in this codebase.
+//
+// Every other role check in the system is all-or-nothing: requireRole() either
+// admits you to a handler or 403s you, and no route reads req.user.role to
+// shape what it returns. This one does, deliberately.
+//
+// WHY: the use-case diagram gives Staff read access to resident records, but a
+// resident's religion, birthplace, sex, civil status, contact number and
+// linked account are not needed to do any Staff task. Staff process rental
+// returns, events and attendance; none of that requires knowing someone's
+// religion. The Punong Barangay is an approving authority and sees the full
+// record, as the Secretary does.
+//
+// WHY ON THE SERVER: hiding these columns in the frontend would still ship
+// them to the browser, where anyone can read them out of the network tab. The
+// only narrowing that means anything happens before the response is written.
+//
+// The eight columns below are the WHOLE of what Staff may see of a resident.
+// This constant is the single source of truth for that rule; the document
+// requests module imports the same list conceptually (see STAFF_DETAIL_FIELDS
+// there) because the resident record reaches Staff through that module too.
+// ---------------------------------------------------------------------------
+const STAFF_FIELDS =
+  'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, is_archived';
 
 const LIST_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, contact_number, date_registered, is_archived';
+
+// Staff get STAFF_FIELDS; everyone admitted by VIEW_ROLES gets the full
+// projection. Non-staff behaviour is byte-identical to before this change.
+const isStaff = (req) => req.user?.role === 'staff';
+const listFieldsFor = (req) => (isStaff(req) ? STAFF_FIELDS : LIST_FIELDS);
 
 // Column limits straight from the schema doc (Table 4).
 const REQUIRED_FIELDS = ['first_name', 'last_name', 'address']; // address is NOT NULL in the DB
@@ -94,7 +138,7 @@ const asSuggestion = (m) => ({
 // Dela Cruz, and "purok 2" works as an address/purok filter). Each row
 // carries the linked account (via profiles.resident_id) so the list can show
 // who is registered.
-router.get('/', async (req, res) => {
+router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPageRaw = Number(req.query.per_page) || DEFAULT_PER_PAGE;
   const perPage = Math.min(MAX_PER_PAGE, Math.max(1, perPageRaw));
@@ -107,7 +151,7 @@ router.get('/', async (req, res) => {
 
   let query = supabase
     .from('resident_records')
-    .select(LIST_FIELDS, { count: 'exact' })
+    .select(listFieldsFor(req), { count: 'exact' })
     .order('last_name', { ascending: true })
     .order('first_name', { ascending: true })
     .range(from, from + perPage - 1);
@@ -141,8 +185,13 @@ router.get('/', async (req, res) => {
 
   // Which of these records are linked to a user account? One lookup for the
   // whole page via profiles.resident_id.
+  //
+  // SKIPPED ENTIRELY FOR STAFF: the linked account is one of the things Staff
+  // may not see, so the lookup is not merely stripped from the response — it
+  // is never run. Every row then carries account: null, which the list already
+  // renders as "no account badge".
   let accountsByResident = {};
-  if (data.length > 0) {
+  if (data.length > 0 && !isStaff(req)) {
     const { data: links, error: linkError } = await supabase
       .from('profiles')
       .select('resident_id, users ( username, is_active )')
@@ -166,15 +215,17 @@ router.get('/', async (req, res) => {
 
 // GET /api/resident-records/:id — one record's full detail, including any
 // linked user account(s). Archived records stay viewable here (history).
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid resident record id' });
   }
 
+  // Staff get the eight-column projection; everyone else keeps '*', so the
+  // Secretary and Punong Barangay responses are exactly what they were.
   const { data: record, error } = await supabase
     .from('resident_records')
-    .select('*')
+    .select(isStaff(req) ? STAFF_FIELDS : '*')
     .eq('resident_id', id)
     .maybeSingle();
   if (error) {
@@ -182,6 +233,14 @@ router.get('/:id', async (req, res) => {
   }
   if (!record) {
     return res.status(404).json({ error: 'Resident record not found' });
+  }
+
+  // The linked account is withheld from Staff, so the lookup is skipped rather
+  // than filtered — same reasoning as the list route above. linked_accounts
+  // stays present as an empty array so the response SHAPE does not vary by
+  // role, only its contents: a client that maps over it needs no role check.
+  if (isStaff(req)) {
+    return res.json({ record, linked_accounts: [] });
   }
 
   // profiles.resident_id has no UNIQUE constraint, so tolerate (and surface)
@@ -217,7 +276,10 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/resident-records/check-duplicates — ranked candidates for a
 // candidate name. Creates nothing; safe to call as often as the UI likes.
-router.post('/check-duplicates', async (req, res) => {
+// Secretary-only despite creating nothing: it is a matching-engine probe that
+// exists to support adding a record, and it returns ranked candidates for
+// arbitrary names. No read-only viewer has a use for it.
+router.post('/check-duplicates', requireRole('secretary'), async (req, res) => {
   const firstName = String(req.body?.first_name ?? '').trim();
   const lastName = String(req.body?.last_name ?? '').trim();
   if (!firstName || !lastName) {
@@ -234,7 +296,7 @@ router.post('/check-duplicates', async (req, res) => {
 // final authority: if there are matches and the client did not send
 // confirm_duplicate, the record is NOT created and the ranked matches come
 // back with a 409 for the Secretary to judge.
-router.post('/', async (req, res) => {
+router.post('/', requireRole('secretary'), async (req, res) => {
   const { error: validationError, value } = validateBody(req.body);
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -264,7 +326,7 @@ router.post('/', async (req, res) => {
 // correcting an existing person's details is not creating a new identity, and
 // re-running it here would flag the record against itself. (Reusing
 // findMatches on edit would be a one-line change if that is ever wanted.)
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid resident record id' });
@@ -403,7 +465,7 @@ function dependencySummary({ accounts, documents, rentals }) {
 }
 
 // POST /api/resident-records/:id/archive
-router.post('/:id/archive', async (req, res) => {
+router.post('/:id/archive', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid resident record id' });
@@ -478,7 +540,7 @@ router.post('/:id/archive', async (req, res) => {
 // POST /api/resident-records/:id/unarchive — symmetric restore: the record
 // comes back AND its linked account(s) are reactivated, so a mistaken archive
 // is undone in one step.
-router.post('/:id/unarchive', async (req, res) => {
+router.post('/:id/unarchive', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid resident record id' });

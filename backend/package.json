@@ -13,7 +13,8 @@
     "tunnel": "node scripts/tunnel.js",
     "tunnel:sync": "node scripts/paymongoWebhook.js",
     "scan:test": "node scripts/test-attendance-scan.js",
-    "notif:test": "node scripts/test-notifications.js"
+    "notif:test": "node scripts/test-notifications.js",
+    "roles:test": "node scripts/test-route-roles.js"
   },
   "keywords": [
     "barangay",

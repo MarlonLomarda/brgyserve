@@ -10,6 +10,12 @@ const router = express.Router();
 
 router.use(authenticate);
 
+// Roles that may READ the cross-resident views (GET / and GET /:id). The
+// Punong Barangay and Staff are view-only here: the four write routes below
+// (approve, reject, ready-for-release, claim) stay requireRole('secretary')
+// and must never be widened to this list.
+const VIEW_ROLES = ['secretary', 'punong_barangay', 'staff'];
+
 const REQUEST_FIELDS =
   'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
@@ -23,6 +29,25 @@ const SECRETARY_LIST_FIELDS = `
   charges ( charge_id, amount, status, declared_method, declared_reference )
 `;
 
+// The list, narrowed for Staff. Same rule and same reason as
+// STAFF_DETAIL_FIELDS below: email is a contact detail, and withholding it on
+// the detail screen while the LIST hands it over would withhold nothing.
+//
+// The resident embed here needs no narrowing — it is only
+// (resident_id, first_name, middle_name, last_name, suffix), all five within
+// the permitted eight. It is restated in full rather than shared with the
+// Secretary constant so that adding a restricted column to one projection
+// cannot silently widen the other.
+const STAFF_LIST_FIELDS = `
+  request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
+  document_types ( document_type_id, name, fee ),
+  resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
+  requester:users!document_requests_requested_by_user_id_fkey ( user_id, username ),
+  charges ( charge_id, amount, status, declared_method, declared_reference )
+`;
+
+const listFieldsFor = (role) => (role === 'staff' ? STAFF_LIST_FIELDS : SECRETARY_LIST_FIELDS);
+
 const SECRETARY_DETAIL_FIELDS = `
   request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
   document_types ( document_type_id, name, fee ),
@@ -33,6 +58,36 @@ const SECRETARY_DETAIL_FIELDS = `
   charges ( charge_id, amount, status, created_at, declared_method, declared_reference, declared_at,
     payments ( payment_id, amount, payment_method, reference_no, created_at ) )
 `;
+
+// The SAME detail view with TWO embeds narrowed for Staff — see the
+// data-minimization note in routes/residentRecords.js, which is the canonical
+// statement of which eight columns Staff may see. This is the second place the
+// rule is applied; the resident record reaches Staff through BOTH modules, so
+// narrowing only the master list would leave the identical columns readable
+// here.
+//
+// THE REQUESTER EMBED DROPS `email` FOR STAFF, and that is not an afterthought:
+// email is a contact detail, exactly like contact_number, which the decision
+// already withholds. HTTP verification of the first cut found the hole — a
+// Staff caller could not read a resident's contact_number on the resident
+// screen, but could read that same person's email address here, one click
+// away. Narrowing one screen and not the other withholds nothing.
+//
+// user_id and username STAY. A document request is defined by who filed it and
+// Staff processing the queue must see that; username identifies the filer
+// without being a way to contact them. The Punong Barangay keeps the full
+// requester, as they keep the full resident record.
+const STAFF_DETAIL_FIELDS = `
+  request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
+  document_types ( document_type_id, name, fee ),
+  resident_records ( resident_id, first_name, middle_name, last_name, suffix, birthdate, address ),
+  requester:users!document_requests_requested_by_user_id_fkey ( user_id, username ),
+  processed_by:users!document_requests_processed_by_user_id_fkey ( user_id, username ),
+  charges ( charge_id, amount, status, created_at, declared_method, declared_reference, declared_at,
+    payments ( payment_id, amount, payment_method, reference_no, created_at ) )
+`;
+
+const detailFieldsFor = (role) => (role === 'staff' ? STAFF_DETAIL_FIELDS : SECRETARY_DETAIL_FIELDS);
 
 // POST /api/document-requests — the logged-in resident submits a request.
 // resident_id comes from the account's profiles.resident_id link, so only
@@ -264,11 +319,14 @@ router.post('/mine/:id/pay', async (req, res) => {
 
 // GET /api/document-requests?status=pending — all requests across residents,
 // optionally filtered by status ('all' or omitted = everything), newest first.
-router.get('/', requireRole('secretary'), async (req, res) => {
+//
+// The resident embed here is within the permitted eight for Staff, but the
+// REQUESTER embed is not — see STAFF_LIST_FIELDS.
+router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   const status = req.query.status;
   let query = supabase
     .from('document_requests')
-    .select(SECRETARY_LIST_FIELDS)
+    .select(listFieldsFor(req.user.role))
     .order('requested_at', { ascending: false });
 
   if (status && status !== 'all') {
@@ -289,7 +347,7 @@ router.get('/', requireRole('secretary'), async (req, res) => {
 
 // GET /api/document-requests/:id — full detail including the requester's
 // linked resident record, so the Secretary can verify the requester.
-router.get('/:id', requireRole('secretary'), async (req, res) => {
+router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid request id' });
@@ -297,7 +355,7 @@ router.get('/:id', requireRole('secretary'), async (req, res) => {
 
   const { data, error } = await supabase
     .from('document_requests')
-    .select(SECRETARY_DETAIL_FIELDS)
+    .select(detailFieldsFor(req.user.role))
     .eq('request_id', id)
     .maybeSingle();
   if (error) {
