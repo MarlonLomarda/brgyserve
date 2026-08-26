@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../auth/roles";
 import { IoCloseSharp } from "react-icons/io5";
+import { FaRegUserCircle } from "react-icons/fa";
 
 // Shared dashboard header: title, current user, logout, and the slide-in
 // navigation drawer.
@@ -20,9 +21,9 @@ import { IoCloseSharp } from "react-icons/io5";
 // The product name alone, matching the static <title> in index.html. That is
 // what the tab reads before React mounts, and on the pages that do not render
 // this header (landing, login, register, change-password).
-const BASE_TITLE = 'BrgyServe';
+const BASE_TITLE = "BrgyServe";
 
-export default function DashHeader({ title, subtitle, nav = [] }) {
+export default function DashHeader({ title, subtitle, nav }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -107,7 +108,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
       return (
         <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-          {Icon && <Icon size={20} />}
+          {Icon && <Icon size={18} />}
           {item.label}
         </NavLink>
       );
@@ -134,9 +135,20 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               </span>
             </button>
 
-            <div>
-              <h1>{title}</h1>
-              <p className="muted">{subtitle}</p>
+            <div id="header-label-container">
+              <div id="header-role-label">
+                <FaRegUserCircle size={18} color="#64748b" />
+                <h1 className="header-label">
+                  {ROLE_LABELS[user.role] || "BrgyServe"}
+                </h1>
+              </div>
+
+              <span id="header-label-divider">/</span>
+
+              <div>
+                <h1 className="header-label">{title}</h1>
+                <p className="header-label">{subtitle}</p>
+              </div>
             </div>
           </section>
         )}
@@ -170,13 +182,9 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               >
                 <IoCloseSharp size={20} />
               </button>
-              {/* The role, not the product name. .dash-username hides the
-                  header's @username at every width now, so this and the
-                  drawer's own footer are the only things left on screen that
-                  say which account you are signed in as. */}
-              <span className="dash-drawer-title">
+              {/* <span className="dash-drawer-title">
                 {ROLE_LABELS[user.role] || "BrgyServe"}
-              </span>
+              </span> */}
             </div>
 
             <nav className="dash-drawer-nav">{navLinks(close)}</nav>
