@@ -98,11 +98,28 @@ export default function App() {
         }
       />
       <Route
+        path="/staff/requests"
+        element={
+          <ProtectedRoute role="staff">
+            <PageLayout
+              title={"Document requests"}
+              subtitle={"Barangay's records of document requests"}
+              nav={STAFF_NAV}
+            >
+              <SecretaryRequestsPage
+                title="Document requests"
+                nav={STAFF_NAV}
+              />
+            </PageLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/secretary/households"
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Household records"}
+              title={"Households"}
               subtitle={"Manage the barangay's household records masterlist"}
               nav={SECRETARY_NAV}
             >
@@ -268,7 +285,9 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               title={"Reports"}
-              subtitle={"System generated reports based on the barangay's operations"}
+              subtitle={
+                "System generated reports based on the barangay's operations"
+              }
               nav={SECRETARY_NAV}
             >
               <ReportsPage title="Reports" nav={SECRETARY_NAV} />
@@ -282,7 +301,9 @@ export default function App() {
           <ProtectedRoute role="treasurer">
             <PageLayout
               title={"Reports"}
-              subtitle={"System generated reports based on the barangay's operations"}
+              subtitle={
+                "System generated reports based on the barangay's operations"
+              }
               nav={TREASURER_NAV}
             >
               <ReportsPage title="Reports" nav={TREASURER_NAV} />
@@ -296,7 +317,9 @@ export default function App() {
           <ProtectedRoute role="punong_barangay">
             <PageLayout
               title={"Reports"}
-              subtitle={"System generated reports based on the barangay's operations"}
+              subtitle={
+                "System generated reports based on the barangay's operations"
+              }
               nav={PUNONG_BARANGAY_NAV}
             >
               <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
@@ -351,8 +374,8 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Request a document"}
+              subtitle={"Create a document request for your needs"}
               nav={RESIDENT_NAV}
             >
               <RequestDocumentPage />
@@ -379,8 +402,8 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Book a facility"}
+              subtitle={"Rental booking for facilities and items from the barangay"}
               nav={RESIDENT_NAV}
             >
               <BookRentalPage />
@@ -395,8 +418,8 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"My household"}
+              subtitle={"Resident household QR code for quick attendance recording"}
               nav={RESIDENT_NAV}
             >
               <MyHouseholdPage />
@@ -429,8 +452,8 @@ export default function App() {
           element={
             <ProtectedRoute role={role}>
               <PageLayout
-                title={"Resident records"}
-                subtitle={"Manage the barangay's resident records masterlist"}
+                title={"Page title"}
+                subtitle={"Page subtitle"}
                 nav={ROLE_NAV[role]}
               >
                 {ROLE_PAGES[role] || <RoleLandingPage />}
