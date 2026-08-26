@@ -102,8 +102,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Household records"}
+              subtitle={"Manage the barangay's household records masterlist"}
               nav={SECRETARY_NAV}
             >
               <HouseholdsPage
@@ -121,10 +121,9 @@ export default function App() {
         path="/staff/households"
         element={
           <ProtectedRoute role="staff">
-            <HouseholdsPage title="Households" nav={STAFF_NAV} />
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Household records"}
+              subtitle={"Barangay's household records masterlist"}
               nav={STAFF_NAV}
             >
               <HouseholdsPage title="Households" nav={STAFF_NAV} />
@@ -137,8 +136,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Document types"}
+              subtitle={"Manage document types for residents to make a request"}
               nav={SECRETARY_NAV}
             >
               <DocumentTypesPage />
@@ -151,8 +150,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Document requests"}
+              subtitle={"Manage document requests from the barangay residents"}
               nav={SECRETARY_NAV}
             >
               <SecretaryRequestsPage />
@@ -165,8 +164,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Payments"}
+              subtitle={"Financial records of the barangay"}
               nav={SECRETARY_NAV}
             >
               <PaymentsPage title="Payments" nav={SECRETARY_NAV} />
@@ -179,8 +178,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Rental items"}
+              subtitle={"Manage rental items being offered by the barangay"}
               nav={SECRETARY_NAV}
             >
               <RentalItemsPage />
@@ -193,8 +192,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Rental bookings"}
+              subtitle={"Manage the barangay's rental bookings"}
               nav={SECRETARY_NAV}
             >
               {" "}
@@ -212,8 +211,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Blotter"}
+              subtitle={"Manage the barangay's blotter list"}
               nav={SECRETARY_NAV}
             >
               <DisputesPage title="Blotter" nav={SECRETARY_NAV} canManage />
@@ -226,8 +225,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Events"}
+              subtitle={"Manage the barangay's events and activities"}
               nav={SECRETARY_NAV}
             >
               <EventsPage title="Events" nav={SECRETARY_NAV} />
@@ -240,8 +239,8 @@ export default function App() {
         element={
           <ProtectedRoute role="staff">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Events"}
+              subtitle={"Barangay's list of events and activities"}
               nav={STAFF_NAV}
             >
               <EventsPage title="Events" nav={STAFF_NAV} />
@@ -254,8 +253,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Notifications"}
+              subtitle={"System notifications and alerts"}
               nav={SECRETARY_NAV}
             >
               <NotificationsPage />
@@ -268,8 +267,8 @@ export default function App() {
         element={
           <ProtectedRoute role="secretary">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Reports"}
+              subtitle={"System generated reports based on the barangay's operations"}
               nav={SECRETARY_NAV}
             >
               <ReportsPage title="Reports" nav={SECRETARY_NAV} />
@@ -282,8 +281,8 @@ export default function App() {
         element={
           <ProtectedRoute role="treasurer">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Reports"}
+              subtitle={"System generated reports based on the barangay's operations"}
               nav={TREASURER_NAV}
             >
               <ReportsPage title="Reports" nav={TREASURER_NAV} />
@@ -296,8 +295,8 @@ export default function App() {
         element={
           <ProtectedRoute role="punong_barangay">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Reports"}
+              subtitle={"System generated reports based on the barangay's operations"}
               nav={PUNONG_BARANGAY_NAV}
             >
               <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
@@ -310,8 +309,8 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Events"}
+              subtitle={"Barangay's list of events and activities"}
               nav={RESIDENT_NAV}
             >
               <PublicEventsPage title="Events" nav={RESIDENT_NAV} />
@@ -324,8 +323,8 @@ export default function App() {
         element={
           <ProtectedRoute role="punong_barangay">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Events"}
+              subtitle={"Barangay's list of events and activities"}
               nav={PUNONG_BARANGAY_NAV}
             >
               <PublicEventsPage title="Events" nav={PUNONG_BARANGAY_NAV} />
@@ -338,8 +337,8 @@ export default function App() {
         element={
           <ProtectedRoute role="punong_barangay">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"Blotter"}
+              subtitle={"Barangay's recorded blotters"}
               nav={PUNONG_BARANGAY_NAV}
             >
               <DisputesPage title="Blotter" nav={PUNONG_BARANGAY_NAV} />
@@ -366,8 +365,8 @@ export default function App() {
         element={
           <ProtectedRoute role="resident">
             <PageLayout
-              title={"Resident records"}
-              subtitle={"Manage the barangay's resident records masterlist"}
+              title={"My rentals"}
+              subtitle={"Manage your rentals from the barangay"}
               nav={RESIDENT_NAV}
             >
               <MyRentalsPage />
