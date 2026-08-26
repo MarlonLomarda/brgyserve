@@ -204,7 +204,7 @@ export default function PaymentsPage({ title, nav }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Record and verify payments" nav={nav} />
+
 
       <main className="dash-main">
         {selected ? (

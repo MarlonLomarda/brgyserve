@@ -93,11 +93,7 @@ export default function MyRequestsPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="My requests"
-        subtitle="Track your barangay document requests"
-        nav={RESIDENT_NAV}
-      />
+     
 
       <main className="dash-main">
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}

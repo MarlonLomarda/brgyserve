@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { formatDate } from '../constants/requestStatus';
-import { EVENT_TYPE_LABELS, eventStatusMeta, formatWindow } from '../constants/events';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import { formatDate } from "../constants/requestStatus";
+import {
+  EVENT_TYPE_LABELS,
+  eventStatusMeta,
+  formatWindow,
+} from "../constants/events";
 
 // Events & Activities stage 2: the READ-ONLY view for residents and the
 // Punong Barangay. Reuses the stage 1 display constants and the same API
@@ -10,14 +14,14 @@ import { EVENT_TYPE_LABELS, eventStatusMeta, formatWindow } from '../constants/e
 // deliberately no create / edit / archive actions anywhere on this screen.
 
 const VIEWS = [
-  { value: 'active', label: 'Current & upcoming' },
-  { value: 'past', label: 'Past activities' },
+  { value: "active", label: "Current & upcoming" },
+  { value: "past", label: "Past activities" },
 ];
 
 function EventDetail({ id, onBack }) {
   const { authFetch } = useAuth();
   const [event, setEvent] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -42,8 +46,10 @@ function EventDetail({ id, onBack }) {
       <div className="pending-head">
         <div>
           <h3>
-            {e ? e.title : `Event #${id}`}{' '}
-            {e && <span className={`badge ${meta.className}`}>{meta.label}</span>}
+            {e ? e.title : `Event #${id}`}{" "}
+            {e && (
+              <span className={`badge ${meta.className}`}>{meta.label}</span>
+            )}
           </h3>
           {e && (
             <p className="muted">
@@ -76,11 +82,11 @@ function EventDetail({ id, onBack }) {
           </div>
           <div className="span-2">
             <dt>Location</dt>
-            <dd>{e.location || '—'}</dd>
+            <dd>{e.location || "—"}</dd>
           </div>
           <div className="span-2">
             <dt>Details</dt>
-            <dd>{e.description || '—'}</dd>
+            <dd>{e.description || "—"}</dd>
           </div>
         </dl>
       )}
@@ -90,20 +96,20 @@ function EventDetail({ id, onBack }) {
 
 export default function PublicEventsPage({ title, nav }) {
   const { authFetch } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [view, setView] = useState('active');
-  const [type, setType] = useState('all');
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState("active");
+  const [type, setType] = useState("all");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ page: String(page), view, type });
-      if (search) params.set('search', search);
+      if (search) params.set("search", search);
       setData(await authFetch(`/events/public?${params}`));
     } catch (err) {
       setError(err.message);
@@ -122,8 +128,8 @@ export default function PublicEventsPage({ title, nav }) {
   }
 
   const events = data?.events;
-  const announcements = (events || []).filter((e) => e.type === 'announcement');
-  const activities = (events || []).filter((e) => e.type === 'activity');
+  const announcements = (events || []).filter((e) => e.type === "announcement");
+  const activities = (events || []).filter((e) => e.type === "activity");
 
   const section = (heading, rows, emptyText) => (
     <>
@@ -155,12 +161,17 @@ export default function PublicEventsPage({ title, nav }) {
                       <strong>{e.title}</strong>
                     </td>
                     <td>{formatWindow(e.start_datetime, e.end_datetime)}</td>
-                    <td className="muted">{e.location || '—'}</td>
+                    <td className="muted">{e.location || "—"}</td>
                     <td>
-                      <span className={`badge ${meta.className}`}>{meta.label}</span>
+                      <span className={`badge ${meta.className}`}>
+                        {meta.label}
+                      </span>
                     </td>
                     <td className="row-actions">
-                      <button className="btn secondary" onClick={() => setSelectedId(e.event_id)}>
+                      <button
+                        className="btn secondary"
+                        onClick={() => setSelectedId(e.event_id)}
+                      >
                         View
                       </button>
                     </td>
@@ -176,8 +187,6 @@ export default function PublicEventsPage({ title, nav }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Barangay events and announcements" nav={nav} />
-
       <main className="dash-main">
         {selectedId ? (
           <EventDetail id={selectedId} onBack={() => setSelectedId(null)} />
@@ -188,8 +197,8 @@ export default function PublicEventsPage({ title, nav }) {
             <div className="list-head">
               <h2>
                 {data === null
-                  ? 'Events'
-                  : `${data.total} ${view === 'past' ? 'past activity' : 'event'}${data.total === 1 ? '' : view === 'past' ? ' records' : 's'}`}
+                  ? "Events"
+                  : `${data.total} ${view === "past" ? "past activity" : "event"}${data.total === 1 ? "" : view === "past" ? " records" : "s"}`}
               </h2>
               <form className="head-actions" onSubmit={handleSearch}>
                 <input
@@ -206,8 +215,8 @@ export default function PublicEventsPage({ title, nav }) {
                     className="btn secondary"
                     type="button"
                     onClick={() => {
-                      setSearch('');
-                      setSearchInput('');
+                      setSearch("");
+                      setSearchInput("");
                       setPage(1);
                     }}
                   >
@@ -246,23 +255,27 @@ export default function PublicEventsPage({ title, nav }) {
             ) : events.length === 0 ? (
               <div className="empty">
                 <p>
-                  {view === 'past'
-                    ? 'No past activities'
-                    : 'Nothing posted by the barangay right now'}
-                  {search ? ` matching "${search}"` : ''}.
+                  {view === "past"
+                    ? "No past activities"
+                    : "Nothing posted by the barangay right now"}
+                  {search ? ` matching "${search}"` : ""}.
                 </p>
               </div>
             ) : (
               <>
-                {type !== 'announcement' &&
+                {type !== "announcement" &&
                   section(
-                    view === 'past' ? 'Past activities' : 'Activities',
+                    view === "past" ? "Past activities" : "Activities",
                     activities,
-                    'No activities to show.'
+                    "No activities to show.",
                   )}
-                {type !== 'activity' &&
-                  view !== 'past' &&
-                  section('Announcements', announcements, 'No announcements to show.')}
+                {type !== "activity" &&
+                  view !== "past" &&
+                  section(
+                    "Announcements",
+                    announcements,
+                    "No announcements to show.",
+                  )}
 
                 {data.total_pages > 1 && (
                   <div className="list-head">

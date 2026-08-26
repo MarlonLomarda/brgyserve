@@ -949,7 +949,7 @@ export default function EventsPage({ title, nav }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Barangay events and announcements" nav={nav} />
+
 
       <main className="dash-main">
         {attendanceId ? (

@@ -327,11 +327,7 @@ export default function SecretaryRequestsPage({ title, nav, canManage = false })
 
   return (
     <div className="dash">
-      <DashHeader
-        title={title}
-        subtitle={canManage ? 'Process document requests' : 'Document requests across residents'}
-        nav={nav}
-      />
+      
 
       <main className="dash-main">
         {selectedId ? (

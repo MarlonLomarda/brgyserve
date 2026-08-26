@@ -785,7 +785,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Household records" nav={nav} />
+
 
       <main className="dash-main">
         {selectedId ? (

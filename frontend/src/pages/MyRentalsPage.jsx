@@ -72,11 +72,7 @@ export default function MyRentalsPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="My rentals"
-        subtitle="Your facility and item bookings"
-        nav={RESIDENT_NAV}
-      />
+      
 
       <main className="dash-main">
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}

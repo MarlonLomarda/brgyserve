@@ -279,7 +279,6 @@ export default function RentalBookingsPage({ title, nav, canManage = false, canR
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle={subtitle} nav={nav} />
 
       <main className="dash-main">
         {editing ? (

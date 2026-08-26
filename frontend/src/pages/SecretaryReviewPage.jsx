@@ -335,11 +335,6 @@ export default function SecretaryReviewPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="Resident review"
-        subtitle="Manage accounts and review pending residents"
-        nav={SECRETARY_NAV}
-      />
 
       <main className="dash-main capped-column">
         <CreateAccountSection />

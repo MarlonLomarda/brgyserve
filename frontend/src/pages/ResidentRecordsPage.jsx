@@ -535,8 +535,7 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const showAccount = !!records?.some((r) => 'account' in r);
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle="Resident master list" nav={nav} />
+    <div className="dash">  
 
       <main className="dash-main">
         {canManage && formTarget ? (

@@ -49,11 +49,7 @@ export default function MyHouseholdPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="My household"
-        subtitle="Your household QR code"
-        nav={RESIDENT_NAV}
-      />
+    
 
       <main className="dash-main">
         <div className="pending-card">

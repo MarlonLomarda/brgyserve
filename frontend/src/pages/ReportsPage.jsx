@@ -109,7 +109,7 @@ export default function ReportsPage({ title, nav }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Reports and statistics" nav={nav} />
+
 
       <main className="dash-main">
         {available.length === 0 ? (

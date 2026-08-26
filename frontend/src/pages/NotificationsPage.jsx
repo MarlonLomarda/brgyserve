@@ -54,11 +54,7 @@ export default function NotificationsPage() {
       {/* The card used to repeat the page name in an <h3> with this same
           description under it. The h1 carries the name now, so the card head
           is gone and the description has moved up to the subtitle. */}
-      <DashHeader
-        title="Notifications"
-        subtitle="Every message the system generated, who it was for, and what happened to it."
-        nav={SECRETARY_NAV}
-      />
+    
       <main className="dash-main">
         <div className="pending-card">
           {/* Stated plainly and permanently — not a dismissible notice. */}

@@ -394,7 +394,7 @@ export default function DisputesPage({ title, nav, canManage = false }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Barangay blotter / dispute records" nav={nav} />
+
 
       <main className="dash-main">
         {formTarget ? (

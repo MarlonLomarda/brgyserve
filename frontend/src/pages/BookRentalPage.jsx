@@ -75,11 +75,7 @@ export default function BookRentalPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="Book a facility"
-        subtitle="Book a barangay facility or item"
-        nav={RESIDENT_NAV}
-      />
+      
 
       <main className="dash-main">
         {booked ? (

@@ -87,11 +87,7 @@ export default function DocumentTypesPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="Document types"
-        subtitle="Manage the document types residents can request"
-        nav={SECRETARY_NAV}
-      />
+    
 
       <main className="dash-main">
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}

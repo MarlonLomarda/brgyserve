@@ -114,11 +114,7 @@ export default function PaymentResultPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="GCash payment"
-        subtitle="Your online payment for a barangay charge"
-        nav={RESIDENT_NAV}
-      />
+     
 
       <main className="dash-main">
         {error && <div className="alert error">{error}</div>}

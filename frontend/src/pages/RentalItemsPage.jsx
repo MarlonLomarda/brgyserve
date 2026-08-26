@@ -101,11 +101,7 @@ export default function RentalItemsPage() {
 
   return (
     <div className="dash">
-      <DashHeader
-        title="Rental items"
-        subtitle="Manage the facilities and items residents can rent"
-        nav={SECRETARY_NAV}
-      />
+      
 
       <main className="dash-main">
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
