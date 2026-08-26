@@ -214,17 +214,13 @@ a {
 
 /* ---------- Dashboard (Secretary review) ---------- */
 
-.dash {
-  min-height: 100vh;
-}
-
 .dash-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
-  padding: 1.3rem 1rem;
+  padding: 0.5rem 1rem;
 }
 
 .dash-header-section {
@@ -232,21 +228,30 @@ a {
   align-items: center;
 }
 
-.dash-header-section > div {
+#header-role-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#header-label-container {
   padding: 0 1rem;
+  display: flex;
+  align-items: center;
 }
 
-.dash-header h1 {
+#header-label-divider {
+  color: #e2e8f0;
+  padding: 0 0.8rem;
+}
+
+.header-label {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 0.8rem;
 }
 
-/* Separates the subtitle from the h1 above it. SCOPED ON PURPOSE: .muted is a
-   shared utility on 163 elements across the app, so this spacing is set here
-   rather than on .muted itself, where it would land on every helper line,
-   empty state and table caption in the system. */
-.dash-header .muted {
-  margin: 5px 0 0 0;
+p.header-label {
+  color: #64748b;
 }
 
 .dash-user {
@@ -565,25 +570,6 @@ button.link-button:hover:not(:disabled) {
    inside one. Without this the flex row compresses every item to its widest
    word, which is what produced "Resident / records" and "Document / requests"
    — five of the twelve broke that way, measured at 1200px and 1300px. */
-.dash-nav a {
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: none;
-  color: #64748b;
-  padding-bottom: 2px;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-}
-
-.dash-nav a:hover {
-  color: #1d4ed8;
-}
-
-.dash-nav a.active {
-  color: #1d4ed8;
-  border-bottom-color: #1d4ed8;
-}
-
 .head-actions {
   display: flex;
   gap: 10px;
@@ -2052,153 +2038,6 @@ button.link-button:hover:not(:disabled) {
   display: none;
 }
 
-/* Overrides the 1.25rem set with the other .dash-header rules. Applies at all
-   widths now, so this IS the dashboard title size everywhere. */
-.dash-header h1 {
-  font-size: 1.05rem;
-}
-
-/* The horizontal tab row this drawer replaced. The element is no longer
-   rendered by DashHeader.jsx at all; the rule is kept as a backstop so a
-   re-added .dash-nav cannot appear alongside the drawer by accident. */
-.dash-nav {
-  display: none;
-}
-
-/* Hidden in the header at every width; shown in the drawer's footer instead,
-   where there is room for it. */
-.dash-username {
-  display: none;
-}
-
-.dash-menu-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-}
-
-.dash-menu-btn:hover:not(:disabled) {
-  background: #f8fafc;
-}
-
-.dash-menu-icon {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 20px;
-  height: 16px;
-}
-
-.dash-menu-icon span {
-  display: block;
-  width: 100%;
-  height: 2px;
-  border-radius: 2px;
-  background: #334155;
-}
-
-.dash-backdrop {
-  display: block;
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(15, 23, 42, 0.5);
-}
-
-.dash-drawer {
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 50;
-  width: min(84vw, 300px);
-  height: 100vh;
-  height: 100dvh; /* keeps the full height under mobile browser chrome */
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
-  /* The drawer is only in the DOM while open, so the animation has no
-       hidden resting state to get stuck in: it starts off-screen and resolves
-       to the element's own position. No forwards fill, nothing to reset. */
-  animation: dash-drawer-in 180ms ease-out;
-}
-
-.dash-drawer:focus {
-  outline: none;
-}
-
-.dash-drawer-head {
-  display: flex;
-  align-items: center;
-  /* justify-content: space-between; */
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  flex: none;
-}
-
-.dash-drawer-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.dash-drawer-close {
-  min-height: 40px;
-}
-
-/* The item list is what scrolls when a 12-item nav overflows a short
-     phone screen; the header and footer stay put. */
-.dash-drawer-nav {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-  padding: 8px 0;
-}
-
-.dash-drawer-nav a {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 13px 16px;
-  min-height: 44px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #334155;
-  text-decoration: none;
-  border-left: 3px solid transparent;
-}
-
-.dash-drawer-nav a:hover {
-  background: #f8fafc;
-  color: #1d4ed8;
-}
-
-.dash-drawer-nav a.active {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-left-color: #1d4ed8;
-}
-
-.dash-drawer-foot {
-  flex: none;
-  padding: 14px 16px;
-  border-top: 1px solid #e2e8f0;
-}
-
-/* — end of the drawer section. Everything above applies at every width. — */
-
 @keyframes dash-drawer-in {
   from {
     transform: translateX(-100%);
@@ -2278,3 +2117,256 @@ button.link-button:hover:not(:disabled) {
     white-space: normal;
   }
 }
+
+/* css for page layout */
+
+.page-layout {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+
+  height: 100vh;
+  overflow: hidden;
+}
+
+.dash-header {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.page-content {
+  grid-column: 2;
+  grid-row: 2;
+
+  overflow-y: auto;
+}
+
+/* css for side bar */
+
+#side-bar {
+  grid-column: 1;
+  grid-row: 2;
+
+  position: relative;
+
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+}
+
+#side-bar-expanded {
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  min-height: 100%;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  width: 49px;
+
+  background-color: #fff;
+  border-right: 1px solid #e2e8f0;
+
+  transition: width 0.2s ease;
+}
+
+#side-bar:hover #side-bar-expanded {
+  width: 250px;
+}
+
+.side-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem;
+
+  text-decoration: none;
+
+  font-size: 0.95rem;
+  /* font-weight: 600; */
+
+  color: #334155;
+}
+
+.side-bar-item:hover {
+  background: #f8fafc;
+  color: #1d4ed8;
+}
+
+.side-bar-item.active {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-left: 3px solid #1d4ed8;
+}
+
+.side-bar-label {
+  white-space: nowrap;
+}
+
+.side-bar-item svg {
+  flex-shrink: 0;
+}
+
+/* this is where the old media query with max-width 900px started */
+
+@media (max-width: 767px) {
+  .page-layout {
+    grid-template-columns: 1fr;
+  }
+
+  #side-bar {
+    display: none;
+  }
+
+  .page-content {
+    grid-column: 1;
+  }
+
+  #header-role-label,
+  #header-label-divider {
+    display: none;
+  }
+  /* The horizontal tab row this drawer replaced. The element is no longer
+   rendered by DashHeader.jsx at all; the rule is kept as a backstop so a
+   re-added .dash-nav cannot appear alongside the drawer by accident. */
+  .dash-nav {
+    display: none;
+  }
+
+  /* Hidden in the header at every width; shown in the drawer's footer instead,
+   where there is room for it. */
+  .dash-username {
+    display: none;
+  }
+
+  .dash-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .dash-menu-btn:hover:not(:disabled) {
+    background: #f8fafc;
+  }
+
+  .dash-menu-icon {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 20px;
+    height: 16px;
+  }
+
+  .dash-menu-icon span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: #334155;
+  }
+
+  .dash-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .dash-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    width: min(84vw, 300px);
+    height: 100vh;
+    height: 100dvh; /* keeps the full height under mobile browser chrome */
+    background: #fff;
+    border-right: 1px solid #e2e8f0;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+    /* The drawer is only in the DOM while open, so the animation has no
+       hidden resting state to get stuck in: it starts off-screen and resolves
+       to the element's own position. No forwards fill, nothing to reset. */
+    animation: dash-drawer-in 180ms ease-out;
+  }
+
+  .dash-drawer:focus {
+    outline: none;
+  }
+
+  .dash-drawer-head {
+    display: flex;
+    align-items: center;
+    /* justify-content: space-between; */
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    flex: none;
+  }
+
+  .dash-drawer-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .dash-drawer-close {
+    min-height: 40px;
+  }
+
+  /* The item list is what scrolls when a 12-item nav overflows a short
+     phone screen; the header and footer stay put. */
+  .dash-drawer-nav {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+  }
+
+  .dash-drawer-nav a {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 13px 16px;
+    min-height: 44px;
+    font-size: 0.95rem;
+    /* font-weight: 600; */
+    color: #334155;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+
+  .dash-drawer-nav a:hover {
+    background: #f8fafc;
+    color: #1d4ed8;
+  }
+
+  .dash-drawer-nav a.active {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-left-color: #1d4ed8;
+  }
+
+  .dash-drawer-foot {
+    flex: none;
+    padding: 14px 16px;
+    border-top: 1px solid #e2e8f0;
+  }
+}
+
+/* — end of the drawer section. Everything above applies at every width. — */
