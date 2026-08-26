@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
-import { ROLE_HOME, roleHome } from "./auth/roles";
+import { ROLE_HOME, roleHome, ROLE_NAV } from "./auth/roles";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PageLayout from "./components/PageLayout";
 import BookRentalPage from "./pages/BookRentalPage";
@@ -125,7 +125,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={STAFF_NAV}
             >
               <HouseholdsPage title="Households" nav={STAFF_NAV} />
             </PageLayout>
@@ -242,7 +242,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={STAFF_NAV}
             >
               <EventsPage title="Events" nav={STAFF_NAV} />
             </PageLayout>
@@ -284,7 +284,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={TREASURER_NAV}
             >
               <ReportsPage title="Reports" nav={TREASURER_NAV} />
             </PageLayout>
@@ -298,7 +298,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={PUNONG_BARANGAY_NAV}
             >
               <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
             </PageLayout>
@@ -312,7 +312,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <PublicEventsPage title="Events" nav={RESIDENT_NAV} />
             </PageLayout>
@@ -326,7 +326,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={PUNONG_BARANGAY_NAV}
             >
               <PublicEventsPage title="Events" nav={PUNONG_BARANGAY_NAV} />
             </PageLayout>
@@ -340,7 +340,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={PUNONG_BARANGAY_NAV}
             >
               <DisputesPage title="Blotter" nav={PUNONG_BARANGAY_NAV} />
             </PageLayout>
@@ -354,7 +354,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <RequestDocumentPage />
             </PageLayout>
@@ -368,7 +368,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <MyRentalsPage />
             </PageLayout>
@@ -382,7 +382,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <BookRentalPage />
             </PageLayout>
@@ -398,7 +398,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <MyHouseholdPage />
             </PageLayout>
@@ -415,7 +415,7 @@ export default function App() {
             <PageLayout
               title={"Resident records"}
               subtitle={"Manage the barangay's resident records masterlist"}
-              nav={SECRETARY_NAV}
+              nav={RESIDENT_NAV}
             >
               <PaymentResultPage />
             </PageLayout>
@@ -432,7 +432,7 @@ export default function App() {
               <PageLayout
                 title={"Resident records"}
                 subtitle={"Manage the barangay's resident records masterlist"}
-                nav={SECRETARY_NAV}
+                nav={ROLE_NAV[role]}
               >
                 {ROLE_PAGES[role] || <RoleLandingPage />}
               </PageLayout>
