@@ -16,4 +16,4 @@
 // the guidance in vite.config.js and .env.example, which both name 5000. This
 // value is one side of a two-sided pair — changing it alone just points the
 // dev frontend at a port nothing is listening on.
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
