@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { roleHome } from '../auth/roles';
+import PasswordInput from '../components/PasswordInput';
 
 export default function ChangePasswordPage() {
   const { user, authFetch, updateUser, logout } = useAuth();
@@ -57,8 +58,7 @@ export default function ChangePasswordPage() {
 
         <label>
           {forced ? 'Temporary password' : 'Current password'}
-          <input
-            type="password"
+          <PasswordInput
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
             autoComplete="current-password"
@@ -68,8 +68,7 @@ export default function ChangePasswordPage() {
         </label>
         <label>
           New password
-          <input
-            type="password"
+          <PasswordInput
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
@@ -79,8 +78,7 @@ export default function ChangePasswordPage() {
         </label>
         <label>
           Confirm new password
-          <input
-            type="password"
+          <PasswordInput
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             autoComplete="new-password"
