@@ -16,10 +16,77 @@ body {
 
 .auth-page {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.login-form-image {
+  grid-column: 1;
+
+  min-height: 80%;
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.login-form-wrapper {
+  grid-column: 2;
+
+  background: #fff;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+}
+
+.register-form-wrapper {
+  grid-column: 1 / -1;
+
+  width: 100%;
+  background: #fff;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The auth pages' own look, SCOPED. These values were originally written onto
+   the shared `.card`, `label`, `input` and `button` rules, which reach far
+   beyond the auth pages: `button` alone matches 174 elements across 27 files,
+   `label` 77, `input` 62, and `.card` is used by the Households create modal
+   and the role landing page as well as login and register. Scoping them under
+   .auth-page keeps the redesign and leaves every dashboard screen untouched —
+   the same rule the `.dash-header .muted` comment further down records. */
+.auth-page .card {
+  padding: 20px;
+  max-width: 500px;
+  border: none;
+  box-shadow: none;
+}
+
+.auth-page .card.wide {
+  max-width: 800px;
+}
+
+.auth-page .card h1 {
+  margin: 0 0 8px;
+}
+
+.auth-page .card h2 {
+  margin: 35px 0 12px;
+}
+
+.auth-page label {
+  font-weight: 400;
+}
+
+.auth-page input {
+  padding: 15px;
+}
+
+.auth-page button {
+  padding: 15px;
 }
 
 .card {
@@ -2358,5 +2425,15 @@ button.link-button:hover:not(:disabled) {
 
   .pending-head .badge {
     white-space: normal;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-form-wrapper {
+    grid-column: 1;
   }
 }
