@@ -16,33 +16,62 @@ body {
 
 .auth-page {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.login-form-image {
+  grid-column: 1;
+
+  min-height: 80%;
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.login-form-wrapper {
+  grid-column: 2;
+
+  background: #fff;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+}
+
+.register-form-wrapper {
+  grid-column: 1 / -1;
+
+  width: 100%;
+  background: #fff;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  /* border: 1px solid #e2e8f0; */
   border-radius: 12px;
   padding: 32px;
   width: 100%;
-  max-width: 440px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  max-width: 500px;
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); */
 }
 
 .card.wide {
-  max-width: 560px;
+  max-width: 800px;
 }
 
 .card h1 {
-  margin: 0 0 4px;
+  margin: 0 0 8px;
   font-size: 1.5rem;
 }
 
 .card h2 {
-  margin: 20px 0 12px;
+  margin: 35px 0 12px;
   font-size: 1rem;
   color: #334155;
   border-bottom: 1px solid #e2e8f0;
@@ -59,7 +88,7 @@ label {
   display: block;
   margin-bottom: 14px;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .hint {
@@ -72,7 +101,7 @@ input {
   display: block;
   width: 100%;
   margin-top: 6px;
-  padding: 10px 12px;
+  padding: 15px;
   font-size: 1rem;
   font-weight: 400;
   font-family: inherit;
@@ -184,7 +213,7 @@ textarea:focus {
 }
 
 button {
-  padding: 11px;
+  padding: 15px;
   font-size: 1rem;
   font-weight: 600;
   font-family: inherit;
@@ -2358,5 +2387,15 @@ button.link-button:hover:not(:disabled) {
 
   .pending-head .badge {
     white-space: normal;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-form-wrapper {
+    grid-column: 1;
   }
 }
