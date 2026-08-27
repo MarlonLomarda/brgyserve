@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import PasswordInput from '../components/PasswordInput';
 
 const INITIAL = {
   username: '',
@@ -15,11 +16,15 @@ const INITIAL = {
   contact_number: '',
 };
 
+// A password field routes through PasswordInput so registration gets the same
+// show/hide toggle as login and change-password, rather than a second
+// hand-rolled one that could drift.
 function Field({ label, name, value, onChange, type = 'text', required = false, ...rest }) {
+  const Control = type === 'password' ? PasswordInput : 'input';
   return (
     <label>
       {label} {!required && <span className="hint">(optional)</span>}
-      <input type={type} name={name} value={value} onChange={onChange} required={required} {...rest} />
+      <Control type={type} name={name} value={value} onChange={onChange} required={required} {...rest} />
     </label>
   );
 }

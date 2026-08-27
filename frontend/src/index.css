@@ -103,6 +103,68 @@ select:focus {
   border-color: #2563eb;
 }
 
+/* Show/hide password toggle (components/PasswordInput.jsx).
+
+   SCOPED AS `.pw-field .pw-toggle` (0,2,0) DELIBERATELY. `.auth-page button`
+   (0,1,1) makes every button in an auth card full-width, and the base `button`
+   rule paints it blue with white text — a bare `.pw-toggle` (0,1,0) would lose
+   to both and the toggle would render as a second Sign in button. The scoped
+   form wins on those and on the `button:hover:not(:disabled)` blue as well. */
+.pw-field {
+  position: relative;
+}
+
+/* The input keeps its own margin-top: 6px from the base `input` rule, so the
+   wrapper is 6px taller than the field itself — hence top: 6px below, which
+   lines the button up with the input rather than the wrapper. */
+.pw-field .pw-toggle {
+  position: absolute;
+  top: 6px;
+  right: 1px;
+  bottom: 1px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  color: #64748b;
+  cursor: pointer;
+}
+
+/* Room for the button so a long value never runs underneath it. */
+.pw-field input {
+  padding-right: 44px;
+}
+
+.pw-field .pw-toggle:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #1d4ed8;
+}
+
+/* Keyboard users get a visible ring; mouse users do not, matching the inputs
+   above which only show their ring on :focus.
+
+   SAME TREATMENT AS `input:focus`: the same 2px translucent ring sitting
+   OUTSIDE the control, plus the control's own colour going solid blue — for an
+   input that is border-color, and here, with border: none, it is the icon.
+
+   This previously carried `outline-offset: -2px`, which drew the ring INSIDE
+   the button's 40px box. An inset ring traces a tile's own edges rather than
+   haloing it, which is how a PRESSED control is drawn — and beside a field
+   whose ring floats outside its border, the two read as different systems.
+   Dropping the negative offset is the whole fix. border-radius is evened out
+   from the base rule's `0 8px 8px 0` so the halo is a rounded shape rather
+   than one with square corners on its left edge. */
+.pw-field .pw-toggle:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-radius: 8px;
+  color: #2563eb;
+}
+
 textarea {
   display: block;
   width: 100%;
