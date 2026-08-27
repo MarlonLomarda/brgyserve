@@ -5,11 +5,12 @@ import {
   FileText,
   QrCode,
   Scale,
-} from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
-import { roleHome } from '../auth/roles';
+} from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { roleHome } from "../auth/roles";
+import barangayImage from "../assets/brgy-hall.jpeg";
 
 // The public landing page at "/" — the only screen in the app that renders
 // without a session. It makes NO API calls: every section below is static, so
@@ -31,107 +32,107 @@ import { roleHome } from '../auth/roles';
 // are hidden from screen readers rather than described twice.
 const SERVICES = [
   {
-    title: 'Document Requests',
-    body: 'Request barangay clearances, certificates and permits, and follow each one through to release.',
+    title: "Document Requests",
+    body: "Request barangay clearances, certificates and permits, and follow each one through to release.",
     Icon: FileText,
   },
   {
-    title: 'Facility Rentals',
-    body: 'Reserve barangay facilities and equipment, with availability checked as you book.',
+    title: "Facility Rentals",
+    body: "Reserve barangay facilities and equipment, with availability checked as you book.",
     Icon: CalendarCheck,
   },
   {
-    title: 'Payments',
-    body: 'Fees for documents and rentals, recorded and verified by the Barangay Treasurer.',
+    title: "Payments",
+    body: "Fees for documents and rentals, recorded and verified by the Barangay Treasurer.",
     Icon: Banknote,
   },
   {
-    title: 'QR Attendance',
-    body: 'Households present a QR code at barangay assemblies for staff to scan.',
+    title: "QR Attendance",
+    body: "Households present a QR code at barangay assemblies for staff to scan.",
     Icon: QrCode,
   },
   {
-    title: 'Blotter and Dispute Records',
-    body: 'Incident and complaint records kept by the Barangay Secretary.',
+    title: "Blotter and Dispute Records",
+    body: "Incident and complaint records kept by the Barangay Secretary.",
     Icon: Scale,
   },
   {
-    title: 'Reports and Records',
-    body: 'Resident records and operational reports for barangay officials.',
+    title: "Reports and Records",
+    body: "Resident records and operational reports for barangay officials.",
     Icon: ChartColumn,
   },
 ];
 
 const STEPS = [
   {
-    title: 'Create Account',
-    body: 'Register with your details. The Barangay Secretary matches you to the barangay’s resident records and activates your account.',
+    title: "Create Account",
+    body: "Register with your details. The Barangay Secretary matches you to the barangay’s resident records and activates your account.",
   },
   {
-    title: 'Submit Request',
-    body: 'Choose the document you need and give the purpose. The fee is shown before you send it.',
+    title: "Submit Request",
+    body: "Choose the document you need and give the purpose. The fee is shown before you send it.",
   },
   {
-    title: 'Track Status',
-    body: 'Sign in and open My Requests to see whether it is pending, approved, or ready for release.',
+    title: "Track Status",
+    body: "Sign in and open My Requests to see whether it is pending, approved, or ready for release.",
   },
   {
-    title: 'Claim Document',
-    body: 'Settle the fee and collect your document at the Barangay Office.',
+    title: "Claim Document",
+    body: "Settle the fee and collect your document at the Barangay Office.",
   },
 ];
 
 const FAQS = [
   {
-    q: 'Do I need an account to request a document?',
-    a: 'Yes. Register with your details, and the Barangay Secretary will match you to the barangay’s resident records and activate your account. Requests are made from your own account so the barangay knows who submitted them.',
+    q: "Do I need an account to request a document?",
+    a: "Yes. Register with your details, and the Barangay Secretary will match you to the barangay’s resident records and activate your account. Requests are made from your own account so the barangay knows who submitted them.",
   },
   {
-    q: 'Why does my new account say it is waiting for approval?',
-    a: 'New accounts are not active straight away. Barangay staff first link your account to an existing resident record, so that requests only come from verified residents of Barangay Ubujan. You can sign in once that is done.',
+    q: "Why does my new account say it is waiting for approval?",
+    a: "New accounts are not active straight away. Barangay staff first link your account to an existing resident record, so that requests only come from verified residents of Barangay Ubujan. You can sign in once that is done.",
   },
   {
-    q: 'What documents can I request, and what do they cost?',
-    a: 'The list is maintained by the Barangay Secretary, so it always reflects what the barangay currently issues. Each type shows its fee when you select it, before you submit anything. Some documents are free of charge.',
+    q: "What documents can I request, and what do they cost?",
+    a: "The list is maintained by the Barangay Secretary, so it always reflects what the barangay currently issues. Each type shows its fee when you select it, before you submit anything. Some documents are free of charge.",
   },
   {
-    q: 'How do I pay the fee?',
-    a: 'You can pay in cash at the Barangay Office, or by GCash. If you pay by GCash, enter the reference number from your receipt when you record the payment, and the Barangay Treasurer will verify it before your document is released.',
+    q: "How do I pay the fee?",
+    a: "You can pay in cash at the Barangay Office, or by GCash. If you pay by GCash, enter the reference number from your receipt when you record the payment, and the Barangay Treasurer will verify it before your document is released.",
   },
   {
-    q: 'How do I know when my document is ready?',
-    a: 'Sign in and open My Requests — the status is shown next to each one, from pending, to approved, to ready for release. Check there for updates. Once a request reads ready for release, you can claim it at the Barangay Office.',
+    q: "How do I know when my document is ready?",
+    a: "Sign in and open My Requests — the status is shown next to each one, from pending, to approved, to ready for release. Check there for updates. Once a request reads ready for release, you can claim it at the Barangay Office.",
   },
   {
-    q: 'Can I cancel a request, and what happens if it is rejected?',
-    a: 'You can cancel a request yourself while it is still pending. If a request is rejected, My Requests shows the reason the Barangay Secretary recorded, and you are free to submit a corrected request.',
+    q: "Can I cancel a request, and what happens if it is rejected?",
+    a: "You can cancel a request yourself while it is still pending. If a request is rejected, My Requests shows the reason the Barangay Secretary recorded, and you are free to submit a corrected request.",
   },
   {
-    q: 'How do I reserve a barangay facility or equipment?',
-    a: 'Choose the item, the date, the time and how many units you need. The system checks availability as you book and confirms the reservation immediately if the slot is free. If it is already taken, you are told why.',
+    q: "How do I reserve a barangay facility or equipment?",
+    a: "Choose the item, the date, the time and how many units you need. The system checks availability as you book and confirms the reservation immediately if the slot is free. If it is already taken, you are told why.",
   },
   {
-    q: 'What is the household QR code for?',
-    a: 'It is used to record attendance at barangay assemblies. Each household is recorded once, so one member can present the code shown in their account for barangay staff to scan.',
+    q: "What is the household QR code for?",
+    a: "It is used to record attendance at barangay assemblies. Each household is recorded once, so one member can present the code shown in their account for barangay staff to scan.",
   },
   {
-    q: 'What happens if my household misses an assembly?',
-    a: 'If the activity carries a fine, the Barangay Secretary may charge it to the household. It then appears as an amount due and is settled at the Barangay Office like any other fee.',
+    q: "What happens if my household misses an assembly?",
+    a: "If the activity carries a fine, the Barangay Secretary may charge it to the household. It then appears as an amount due and is settled at the Barangay Office like any other fee.",
   },
   {
-    q: 'Who can see blotter and dispute records?',
-    a: 'Only the Barangay Secretary and the Punong Barangay. Blotter and dispute records are not visible to residents.',
+    q: "Who can see blotter and dispute records?",
+    a: "Only the Barangay Secretary and the Punong Barangay. Blotter and dispute records are not visible to residents.",
   },
   {
-    q: 'Who uses the system?',
-    a: 'Residents, together with four barangay roles: the Barangay Secretary, the Punong Barangay, the Barangay Treasurer and Barangay Staff. Each role only sees the screens for its own work.',
+    q: "Who uses the system?",
+    a: "Residents, together with four barangay roles: the Barangay Secretary, the Punong Barangay, the Barangay Treasurer and Barangay Staff. Each role only sees the screens for its own work.",
   },
 ];
 
 const NAV_LINKS = [
-  { href: '#about', label: 'About' },
-  { href: '#services', label: 'Services' },
-  { href: '#faq', label: 'FAQ' },
+  { href: "#about", label: "About" },
+  { href: "#services", label: "Services" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export default function LandingPage() {
@@ -140,8 +141,12 @@ export default function LandingPage() {
 
   // Where a signed-in visitor is offered to go. Users on a temporary password
   // are sent to change it — every other route refuses them until they do.
-  const signedInTo = user?.must_change_password ? '/change-password' : roleHome(user?.role);
-  const signedInLabel = user?.must_change_password ? 'Change your password' : 'Go to my dashboard';
+  const signedInTo = user?.must_change_password
+    ? "/change-password"
+    : roleHome(user?.role);
+  const signedInLabel = user?.must_change_password
+    ? "Change your password"
+    : "Go to my dashboard";
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -159,10 +164,13 @@ export default function LandingPage() {
             className="landing-menu-btn"
             aria-expanded={menuOpen}
             aria-controls="landing-menu"
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
             onClick={() => setMenuOpen((open) => !open)}
           >
-            <span className={`landing-menu-icon${menuOpen ? ' is-open' : ''}`} aria-hidden="true">
+            <span
+              className={`landing-menu-icon${menuOpen ? " is-open" : ""}`}
+              aria-hidden="true"
+            >
               <span />
               <span />
               <span />
@@ -171,7 +179,7 @@ export default function LandingPage() {
 
           <div
             id="landing-menu"
-            className={`landing-nav-menu${menuOpen ? ' is-open' : ''}`}
+            className={`landing-nav-menu${menuOpen ? " is-open" : ""}`}
           >
             <nav className="landing-nav-links">
               {NAV_LINKS.map((item) => (
@@ -185,16 +193,28 @@ export default function LandingPage() {
               {user ? (
                 <>
                   <span className="landing-nav-user">@{user.username}</span>
-                  <Link className="button-link landing-cta" to={signedInTo} onClick={closeMenu}>
+                  <Link
+                    className="button-link landing-cta"
+                    to={signedInTo}
+                    onClick={closeMenu}
+                  >
                     {signedInLabel}
                   </Link>
                 </>
               ) : (
                 <>
-                  <Link className="landing-nav-login" to="/login" onClick={closeMenu}>
+                  <Link
+                    className="landing-nav-login"
+                    to="/login"
+                    onClick={closeMenu}
+                  >
                     Login
                   </Link>
-                  <Link className="button-link landing-cta" to="/register" onClick={closeMenu}>
+                  <Link
+                    className="button-link landing-cta"
+                    to="/register"
+                    onClick={closeMenu}
+                  >
                     Create Account
                   </Link>
                 </>
@@ -205,7 +225,11 @@ export default function LandingPage() {
       </header>
 
       {/* --------------------------------------------------------- hero */}
-      <section className="landing-hero" id="about">
+      <section
+        className="landing-hero"
+        id="about"
+        style={{ backgroundImage: `url(${barangayImage})` }}
+      >
         <div className="landing-hero-inner">
           <span className="badge">Barangay Ubujan, Tagbilaran City</span>
           <h1 className="landing-title">BrgyServe</h1>
@@ -213,13 +237,17 @@ export default function LandingPage() {
             A Web-Based Barangay Service and Records Management System
           </p>
           <p className="landing-lede">
-            Submit your barangay document requests online and follow them through to release,
-            instead of making a trip for every step. Reserve barangay facilities, and keep your
-            household record up to date with the Barangay Office. Documents are claimed in person
-            at the Barangay Office.
+            Submit your barangay document requests online and follow them
+            through to release, instead of making a trip for every step. Reserve
+            barangay facilities, and keep your household record up to date with
+            the Barangay Office. Documents are claimed in person at the Barangay
+            Office.
           </p>
-          <Link className="button-link landing-hero-cta" to={user ? signedInTo : '/login'}>
-            {user ? signedInLabel : 'Request a Document'}
+          <Link
+            className="button-link landing-hero-cta"
+            to={user ? signedInTo : "/login"}
+          >
+            {user ? signedInLabel : "Request a Document"}
           </Link>
         </div>
       </section>
@@ -235,7 +263,12 @@ export default function LandingPage() {
             {SERVICES.map(({ title, body, Icon }) => (
               <article className="landing-card" key={title}>
                 <span className="landing-card-icon" aria-hidden="true">
-                  <Icon size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+                  <Icon
+                    size={20}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
                 </span>
                 <h3>{title}</h3>
                 <p>{body}</p>
@@ -249,7 +282,9 @@ export default function LandingPage() {
       <section className="landing-section landing-section-alt" id="how">
         <div className="landing-section-inner">
           <h2 className="landing-section-title">How It Works</h2>
-          <p className="landing-section-lede">From registration to claiming your document.</p>
+          <p className="landing-section-lede">
+            From registration to claiming your document.
+          </p>
           <ol className="landing-grid landing-grid-steps">
             {STEPS.map((step, index) => (
               <li className="landing-step" key={step.title}>
@@ -289,7 +324,9 @@ export default function LandingPage() {
         <div className="landing-footer-inner">
           <div>
             <p className="landing-footer-brand">BrgyServe</p>
-            <p className="landing-footer-line">Barangay Ubujan, Tagbilaran City, Bohol</p>
+            <p className="landing-footer-line">
+              Barangay Ubujan, Tagbilaran City, Bohol
+            </p>
           </div>
 
           <div>
@@ -300,7 +337,13 @@ export default function LandingPage() {
                   <a href={item.href}>{item.label}</a>
                 </li>
               ))}
-              <li>{user ? <Link to={signedInTo}>{signedInLabel}</Link> : <Link to="/login">Login</Link>}</li>
+              <li>
+                {user ? (
+                  <Link to={signedInTo}>{signedInLabel}</Link>
+                ) : (
+                  <Link to="/login">Login</Link>
+                )}
+              </li>
               {!user && (
                 <li>
                   <Link to="/register">Create Account</Link>
@@ -311,14 +354,17 @@ export default function LandingPage() {
 
           <div>
             <p className="landing-footer-head">Contact</p>
-            <p className="landing-footer-line">Barangay Hall, Ubujan, Tagbilaran City, Bohol</p>
+            <p className="landing-footer-line">
+              Barangay Hall, Ubujan, Tagbilaran City, Bohol
+            </p>
             <p className="landing-footer-line landing-footer-placeholder">
               Office hours and contact details to be added.
             </p>
           </div>
         </div>
         <p className="landing-footer-note">
-          Barangay Ubujan · A capstone project for Barangay Ubujan, Tagbilaran City, Bohol
+          Barangay Ubujan · A capstone project for Barangay Ubujan, Tagbilaran
+          City, Bohol
         </p>
       </footer>
     </div>
