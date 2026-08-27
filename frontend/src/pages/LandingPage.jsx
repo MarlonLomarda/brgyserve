@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { roleHome } from "../auth/roles";
-import barangayImage from "../assets/bohol-sglgb-scaled.jpg";
+import barangayImage from "../assets/brgy-hall.jpeg";
 
 // The public landing page at "/" — the only screen in the app that renders
 // without a session. It makes NO API calls: every section below is static, so
