@@ -4,6 +4,14 @@ const bcrypt = require('bcryptjs');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { findMatches } = require('../services/nameMatching');
+const { notify } = require('../services/notifications');
+const { RELATED_TYPE } = require('../constants/notifications');
+const {
+  REJECTION_REASONS,
+  isRejectionReason,
+  reasonRequiresNote,
+  rejectionMessage,
+} = require('../constants/registration');
 
 // Staff-type roles the Secretary may create accounts for (per the
 // "Authentication & account rules" in docs/brgyserve-use-cases.md, this
@@ -17,6 +25,54 @@ router.use(authenticate, requireRole('secretary'));
 
 const PROFILE_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, phone_number';
+
+// The rejection state (migration 017). These are read on every pending-account
+// path because three separate routes now have to agree about it: reject
+// refuses to re-reject, un-reject refuses a non-rejected account, and activate
+// refuses a rejected one.
+//
+// These are NOT the "withheld field" case from the Standing Rules. A pending
+// account genuinely HAS no rejection reason, so null here is a true statement
+// about the account rather than a claim standing in for data the server chose
+// not to send — nothing is being withheld from anyone, and the client is free
+// to read them as null.
+const REJECTION_FIELDS =
+  'is_rejected, rejection_reason, rejection_note, rejected_at, rejected_by_user_id';
+
+// Valid values for the ?status= filter on the pending list. 'pending' and
+// 'rejected' are both is_active = false — the difference is is_rejected.
+const PENDING_STATUS_FILTERS = ['pending', 'rejected', 'all'];
+
+// Resolves rejected_by_user_id -> username for a set of account rows.
+//
+// Deliberately a second query rather than a PostgREST embed. The embed would
+// be a self-referential join on users and has to be disambiguated by FK
+// constraint name (users!users_rejected_by_user_id_fkey), which cannot be
+// verified until migration 017 is applied — and a query shape that is only
+// discovered to be wrong in production is not worth the round trip it saves.
+// The id set here is at most the number of Secretaries, so .in() is safe.
+async function attachRejectedBy(rows) {
+  const ids = [...new Set(rows.map((r) => r.rejected_by_user_id).filter((v) => v != null))];
+  if (ids.length === 0) {
+    return rows.map((r) => ({ ...r, rejected_by_username: null }));
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('user_id, username')
+    .in('user_id', ids);
+  if (error) {
+    throw new Error(`Failed to load rejecting accounts: ${error.message}`);
+  }
+
+  const byId = new Map((data || []).map((u) => [u.user_id, u.username]));
+  return rows.map((r) => ({
+    ...r,
+    rejected_by_username: r.rejected_by_user_id != null
+      ? byId.get(r.rejected_by_user_id) || null
+      : null,
+  }));
+}
 
 // POST /api/secretary/accounts — create a staff-type account.
 // The generated temporary password is returned ONCE so the Secretary can hand
@@ -98,7 +154,9 @@ router.post('/accounts', async (req, res) => {
 async function loadResidentAccount(userId) {
   const { data, error } = await supabase
     .from('users')
-    .select(`user_id, username, email, is_active, profiles ( ${PROFILE_FIELDS} )`)
+    .select(
+      `user_id, username, email, is_active, ${REJECTION_FIELDS}, profiles ( ${PROFILE_FIELDS} )`
+    )
     .eq('user_id', userId)
     .eq('role', 'resident')
     .maybeSingle();
@@ -112,19 +170,46 @@ async function loadResidentAccount(userId) {
   return { ...data, profile: profile || null };
 }
 
-// GET /api/secretary/pending-residents — resident accounts awaiting review
+// GET /api/secretary/pending-residents?status=pending|rejected|all
+//
+// Resident accounts that cannot log in. is_active = false is what "not yet
+// let in" means, and BOTH outcomes share it — a rejected account is not
+// reactivated, it is marked. So the base filter is unchanged and is_rejected
+// selects between them.
+//
+// A rejected account that simply disappeared from every view would be a
+// decision nobody could correct, and the applicant is being told at login to
+// visit the office about it. Hence 'rejected' and 'all', following the
+// ?archived= filter on resident records and ?view= on events.
+//
+// An unknown value is a 400, never a silent fall back to the default: a
+// caller asking for a filter this route does not have is asking the wrong
+// question, and answering with the pending list would look like an answer.
 router.get('/pending-residents', async (req, res) => {
-  const { data, error } = await supabase
+  const status = String(req.query.status ?? 'pending').toLowerCase();
+  if (!PENDING_STATUS_FILTERS.includes(status)) {
+    return res.status(400).json({
+      error: `status must be one of: ${PENDING_STATUS_FILTERS.join(', ')}`,
+    });
+  }
+
+  let query = supabase
     .from('users')
-    .select(`user_id, username, email, profiles ( ${PROFILE_FIELDS} )`)
+    .select(`user_id, username, email, ${REJECTION_FIELDS}, profiles ( ${PROFILE_FIELDS} )`)
     .eq('role', 'resident')
     .eq('is_active', false)
     .order('user_id', { ascending: true });
 
+  if (status !== 'all') {
+    query = query.eq('is_rejected', status === 'rejected');
+  }
+
+  const { data, error } = await query;
   if (error) {
     throw new Error(`Failed to load pending accounts: ${error.message}`);
   }
-  res.json({ pending: data });
+
+  res.json({ pending: await attachRejectedBy(data || []), status });
 });
 
 // GET /api/secretary/pending-residents/:userId/match-suggestions
@@ -312,7 +397,8 @@ router.post('/pending-residents/:userId/create-resident', async (req, res) => {
 });
 
 // POST /api/secretary/pending-residents/:userId/activate
-// Only allowed once a resident record has been linked.
+// Only allowed once a resident record has been linked, and never for an
+// account that has been rejected.
 router.post('/pending-residents/:userId/activate', async (req, res) => {
   const userId = Number(req.params.userId);
   if (!Number.isInteger(userId)) {
@@ -326,19 +412,200 @@ router.post('/pending-residents/:userId/activate', async (req, res) => {
   if (account.is_active) {
     return res.status(409).json({ error: 'Account is already active' });
   }
+  // A rejected account is still is_active = false, so without this check it
+  // matched the pending list and could be activated straight from it — the
+  // decision undone by the next click, with nothing to show it had been made.
+  // Reversing a rejection has to be the deliberate act, which is un-reject.
+  if (account.is_rejected) {
+    return res.status(409).json({
+      error: 'This registration was rejected. Un-reject it first if the applicant is now eligible.',
+    });
+  }
   if (!account.profile?.resident_id) {
     return res.status(409).json({ error: 'Link a resident record before activating the account' });
   }
 
-  const { error } = await supabase
+  // Status-guarded like every other transition in the codebase: the same two
+  // conditions checked above, re-asserted in the WHERE clause so a rejection
+  // landing between the read and the write cannot be activated over.
+  const { data: activated, error } = await supabase
     .from('users')
     .update({ is_active: true })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .eq('is_rejected', false)
+    .select('user_id')
+    .maybeSingle();
   if (error) {
     throw new Error(`Failed to activate account: ${error.message}`);
   }
+  if (!activated) {
+    return res.status(409).json({ error: 'Account state just changed — refresh and try again' });
+  }
 
   res.json({ message: 'Account activated. The resident can now log in.', user_id: userId });
+});
+
+// ---------------------------------------------------------------------------
+// Registration rejection (migration 017).
+//
+// WHY THIS EXISTS: the Secretary could previously only ever ACTIVATE a pending
+// registration. An ineligible applicant sat in the list forever, and — worse —
+// was told at login that their account was "pending approval by the Barangay
+// Secretary", which was false the moment a decision had been made.
+//
+// WHY IT IS NOT JUST is_active = false: a pending registration is created with
+// is_active = false, so that flag was already clear. Rejecting had literally
+// no state to write. Migration 017 adds the five columns this pair maintains.
+//
+// Rejection is REVERSIBLE. It is a judgement about eligibility, and eligibility
+// changes — a resident gets added to the masterlist, or reaches six months of
+// residency. Un-rejecting returns the account to exactly the pending state it
+// was in before, from which the normal link-and-activate flow continues.
+// ---------------------------------------------------------------------------
+
+// POST /api/secretary/pending-residents/:userId/reject
+// Body: { reason: <code>, note?: <string> }
+router.post('/pending-residents/:userId/reject', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
+
+  const reason = String(req.body?.reason ?? '').trim();
+  if (!isRejectionReason(reason)) {
+    return res.status(400).json({
+      error: `reason must be one of: ${REJECTION_REASONS.join(', ')}`,
+    });
+  }
+
+  const note = String(req.body?.note ?? '').trim();
+  // Only OTHER demands a note: the two specific codes already say why, while
+  // OTHER says nothing at all unless the Secretary writes it down.
+  if (reasonRequiresNote(reason) && !note) {
+    return res.status(400).json({ error: 'A note is required when the reason is OTHER' });
+  }
+  if (note.length > 255) {
+    return res.status(400).json({ error: 'note must be 255 characters or fewer' });
+  }
+
+  const account = await loadResidentAccount(userId);
+  if (!account) {
+    return res.status(404).json({ error: 'Resident account not found' });
+  }
+  if (account.is_active) {
+    return res.status(409).json({
+      error: 'This account is already active and cannot be rejected. Archive the resident record instead if the account should lose access.',
+    });
+  }
+  if (account.is_rejected) {
+    return res.status(409).json({
+      error: 'This registration has already been rejected. Un-reject it first to change the reason.',
+    });
+  }
+
+  const { data: rejected, error } = await supabase
+    .from('users')
+    .update({
+      is_rejected: true,
+      rejection_reason: reason,
+      // Stored as null rather than '' when absent, so the CHECK constraint's
+      // "not rejected => all null" branch stays meaningful and the column
+      // never holds an empty string standing in for "no note".
+      rejection_note: note || null,
+      rejected_at: new Date().toISOString(),
+      rejected_by_user_id: req.user.user_id,
+    })
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .eq('is_rejected', false)
+    .select(`user_id, username, ${REJECTION_FIELDS}`)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to reject registration: ${error.message}`);
+  }
+  if (!rejected) {
+    return res.status(409).json({ error: 'Account state just changed — refresh and try again' });
+  }
+
+  // Recorded, not sent (SMS_MODE=SIMULATED). Runs AFTER the rejection is
+  // committed and notify() never throws, so a notification problem cannot
+  // undo the decision.
+  //
+  // THE PHONE NUMBER COMES FROM profiles.phone_number, AND THIS IS THE ONE
+  // CALL SITE WHERE IT MUST. Everywhere else resident_records.contact_number
+  // wins, because the record is what the barangay maintains and the profile is
+  // only what the resident claimed. A rejected applicant usually has NO linked
+  // resident record at all — being unmatchable is the commonest reason to
+  // reject one — so the claimed number is the only number in existence. This
+  // is an exception by availability, not by preference.
+  //
+  // Only the reason code's canned sentence is sent. The Secretary's note is
+  // internal and never leaves the office.
+  await notify({
+    userId,
+    destination: account.profile?.phone_number,
+    relatedType: RELATED_TYPE.ACCOUNT,
+    relatedTo: userId,
+    message: `BrgyServe: ${rejectionMessage(reason)}`,
+  });
+
+  res.json({
+    message: `Registration rejected. @${rejected.username} is told the reason when they try to sign in.`,
+    user_id: userId,
+    rejection: rejected,
+  });
+});
+
+// POST /api/secretary/pending-residents/:userId/unreject
+// Clears all five columns, returning the account to the pending state.
+router.post('/pending-residents/:userId/unreject', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
+
+  const account = await loadResidentAccount(userId);
+  if (!account) {
+    return res.status(404).json({ error: 'Resident account not found' });
+  }
+  if (!account.is_rejected) {
+    return res.status(409).json({ error: 'This registration has not been rejected' });
+  }
+
+  // All four detail columns are cleared together with the flag. The CHECK
+  // constraint added in migration 017 requires it — "not rejected" means all
+  // four are null — and it is the right behaviour anyway: leaving a stale
+  // reason behind would make a later reader think the account is still marked.
+  const { data: restored, error } = await supabase
+    .from('users')
+    .update({
+      is_rejected: false,
+      rejection_reason: null,
+      rejection_note: null,
+      rejected_at: null,
+      rejected_by_user_id: null,
+    })
+    .eq('user_id', userId)
+    .eq('is_rejected', true)
+    .select('user_id, username')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to un-reject registration: ${error.message}`);
+  }
+  if (!restored) {
+    return res.status(409).json({ error: 'Account state just changed — refresh and try again' });
+  }
+
+  // Deliberately NOT notified. Nothing has been granted — the account is back
+  // to awaiting review, exactly where it started — so a message saying so
+  // would announce a non-event, and the applicant would still not be able to
+  // log in. They are told when the account is ACTIVATED, which is the point at
+  // which something actually changed for them.
+  res.json({
+    message: `Rejection cleared. @${restored.username} is awaiting review again.`,
+    user_id: userId,
+  });
 });
 
 module.exports = router;

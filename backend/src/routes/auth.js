@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
 const { authenticate, allowPendingPasswordChange } = require('../middleware/auth');
+const { rejectionMessage } = require('../constants/registration');
 
 const router = express.Router();
 
@@ -90,16 +91,42 @@ router.post('/register', async (req, res) => {
   });
 });
 
-// Why an account with is_active = false cannot log in. Only two paths ever
-// clear that flag — resident self-registration (pending approval) and the
-// resident-record archive cascade — so the two are told apart from existing
-// state, no extra column needed: an account linked to an ARCHIVED
-// resident_records row was deactivated by archiving; a resident that is not
-// (whether or not the Secretary has linked a record yet — linking and
-// activating are separate steps) is still awaiting approval. Anything else
-// gets a safe generic message rather than falling through to the wrong one.
-// The block itself never changes: none of these accounts may log in.
+// Why an account with is_active = false cannot log in, and which of the four
+// reasons it is. The block itself never changes: none of these accounts may
+// log in. Only the message differs.
+//
+// THIS USED TO BE DERIVED FROM EXISTING STATE ALONE, and the comment here
+// argued that no extra column was needed because only two paths ever cleared
+// is_active. That argument died with registration rejection (migration 017).
+// A pending registration is created with is_active = false, so "rejected"
+// could not be expressed by clearing a flag that was already clear — pending
+// and rejected were the SAME row state, and this function had no way to tell
+// them apart. It answered "pending approval" for both, which meant a declined
+// applicant was told to keep waiting for a review that had already happened.
+// users.is_rejected exists to make that distinction real.
+//
+// The four cases, in the order they are checked:
+//   1. REJECTED     — is_rejected. Checked FIRST and before the resident
+//                     branch, because a rejected resident satisfies that
+//                     branch too and it would swallow this one. The applicant
+//                     is shown the reason code's canned sentence, which tells
+//                     them what to do next; the Secretary's internal note is
+//                     never included.
+//   2. ARCHIVED     — linked to an archived resident_records row, so the
+//                     archive cascade deactivated a previously ACTIVE account.
+//   3. PENDING      — any other resident: awaiting Secretary approval. Correct
+//                     both before and after a record is linked, since linking
+//                     and activating are separate steps.
+//   4. ANYTHING ELSE — a safe generic message rather than falling through to
+//                     one of the above and stating something untrue.
 async function inactiveMessage(user) {
+  // Decided before any query: rejection is a fact on the user row itself and
+  // does not depend on whether a resident record was ever linked — which
+  // matters, because the commonest reason to reject is that no record matches.
+  if (user.is_rejected) {
+    return rejectionMessage(user.rejection_reason);
+  }
+
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('resident_id, resident_records ( is_archived )')
@@ -129,7 +156,9 @@ router.post('/login', async (req, res) => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('user_id, username, password_hash, email, role, is_active, must_change_password')
+    .select(
+      'user_id, username, password_hash, email, role, is_active, must_change_password, is_rejected, rejection_reason'
+    )
     .eq('username', username)
     .maybeSingle();
   if (error) {

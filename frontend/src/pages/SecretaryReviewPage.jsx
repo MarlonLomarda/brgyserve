@@ -3,6 +3,12 @@ import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABELS, STAFF_ROLES } from '../auth/roles';
 import DashHeader from '../components/DashHeader';
 import { SECRETARY_NAV } from '../constants/nav';
+import {
+  PENDING_STATUS_FILTERS,
+  REJECTION_REASON_OPTIONS,
+  rejectionReasonLabel,
+  rejectionReasonRequiresNote,
+} from '../constants/registration';
 
 const EMPTY_ACCOUNT_FORM = {
   first_name: '',
@@ -124,6 +130,130 @@ function fullName(p) {
   return p.suffix ? `${name}, ${p.suffix}` : name;
 }
 
+// Heading noun and empty-state line per ?status= value. Kept beside each other
+// so the count and the "nothing here" message can never describe different
+// lists.
+//
+// BOTH forms are written out rather than appending an "s" to the singular.
+// Two of these three phrases do not end in their own noun — "account awaiting
+// review" and "account not yet active" — so a trailing "s" landed on "review"
+// and "active", giving "2 account awaiting reviews". Only "rejected
+// registration" happened to end in the word that pluralises, which is what
+// made the append look like it worked.
+const STATUS_NOUN = {
+  pending: { one: 'account awaiting review', many: 'accounts awaiting review' },
+  rejected: { one: 'rejected registration', many: 'rejected registrations' },
+  all: { one: 'account not yet active', many: 'accounts not yet active' },
+};
+
+const EMPTY_TEXT = {
+  pending: 'No resident accounts are awaiting review.',
+  rejected: 'No registrations have been rejected.',
+  all: 'No resident accounts are waiting — every registration has been activated.',
+};
+
+function formatDateTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+}
+
+// The reason + note step. Rejection is confirm-then-act like the resident
+// archive and the fines void, but it needs more than a yes/no: the reason code
+// decides what the applicant is told at login, so the confirmation IS the form.
+function RejectPanel({ busy, onSubmit, onCancel }) {
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+
+  const needsNote = rejectionReasonRequiresNote(reason);
+  const trimmedNote = note.trim();
+  // Mirrors the server's rule rather than replacing it: the route validates
+  // this again and is the real gate.
+  const ready = Boolean(reason) && (!needsNote || Boolean(trimmedNote));
+
+  return (
+    <form
+      className="account-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (ready) onSubmit({ reason, note: trimmedNote });
+      }}
+    >
+      <p className="muted">
+        The applicant is shown this reason the next time they try to sign in, with what
+        to do next. Your note is internal and is never shown to them.
+      </p>
+      <label>
+        Reason
+        <select value={reason} onChange={(e) => setReason(e.target.value)} required>
+          <option value="">Choose a reason…</option>
+          {REJECTION_REASON_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Note {needsNote ? <span className="hint">(required)</span> : <span className="hint">(optional, internal)</span>}
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={255}
+          placeholder="Only the barangay sees this"
+        />
+      </label>
+      <div className="actions">
+        <button className="btn danger" type="submit" disabled={busy || !ready}>
+          {busy ? 'Rejecting…' : 'Reject this registration'}
+        </button>
+        <button className="btn secondary" type="button" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// What a rejected account shows instead of the review actions. There is
+// deliberately no link/create/activate path here — a rejected registration is
+// not mid-review, and un-rejecting is the one way back to it.
+function RejectedPanel({ account, busy, onUnreject }) {
+  const by = account.rejected_by_username ? ` by @${account.rejected_by_username}` : '';
+  return (
+    <div className="created-panel">
+      <div className="alert error">
+        This registration was rejected. The applicant is told the reason when they try to
+        sign in, and cannot be activated until the rejection is cleared.
+      </div>
+      <dl className="info-grid">
+        <div>
+          <dt>Reason</dt>
+          <dd>{rejectionReasonLabel(account.rejection_reason)}</dd>
+        </div>
+        <div>
+          <dt>Rejected</dt>
+          <dd>
+            {formatDateTime(account.rejected_at)}
+            {by}
+          </dd>
+        </div>
+        {account.rejection_note && (
+          <div className="span-2">
+            <dt>Note (internal, not shown to the applicant)</dt>
+            <dd>{account.rejection_note}</dd>
+          </div>
+        )}
+      </dl>
+      <div className="actions">
+        <button className="btn secondary" disabled={busy} onClick={onUnreject}>
+          {busy ? 'Working…' : 'Un-reject'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MatchSuggestions({ account, busy, onAction }) {
   const { authFetch } = useAuth();
   const [suggestions, setSuggestions] = useState(null); // null = loading
@@ -195,8 +325,36 @@ function MatchSuggestions({ account, busy, onAction }) {
 
 function PendingCard({ account, busy, message, onAction }) {
   const [linkId, setLinkId] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const p = account.profile || {};
   const linked = p.resident_id != null;
+  const rejected = account.is_rejected === true;
+
+  function handleUnreject() {
+    if (
+      !window.confirm(
+        `Clear the rejection on @${account.username}? The account goes back to awaiting review — it does NOT become active, and you can still activate or reject it afterwards.`
+      )
+    ) {
+      return;
+    }
+    onAction(account, 'unreject');
+  }
+
+  // The reject button, shown in BOTH review branches. The not-linked branch is
+  // the commonest rejection case by far — an applicant with no matching record
+  // is exactly the one to decline — and before this it offered no exit at all,
+  // only "create a record for them" and "link them to one".
+  const rejectButton = (
+    <button
+      className="btn danger"
+      type="button"
+      disabled={busy}
+      onClick={() => setRejecting(true)}
+    >
+      Reject registration
+    </button>
+  );
 
   return (
     <div className="pending-card">
@@ -205,6 +363,7 @@ function PendingCard({ account, busy, message, onAction }) {
           <h3>{fullName(p) || account.username}</h3>
           <p className="muted">@{account.username} · {account.email}</p>
         </div>
+        {rejected && <span className="badge status-rejected">Rejected</span>}
         {linked && <span className="badge">Linked to record #{p.resident_id}</span>}
       </div>
 
@@ -225,7 +384,18 @@ function PendingCard({ account, busy, message, onAction }) {
 
       {message && <div className={`alert ${message.type}`}>{message.text}</div>}
 
-      {!linked ? (
+      {rejected ? (
+        <RejectedPanel account={account} busy={busy} onUnreject={handleUnreject} />
+      ) : rejecting ? (
+        <RejectPanel
+          busy={busy}
+          onCancel={() => setRejecting(false)}
+          onSubmit={(payload) => {
+            setRejecting(false);
+            onAction(account, 'reject', payload);
+          }}
+        />
+      ) : !linked ? (
         <>
           <MatchSuggestions account={account} busy={busy} onAction={onAction} />
           <div className="actions">
@@ -255,6 +425,7 @@ function PendingCard({ account, busy, message, onAction }) {
                 Link by ID
               </button>
             </form>
+            {rejectButton}
           </div>
         </>
       ) : (
@@ -266,6 +437,7 @@ function PendingCard({ account, busy, message, onAction }) {
           >
             Activate account
           </button>
+          {rejectButton}
         </div>
       )}
     </div>
@@ -280,11 +452,14 @@ export default function SecretaryReviewPage() {
   const [flash, setFlash] = useState(null); // top banner for successful actions
   const [busyId, setBusyId] = useState(null);
   const [errors, setErrors] = useState({}); // user_id -> { type, text }
+  // Drives ?status= on the server. 'pending' matches the route's default, so
+  // the screen opens on exactly the list it always showed.
+  const [status, setStatus] = useState('pending');
 
   const load = useCallback(async () => {
     setListError('');
     try {
-      const data = await authFetch('/secretary/pending-residents');
+      const data = await authFetch(`/secretary/pending-residents?status=${status}`);
       setPending(
         data.pending.map((u) => ({
           ...u,
@@ -296,13 +471,15 @@ export default function SecretaryReviewPage() {
       setListError(err.message);
       setPending([]);
     }
-  }, [authFetch]);
+  }, [authFetch, status]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function handleAction(account, kind, residentId) {
+  // `payload` is the resident_id for 'link' and the { reason, note } body for
+  // 'reject'; the other kinds ignore it.
+  async function handleAction(account, kind, payload) {
     const userId = account.user_id;
     setBusyId(userId);
     setFlash(null);
@@ -317,7 +494,16 @@ export default function SecretaryReviewPage() {
       } else if (kind === 'link') {
         data = await authFetch(`/secretary/pending-residents/${userId}/link`, {
           method: 'POST',
-          body: { resident_id: residentId },
+          body: { resident_id: payload },
+        });
+      } else if (kind === 'reject') {
+        data = await authFetch(`/secretary/pending-residents/${userId}/reject`, {
+          method: 'POST',
+          body: payload,
+        });
+      } else if (kind === 'unreject') {
+        data = await authFetch(`/secretary/pending-residents/${userId}/unreject`, {
+          method: 'POST',
         });
       } else {
         data = await authFetch(`/secretary/pending-residents/${userId}/activate`, {
@@ -347,37 +533,49 @@ export default function SecretaryReviewPage() {
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
         {listError && <div className="alert error">{listError}</div>}
 
-        {pending === null ? (
-          <p className="muted">Loading pending accounts…</p>
-        ) : pending.length === 0 ? (
-          <div className="empty">
-            <p>No pending resident accounts.</p>
+        {/* The filter sits OUTSIDE the empty check on purpose: switching to
+            Rejected and finding it empty must not remove the control that
+            switches back. */}
+        <div className="list-head">
+          <h2>
+            {pending === null
+              ? 'Resident accounts'
+              : `${pending.length} ${
+                  pending.length === 1 ? STATUS_NOUN[status].one : STATUS_NOUN[status].many
+                }`}
+          </h2>
+          <div className="head-actions">
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              {PENDING_STATUS_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
             <button className="btn secondary" onClick={load}>
               Refresh
             </button>
           </div>
+        </div>
+
+        {pending === null ? (
+          <p className="muted">Loading resident accounts…</p>
+        ) : pending.length === 0 ? (
+          <div className="empty">
+            <p>{EMPTY_TEXT[status]}</p>
+          </div>
         ) : (
-          <>
-            <div className="list-head">
-              <h2>
-                {pending.length} pending account{pending.length === 1 ? '' : 's'}
-              </h2>
-              <button className="btn secondary" onClick={load}>
-                Refresh
-              </button>
-            </div>
-            <div className="pending-list">
-              {pending.map((a) => (
-                <PendingCard
-                  key={a.user_id}
-                  account={a}
-                  busy={busyId === a.user_id}
-                  message={errors[a.user_id]}
-                  onAction={handleAction}
-                />
-              ))}
-            </div>
-          </>
+          <div className="pending-list">
+            {pending.map((a) => (
+              <PendingCard
+                key={a.user_id}
+                account={a}
+                busy={busyId === a.user_id}
+                message={errors[a.user_id]}
+                onAction={handleAction}
+              />
+            ))}
+          </div>
         )}
       </main>
     </div>

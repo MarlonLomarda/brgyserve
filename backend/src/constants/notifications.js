@@ -31,12 +31,20 @@ const NOTIFICATION_STATUS = {
 const DELIVERED_STATUSES = [NOTIFICATION_STATUS.SENT];
 
 // Polymorphic pointer (notifications.related_type / related_to). Not an
-// enforced FK — one column has to point at four different tables.
+// enforced FK — one column has to point at five different tables.
+//
+// ACCOUNT points at users.user_id and was added for registration rejection.
+// It is the only member that is not about a transaction: the others all name
+// something the resident asked for, while this one is about the account
+// itself. related_type is varchar(50) with no CHECK, so adding it needed no
+// migration — but frontend/src/constants/notifications.js must gain the
+// matching entry or the rows are unfilterable on the notifications screen.
 const RELATED_TYPE = {
   DOCUMENT_REQUEST: 'DOCUMENT_REQUEST',
   RENTAL_REQUEST: 'RENTAL_REQUEST',
   CHARGE: 'CHARGE',
   EVENT: 'EVENT',
+  ACCOUNT: 'ACCOUNT',
 };
 
 // Provider modes, read from SMS_MODE. SIMULATED is the default and the only

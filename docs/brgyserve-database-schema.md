@@ -163,6 +163,13 @@ Stores system user accounts, including login credentials, roles, and account sta
 | role | varchar(50) | | No | System role (Secretary, Punong Barangay, Treasurer, Staff, Resident). |
 | must_change_password | boolean | | No | Whether the user must change their password on next login. |
 | is_active | boolean | | No | Whether the account is active and allowed to access the system. |
+| is_rejected | boolean | | No | Whether a resident self-registration was declined by the Secretary. Added in migration 017. Needed because a pending registration is already `is_active = false`, so pending and rejected were otherwise the same row state and login could not tell them apart. Defaults false. |
+| rejection_reason | varchar(50) | | Yes | Fixed reason code for the rejection (`NOT_IN_MASTERLIST`, `RESIDENCY_TOO_SHORT`, `OTHER`), defined in `backend/src/constants/registration.js`. The code's canned sentence is what the applicant is shown at login. Null unless rejected. Added in migration 017. |
+| rejection_note | varchar(255) | | Yes | Secretary's optional free-text note about the rejection. **Internal only — never shown to the applicant**, which is what allows it to be specific. Required by the app when the reason code is `OTHER`. Added in migration 017. |
+| rejected_at | timestamptz | | Yes | When the registration was declined; null unless rejected. Added in migration 017. |
+| rejected_by_user_id | bigint | FK → users | Yes | Secretary who declined the registration; null unless rejected. Matches `payments.received_by_user_id` in type and target — a rejection may be contested at the office, so who decided it must be answerable. Added in migration 017. |
+
+Two CHECK constraints added in migration 017 back the app rules: `users_rejection_state_consistent` (not rejected ⇒ all four detail columns null; rejected ⇒ reason, `rejected_at` and `rejected_by_user_id` all present) and `users_rejection_reason_valid` (the reason code vocabulary). Rejection is reversible — un-rejecting clears all five back to the pending state.
 
 ### TABLE 10. profiles
 Stores additional profile information for system users, such as name, contact number, and profile picture.

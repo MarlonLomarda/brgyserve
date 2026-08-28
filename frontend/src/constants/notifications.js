@@ -23,11 +23,16 @@ export const NOTIFICATION_STATUS_FILTERS = [
   { value: 'FAILED', label: 'Failed' },
 ];
 
+// ACCOUNT points at users.user_id — currently only registration rejections.
+// It must stay in step with RELATED_TYPE in backend/src/constants/
+// notifications.js: a kind missing from the filter list below is a kind the
+// Secretary cannot filter the log by.
 export const RELATED_TYPE_LABELS = {
   DOCUMENT_REQUEST: 'Document request',
   RENTAL_REQUEST: 'Facility rental',
   CHARGE: 'Payment',
   EVENT: 'Event',
+  ACCOUNT: 'Account',
 };
 
 export const RELATED_TYPE_FILTERS = [
@@ -36,6 +41,7 @@ export const RELATED_TYPE_FILTERS = [
   { value: 'RENTAL_REQUEST', label: 'Facility rentals' },
   { value: 'CHARGE', label: 'Payments' },
   { value: 'EVENT', label: 'Events' },
+  { value: 'ACCOUNT', label: 'Accounts' },
 ];
 
 export function relatedLabel(row) {
