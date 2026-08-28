@@ -77,6 +77,97 @@ const rejectionMessage = (code) =>
   REJECTION_REASON_META[code]?.applicantMessage ||
   REJECTION_REASON_META[REJECTION_REASON.OTHER].applicantMessage;
 
+// ===========================================================================
+// RESIDENCY — how long a resident has been on the barangay masterlist.
+//
+// DISPLAY-ONLY AND NEVER STORED, the same rule as deriveStatus() in
+// routes/rentalRequests.js and routes/events.js: the time comparison lives in
+// exactly one place, GETs stay read-only, and no scheduler is needed because
+// nothing has to be recomputed on a clock.
+//
+// It lives HERE rather than in a route file (which is where the two
+// deriveStatus() precedents sit) because TWO route files serve it —
+// residentRecords.js for the master list and secretary.js for the review
+// screen. Putting it beside RESIDENCY_MINIMUM_MONTHS also keeps the threshold
+// next to RESIDENCY_TOO_SHORT, the reason code it justifies.
+//
+// IT IS ADVISORY. Nothing in the codebase blocks, disables or gates anything
+// on meets_minimum. The Secretary reads it and decides.
+// ===========================================================================
+
+const RESIDENCY_MINIMUM_MONTHS = 6;
+
+// Manila is UTC+8 with no DST, so shifting the epoch by +8h and reading the
+// UTC parts gives the Manila calendar date without a timezone library. Same
+// approach as the explicit +08:00 composition used elsewhere in the backend.
+function manilaToday() {
+  const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return {
+    y: shifted.getUTCFullYear(),
+    m: shifted.getUTCMonth() + 1,
+    d: shifted.getUTCDate(),
+  };
+}
+
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Elapsed time since the masterlist registration date.
+ *
+ * RETURNS null WHEN THERE IS NO DATE ON FILE, AND THAT IS THE ONLY CORRECT
+ * ANSWER. It must never return a shape with meets_minimum: false for a
+ * missing date. `false` is a POSITIVE CLAIM — "we checked, they do not meet
+ * the six months" — and a client cannot tell it apart from "there was nothing
+ * to check". Every record the barangay simply has no date for would render an
+ * under-six-months badge, and the Secretary would decline people for failing a
+ * test that never ran. This is the same defect as `account: null` on the
+ * resident list and `linked_accounts: []` on its detail (see the Standing
+ * Rules in CLAUDE.md), in a new place: a value that looks like an answer
+ * standing in for the absence of one.
+ *
+ * @param {string|null} masterlistRegisteredOn - 'YYYY-MM-DD' or null
+ * @returns {{ months: number, days: number, meets_minimum: boolean }|null}
+ */
+function deriveResidency(masterlistRegisteredOn) {
+  if (!masterlistRegisteredOn) return null;
+
+  const parts = DATE_ONLY_RE.exec(String(masterlistRegisteredOn).slice(0, 10));
+  // Unparseable is treated exactly like absent: showing nothing beats showing
+  // a number derived from something the code did not understand.
+  if (!parts) return null;
+
+  const from = { y: Number(parts[1]), m: Number(parts[2]), d: Number(parts[3]) };
+  const today = manilaToday();
+
+  let months = (today.y - from.y) * 12 + (today.m - from.m);
+  // The day-of-month anniversary has not come round yet this month.
+  if (today.d < from.d) months -= 1;
+
+  // Defensive only: validateOptionalDate rejects a future date on both the add
+  // and edit paths, so this is unreachable through the API. A future date
+  // certainly does not meet a six-month minimum, and reporting negative
+  // elapsed time would be worse than reporting none.
+  if (months < 0) return { months: 0, days: 0, meets_minimum: false };
+
+  // Days since that anniversary. Date's own month arithmetic rolls overflow
+  // forward (31 Jan + 1 month lands in March), which can put the anniversary
+  // marginally past today for end-of-month dates — clamped rather than shown
+  // as negative, since this is a display remainder and not a calculation
+  // anything depends on.
+  const anniversary = Date.UTC(from.y, from.m - 1 + months, from.d);
+  const todayUtc = Date.UTC(today.y, today.m - 1, today.d);
+  const days = Math.max(0, Math.round((todayUtc - anniversary) / 86400000));
+
+  // >= : exactly six months COUNTS as meeting the rule, which is what "at
+  // least six months" means.
+  return { months, days, meets_minimum: months >= RESIDENCY_MINIMUM_MONTHS };
+}
+
+// Attaches the derived value to a row carrying masterlist_registered_on.
+// Mirrors withStatus()/withDerived() in the events and rentals routes.
+const withResidency = (row) =>
+  (row ? { ...row, residency: deriveResidency(row.masterlist_registered_on) } : row);
+
 module.exports = {
   REJECTION_REASON,
   REJECTION_REASONS,
@@ -84,4 +175,7 @@ module.exports = {
   isRejectionReason,
   reasonRequiresNote,
   rejectionMessage,
+  RESIDENCY_MINIMUM_MONTHS,
+  deriveResidency,
+  withResidency,
 };

@@ -80,6 +80,15 @@ const EXPECTED = {
 // separately because they are response keys, not table columns.
 const RESTRICTED = ['birthplace', 'sex', 'civil_status', 'religion', 'educational_attainment', 'contact_number'];
 
+// The two registration dates, swept separately because neither is a personal
+// detail in the way the RESTRICTED list is — they are withheld from Staff for
+// the same data-minimization reason, but the argument is "no Staff task needs
+// it" rather than "this is private". masterlist_registered_on (migration 018)
+// drives the six-month residency judgement, which belongs to the Secretary.
+// Withholding one registration date while exposing the other would be
+// incoherent, so both are asserted by name here.
+const RESTRICTED_DATES = ['date_registered', 'masterlist_registered_on'];
+
 // ---------------------------------------------------------------------------
 // Probing the real middleware chain
 // ---------------------------------------------------------------------------
@@ -193,7 +202,9 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   for (const col of RESTRICTED) {
     check(`  staff row omits ${col}`, !(col in staffRow));
   }
-  check('  staff row omits date_registered', !('date_registered' in staffRow));
+  for (const col of RESTRICTED_DATES) {
+    check(`  staff row omits ${col}`, !(col in staffRow));
+  }
 
   // WITHHELD MEANS ABSENT. `account: null` used to be the one field that was
   // withheld by being nulled rather than removed, which made a withheld value
@@ -205,7 +216,9 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
     Object.keys(pbRow).join(', '));
 
   check('  PB row DOES include contact_number', 'contact_number' in pbRow);
-  check('  PB row DOES include date_registered', 'date_registered' in pbRow);
+  for (const col of RESTRICTED_DATES) {
+    check(`  PB row DOES include ${col}`, col in pbRow);
+  }
 
   // EXACTLY the eight, not merely "at least" — an extra key is what this whole
   // section exists to catch.
@@ -302,7 +315,7 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
     const pbRes = pbReq.body.request?.resident_records || {};
 
     check('staff detail returns 200', staffReq.status === 200, String(staffReq.status));
-    for (const col of ['birthplace', 'sex', 'civil_status', 'contact_number', 'date_registered']) {
+    for (const col of ['birthplace', 'sex', 'civil_status', 'contact_number', ...RESTRICTED_DATES]) {
       check(`  staff resident embed omits ${col}`, !(col in staffRes));
     }
     check('  staff resident embed keeps name + birthdate + address',

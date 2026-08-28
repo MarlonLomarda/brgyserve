@@ -52,8 +52,16 @@ const VIEW_ROLES = ['secretary', 'punong_barangay', 'staff'];
 const STAFF_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, is_archived';
 
+// masterlist_registered_on is in LIST_FIELDS but deliberately NOT in
+// STAFF_FIELDS. The argument is the one written above: Staff read records to
+// confirm a resident is registered, an identity task, and the six-month
+// residency judgement belongs to the Secretary — the whole rejection module is
+// Secretary-only. date_registered is already withheld from Staff, so exposing
+// a second and more meaningful registration date while hiding the first would
+// be incoherent. `roles:test` sweeps for this column by name, so the omission
+// is guarded rather than incidental.
 const LIST_FIELDS =
-  'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, contact_number, date_registered, is_archived';
+  'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, contact_number, date_registered, masterlist_registered_on, is_archived';
 
 // Staff get STAFF_FIELDS; everyone admitted by VIEW_ROLES gets the full
 // projection. Non-staff behaviour is byte-identical to before this change.
@@ -73,10 +81,45 @@ const MAX_LENGTH = {
 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Validates one optional YYYY-MM-DD column. Returns { error } or { value }.
+//
+// TWO date columns now share these rules, so there is ONE implementation:
+//   birthdate                — when the resident was born
+//   masterlist_registered_on — when the barangay registered them (migration
+//                              018), which the six-month residency rule counts
+//                              from
+// They validate identically: shape first (the regex catches 2026-13-45 before
+// Date can quietly accept it), then validity, then not-in-the-future. The
+// +08:00 composition matters — comparing a bare date against `new Date()` in
+// UTC would call today's date "future" for the first eight hours of every
+// Manila day. Keeping this in one function is what stops the two columns
+// drifting apart on that detail.
+//
+// A BLANK VALUE CLEARS THE COLUMN (null, not ''), so an edit can remove a
+// date entered by mistake.
+const DATE_RE_MSG = 'must be in YYYY-MM-DD format';
+function validateOptionalDate(body, field, label) {
+  const raw = String(body?.[field] ?? '').trim();
+  if (!raw) return { value: null };
+
+  if (!DATE_RE.test(raw)) return { error: `${label} ${DATE_RE_MSG}` };
+  const parsed = new Date(`${raw}T00:00:00+08:00`);
+  if (Number.isNaN(parsed.getTime())) return { error: `${label} is not a valid date` };
+  if (parsed > new Date()) return { error: `${label} cannot be in the future` };
+  return { value: raw };
+}
+
 // Validates the writable columns; returns { error } or { value }, the same
-// shape document types and rental items use. resident_id, date_registered and
-// is_archived are never client-writable (date_registered is set server-side on
-// create; archiving is stage 3).
+// shape document types and rental items use.
+//
+// WHAT IS NEVER CLIENT-WRITABLE: resident_id, date_registered and is_archived.
+// This is not a denylist — `value` is built key by key from the lists below,
+// so a column that is not named here simply cannot enter an insert or update.
+// Note that this is about those three columns specifically and NOT about dates
+// in general: birthdate and masterlist_registered_on are both writable on add
+// and edit. date_registered is locked because it records when the row entered
+// BrgyServe, which only the server can know; masterlist_registered_on records
+// something only the barangay knows, so the Secretary supplies it.
 function validateBody(body) {
   const value = {};
 
@@ -97,21 +140,13 @@ function validateBody(body) {
     value[field] = v || null;
   }
 
-  const birthdate = String(body?.birthdate ?? '').trim();
-  if (birthdate) {
-    if (!DATE_RE.test(birthdate)) {
-      return { error: 'birthdate must be in YYYY-MM-DD format' };
-    }
-    const parsed = new Date(`${birthdate}T00:00:00+08:00`);
-    if (Number.isNaN(parsed.getTime())) {
-      return { error: 'birthdate is not a valid date' };
-    }
-    if (parsed > new Date()) {
-      return { error: 'birthdate cannot be in the future' };
-    }
-    value.birthdate = birthdate;
-  } else {
-    value.birthdate = null;
+  for (const [field, label] of [
+    ['birthdate', 'birthdate'],
+    ['masterlist_registered_on', 'masterlist registration date'],
+  ]) {
+    const result = validateOptionalDate(body, field, label);
+    if (result.error) return { error: result.error };
+    value[field] = result.value;
   }
 
   return { value };

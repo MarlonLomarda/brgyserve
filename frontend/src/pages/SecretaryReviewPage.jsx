@@ -6,6 +6,8 @@ import { SECRETARY_NAV } from '../constants/nav';
 import {
   PENDING_STATUS_FILTERS,
   REJECTION_REASON_OPTIONS,
+  RESIDENCY_BADGE,
+  formatResidency,
   rejectionReasonLabel,
   rejectionReasonRequiresNote,
 } from '../constants/registration';
@@ -151,6 +153,36 @@ const EMPTY_TEXT = {
   rejected: 'No registrations have been rejected.',
   all: 'No resident accounts are waiting — every registration has been activated.',
 };
+
+// The masterlist registration date and how long ago it was, with an advisory
+// badge under six months.
+//
+// RENDERS NOTHING AT ALL when there is no date on file — the component returns
+// null, so there is no date, no badge and no "unknown" pill. A placeholder
+// would read as "under six months" at a glance, and the Secretary would
+// decline someone for failing a check that never ran.
+//
+// It tests `record?.residency`, never the viewer's role. The server decided
+// what to send; a role check here would be a second opinion free to disagree.
+//
+// PURELY ADVISORY — it renders text and a badge and nothing else. No caller
+// passes it a disabled flag and nothing downstream reads meets_minimum.
+function ResidencyLine({ record }) {
+  const residency = record?.residency;
+  if (!residency) return null;
+
+  const elapsed = formatResidency(residency);
+  return (
+    <span className="muted">
+      registered {record.masterlist_registered_on} · {elapsed} ago{' '}
+      {!residency.meets_minimum && (
+        <span className={`badge ${RESIDENCY_BADGE.className}`} title={RESIDENCY_BADGE.title}>
+          {RESIDENCY_BADGE.label}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -303,6 +335,7 @@ function MatchSuggestions({ account, busy, onAction }) {
                 <span className="muted">
                   b. {s.birthdate || '—'} · {s.address || '—'}
                 </span>
+                <ResidencyLine record={s} />
               </div>
               {s.already_linked ? (
                 <span className="muted linked-note">already linked to another account</span>
@@ -380,6 +413,19 @@ function PendingCard({ account, busy, message, onAction }) {
           <dt>Claimed address</dt>
           <dd>{p.address || '—'}</dd>
         </div>
+        {/* The LINKED branch used to fetch no resident record at all, so the
+            masterlist date had nowhere to appear once an account was linked.
+            The whole row is omitted when there is no date on file — the same
+            rule as ResidencyLine, applied one level up so no empty <dt> is
+            left behind. */}
+        {account.linked_record?.residency && (
+          <div className="span-2">
+            <dt>Masterlist registration (record #{account.linked_record.resident_id})</dt>
+            <dd>
+              <ResidencyLine record={account.linked_record} />
+            </dd>
+          </div>
+        )}
       </dl>
 
       {message && <div className={`alert ${message.type}`}>{message.text}</div>}

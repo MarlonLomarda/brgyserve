@@ -32,3 +32,48 @@ export const PENDING_STATUS_FILTERS = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'all', label: 'All' },
 ];
+
+// ---------------------------------------------------------------------------
+// RESIDENCY — display only.
+//
+// The server derives { months, days, meets_minimum } and sends `residency`,
+// or NULL when there is no masterlist date on file. THE CALLER MUST TEST FOR
+// THE OBJECT AND RENDER NOTHING WHEN IT IS ABSENT — no date, no badge, no
+// "unknown" pill. A placeholder in that slot reads as "under six months" to
+// anyone glancing at the screen, which would have the Secretary decline people
+// for failing a test that never ran.
+//
+// Presence is the only thing checked. NEVER the viewer's role: the server has
+// already decided what to send, and a role check here would be a second
+// opinion free to disagree with it.
+//
+// The six-month threshold is NOT duplicated here. `meets_minimum` arrives
+// decided from the server, so this file cannot drift out of step with the rule.
+// ---------------------------------------------------------------------------
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// "7 years 6 months" / "4 months 22 days" / "18 days"
+export function formatResidency(residency) {
+  if (!residency) return null;
+  const { months = 0, days = 0 } = residency;
+
+  if (months >= 12) {
+    const years = Math.floor(months / 12);
+    const rem = months % 12;
+    return rem ? `${plural(years, 'year')} ${plural(rem, 'month')}` : plural(years, 'year');
+  }
+  if (months > 0) {
+    return days ? `${plural(months, 'month')} ${plural(days, 'day')}` : plural(months, 'month');
+  }
+  return plural(days, 'day');
+}
+
+// Advisory badge. Reuses the amber .badge.status-pending variant already in
+// index.css rather than introducing a colour — it is a caution, not an error,
+// and it never gates anything.
+export const RESIDENCY_BADGE = {
+  label: 'Under 6 months',
+  className: 'status-pending',
+  title: 'Registered in the barangay masterlist less than six months ago. Advisory only — you can still activate this account.',
+};

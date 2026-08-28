@@ -31,6 +31,12 @@ const OPTIONAL_DETAIL_FIELDS = [
   { key: 'religion', label: 'Religion' },
   { key: 'educational_attainment', label: 'Educational attainment' },
   { key: 'contact_number', label: 'Contact number' },
+  // Withheld from Staff (migration 018) for the same reason date_registered
+  // is: no Staff task uses it, and the six-month residency judgement belongs
+  // to the Secretary. The row disappears for Staff because the KEY IS ABSENT
+  // from a narrowed payload — the filter below tests `key in r` and never the
+  // viewer's role.
+  { key: 'masterlist_registered_on', label: 'Registered in masterlist' },
 ];
 
 const ARCHIVED_FILTERS = [
@@ -42,10 +48,14 @@ const ARCHIVED_FILTERS = [
 const SEX_OPTIONS = ['Male', 'Female'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'];
 
+// EMPTY_FORM is also what the EDIT form prefills from — it maps over these
+// keys against the record — so a writable column missing here is silently
+// dropped on save rather than merely absent from the add form.
 const EMPTY_FORM = {
   first_name: '', middle_name: '', last_name: '', suffix: '',
   birthdate: '', birthplace: '', address: '', sex: '', civil_status: '',
   religion: '', educational_attainment: '', contact_number: '',
+  masterlist_registered_on: '',
 };
 
 function fullName(r) {
@@ -199,6 +209,22 @@ function RecordForm({ record, onDone }) {
               type="date"
               max={new Date().toISOString().slice(0, 10)}
               value={form.birthdate}
+              onChange={handleChange}
+            />
+          </label>
+          {/* The barangay's OWN registration date, which the six-month
+              residency rule counts from — not date_registered, which is when
+              this row was created in BrgyServe and is not writable here.
+              Markup mirrors Birthdate above, `max` included: same rule (not in
+              the future), same validator on the server. Leaving it blank is
+              normal and clears the column on edit. */}
+          <label>
+            Registered in masterlist <span className="hint">(optional)</span>
+            <input
+              name="masterlist_registered_on"
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={form.masterlist_registered_on}
               onChange={handleChange}
             />
           </label>

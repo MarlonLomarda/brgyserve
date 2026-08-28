@@ -78,7 +78,8 @@ Stores the demographic and personal information of residents registered in Baran
 | religion | varchar(100) | | Yes | Resident's religious affiliation. |
 | educational_attainment | varchar(100) | | Yes | Highest educational level attained. |
 | contact_number | varchar(20) | | Yes | Resident's contact number. |
-| date_registered | timestamptz | | No | Date and time the resident record was registered. |
+| date_registered | timestamptz | | No | Date and time the resident record was created **in BrgyServe**. Server-set on insert and never client-writable. This is a row-creation timestamp, **not** the barangay's own registration date — see `masterlist_registered_on`. |
+| masterlist_registered_on | date | | Yes | The date the resident was registered in the **barangay's own masterlist**, which is what the six-month residency rule counts from. Secretary-writable on add and edit, unlike `date_registered`. Nullable because the barangay will not have a date for every resident; null means "no date on file" and the UI renders nothing for it rather than a placeholder. Advisory only — the elapsed time and an under-six-months badge are shown, and nothing is ever blocked or disabled by it. Added in migration 018. |
 | is_archived | boolean | | No | Whether the resident record has been archived. |
 
 ---

@@ -11,6 +11,8 @@ const {
   isRejectionReason,
   reasonRequiresNote,
   rejectionMessage,
+  deriveResidency,
+  withResidency,
 } = require('../constants/registration');
 
 // Staff-type roles the Secretary may create accounts for (per the
@@ -25,6 +27,41 @@ router.use(authenticate, requireRole('secretary'));
 
 const PROFILE_FIELDS =
   'resident_id, first_name, middle_name, last_name, suffix, birthdate, address, phone_number';
+
+// The linked resident record's masterlist registration date, reached through
+// profiles.resident_id. A NESTED EMBED rather than a second query: that FK is
+// single-column and unambiguous, and routes/auth.js already runs the identical
+// shape (`profiles → resident_records ( is_archived )`) in inactiveMessage, so
+// this is a proven pattern here rather than a guess. It also costs no extra
+// round trip and gives every pending card — linked or not — the same shape,
+// so the screen has one case to render instead of two.
+//
+// Only the two columns the review screen needs. The rest of the record is
+// available at GET /api/resident-records/:id and has no business being copied
+// into this payload.
+const LINKED_RECORD_FIELDS = 'resident_id, masterlist_registered_on';
+
+// profiles is one-to-one and the embed is to-one, but PostgREST can return
+// either an object or a single-element array depending on how it resolves the
+// relationship — normalize both, the same way loadResidentAccount already
+// normalizes profiles itself.
+const one = (v) => (Array.isArray(v) ? v[0] || null : v || null);
+
+// Flattens the embed into the shape the screen consumes, with the residency
+// derived once here so the time comparison stays in a single place.
+//
+// null when there is no linked record AND null when the record has no date on
+// file. Both mean "there is nothing to show", and the screen renders nothing
+// for either — a placeholder would read as "under six months".
+function linkedRecordOf(profile) {
+  const record = one(profile?.resident_records);
+  if (!record) return null;
+  return {
+    resident_id: record.resident_id,
+    masterlist_registered_on: record.masterlist_registered_on,
+    residency: deriveResidency(record.masterlist_registered_on),
+  };
+}
 
 // The rejection state (migration 017). These are read on every pending-account
 // path because three separate routes now have to agree about it: reject
@@ -155,7 +192,8 @@ async function loadResidentAccount(userId) {
   const { data, error } = await supabase
     .from('users')
     .select(
-      `user_id, username, email, is_active, ${REJECTION_FIELDS}, profiles ( ${PROFILE_FIELDS} )`
+      `user_id, username, email, is_active, ${REJECTION_FIELDS}, ` +
+      `profiles ( ${PROFILE_FIELDS}, resident_records ( ${LINKED_RECORD_FIELDS} ) )`
     )
     .eq('user_id', userId)
     .eq('role', 'resident')
@@ -166,8 +204,8 @@ async function loadResidentAccount(userId) {
   }
   if (!data) return null;
   // profiles is one-to-one (PK+FK) but normalize in case the client returns an array
-  const profile = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
-  return { ...data, profile: profile || null };
+  const profile = one(data.profiles);
+  return { ...data, profile, linked_record: linkedRecordOf(profile) };
 }
 
 // GET /api/secretary/pending-residents?status=pending|rejected|all
@@ -195,7 +233,10 @@ router.get('/pending-residents', async (req, res) => {
 
   let query = supabase
     .from('users')
-    .select(`user_id, username, email, ${REJECTION_FIELDS}, profiles ( ${PROFILE_FIELDS} )`)
+    .select(
+      `user_id, username, email, ${REJECTION_FIELDS}, ` +
+      `profiles ( ${PROFILE_FIELDS}, resident_records ( ${LINKED_RECORD_FIELDS} ) )`
+    )
     .eq('role', 'resident')
     .eq('is_active', false)
     .order('user_id', { ascending: true });
@@ -209,7 +250,15 @@ router.get('/pending-residents', async (req, res) => {
     throw new Error(`Failed to load pending accounts: ${error.message}`);
   }
 
-  res.json({ pending: await attachRejectedBy(data || []), status });
+  // The embed is flattened here so the linked branch of the review card has
+  // the masterlist date without a second request — it previously fetched no
+  // resident record at all.
+  const withLinked = (data || []).map((row) => ({
+    ...row,
+    linked_record: linkedRecordOf(one(row.profiles)),
+  }));
+
+  res.json({ pending: await attachRejectedBy(withLinked), status });
 });
 
 // GET /api/secretary/pending-residents/:userId/match-suggestions
@@ -243,9 +292,37 @@ router.get('/pending-residents/:userId/match-suggestions', async (req, res) => {
   }
   const linkedIds = new Set(linkedRows.map((r) => r.resident_id));
 
+  // HYDRATE the masterlist date onto the candidates rather than adding it to
+  // match_resident_candidates' RETURNS TABLE.
+  //
+  // Adding an output column to that function CANNOT be done with CREATE OR
+  // REPLACE — PostgreSQL refuses with "cannot change return type of existing
+  // function" and requires a DROP first, which would remove the duplicate
+  // checker from the database mid-migration. That checker guards BOTH entry
+  // points into the master list, and the function is the measured Stage 1 of
+  // the research contribution. One extra read is the cheaper trade by a wide
+  // margin.
+  //
+  // The id list is bounded by DEFAULTS.maxCandidates (50), so .in() is safe
+  // here — this is not the four-figure list that GET /unassigned-residents and
+  // fine generation had to avoid putting in a query string.
+  let datesById = {};
+  if (matches.length > 0) {
+    const { data: dates, error: dateError } = await supabase
+      .from('resident_records')
+      .select('resident_id, masterlist_registered_on')
+      .in('resident_id', matches.map((m) => m.resident_id));
+    if (dateError) {
+      throw new Error(`Failed to load masterlist dates: ${dateError.message}`);
+    }
+    datesById = Object.fromEntries(dates.map((d) => [d.resident_id, d.masterlist_registered_on]));
+  }
+
   res.json({
     claimed,
-    suggestions: matches.map((m) => ({
+    // withResidency derives from masterlist_registered_on and yields null when
+    // there is no date on file, which is what the screen renders nothing for.
+    suggestions: matches.map((m) => withResidency({
       resident_id: m.resident_id,
       first_name: m.first_name,
       middle_name: m.middle_name,
@@ -253,6 +330,7 @@ router.get('/pending-residents/:userId/match-suggestions', async (req, res) => {
       suffix: m.suffix,
       birthdate: m.birthdate,
       address: m.address,
+      masterlist_registered_on: datesById[m.resident_id] ?? null,
       score: m.score,
       already_linked: linkedIds.has(m.resident_id),
     })),
