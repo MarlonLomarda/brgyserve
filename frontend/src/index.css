@@ -347,6 +347,17 @@ a {
   min-height: 100vh;
 }
 
+/* STICKY, and z-index: 30 is the load-bearing number. It must stay BELOW
+   .dash-backdrop's 40 so the backdrop still covers the header while the drawer
+   is open (the drawer itself is 50), and above 0 so .dash-main scrolls beneath
+   the header rather than over it. At 40 or higher the header would sit on top
+   of the backdrop and stay clickable behind an open drawer.
+
+   The cost is vertical space, permanently: the header measures 89.6px at 640px
+   and up, and 109.6px at 480px and below, where the subtitle wraps to a second
+   line. Padding is deliberately untouched — shrinking the header is a separate
+   judgement about density, and .dash-header padding has already been through
+   one revert cycle (2c6d7c1 / 07cc26d). */
 .dash-header {
   display: flex;
   justify-content: space-between;
@@ -354,6 +365,9 @@ a {
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
   padding: 1.3rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 
 .dash-header-section {
