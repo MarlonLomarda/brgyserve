@@ -234,6 +234,29 @@ Line numbers below are current as of `22d7f35`. They have drifted twice already 
 - **There is deliberately NO resize handler.** One used to close the drawer above 900px, which was right while the tab row took over at that width — closing simply handed navigation back. With the drawer as the only navigation, that same close took away the user's only way to move around the app, mid-drag, with nothing replacing it. Removed in `e83e56c`. **Do not add one back.**
 - `.dash-nav { display: none }` (`index.css:2064`) is kept as a backstop so a re-added tab row cannot appear alongside the drawer by accident.
 
+### The dashboard header is STICKY (`a62f8d7`)
+
+`.dash-header` carries **`position: sticky; top: 0; z-index: 30`**. It was static from the beginning and nothing had ever revisited it — not a regression, a choice nobody had costed.
+
+**Why:** it follows directly from the section above. With the drawer as the ONLY navigation, scrolling to the bottom of a long list (the payments queue, the attendance roster, the resident list) put the **hamburger off-screen**, and the only way back to navigation was scrolling all the way up. While a tab row existed that cost nothing; once it was deleted, it did.
+
+**`z-index: 30` IS LOAD-BEARING — it is a value in a ladder, not a free number.** The whole ladder:
+
+| element | z-index | |
+|---|---|---|
+| `.dash-header` | **30** | scrolls beneath nothing; covers `.dash-main` |
+| `.dash-backdrop` | 40 | must cover the header while the drawer is open |
+| `.dash-drawer` | 50 | covers the backdrop |
+| `.modal-backdrop` (Households create) | 50 | |
+
+30 must stay **below 40**, or the header sits on top of the dimming backdrop and its Log out button stays clickable behind an open drawer; and **above 0**, or `.dash-main` content scrolls over the header instead of under it. Two consequences for anything added later: **a new floating element must sit at 40 or above to clear the header**, and **anything given 40+ that is not meant to cover the header will cover it anyway** — that is now a decision every fixed element makes, whether or not its author realises it.
+
+**The cost is vertical space, permanently: 89.6px at 640px and up, 109.6px at 480px and below** (the subtitle wraps to a second line there). That is 10% of a 900px viewport, 12.2% on a phone. Padding was deliberately **not** shrunk to claw any of it back — that is a separate judgement about density, and `.dash-header` padding has already been through one revert cycle (`2c6d7c1` / `07cc26d`).
+
+**Measured against `main` at 1280 and 1920 before shipping — two stylesheets on disk, not a runtime injection — and every value matched exactly: all six protected desktop rules, the 1132px content box, table widths, and `.table-wrap` overflow.** That result is not luck and generalises: `position: sticky` keeps the element **in flow** and does not change its width, and `.dash-header` is a **sibling** of `.dash-main` rather than an ancestor, so it cannot enter the width cascade the payments column budget depends on. The 45.5px of slack in that budget is untouched.
+
+**Nothing needed a `scroll-margin-top`.** No `.jsx` in the app calls `scrollIntoView` or `window.scrollTo`, and the dashboard has no in-page anchors — so there is nothing that could land under the pinned header. (The two `scroll-margin-top` values in `index.css` — 72px on `.landing-hero`, 68px on `.landing-section` — belong to `.landing-nav`, a **different** sticky element on the landing page, which has real anchor links. They are unrelated to `.dash-header` and were never measuring it.)
+
 ### Layout fixes, 16–17 Aug 2026
 
 - **`b5b070c` — nav row wrapping. SUPERSEDED by `07cc26d`, kept as history.** `flex-wrap: wrap` on `.dash-nav`, `white-space: nowrap` on `.dash-nav a`. The header was pushing the whole dashboard past the viewport between roughly 900 and 1300px. **Both declarations are still in the file** (`index.css:557-562`) **and both are dead**: the element is no longer rendered, and `.dash-nav { display: none }` at `index.css:2064` would hide it anyway. Left in place rather than deleted because they are the backstop's companions — if a tab row is ever reinstated, this is the wrapping behaviour it needs, and the bug it fixed is real and would return. Do not cite this entry as evidence of current behaviour.
