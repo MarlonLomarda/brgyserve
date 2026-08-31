@@ -183,10 +183,11 @@ Stores additional profile information for system users, such as name, contact nu
 | last_name | varchar(100) | | Yes | User's last name; optional for resident-type accounts. |
 | suffix | varchar(20) | | Yes | Name suffix such as Jr., Sr., III. |
 | phone_number | varchar(20) | | Yes | Contact number of the user. |
-| profile_pic | varchar(255) | | Yes | URL/path of the user's profile picture. |
 | resident_id | bigint | FK → resident_records (UNIQUE) | Yes | Links the account to its resident record; set by the Secretary when approving a resident account. Null for pending/unlinked and for staff accounts. Added in migration 002. |
 | birthdate | date | | Yes | Birthdate claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
 | address | varchar(255) | | Yes | Address claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
+
+**`profile_pic varchar(255)` was DROPPED in migration 019.** It existed from migration 001 and was never read or written by any code. A resident photo was considered and **declined**: under the Data Privacy Act a photograph needs a stated purpose, and no BrgyServe function uses one. This is a decision against the feature, not a deferral — contrast `users.email_verified`, which is equally unused but is **reserved** for planned email verification and therefore kept.
 
 ---
 
