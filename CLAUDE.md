@@ -577,6 +577,21 @@ The rest of this section is kept as the record of how webhook delivery worked du
 - **Screen:** `/secretary/notifications` (Secretary-only — it exposes contact numbers and message content). Read-only: no re-send, no delete, no POST route. Filters by status and by what the message relates to; summary counts run over the whole log, not the page.
 - **Test: `cd backend && npm run notif:test`** — no server, no network, `SMS_MODE` forced to SIMULATED. The centrepiece is failure isolation: the `notifications` table is sabotaged to throw, a real document-request approval is invoked through its actual route handler, and the test asserts the approval still returns **200**, the request is still `approved`, the charge still exists, and no notification row was written (proving the failure was real and not skipped).
 
+### WHEN EMAIL NOTIFICATION IS IMPLEMENTED, UPDATE THE ERD AND CHAPTER 3 TOO
+
+`NOTIFICATION_TYPE.EMAIL` is already in `constants/notifications.js`, reserved and unused — so email is a planned feature, and whatever schema it needs (a column, a new provider mode, anything on `notifications`) will land as a migration.
+
+**Two artifacts outside this repo must be updated in the same pass:**
+
+1. **The ERD** — the drawio page **`amoncio - erd`**.
+2. **The Chapter 3 file-structure tables** in the manuscript (the Word document).
+
+**This is a RECURRING failure, not a hypothetical one.** The manuscript and the diagram have already fallen behind migrations **015, 016, 017 and 018**, and in every case the drift was found only by **comparing them against the live database** — never by anyone noticing while writing the migration. Each of those migrations carries a "Chapter 3 TABLE n needs the matching manuscript edit" line in its own header, and that note was not enough on its own.
+
+**A migration is not finished when it is applied.** It is finished when the ERD and Chapter 3 say the same thing the database does. Treat the manuscript and the diagram as build outputs of a schema change, not as documentation someone will tidy later.
+
+**Current known drift (measured against the live schema via PostgREST's OpenAPI document):** `docs/brgyserve-database-schema.md` matches the database on **17 of 19 tables**. The gap is **Table 5 (`events`)**, missing `attendance_required boolean NOT NULL` and `fine_amount numeric(10,2)` from migration 016. Everything from 015, 017, 018 and 019 has landed in the markdown — **the Word document and the ERD are separate artifacts and were not part of that check.**
+
 ## Test Accounts
 
 The working accounts used for development and the demo. **Do not delete, rename or repurpose them.**
