@@ -100,6 +100,10 @@ Stores details of barangay events and activities, including title, description, 
 | date_created | timestamptz | | No | Date and time the event record was created. |
 | type | varchar(20) | | No | Record kind: `activity` (timed event) or `announcement` (notice, no schedule required). Added in migration 013. |
 | is_archived | boolean | | No | Whether the record has been manually archived (soft delete). Added in migration 013. |
+| attendance_required | boolean | | No | Whether household attendance is recorded for this event. Opt-in per event — most events do not take attendance, a General Assembly does. Only valid for `activity`, since an announcement has no schedule. Defaults false. Added in migration 016. |
+| fine_amount | numeric(10,2) | | Yes | Amount charged to each household that missed the event, raised as a `FINE` charge in `charges`. **Null does not mean zero:** it means attendance is tracked but nothing is chargeable. Added in migration 016. |
+
+Migration 016 also added two things that are not columns. The CHECK `events_attendance_activity_only` backs the app rule that `attendance_required` may only be true when `type = 'activity'` — an announcement has no schedule, so "who attended" is meaningless for one. A **partial** unique index `charges_event_household_unique` on `charges (event_id, household_id)` `WHERE event_id IS NOT NULL AND household_id IS NOT NULL` makes fine generation idempotent, so re-running it cannot double-charge a household for the same assembly; it is partial because PostgreSQL treats NULLs as distinct in a UNIQUE, and every non-fine charge has both columns null.
 
 ### TABLE 6. event_attendees
 Records which **households** attended each barangay event. Attendance is per household, not per resident: at an assembly one household signs once, and a household with no signature is fined via `charges.household_id`.
