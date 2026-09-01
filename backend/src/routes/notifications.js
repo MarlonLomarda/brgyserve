@@ -1,7 +1,12 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { NOTIFICATION_STATUSES, RELATED_TYPES, NOTIFICATION_STATUS } = require('../constants/notifications');
+const {
+  NOTIFICATION_STATUSES,
+  RELATED_TYPES,
+  NOTIFICATION_STATUS,
+  NOTIFICATION_TYPE,
+} = require('../constants/notifications');
 const { searchWords, parsePaging, pageResponse } = require('../utils/listQuery');
 const { currentMode } = require('../services/notifications');
 
@@ -78,7 +83,7 @@ router.get('/', async (req, res) => {
       return res.json({
         ...pageResponse('notifications', [], count || 0, page, perPage),
         summary: await summarise(),
-        mode: currentMode(),
+        ...deliveryModes(),
       });
     }
     throw new Error(`Failed to load notifications: ${error.message}`);
@@ -113,8 +118,21 @@ router.get('/', async (req, res) => {
     ...pageResponse('notifications', rows, count || 0, page, perPage),
     summary: await summarise(),
     // The screen states this plainly; it is not decoration.
-    mode: currentMode(),
+    ...deliveryModes(),
   });
+});
+
+// BOTH modes, because they are independent and the screen's banner was
+// asserting something false without the second one.
+//
+// `mode` is the SMS mode and keeps that name for compatibility — it is what
+// the page has always read. `email_mode` is new. Until it existed the banner
+// could only see SMS_MODE, so after the forgot-password work it went on
+// saying "no provider is connected" directly above a row marked SENT by
+// Resend. A screen cannot tell two independent settings apart from one value.
+const deliveryModes = () => ({
+  mode: currentMode(NOTIFICATION_TYPE.SMS),
+  email_mode: currentMode(NOTIFICATION_TYPE.EMAIL),
 });
 
 // Counts per status over the WHOLE log, not the current page — the useful
