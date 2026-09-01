@@ -3,7 +3,7 @@
 
 const NOTIFICATION_TYPE = {
   SMS: 'SMS',
-  EMAIL: 'EMAIL', // reserved; nothing sends email yet
+  EMAIL: 'EMAIL',
 };
 
 // PENDING / SENT / FAILED come from Table 17. Two more were added when the
@@ -47,11 +47,33 @@ const RELATED_TYPE = {
   ACCOUNT: 'ACCOUNT',
 };
 
-// Provider modes, read from SMS_MODE. SIMULATED is the default and the only
-// one implemented; see services/notifications.js for the seam.
+// Provider modes. There is ONE PER TYPE, read from its own environment
+// variable, and they are deliberately NOT a single shared setting.
+//
+// The reason is that the two types are at different stages and always will be
+// at some point: SMS is simulated because sending it costs PHP 560 up front
+// for a demo of twenty messages, while email is really sent through Resend.
+// A single mode would mean the decision for one is the decision for the other
+// — setting SMS_MODE=SEMAPHORE would silently route password reset emails
+// through an SMS provider, and EMAIL_MODE=RESEND would claim SMS was sent.
+// Neither can happen when each type reads its own variable.
+//
+// Both default to SIMULATED, so a missing value can never send anything.
 const SMS_MODE = {
   SIMULATED: 'SIMULATED',
   SEMAPHORE: 'SEMAPHORE',
+};
+
+const EMAIL_MODE = {
+  SIMULATED: 'SIMULATED',
+  RESEND: 'RESEND',
+};
+
+// type -> { env, modes, default }. currentMode() reads this rather than
+// branching on the type, so adding a third type is a table entry.
+const MODE_SOURCE = {
+  [NOTIFICATION_TYPE.SMS]: { env: 'SMS_MODE', modes: SMS_MODE, fallback: SMS_MODE.SIMULATED },
+  [NOTIFICATION_TYPE.EMAIL]: { env: 'EMAIL_MODE', modes: EMAIL_MODE, fallback: EMAIL_MODE.SIMULATED },
 };
 
 module.exports = {
@@ -60,6 +82,8 @@ module.exports = {
   DELIVERED_STATUSES,
   RELATED_TYPE,
   SMS_MODE,
+  EMAIL_MODE,
+  MODE_SOURCE,
   NOTIFICATION_STATUSES: Object.values(NOTIFICATION_STATUS),
   RELATED_TYPES: Object.values(RELATED_TYPE),
 };

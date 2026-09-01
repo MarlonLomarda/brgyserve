@@ -203,6 +203,15 @@ export default function NotificationsPage() {
                         </td>
                         <td className="col-message">
                           <span className="cell-clamp">
+                            {/* Email carries a subject; SMS stores null and
+                                renders nothing. Same <strong> + <br> shape the
+                                recipient cell uses, so no CSS was needed. */}
+                            {n.subject && (
+                              <>
+                                <strong>{n.subject}</strong>
+                                <br />
+                              </>
+                            )}
                             {open || n.message.length <= 90
                               ? n.message
                               : `${n.message.slice(0, 90)}…`}

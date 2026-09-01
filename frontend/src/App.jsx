@@ -7,6 +7,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import DisputesPage from './pages/DisputesPage';
 import DocumentTypesPage from './pages/DocumentTypesPage';
 import EventsPage from './pages/EventsPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import HouseholdsPage from './pages/HouseholdsPage';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -22,6 +23,7 @@ import ReportsPage from './pages/ReportsPage';
 import RentalBookingsPage from './pages/RentalBookingsPage';
 import RentalItemsPage from './pages/RentalItemsPage';
 import RequestDocumentPage from './pages/RequestDocumentPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ResidentRecordsPage from './pages/ResidentRecordsPage';
 import RoleLandingPage from './pages/RoleLandingPage';
 import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
@@ -61,6 +63,19 @@ export default function App() {
 
       <Route path="/login" element={user ? <Navigate to={home} replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to={home} replace /> : <RegisterPage />} />
+      {/* Forgot password bounces a signed-in user for the same reason /login
+          and /register do: they already have a working session, and
+          /change-password is the screen they want. */}
+      <Route
+        path="/forgot-password"
+        element={user ? <Navigate to={home} replace /> : <ForgotPasswordPage />}
+      />
+      {/* Reset password DOES NOT bounce, and the asymmetry is deliberate. The
+          token in the URL is the authority here, not the session — this page
+          never reads `user`. A resident who resets on their phone and opens
+          the emailed link on a laptop that is still signed in would otherwise
+          be redirected away from the only screen that can spend their link. */}
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/change-password"
         element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />}

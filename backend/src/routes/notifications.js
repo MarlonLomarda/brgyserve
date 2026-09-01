@@ -23,7 +23,7 @@ const router = express.Router();
 router.use(authenticate, requireRole('secretary'));
 
 const FIELDS = `
-  notification_id, type, destination, message, status, provider_response,
+  notification_id, type, destination, subject, message, status, provider_response,
   related_type, related_to, created_at, sent_at, user_id, household_id,
   users ( username, profiles ( first_name, middle_name, last_name, suffix ) ),
   household_records ( household_id, address )
@@ -91,6 +91,9 @@ router.get('/', async (req, res) => {
       notification_id: n.notification_id,
       type: n.type,
       destination: n.destination || null,
+      // Email only; SMS has no subject and stores null, which is what every
+      // row written before email existed holds.
+      subject: n.subject || null,
       message: n.message,
       status: n.status,
       provider_response: n.provider_response,
