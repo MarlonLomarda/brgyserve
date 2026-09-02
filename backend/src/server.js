@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const supabase = require('./config/supabase');
 
 const authRoutes = require('./routes/auth');
@@ -27,6 +28,22 @@ const PORT = process.env.PORT || 5000;
 if (!process.env.JWT_SECRET) {
   throw new Error('Missing JWT_SECRET. Set it in backend/.env (see .env.example).');
 }
+
+// Security response headers. Before this, the API sent NONE — no CSP, no
+// X-Content-Type-Options, no Referrer-Policy, no X-Frame-Options — and
+// advertised `X-Powered-By: Express` on every single response, which
+// fingerprints the stack for free and is the first line of any scanner's
+// report. Verified live on the deployed instance before this was added.
+//
+// MOUNTED FIRST, ahead of cors() and ahead of the raw-body PayMongo webhook,
+// so the headers are on EVERY response — including the CORS preflight, which
+// cors() short-circuits with a 204 before any router runs, and including the
+// 500s from the error handler at the bottom of this file.
+//
+// Helmet only sets response headers and calls next(); it never reads the
+// request body or stream, so express.raw() on the webhook below is unaffected
+// and the PayMongo HMAC still covers the exact bytes sent.
+app.use(helmet());
 
 // FRONTEND_URL is a comma-separated allowlist of browser origins. Production
 // sets exactly one; local device testing (a phone reaching the dev server over
