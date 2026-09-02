@@ -126,18 +126,94 @@ export default function LoginPage() {
                 <>
                   <h2>Help Center</h2>
 
-                  <p>Welcome to the BrgyServe Help Center.</p>
-
-                  <h3>How do I request a document?</h3>
                   <p>
-                    Log in to your account, select the document you need,
-                    provide the required information, and submit your request.
+                    Welcome to the <strong>BrgyServe Help Center</strong>. Here
+                    you can find answers to common questions about using the
+                    system.
                   </p>
 
-                  <h3>How do I track my request?</h3>
+                  <h4>1. How do I create an account?</h4>
                   <p>
-                    You can track the status of your submitted request through
-                    the tracking section of BrgyServe.
+                    Click <strong>Register as a resident</strong> on the login
+                    page. Enter the required information and submit your
+                    registration. Make sure the information you provide is
+                    accurate.
+                  </p>
+
+                  <h4>2. How do I request a document?</h4>
+                  <p>
+                    Log in to your account and select the document you need.
+                    Fill out the required information, upload any required
+                    documents, and submit your request.
+                  </p>
+
+                  <h4>3. How do I track my request?</h4>
+                  <p>
+                    After submitting a request, you can check its status through
+                    the
+                    <strong> Document Requests</strong> section. You may also
+                    use your tracking ID to identify your request.
+                  </p>
+
+                  <h4>4. What do the request statuses mean?</h4>
+                  <ul>
+                    <li>
+                      <strong>Pending:</strong> Your request is waiting for
+                      review.
+                    </li>
+                    <li>
+                      <strong>Processing:</strong> Your request is currently
+                      being processed.
+                    </li>
+                    <li>
+                      <strong>Approved:</strong> Your request has been approved.
+                    </li>
+                    <li>
+                      <strong>Rejected:</strong> Your request was not approved.
+                    </li>
+                    <li>
+                      <strong>Ready for Claim:</strong> Your document is ready
+                      to be claimed.
+                    </li>
+                    <li>
+                      <strong>Completed:</strong> Your request has been
+                      successfully completed.
+                    </li>
+                  </ul>
+
+                  <h4>5. How do I make a payment?</h4>
+                  <p>
+                    Follow the payment instructions provided by the barangay. If
+                    a payment receipt or screenshot is required, upload a clear
+                    copy through the system. Payments are subject to
+                    verification by the barangay treasurer.
+                  </p>
+
+                  <h4>6. How do I rent a facility?</h4>
+                  <p>
+                    Go to the <strong>Facility Rentals</strong> section, select
+                    an available facility, choose your preferred date, provide
+                    the required information, and submit your rental request.
+                  </p>
+
+                  <h4>7. What should I do if my request is rejected?</h4>
+                  <p>
+                    Check the reason provided by the barangay. If additional
+                    information or documents are required, correct the issue and
+                    submit a new request when applicable.
+                  </p>
+
+                  <h4>8. I forgot my password. What should I do?</h4>
+                  <p>
+                    Use the password recovery option on the login page. Follow
+                    the instructions provided to reset your password.
+                  </p>
+
+                  <h4>9. Who can I contact for assistance?</h4>
+                  <p>
+                    For problems that cannot be resolved through the Help
+                    Center, contact the Barangay Office during official office
+                    hours.
                   </p>
                 </>
               )}
@@ -147,23 +223,64 @@ export default function LoginPage() {
                 <>
                   <h2>Terms of Use</h2>
 
+                  <h4>1. Acceptance of Terms</h4>
                   <p>
-                    By using BrgyServe, you agree to use the system only for
-                    legitimate barangay-related services and transactions.
+                    By accessing or using the <strong>BrgyServe</strong>, you
+                    agree to be bound by these Terms of Use. If you do not
+                    agree, please refrain from using the platform.
                   </p>
 
-                  <h3>Acceptable Use</h3>
+                  <h4>2. Eligibility</h4>
                   <p>
-                    Users must provide accurate information and must not misuse,
-                    interfere with, or attempt to gain unauthorized access to
-                    the system.
+                    You must be a registered resident of{" "}
+                    <strong>Barangay Ubujan</strong>
+                    and at least 18 years old to create an account. Minors may
+                    use the portal under parental or guardian supervision.
                   </p>
 
-                  <h3>Account Responsibility</h3>
+                  <h4>3. Account Responsibilities</h4>
                   <p>
-                    Users are responsible for keeping their account credentials
-                    secure and for all activities performed through their
-                    account.
+                    You are responsible for maintaining the confidentiality of
+                    your login credentials. Any activity under your account is
+                    your responsibility. Notify us immediately of any
+                    unauthorized use.
+                  </p>
+
+                  <h4>4. Acceptable Use</h4>
+                  <p>You agree not to:</p>
+
+                  <ul>
+                    <li>Use the portal for unlawful purposes</li>
+                    <li>Impersonate any person or entity</li>
+                    <li>Upload false or misleading information</li>
+                    <li>Interfere with portal functionality</li>
+                  </ul>
+
+                  <h4>5. Document Requests</h4>
+                  <p>
+                    All requests are subject to verification. False declarations
+                    may result in denial of service or legal action. Approved
+                    documents must be claimed within <strong>30 days</strong>.
+                  </p>
+
+                  <h4>6. Limitation of Liability</h4>
+                  <p>
+                    The Barangay is not liable for technical failures, data
+                    loss, or delays beyond our control. We strive to maintain
+                    99.9% uptime.
+                  </p>
+
+                  <h4>7. Changes to Terms</h4>
+                  <p>
+                    We may update these terms at any time. Continued use of the
+                    portal constitutes acceptance of the new terms.
+                  </p>
+
+                  <p>
+                    <em>
+                      Thank you for being a responsible digital citizen of
+                      Barangay Ubujan.
+                    </em>
                   </p>
                 </>
               )}
@@ -173,22 +290,78 @@ export default function LoginPage() {
                 <>
                   <h2>Privacy Policy</h2>
 
+                  <h4>Our Commitment to Your Privacy</h4>
                   <p>
-                    BrgyServe collects personal information needed to provide
-                    barangay services and process resident requests.
+                    At <strong>BrgyServe</strong>, we take your privacy
+                    seriously. This policy explains how we collect, use, and
+                    protect your personal information in compliance with the{" "}
+                    <em>Data Privacy Act of 2012 (RA 10173)</em>.
                   </p>
 
-                  <h3>Information We Collect</h3>
+                  <h4>1. Information We Collect</h4>
+                  <ul>
+                    <li>
+                      <strong>Personal Information:</strong> Full name, address,
+                      contact number, email, birthdate
+                    </li>
+                    <li>
+                      <strong>Government IDs:</strong> For verification (e.g.,
+                      Barangay ID, Voter's ID)
+                    </li>
+                    <li>
+                      <strong>Usage Data:</strong> Login history, request logs
+                    </li>
+                  </ul>
+
+                  <h4>2. How We Use Your Data</h4>
+                  <p>Your information is used solely to:</p>
+                  <ul>
+                    <li>Process document requests</li>
+                    <li>Verify identity and residency</li>
+                    <li>Send important notifications</li>
+                    <li>Improve portal services</li>
+                  </ul>
+
+                  <h4>3. Data Security</h4>
                   <p>
-                    Information may include your name, contact details, address,
-                    and other information required for barangay transactions.
+                    We use industry-standard encryption (SSL/TLS) and store data
+                    in secure, access-controlled servers. Only authorized
+                    personnel can access your information.
                   </p>
 
-                  <h3>Use of Information</h3>
+                  <h4>4. Data Sharing</h4>
                   <p>
-                    Your information is used for processing requests,
-                    notifications, records management, and other legitimate
-                    barangay services.
+                    We <strong>do not sell</strong> your data. Information is
+                    shared only with:
+                  </p>
+                  <ul>
+                    <li>Barangay officials for verification</li>
+                    <li>LGU partners for official transactions</li>
+                    <li>Law enforcement (when legally required)</li>
+                  </ul>
+
+                  <h4>5. Your Rights</h4>
+                  <p>Under RA 10173, you have the right to:</p>
+                  <ul>
+                    <li>Access your personal data</li>
+                    <li>Correct inaccurate information</li>
+                    <li>Request deletion (subject to legal retention)</li>
+                    <li>File a complaint with the NPC</li>
+                  </ul>
+
+                  <h4>6. Contact Us</h4>
+                  <p>
+                    <strong>Data Privacy Officer</strong>
+                    <br />
+                    Email: <strong>BrgyServeUbujan@gmail.com</strong>
+                    <br />
+                    Phone: 09-123-456-78911
+                  </p>
+
+                  <p>
+                    <em>
+                      Your trust is the foundation of our digital barangay.
+                    </em>
                   </p>
                 </>
               )}
