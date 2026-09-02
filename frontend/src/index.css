@@ -39,6 +39,74 @@ body {
   align-items: center;
   justify-content: center;
 }
+/* Legal Links */
+.legal-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.legal-links a {
+  color: #0000ee;
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.legal-links a:hover {
+  color: #0000ee;
+  text-decoration: none;
+}
+
+.legal-links a:focus {
+  outline: none;
+}
+
+/* Modal Background */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.5);
+  padding: 20px;
+}
+
+/* Modal */
+.legal-modal {
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+
+  padding: 30px;
+  box-sizing: border-box;
+
+  background: #fff;
+  border-radius: 10px;
+
+  overflow-y: auto;
+}
+
+/* Modal Text */
+.legal-modal h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.legal-modal h3 {
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+.legal-modal p {
+  line-height: 1.6;
+}
 
 .register-form-wrapper {
   grid-column: 1 / -1;
