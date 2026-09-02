@@ -6,6 +6,7 @@ import { formatDate } from '../constants/requestStatus';
 import {
   NOTIFICATION_STATUS_FILTERS,
   RELATED_TYPE_FILTERS,
+  deliveryBanner,
   notificationStatusMeta,
   relatedLabel,
 } from '../constants/notifications';
@@ -48,6 +49,8 @@ export default function NotificationsPage() {
   }, [load]);
 
   const summary = data?.summary;
+  // Null until both modes have been reported — see deliveryBanner().
+  const banner = deliveryBanner(data?.mode, data?.email_mode);
 
   return (
     <div className="dash">
@@ -61,12 +64,15 @@ export default function NotificationsPage() {
       />
       <main className="dash-main">
         <div className="pending-card">
-          {/* Stated plainly and permanently — not a dismissible notice. */}
-          {data?.mode !== 'SEMAPHORE' && (
+          {/* Stated plainly and permanently — not a dismissible notice. It is
+              shown in EVERY mode, including when both providers are live: a
+              screen listing residents' numbers and message bodies should say
+              whether what it lists actually went out. The old version rendered
+              only when SMS was simulated, which is how it ended up asserting
+              "no provider is connected" above a row Resend had sent. */}
+          {banner && (
             <div className="alert info notif-mode">
-              <strong>Sending is simulated.</strong> Messages are composed, addressed and recorded
-              here, but no SMS is transmitted and no provider is connected. Rows are marked{' '}
-              <em>Simulated</em> rather than Sent for that reason.
+              <strong>{banner.heading}</strong> {banner.body}
             </div>
           )}
 
@@ -203,6 +209,15 @@ export default function NotificationsPage() {
                         </td>
                         <td className="col-message">
                           <span className="cell-clamp">
+                            {/* Email carries a subject; SMS stores null and
+                                renders nothing. Same <strong> + <br> shape the
+                                recipient cell uses, so no CSS was needed. */}
+                            {n.subject && (
+                              <>
+                                <strong>{n.subject}</strong>
+                                <br />
+                              </>
+                            )}
                             {open || n.message.length <= 90
                               ? n.message
                               : `${n.message.slice(0, 90)}…`}

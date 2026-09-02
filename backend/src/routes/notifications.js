@@ -1,7 +1,12 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { NOTIFICATION_STATUSES, RELATED_TYPES, NOTIFICATION_STATUS } = require('../constants/notifications');
+const {
+  NOTIFICATION_STATUSES,
+  RELATED_TYPES,
+  NOTIFICATION_STATUS,
+  NOTIFICATION_TYPE,
+} = require('../constants/notifications');
 const { searchWords, parsePaging, pageResponse } = require('../utils/listQuery');
 const { currentMode } = require('../services/notifications');
 
@@ -23,7 +28,7 @@ const router = express.Router();
 router.use(authenticate, requireRole('secretary'));
 
 const FIELDS = `
-  notification_id, type, destination, message, status, provider_response,
+  notification_id, type, destination, subject, message, status, provider_response,
   related_type, related_to, created_at, sent_at, user_id, household_id,
   users ( username, profiles ( first_name, middle_name, last_name, suffix ) ),
   household_records ( household_id, address )
@@ -78,7 +83,7 @@ router.get('/', async (req, res) => {
       return res.json({
         ...pageResponse('notifications', [], count || 0, page, perPage),
         summary: await summarise(),
-        mode: currentMode(),
+        ...deliveryModes(),
       });
     }
     throw new Error(`Failed to load notifications: ${error.message}`);
@@ -91,6 +96,9 @@ router.get('/', async (req, res) => {
       notification_id: n.notification_id,
       type: n.type,
       destination: n.destination || null,
+      // Email only; SMS has no subject and stores null, which is what every
+      // row written before email existed holds.
+      subject: n.subject || null,
       message: n.message,
       status: n.status,
       provider_response: n.provider_response,
@@ -110,8 +118,21 @@ router.get('/', async (req, res) => {
     ...pageResponse('notifications', rows, count || 0, page, perPage),
     summary: await summarise(),
     // The screen states this plainly; it is not decoration.
-    mode: currentMode(),
+    ...deliveryModes(),
   });
+});
+
+// BOTH modes, because they are independent and the screen's banner was
+// asserting something false without the second one.
+//
+// `mode` is the SMS mode and keeps that name for compatibility — it is what
+// the page has always read. `email_mode` is new. Until it existed the banner
+// could only see SMS_MODE, so after the forgot-password work it went on
+// saying "no provider is connected" directly above a row marked SENT by
+// Resend. A screen cannot tell two independent settings apart from one value.
+const deliveryModes = () => ({
+  mode: currentMode(NOTIFICATION_TYPE.SMS),
+  email_mode: currentMode(NOTIFICATION_TYPE.EMAIL),
 });
 
 // Counts per status over the WHOLE log, not the current page — the useful

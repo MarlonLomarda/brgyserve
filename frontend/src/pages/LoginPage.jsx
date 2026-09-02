@@ -76,6 +76,9 @@ export default function LoginPage() {
           </button>
 
           <p className="alt">
+            <Link to="/forgot-password">Forgot your password?</Link>
+          </p>
+          <p className="alt">
             No account yet? <Link to="/register">Register as a resident</Link>
           </p>
 

@@ -3,7 +3,8 @@
 Source of truth for the BrgyServe database, converted from the Chapter 3 data
 dictionary into PostgreSQL (Supabase) types. Table numbers match the thesis
 Chapter 3 File Structure. Table 19 is a new addition (not yet in the thesis)
-required by the fuzzy name-matching research contribution.
+required by the fuzzy name-matching research contribution, and Table 20 is a
+new addition required by password reset.
 
 ## Type conventions (MySQL → PostgreSQL)
 
@@ -100,6 +101,10 @@ Stores details of barangay events and activities, including title, description, 
 | date_created | timestamptz | | No | Date and time the event record was created. |
 | type | varchar(20) | | No | Record kind: `activity` (timed event) or `announcement` (notice, no schedule required). Added in migration 013. |
 | is_archived | boolean | | No | Whether the record has been manually archived (soft delete). Added in migration 013. |
+| attendance_required | boolean | | No | Whether household attendance is recorded for this event. Opt-in per event — most events do not take attendance, a General Assembly does. Only valid for `activity`, since an announcement has no schedule. Defaults false. Added in migration 016. |
+| fine_amount | numeric(10,2) | | Yes | Amount charged to each household that missed the event, raised as a `FINE` charge in `charges`. **Null does not mean zero:** it means attendance is tracked but nothing is chargeable. Added in migration 016. |
+
+Migration 016 also added two things that are not columns. The CHECK `events_attendance_activity_only` backs the app rule that `attendance_required` may only be true when `type = 'activity'` — an announcement has no schedule, so "who attended" is meaningless for one. A **partial** unique index `charges_event_household_unique` on `charges (event_id, household_id)` `WHERE event_id IS NOT NULL AND household_id IS NOT NULL` makes fine generation idempotent, so re-running it cannot double-charge a household for the same assembly; it is partial because PostgreSQL treats NULLs as distinct in a UNIQUE, and every non-fine charge has both columns null.
 
 ### TABLE 6. event_attendees
 Records which **households** attended each barangay event. Attendance is per household, not per resident: at an assembly one household signs once, and a household with no signature is fined via `charges.household_id`.
@@ -183,10 +188,11 @@ Stores additional profile information for system users, such as name, contact nu
 | last_name | varchar(100) | | Yes | User's last name; optional for resident-type accounts. |
 | suffix | varchar(20) | | Yes | Name suffix such as Jr., Sr., III. |
 | phone_number | varchar(20) | | Yes | Contact number of the user. |
-| profile_pic | varchar(255) | | Yes | URL/path of the user's profile picture. |
 | resident_id | bigint | FK → resident_records (UNIQUE) | Yes | Links the account to its resident record; set by the Secretary when approving a resident account. Null for pending/unlinked and for staff accounts. Added in migration 002. |
 | birthdate | date | | Yes | Birthdate claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
 | address | varchar(255) | | Yes | Address claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
+
+**`profile_pic varchar(255)` was DROPPED in migration 019.** It existed from migration 001 and was never read or written by any code. A resident photo was considered and **declined**: under the Data Privacy Act a photograph needs a stated purpose, and no BrgyServe function uses one. This is a decision against the feature, not a deferral — contrast `users.email_verified`, which is equally unused but is **reserved** for planned email verification and therefore kept.
 
 ---
 
@@ -310,9 +316,9 @@ Stores notifications sent to users or households via SMS or email, including del
 | destination | varchar(255) | | No | Target contact address (phone number or email). NOT NULL, so a SKIPPED row (no number on record) stores an empty string and the status carries the reason. |
 | subject | varchar(255) | | Yes | Subject line (mainly for email); null for SMS. |
 | message | text | | No | Content/body of the notification. |
-| status | varchar(50) | | No | Delivery status: PENDING, SIMULATED, SENT, FAILED, SKIPPED. **SIMULATED** = composed, addressed and recorded but deliberately not transmitted (the default, `SMS_MODE=SIMULATED`); it is a separate value from SENT so the log never reports a delivery that did not happen. **SKIPPED** = the recipient has no contact number on record, so there was nothing to send to; the row is still written, because who the barangay cannot reach is worth knowing. |
-| provider_response | text | | Yes | Response from the SMS/email provider (message ID, error details). |
-| related_type | varchar(50) | | Yes | Type of related record (CHARGE, EVENT, DOCUMENT_REQUEST, RENTAL_REQUEST). |
+| status | varchar(50) | | No | Delivery status: PENDING, SIMULATED, SENT, FAILED, SKIPPED. **SIMULATED** = composed, addressed and recorded but deliberately not transmitted; it is a separate value from SENT so the log never reports a delivery that did not happen. The mode is per type and read from its own variable — `SMS_MODE` (default SIMULATED, and it stays there) and `EMAIL_MODE` (SIMULATED or RESEND) — so an SMS setting can never route email. **SENT** is currently only ever reached by a password reset email under `EMAIL_MODE=RESEND`. **SKIPPED** = there was no destination on record, so there was nothing to send to; the row is still written, because who the barangay cannot reach is worth knowing. |
+| provider_response | text | | Yes | Response from the SMS/email provider (message ID, error details). Never the API key. |
+| related_type | varchar(50) | | Yes | Type of related record (CHARGE, EVENT, DOCUMENT_REQUEST, RENTAL_REQUEST, ACCOUNT). Not an enforced vocabulary — the column has no CHECK, so a new kind is a constants-only change. |
 | related_to | bigint | | Yes | ID of the related record (polymorphic — not an enforced FK). |
 | created_at | timestamptz | | No | When the notification was created. |
 | sent_at | timestamptz | | Yes | When the notification was successfully sent; null until sent. |
@@ -352,6 +358,29 @@ Stores pairs of resident records flagged by the two-stage fuzzy name-matching co
 **Suggested constraints (tell Claude Code to add these):**
 - Prevent a record being compared to itself and prevent mirror-duplicate rows: order the pair so `resident_id_a < resident_id_b`, plus a `UNIQUE (resident_id_a, resident_id_b)` constraint.
 - Default `match_status` to `pending`; default `created_at` to `now()`.
+
+---
+
+## Auth (NEW — not yet in the thesis)
+
+### TABLE 20. password_resets
+Stores outstanding and spent password reset links (migration 020). One row per request from `POST /api/auth/forgot-password`; consumed by `POST /api/auth/reset-password`. Residents only — the routes refuse every other role, and pending and rejected accounts as well.
+
+| Field | Type | Key | Nullable | Description |
+|---|---|---|---|---|
+| reset_id | bigint | PK | No | Uniquely identifies each reset request. |
+| user_id | bigint | FK → users | No | Account the link belongs to. |
+| token_hash | varchar(64) | UNIQUE | No | SHA-256 hex digest of the reset token. The raw token (32 random bytes, base64url, 43 characters) exists only in the email and in the resident's URL bar; it is never stored. UNIQUE so the lookup resolves to at most one row without ordering. |
+| expires_at | timestamptz | | No | When the link stops working — 60 minutes after it was issued. |
+| used_at | timestamptz | | Yes | When the link was spent; null while it is still live. Consumed with a status-guarded `UPDATE … WHERE used_at IS NULL`, so two simultaneous submissions of one link cannot both succeed. |
+| created_at | timestamptz | | No | When the request was made. Defaults to `now()`. Also what the per-user 15-minute cooldown is counted against. |
+
+**Notes:**
+- The hash is a FAST one on purpose, which is the opposite of the rule for `users.password_hash`. bcrypt is slow because a password is low-entropy and worth brute-forcing; a 256-bit random token is not, so slowness would buy nothing and only make an unauthenticated route expensive to call.
+- `household_qr.qr_token` (Table 2) is stored RAW and is a different case, not an inconsistency: it is a long-lived identifier, scanned repeatedly, granting no account access.
+- Rows are marked used rather than deleted — a used row is the only record that a reset happened once the password itself has changed.
+- Index `password_resets_user_created_idx` on `(user_id, created_at DESC)` serves the cooldown check, not the token lookup (which uses the UNIQUE index on `token_hash`).
+- **Row Level Security is enabled explicitly by the migration.** A new table does NOT inherit the RLS that was switched on for the other 19; without that line this would be the only table in the database writable through the anon key, and inserting a row whose hash you chose is an account takeover.
 
 ---
 

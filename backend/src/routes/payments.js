@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
+const { frontendOrigin } = require('../utils/frontendOrigin');
 const {
   createCheckoutSession,
   retrieveCheckoutSession,
@@ -140,20 +141,9 @@ function billingFor(charge) {
   return Object.keys(billing).length ? billing : undefined;
 }
 
-// The ONE origin a resident is redirected back to after paying. Deliberately
-// NOT FRONTEND_URL: that is a comma-separated CORS allowlist (server.js), so
-// reading it here produced a broken redirect the moment a second origin was
-// added for LAN testing —
-//   "http://localhost:5173,http://192.168.1.14:5173/resident/payment-result"
-// Falls back to the FIRST entry of that allowlist so local dev and any existing
-// .env keep working without setting a new variable.
-const frontendOrigin = () => {
-  const configured =
-    process.env.PUBLIC_FRONTEND_URL ||
-    (process.env.FRONTEND_URL || '').split(',')[0] ||
-    'http://localhost:5173';
-  return configured.trim().replace(/\/+$/, '');
-};
+// The ONE origin a resident is redirected back to after paying. Moved to
+// utils/frontendOrigin.js when the password reset link became a second caller
+// — the reasoning for not reading FRONTEND_URL directly lives there.
 
 // Every outcome settlePaidCharge can return. Named in one place so the two
 // caller-facing message maps below cannot drift from it or from each other —
