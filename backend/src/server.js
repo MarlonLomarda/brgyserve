@@ -29,6 +29,32 @@ if (!process.env.JWT_SECRET) {
   throw new Error('Missing JWT_SECRET. Set it in backend/.env (see .env.example).');
 }
 
+// How many proxy hops to count in from the socket before believing an address.
+// Without this, Express defaults to `false`, `req.ip` is the nearest proxy and
+// `req.ips` is empty — so every caller on the internet shares one value and an
+// IP-keyed rate limiter would limit them as a single client.
+//
+// 3 IS MEASURED, NOT CHOSEN. The live chain is caller -> Cloudflare -> Render,
+// confirmed on two different networks against the temporary /api/proxy-probe
+// route (added in 3c699b6, removed in this change now that the reading is
+// taken). Custom Domains is empty and PR Previews is off, so the onrender.com
+// hostname is the only public path in and it is Cloudflare-fronted throughout.
+//
+// NOT `true`, and the difference is not stylistic. `true` tells Express to
+// believe the LEFTMOST X-Forwarded-For entry, which is caller-controlled —
+// a forged X-Forwarded-For is PREPENDED to the real chain rather than
+// rejected, so anyone could mint a fresh rate-limit bucket per request by
+// changing one header. express-rate-limit has a check for exactly this
+// (ERR_ERL_PERMISSIVE_TRUST_PROXY), but do NOT rely on it to catch a mistake
+// here: its validations are caught internally and become one console.error,
+// once per process, never an exception the request would surface.
+//
+// A count is what makes the header safe to read at all. RE-MEASURE IT if the
+// hosting changes — a Render region or plan change, a custom domain, or
+// anything put in front of Cloudflare moves the hop count, and a stale value
+// fails silently in whichever direction it moved.
+app.set('trust proxy', 3);
+
 // Security response headers. Before this, the API sent NONE — no CSP, no
 // X-Content-Type-Options, no Referrer-Policy, no X-Frame-Options — and
 // advertised `X-Powered-By: Express` on every single response, which
@@ -82,54 +108,6 @@ app.get('/api/health', (req, res) => {
     service: 'BrgyServe API',
     supabase: supabase ? 'client initialized' : 'not connected',
     timestamp: new Date().toISOString(),
-  });
-});
-
-// ===========================================================================
-// TEMPORARY — DIAGNOSTIC PROBE. REMOVE BEFORE THE RATE LIMITER IS COMMITTED.
-//
-// WHY IT EXISTS: an IP-keyed rate limiter needs `req.ip` to be the CALLER's
-// address, and right now it is not. There is no app.set('trust proxy', ...)
-// anywhere in this file, so Express's default of `false` applies and `req.ip`
-// resolves to the nearest proxy hop while `req.ips` is empty — measured
-// against the real Express request prototype. On Render the API sits behind
-// Cloudflare AND Render's own layer, so the number of hops to trust cannot be
-// read off the code; it has to be counted from what actually arrives.
-//
-// Getting that number wrong is dangerous in BOTH directions. Too low and every
-// caller shares one bucket, so the limiter locks out all users at once. Too
-// high (including `true`) and Express walks past the real hops into
-// attacker-controlled header text, so anyone can mint a fresh bucket per
-// request by sending their own X-Forwarded-For — the limiter looks like it
-// works and stops nothing.
-//
-// HOW TO USE IT: deploy, then open this path ON MOBILE DATA (not the same
-// network as anything else) and compare the entries in x_forwarded_for against
-// your phone's public IP from any "what is my IP" page. The position of your
-// real address in that list is the hop count to trust. Check cf_connecting_ip
-// in the same response — if Cloudflare's header survives Render, it names the
-// caller directly with no counting.
-//
-// IT DELIBERATELY DOES NOT CALL app.set('trust proxy', ...). This route
-// MEASURES what arrives; setting the value would change how Express
-// interprets it and corrupt the very reading being taken.
-//
-// SAFE TO EXPOSE UNAUTHENTICATED, and only just: every field below is either
-// the caller's own address or this app's own configuration. No environment
-// variable, no database value, no user record, and no header beyond the two
-// forwarding ones is read or returned. It is still a fingerprinting aid, which
-// is the other reason it does not outlive the measurement.
-// ===========================================================================
-app.get('/api/proxy-probe', (req, res) => {
-  res.json({
-    // Raw and unparsed on purpose — the whole point is the number and order
-    // of entries as they arrive, which any splitting or trimming would hide.
-    x_forwarded_for: req.headers['x-forwarded-for'],
-    socket_remote_address: req.socket.remoteAddress,
-    cf_connecting_ip: req.headers['cf-connecting-ip'] ?? null,
-    req_ip: req.ip,
-    req_ips: req.ips,
-    trust_proxy_setting: req.app.get('trust proxy'),
   });
 });
 

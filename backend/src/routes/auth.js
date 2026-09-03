@@ -8,6 +8,11 @@ const { NOTIFICATION_TYPE, RELATED_TYPE } = require('../constants/notifications'
 const { notify, escapeHtml } = require('../services/notifications');
 const { frontendOrigin } = require('../utils/frontendOrigin');
 const {
+  loginLimiter,
+  registerLimiter,
+  forgotPasswordLimiter,
+} = require('../middleware/rateLimit');
+const {
   TOKEN_TTL_MINUTES,
   REQUEST_COOLDOWN_MINUTES,
   generateToken,
@@ -26,7 +31,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // POST /api/auth/register — resident self-registration.
 // The account is created pending (is_active = false, no resident link) and
 // cannot log in until the Secretary links a resident record and activates it.
-router.post('/register', async (req, res) => {
+// RATE LIMITED — mounted at ROUTE level, deliberately, not with router.use().
+// Router-level would also cover /change-password and /reset-password, which
+// are not the exposure: one needs a session, the other needs a 256-bit token.
+// Route level also puts the limiter AFTER cors() (server.js:93) in the
+// effective order, so a 429 still carries Access-Control-Allow-Origin and the
+// browser can read the message — verified: cors() sets that header before it
+// calls next(), so anything short-circuiting later inherits it.
+router.post('/register', registerLimiter, async (req, res) => {
   const body = req.body || {};
   const {
     username, email, password,
@@ -162,7 +174,18 @@ async function inactiveMessage(user) {
 }
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+// RATE LIMITED — 5 per 15 minutes, with skipSuccessfulRequests.
+//
+// WHAT COUNTS, since it is decided by STATUS and not by intent: the library
+// decrements the counter on `finish` when `response.statusCode < 400`. So a
+// successful sign-in (200) is refunded, a wrong password (401) counts, and a
+// 403 from the inactive-account branch below ALSO counts — including when the
+// password was correct. A pending or rejected applicant retrying their own
+// correct password therefore burns the allowance like a failed guess. That is
+// the default behaviour and it is left in place: telling those two apart in
+// the limiter would mean giving the 403 branch a different rate-limit outcome
+// from the 401 one, which is a distinction an attacker can measure.
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -306,7 +329,20 @@ async function eligibleResidentByEmail(email) {
 }
 
 // POST /api/auth/forgot-password — UNAUTHENTICATED.
-router.post('/forgot-password', async (req, res) => {
+//
+// RATE LIMITED — 10 per hour, and the limiter runs BEFORE the handler, which
+// is the point rather than an ordering detail. It has not looked at the
+// address when it decides, so its behaviour cannot vary with whether an
+// account exists — the same property FORGOT_PASSWORD_RESPONSE protects on the
+// success path. A limiter that only fired for real accounts would reopen the
+// enumeration oracle this whole route is written around.
+//
+// THE PER-USER COOLDOWN BELOW IS UNCHANGED AND STILL DOES ITS OWN JOB. This
+// limiter counts REQUESTS from one address; the cooldown counts EMAILS to one
+// account, in the password_resets table, and survives a restart. Neither
+// covers the other: the cooldown ignores a caller cycling addresses that do
+// not exist, and this limiter ignores one account targeted from many networks.
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
   // A 400 here is about the SHAPE of the request, not about whether an account
   // exists, so it discloses nothing: the answer is the same for every caller
