@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { roleHome } from "../auth/roles";
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const sliderRef = useRef(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -29,10 +30,40 @@ export default function LoginPage() {
     }
   }
 
+  useEffect(() => {
+    // set an interval to run every 3 seconds
+    const interval = setInterval(() => {
+      const slider = sliderRef.current;
+
+      // error safety net
+      if (!slider) return;
+
+      const sliderWidth = slider.clientWidth;
+
+      // move to the next slide
+      slider.scrollBy({
+        left: sliderWidth,
+        behavior: "smooth",
+      });
+
+      // if last slide na, go back to the first slide
+      if (slider.scrollLeft + slider.clientWidth >= slider.scrollWidth - 10) {
+        setTimeout(() => {
+          slider.scrollTo({
+            left: 0,
+            behavior: "smooth",
+          });
+        }, 500);
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="auth-page">
       <div className="slider-wrapper">
-        <div className="slider">
+        <div className="slider" ref={sliderRef}>
           <img
             id="slider-1"
             src={brgyPersonnel}
