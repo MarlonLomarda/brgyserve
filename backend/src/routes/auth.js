@@ -12,6 +12,7 @@ const {
   registerLimiter,
   forgotPasswordLimiter,
 } = require('../middleware/rateLimit');
+const { validatePassword } = require('../constants/passwordPolicy');
 const {
   TOKEN_TTL_MINUTES,
   REQUEST_COOLDOWN_MINUTES,
@@ -51,8 +52,14 @@ router.post('/register', registerLimiter, async (req, res) => {
   if (missing.length) {
     return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
   }
-  if (String(password).length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  // Runs AFTER the required-fields check above, which is what guarantees a
+  // username to check the password against. It runs BEFORE the username
+  // uniqueness lookup on purpose: a weak password is refused without a
+  // database round trip, and the refusal cannot vary with whether the
+  // username was taken.
+  const passwordCheck = validatePassword(password, { username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
   }
   if (birthdate && !DATE_RE.test(birthdate)) {
     return res.status(400).json({ error: 'birthdate must be in YYYY-MM-DD format' });
@@ -237,8 +244,12 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   if (!current_password || !new_password) {
     return res.status(400).json({ error: 'Current password and new password are required' });
   }
-  if (String(new_password).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  // req.user is loaded fresh from the database by authenticate(), which
+  // selects username among its six columns — so the username the blocklist
+  // checks against is the stored one, not anything the caller supplied.
+  const passwordCheck = validatePassword(new_password, { username: req.user.username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
   }
 
   const { data: user, error } = await supabase
@@ -439,8 +450,12 @@ router.post('/reset-password', async (req, res) => {
   if (!token) {
     return res.status(400).json({ error: INVALID_TOKEN_MESSAGE, code: 'RESET_TOKEN_INVALID' });
   }
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  // PRESENCE ONLY HERE. The full policy check needs the account's username to
+  // run its blocklist rule, and the username is not known until the token has
+  // been resolved to a user below — so the rules are applied there, not here.
+  // This one is about the SHAPE of the request and discloses nothing.
+  if (!newPassword) {
+    return res.status(400).json({ error: 'A new password is required.' });
   }
 
   // The stored value is a SHA-256 hash, so the raw token is hashed and the
@@ -464,9 +479,13 @@ router.post('/reset-password', async (req, res) => {
   // Re-checked at USE time, not just at request time: an account can be
   // archived (which deactivates it) or rejected in the hour a link is alive,
   // and a token must not outlive the eligibility that produced it.
+  // `username` is selected for the password blocklist and for nothing else.
+  // It is never returned to the caller — the response is the fixed success
+  // message — so this does not turn a reset link into a way to read the
+  // username off an account.
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('user_id, role, is_active, is_rejected')
+    .select('user_id, username, role, is_active, is_rejected')
     .eq('user_id', reset.user_id)
     .maybeSingle();
   if (userError) {
@@ -479,6 +498,20 @@ router.post('/reset-password', async (req, res) => {
       error: 'This account is not active, so its password cannot be reset. Please contact the Barangay Office.',
       code: 'RESET_ACCOUNT_INACTIVE',
     });
+  }
+
+  // THE POLICY IS CHECKED HERE — after the account is resolved, and BEFORE
+  // the token is claimed below.
+  //
+  // After, because the blocklist needs this account's username and there was
+  // no username to check against until now. Before the claim, because the
+  // claim is irreversible: a password refused for being too weak must leave
+  // the link still usable, or a resident who types "password" once has burned
+  // the email and has to wait out the 15-minute cooldown for another. A
+  // rejected password must cost them a retry, not the token.
+  const passwordCheck = validatePassword(newPassword, { username: user.username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
   }
 
   // CLAIM THE TOKEN FIRST, with a status-guarded update — the same read-then-
