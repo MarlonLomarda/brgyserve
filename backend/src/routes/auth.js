@@ -13,6 +13,7 @@ const {
   forgotPasswordLimiter,
 } = require('../middleware/rateLimit');
 const { validatePassword } = require('../constants/passwordPolicy');
+const { validateUsername } = require('../constants/usernamePolicy');
 const {
   TOKEN_TTL_MINUTES,
   REQUEST_COOLDOWN_MINUTES,
@@ -52,12 +53,24 @@ router.post('/register', registerLimiter, async (req, res) => {
   if (missing.length) {
     return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
   }
+  // Username BEFORE password, because the password blocklist refuses a
+  // password containing the username and must be given the value that will
+  // actually be stored — the trimmed one.
+  const usernameCheck = validateUsername(username);
+  if (!usernameCheck.ok) {
+    return res.status(400).json({ error: usernameCheck.error });
+  }
+  // cleanUsername, not `username`, is used from here down: the uniqueness
+  // lookup, the password blocklist and the insert must all see one value, or
+  // " rad" is validated as "rad" and stored with the space still on it.
+  const cleanUsername = usernameCheck.value;
+
   // Runs AFTER the required-fields check above, which is what guarantees a
   // username to check the password against. It runs BEFORE the username
   // uniqueness lookup on purpose: a weak password is refused without a
   // database round trip, and the refusal cannot vary with whether the
   // username was taken.
-  const passwordCheck = validatePassword(password, { username });
+  const passwordCheck = validatePassword(password, { username: cleanUsername });
   if (!passwordCheck.ok) {
     return res.status(400).json({ error: passwordCheck.error });
   }
@@ -68,7 +81,7 @@ router.post('/register', registerLimiter, async (req, res) => {
   const { data: existing, error: lookupError } = await supabase
     .from('users')
     .select('user_id')
-    .eq('username', username)
+    .eq('username', cleanUsername)
     .maybeSingle();
   if (lookupError) {
     throw new Error(`Username lookup failed: ${lookupError.message}`);
@@ -82,7 +95,7 @@ router.post('/register', registerLimiter, async (req, res) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .insert({
-      username,
+      username: cleanUsername,
       password_hash,
       email,
       email_verified: false,

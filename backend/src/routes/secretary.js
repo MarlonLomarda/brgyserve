@@ -6,6 +6,7 @@ const { findMatches } = require('../services/nameMatching');
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { generateTemporaryPassword } = require('../constants/passwordPolicy');
+const { validateUsername } = require('../constants/usernamePolicy');
 const {
   REJECTION_REASONS,
   isRejectionReason,
@@ -133,10 +134,21 @@ router.post('/accounts', async (req, res) => {
     });
   }
 
+  // The SAME rules the resident registration form applies — one validator, so
+  // a staff account cannot be created in a shape a resident is refused. The
+  // trimmed value is used from here down for the uniqueness lookup, the
+  // temporary password (whose blocklist refuses a password containing the
+  // username) and the insert.
+  const usernameCheck = validateUsername(username);
+  if (!usernameCheck.ok) {
+    return res.status(400).json({ error: usernameCheck.error });
+  }
+  const cleanUsername = usernameCheck.value;
+
   const { data: existing, error: lookupError } = await supabase
     .from('users')
     .select('user_id')
-    .eq('username', username)
+    .eq('username', cleanUsername)
     .maybeSingle();
   if (lookupError) {
     throw new Error(`Username lookup failed: ${lookupError.message}`);
@@ -151,13 +163,13 @@ router.post('/accounts', async (req, res) => {
   // for the measurement and for why the format guarantees every rule from its
   // fixed parts rather than from the random ones. The username is passed
   // because the policy refuses a password containing it.
-  const temporaryPassword = generateTemporaryPassword(username);
+  const temporaryPassword = generateTemporaryPassword(cleanUsername);
   const password_hash = await bcrypt.hash(temporaryPassword, 10);
 
   const { data: user, error: userError } = await supabase
     .from('users')
     .insert({
-      username,
+      username: cleanUsername,
       password_hash,
       email,
       email_verified: false,
