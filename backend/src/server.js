@@ -85,6 +85,54 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ===========================================================================
+// TEMPORARY — DIAGNOSTIC PROBE. REMOVE BEFORE THE RATE LIMITER IS COMMITTED.
+//
+// WHY IT EXISTS: an IP-keyed rate limiter needs `req.ip` to be the CALLER's
+// address, and right now it is not. There is no app.set('trust proxy', ...)
+// anywhere in this file, so Express's default of `false` applies and `req.ip`
+// resolves to the nearest proxy hop while `req.ips` is empty — measured
+// against the real Express request prototype. On Render the API sits behind
+// Cloudflare AND Render's own layer, so the number of hops to trust cannot be
+// read off the code; it has to be counted from what actually arrives.
+//
+// Getting that number wrong is dangerous in BOTH directions. Too low and every
+// caller shares one bucket, so the limiter locks out all users at once. Too
+// high (including `true`) and Express walks past the real hops into
+// attacker-controlled header text, so anyone can mint a fresh bucket per
+// request by sending their own X-Forwarded-For — the limiter looks like it
+// works and stops nothing.
+//
+// HOW TO USE IT: deploy, then open this path ON MOBILE DATA (not the same
+// network as anything else) and compare the entries in x_forwarded_for against
+// your phone's public IP from any "what is my IP" page. The position of your
+// real address in that list is the hop count to trust. Check cf_connecting_ip
+// in the same response — if Cloudflare's header survives Render, it names the
+// caller directly with no counting.
+//
+// IT DELIBERATELY DOES NOT CALL app.set('trust proxy', ...). This route
+// MEASURES what arrives; setting the value would change how Express
+// interprets it and corrupt the very reading being taken.
+//
+// SAFE TO EXPOSE UNAUTHENTICATED, and only just: every field below is either
+// the caller's own address or this app's own configuration. No environment
+// variable, no database value, no user record, and no header beyond the two
+// forwarding ones is read or returned. It is still a fingerprinting aid, which
+// is the other reason it does not outlive the measurement.
+// ===========================================================================
+app.get('/api/proxy-probe', (req, res) => {
+  res.json({
+    // Raw and unparsed on purpose — the whole point is the number and order
+    // of entries as they arrive, which any splitting or trimming would hide.
+    x_forwarded_for: req.headers['x-forwarded-for'],
+    socket_remote_address: req.socket.remoteAddress,
+    cf_connecting_ip: req.headers['cf-connecting-ip'] ?? null,
+    req_ip: req.ip,
+    req_ips: req.ips,
+    trust_proxy_setting: req.app.get('trust proxy'),
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/secretary', secretaryRoutes);
 app.use('/api/residents', residentRoutes);
