@@ -114,13 +114,14 @@ export default function LoginPage() {
             />
           </label>
 
+          <Link className="forgot-password-link" to="/forgot-password">
+            Forgot your password?
+          </Link>
+
           <button type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
 
-          <p className="alt">
-            <Link to="/forgot-password">Forgot your password?</Link>
-          </p>
           <p className="alt">
             No account yet? <Link to="/register">Register as a resident</Link>
           </p>
