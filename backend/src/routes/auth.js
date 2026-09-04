@@ -279,6 +279,37 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
     return res.status(401).json({ error: 'Current password is incorrect' });
   }
 
+  // THE NEW PASSWORD MUST ACTUALLY BE NEW.
+  //
+  // Without this the route accepted the same password in all three fields,
+  // reported success, and — worse — cleared must_change_password below. A
+  // Secretary-created staff account could therefore satisfy its forced change
+  // by keeping the temporary password that was handed over on a piece of
+  // paper: the one password in this system already known to have left the
+  // office. The whole purpose of that flag is to guarantee the temporary
+  // password stops working, and it did not.
+  //
+  // It is INVISIBLE AFTER THE FACT, which is why nothing caught it: bcrypt
+  // salts every hash, so a no-op change still writes a different
+  // password_hash and the row looks updated. Nothing in the stored data can
+  // tell a real change from this one.
+  //
+  // PLACED AFTER THE bcrypt.compare ABOVE, DELIBERATELY. Refusing earlier
+  // would answer "that is your current password" to someone who had not yet
+  // proved they knew it — a disclosure to anyone holding a stolen session.
+  // Here the caller has already demonstrated they hold it, so telling them
+  // reveals nothing they did not supply.
+  //
+  // A plain string comparison, not bcrypt: both plaintexts are in hand, and
+  // they are compared under the same String() coercion that bcrypt.compare
+  // above and bcrypt.hash below already apply.
+  if (String(current_password) === String(new_password)) {
+    return res.status(400).json({
+      error:
+        'Your new password must be different from your current one. Nothing has been changed. If you are changing it because someone else may know it, reusing the same password leaves the account exactly as exposed as before — please choose a different one.',
+    });
+  }
+
   const password_hash = await bcrypt.hash(String(new_password), 10);
   const { error: updateError } = await supabase
     .from('users')
@@ -492,13 +523,14 @@ router.post('/reset-password', async (req, res) => {
   // Re-checked at USE time, not just at request time: an account can be
   // archived (which deactivates it) or rejected in the hour a link is alive,
   // and a token must not outlive the eligibility that produced it.
-  // `username` is selected for the password blocklist and for nothing else.
-  // It is never returned to the caller — the response is the fixed success
-  // message — so this does not turn a reset link into a way to read the
-  // username off an account.
+  // `username` is selected for the password blocklist and `password_hash` for
+  // the reuse check below — neither for anything else. Neither is ever
+  // returned to the caller: the response is the fixed success message, so this
+  // does not turn a reset link into a way to read the username, and the hash
+  // never leaves this handler.
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('user_id, username, role, is_active, is_rejected')
+    .select('user_id, username, password_hash, role, is_active, is_rejected')
     .eq('user_id', reset.user_id)
     .maybeSingle();
   if (userError) {
@@ -525,6 +557,37 @@ router.post('/reset-password', async (req, res) => {
   const passwordCheck = validatePassword(newPassword, { username: user.username });
   if (!passwordCheck.ok) {
     return res.status(400).json({ error: passwordCheck.error });
+  }
+
+  // THE NEW PASSWORD MUST ACTUALLY BE NEW — the same rule /change-password
+  // enforces above, and the reason bites harder here. The commonest reason to
+  // reset a password is that somebody else may know it; setting it back to
+  // itself leaves the account exactly as exposed as it was, while the screen
+  // says the reset succeeded.
+  //
+  // A REAL bcrypt COMPARE, unlike /change-password. That route holds both
+  // plaintexts and can compare strings; here only the new plaintext exists
+  // and the old one is a hash, so there is no cheaper way to ask. The cost is
+  // one bcrypt compare on an unauthenticated route — the same cost as the
+  // bcrypt.hash a few lines below, and the caller has already had to produce
+  // a valid unexpired token to get this far.
+  //
+  // PLACED BEFORE THE CLAIM, for the reason the comment above gives: a
+  // rejection after the claim burns the link, and the resident then waits out
+  // the 15-minute cooldown for another email over a password they can simply
+  // retype differently.
+  //
+  // KNOWN, ACCEPTED DISCLOSURE: this tells whoever holds the token that the
+  // password they submitted is the account's current one. They already hold a
+  // live reset token, so the marginal disclosure is small, and it was weighed
+  // against letting someone resetting a compromised password reuse it.
+  const reusesCurrent = await bcrypt.compare(String(newPassword), user.password_hash);
+  if (reusesCurrent) {
+    return res.status(400).json({
+      error:
+        'Your new password must be different from your current one. Nothing has been changed and this link still works, so please open it again and choose a different password. If you are resetting because someone else may know your password, reusing it leaves the account exactly as exposed as before.',
+      code: 'RESET_PASSWORD_REUSED',
+    });
   }
 
   // CLAIM THE TOKEN FIRST, with a status-guarded update — the same read-then-
