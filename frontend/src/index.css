@@ -232,6 +232,49 @@ select:focus {
   color: #2563eb;
 }
 
+/* The live password checklist (components/PasswordChecklist.jsx), rendered as
+   a sibling AFTER the field's <label>.
+
+   NO NEW COLOURS. Met reuses the green already carried by `.alert.success`
+   and `.badge.score` (#15803d); unmet reuses `.muted`'s slate (#64748b).
+   Unmet is deliberately NOT the `.alert.error` red — a rule not satisfied
+   yet, while someone is still typing, is "not done", not "wrong", and five
+   red rows under a half-typed password reads as five errors.
+
+   The -6px cancels part of the 14px bottom margin the preceding `label`
+   carries (base rule, index.css:125), so the list sits snug under the field
+   it describes instead of floating midway to the next one. The 14px below
+   keeps the form's own rhythm. */
+.pw-rules {
+  list-style: none;
+  margin: -6px 0 14px 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.pw-rules li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.7;
+}
+
+.pw-rules li.met {
+  color: #15803d;
+}
+
+/* The unmet marker is an outline circle at a lighter weight than the tick, so
+   the met rows are what the eye lands on. */
+.pw-rules li svg {
+  flex: none;
+  opacity: 0.55;
+}
+
+.pw-rules li.met svg {
+  opacity: 1;
+}
+
 textarea {
   display: block;
   width: 100%;

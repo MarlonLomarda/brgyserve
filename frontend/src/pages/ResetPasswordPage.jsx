@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import PasswordInput from '../components/PasswordInput';
+import PasswordChecklist from '../components/PasswordChecklist';
 
 // Public, and reached only from a link in an email. Like ForgotPasswordPage it
 // uses apiFetch rather than authFetch: the token in the URL is the authority
@@ -116,6 +117,7 @@ export default function ResetPasswordPage() {
             autoFocus
           />
         </label>
+        <PasswordChecklist value={password} />
         <label>
           Confirm new password
           <PasswordInput
