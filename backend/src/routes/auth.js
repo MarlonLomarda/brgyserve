@@ -15,6 +15,11 @@ const {
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
 const {
+  findUserByEmail,
+  uniqueViolationField,
+  EMAIL_TAKEN_MESSAGE,
+} = require('../utils/userEmail');
+const {
   TOKEN_TTL_MINUTES,
   REQUEST_COOLDOWN_MINUTES,
   generateToken,
@@ -90,6 +95,14 @@ router.post('/register', registerLimiter, async (req, res) => {
     return res.status(409).json({ error: 'Username is already taken' });
   }
 
+  // The SAME shape as the username check above, for the address. Migration
+  // 021's UNIQUE INDEX on lower(email) is the guarantee; this pre-check is
+  // what makes the refusal say something the applicant can act on.
+  const emailOwner = await findUserByEmail(email);
+  if (emailOwner) {
+    return res.status(409).json({ error: EMAIL_TAKEN_MESSAGE, code: 'EMAIL_TAKEN' });
+  }
+
   const password_hash = await bcrypt.hash(String(password), 10);
 
   const { data: user, error: userError } = await supabase
@@ -107,8 +120,21 @@ router.post('/register', registerLimiter, async (req, res) => {
     .single();
 
   if (userError) {
+    // THE RACE BACKSTOP, and it must name the right field. This used to
+    // answer "Username is already taken" to EVERY 23505, so once email became
+    // unique an address collision would have sent the applicant off inventing
+    // new usernames to fix a problem that was never about the username.
+    // A 23505 from an unrecognised constraint is re-thrown rather than
+    // guessed at — answering with either message would be a claim we cannot
+    // support.
     if (userError.code === '23505') {
-      return res.status(409).json({ error: 'Username is already taken' });
+      const field = uniqueViolationField(userError);
+      if (field === 'email') {
+        return res.status(409).json({ error: EMAIL_TAKEN_MESSAGE, code: 'EMAIL_TAKEN' });
+      }
+      if (field === 'username') {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
     }
     throw new Error(`Failed to create user: ${userError.message}`);
   }
@@ -359,6 +385,17 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
 // which row matched — the exact, case-insensitive comparison in JS below is.
 // That way a submitted "%@gmail.com" matches rows in the prefilter and then
 // matches nobody, rather than resolving to somebody else's account.
+//
+// THE .find() BELOW IS NOW UNAMBIGUOUS, AND IT WAS NOT BEFORE. It returns the
+// first exact match in PostgREST's return order, and this query carries no
+// ORDER BY — so while two accounts could share an address, one of them
+// silently received every reset link and the other could never recover its
+// password, with nothing reporting the clash. Migration 021's UNIQUE INDEX on
+// lower(email) makes at most one row match, so "first" and "only" are now the
+// same thing. The code is deliberately UNCHANGED: rewriting a lookup whose
+// behaviour is pinned by the reset test suite, to express a guarantee the
+// database now provides, would be risk without benefit. If that index is ever
+// dropped, this comment is the thing that stops being true.
 const EMAIL_PREFILTER_LIMIT = 25;
 
 async function eligibleResidentByEmail(email) {

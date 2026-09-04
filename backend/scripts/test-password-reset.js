@@ -52,6 +52,12 @@ const {
 } = require('../src/constants/passwordReset');
 
 const authRouter = require('../src/routes/auth');
+// Only for the email-uniqueness section below. The router-level
+// authenticate + requireRole('secretary') guard is a layer with no .route, so
+// handlerFor skips it and reaches the handler directly — and POST /accounts
+// reads nothing but req.body, so it runs without a session. That is fine here
+// because the only path exercised is the one that REFUSES before any insert.
+const secretaryRouter = require('../src/routes/secretary');
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -223,6 +229,65 @@ let skipReason = '';
     });
     const staff = await mkUser('staff', { role: 'staff' });
     check('four throwaway fixtures created', created.users.length === 4, created.users.join(', '));
+
+    // ================================================================= B2
+    // EMAIL UNIQUENESS AT BOTH INSERT ROUTES.
+    //
+    // These live here rather than in a harness of their own because this is
+    // the only script with throwaway accounts whose addresses are known, and
+    // it already cleans them up. Both probes use a FREE username with a TAKEN
+    // address, so the username check cannot fire first and mask the result —
+    // and both exercise only the refusing path, which returns before any row
+    // is written. Nothing here can create an account.
+    section('B2. an email address cannot be claimed twice');
+
+    const registerHandler = handlerFor(authRouter, 'post', '/register');
+    const accountsHandler = handlerFor(secretaryRouter, 'post', '/accounts');
+
+    const dupRegister = await invoke(registerHandler, {
+      body: {
+        username: `${STAMP}_dupmail`,      // free, and valid under usernamePolicy
+        email: active.email,               // already held by the `active` fixture
+        password: 'Ubay-Sunrise-42!',
+        first_name: 'Dup', last_name: 'Email', address: 'Purok 1',
+      },
+    });
+    check('POST /register refuses an address another account holds',
+      dupRegister.status === 409, `${dupRegister.status} ${dupRegister.body?.error || ''}`);
+    check('  and it names the EMAIL, not the username',
+      /email address is already registered/i.test(dupRegister.body?.error || '')
+      && !/username/i.test(dupRegister.body?.error || ''), dupRegister.body?.error);
+    check('  with a code the frontend can branch on',
+      dupRegister.body?.code === 'EMAIL_TAKEN', String(dupRegister.body?.code));
+
+    const dupAccount = await invoke(accountsHandler, {
+      body: {
+        username: `${STAMP}_dupmail2`,
+        email: active.email.toUpperCase(),  // ALSO proves the check is case-insensitive
+        role: 'staff',
+        first_name: 'Dup', last_name: 'Email',
+      },
+    });
+    check('POST /secretary/accounts refuses it too, case-insensitively',
+      dupAccount.status === 409, `${dupAccount.status} ${dupAccount.body?.error || ''}`);
+    check('  and it names the EMAIL, not the username',
+      /email address is already registered/i.test(dupAccount.body?.error || '')
+      && !/username/i.test(dupAccount.body?.error || ''), dupAccount.body?.error);
+
+    // The refusals must have cost nothing: still four fixtures, no fifth or
+    // sixth account created by the probes above.
+    const { data: probeRows } = await supabase
+      .from('users').select('user_id, username')
+      .or(`username.eq.${STAMP}_dupmail,username.eq.${STAMP}_dupmail2`);
+    check('  NEITHER probe created an account', (probeRows?.length || 0) === 0,
+      `${probeRows?.length || 0} row(s)`);
+    // Register anything the probes DID create for cleanup, so the assertion
+    // above can fail without leaving accounts behind. It fails only against a
+    // route missing the guard — which is exactly when this runs, and exactly
+    // when a leak is least welcome: verified against the pre-fix code, both
+    // probes returned 201 and one of them was an ACTIVE staff account holding
+    // a duplicate address.
+    for (const row of probeRows || []) created.users.push(row.user_id);
 
     // ================================================================== C
     section('C. the response is byte-identical on every path');
