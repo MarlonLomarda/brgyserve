@@ -34,35 +34,23 @@ export default function LoginPage() {
     }
   }
 
-<<<<<<< HEAD
   function closeModal() {
     setActiveModal(null);
   }
 
-  return (
-    <div className="auth-page">
-      <div
-        className="login-form-image"
-        style={{ backgroundImage: `url(${brgyPersonnel})` }}
-      ></div>
-=======
   useEffect(() => {
-    // set an interval to run every 3 seconds
     const interval = setInterval(() => {
       const slider = sliderRef.current;
 
-      // error safety net
       if (!slider) return;
 
       const sliderWidth = slider.clientWidth;
 
-      // move to the next slide
       slider.scrollBy({
         left: sliderWidth,
         behavior: "smooth",
       });
 
-      // if last slide na, go back to the first slide
       if (slider.scrollLeft + slider.clientWidth >= slider.scrollWidth - 10) {
         setTimeout(() => {
           slider.scrollTo({
@@ -102,7 +90,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
->>>>>>> origin/main
 
       <div className="login-form-wrapper">
         <form className="card" onSubmit={handleSubmit}>
