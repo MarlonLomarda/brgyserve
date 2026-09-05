@@ -8,6 +8,18 @@ const { NOTIFICATION_TYPE, RELATED_TYPE } = require('../constants/notifications'
 const { notify, escapeHtml } = require('../services/notifications');
 const { frontendOrigin } = require('../utils/frontendOrigin');
 const {
+  loginLimiter,
+  registerLimiter,
+  forgotPasswordLimiter,
+} = require('../middleware/rateLimit');
+const { validatePassword } = require('../constants/passwordPolicy');
+const { validateUsername } = require('../constants/usernamePolicy');
+const {
+  findUserByEmail,
+  uniqueViolationField,
+  EMAIL_TAKEN_MESSAGE,
+} = require('../utils/userEmail');
+const {
   TOKEN_TTL_MINUTES,
   REQUEST_COOLDOWN_MINUTES,
   generateToken,
@@ -26,7 +38,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // POST /api/auth/register — resident self-registration.
 // The account is created pending (is_active = false, no resident link) and
 // cannot log in until the Secretary links a resident record and activates it.
-router.post('/register', async (req, res) => {
+// RATE LIMITED — mounted at ROUTE level, deliberately, not with router.use().
+// Router-level would also cover /change-password and /reset-password, which
+// are not the exposure: one needs a session, the other needs a 256-bit token.
+// Route level also puts the limiter AFTER cors() (server.js:93) in the
+// effective order, so a 429 still carries Access-Control-Allow-Origin and the
+// browser can read the message — verified: cors() sets that header before it
+// calls next(), so anything short-circuiting later inherits it.
+router.post('/register', registerLimiter, async (req, res) => {
   const body = req.body || {};
   const {
     username, email, password,
@@ -39,8 +58,26 @@ router.post('/register', async (req, res) => {
   if (missing.length) {
     return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
   }
-  if (String(password).length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  // Username BEFORE password, because the password blocklist refuses a
+  // password containing the username and must be given the value that will
+  // actually be stored — the trimmed one.
+  const usernameCheck = validateUsername(username);
+  if (!usernameCheck.ok) {
+    return res.status(400).json({ error: usernameCheck.error });
+  }
+  // cleanUsername, not `username`, is used from here down: the uniqueness
+  // lookup, the password blocklist and the insert must all see one value, or
+  // " rad" is validated as "rad" and stored with the space still on it.
+  const cleanUsername = usernameCheck.value;
+
+  // Runs AFTER the required-fields check above, which is what guarantees a
+  // username to check the password against. It runs BEFORE the username
+  // uniqueness lookup on purpose: a weak password is refused without a
+  // database round trip, and the refusal cannot vary with whether the
+  // username was taken.
+  const passwordCheck = validatePassword(password, { username: cleanUsername });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
   }
   if (birthdate && !DATE_RE.test(birthdate)) {
     return res.status(400).json({ error: 'birthdate must be in YYYY-MM-DD format' });
@@ -49,7 +86,7 @@ router.post('/register', async (req, res) => {
   const { data: existing, error: lookupError } = await supabase
     .from('users')
     .select('user_id')
-    .eq('username', username)
+    .eq('username', cleanUsername)
     .maybeSingle();
   if (lookupError) {
     throw new Error(`Username lookup failed: ${lookupError.message}`);
@@ -58,12 +95,20 @@ router.post('/register', async (req, res) => {
     return res.status(409).json({ error: 'Username is already taken' });
   }
 
+  // The SAME shape as the username check above, for the address. Migration
+  // 021's UNIQUE INDEX on lower(email) is the guarantee; this pre-check is
+  // what makes the refusal say something the applicant can act on.
+  const emailOwner = await findUserByEmail(email);
+  if (emailOwner) {
+    return res.status(409).json({ error: EMAIL_TAKEN_MESSAGE, code: 'EMAIL_TAKEN' });
+  }
+
   const password_hash = await bcrypt.hash(String(password), 10);
 
   const { data: user, error: userError } = await supabase
     .from('users')
     .insert({
-      username,
+      username: cleanUsername,
       password_hash,
       email,
       email_verified: false,
@@ -75,8 +120,21 @@ router.post('/register', async (req, res) => {
     .single();
 
   if (userError) {
+    // THE RACE BACKSTOP, and it must name the right field. This used to
+    // answer "Username is already taken" to EVERY 23505, so once email became
+    // unique an address collision would have sent the applicant off inventing
+    // new usernames to fix a problem that was never about the username.
+    // A 23505 from an unrecognised constraint is re-thrown rather than
+    // guessed at — answering with either message would be a claim we cannot
+    // support.
     if (userError.code === '23505') {
-      return res.status(409).json({ error: 'Username is already taken' });
+      const field = uniqueViolationField(userError);
+      if (field === 'email') {
+        return res.status(409).json({ error: EMAIL_TAKEN_MESSAGE, code: 'EMAIL_TAKEN' });
+      }
+      if (field === 'username') {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
     }
     throw new Error(`Failed to create user: ${userError.message}`);
   }
@@ -162,7 +220,18 @@ async function inactiveMessage(user) {
 }
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+// RATE LIMITED — 5 per 15 minutes, with skipSuccessfulRequests.
+//
+// WHAT COUNTS, since it is decided by STATUS and not by intent: the library
+// decrements the counter on `finish` when `response.statusCode < 400`. So a
+// successful sign-in (200) is refunded, a wrong password (401) counts, and a
+// 403 from the inactive-account branch below ALSO counts — including when the
+// password was correct. A pending or rejected applicant retrying their own
+// correct password therefore burns the allowance like a failed guess. That is
+// the default behaviour and it is left in place: telling those two apart in
+// the limiter would mean giving the 403 branch a different rate-limit outcome
+// from the 401 one, which is a distinction an attacker can measure.
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -214,8 +283,12 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   if (!current_password || !new_password) {
     return res.status(400).json({ error: 'Current password and new password are required' });
   }
-  if (String(new_password).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  // req.user is loaded fresh from the database by authenticate(), which
+  // selects username among its six columns — so the username the blocklist
+  // checks against is the stored one, not anything the caller supplied.
+  const passwordCheck = validatePassword(new_password, { username: req.user.username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
   }
 
   const { data: user, error } = await supabase
@@ -230,6 +303,37 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   const valid = await bcrypt.compare(String(current_password), user.password_hash);
   if (!valid) {
     return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // THE NEW PASSWORD MUST ACTUALLY BE NEW.
+  //
+  // Without this the route accepted the same password in all three fields,
+  // reported success, and — worse — cleared must_change_password below. A
+  // Secretary-created staff account could therefore satisfy its forced change
+  // by keeping the temporary password that was handed over on a piece of
+  // paper: the one password in this system already known to have left the
+  // office. The whole purpose of that flag is to guarantee the temporary
+  // password stops working, and it did not.
+  //
+  // It is INVISIBLE AFTER THE FACT, which is why nothing caught it: bcrypt
+  // salts every hash, so a no-op change still writes a different
+  // password_hash and the row looks updated. Nothing in the stored data can
+  // tell a real change from this one.
+  //
+  // PLACED AFTER THE bcrypt.compare ABOVE, DELIBERATELY. Refusing earlier
+  // would answer "that is your current password" to someone who had not yet
+  // proved they knew it — a disclosure to anyone holding a stolen session.
+  // Here the caller has already demonstrated they hold it, so telling them
+  // reveals nothing they did not supply.
+  //
+  // A plain string comparison, not bcrypt: both plaintexts are in hand, and
+  // they are compared under the same String() coercion that bcrypt.compare
+  // above and bcrypt.hash below already apply.
+  if (String(current_password) === String(new_password)) {
+    return res.status(400).json({
+      error:
+        'Your new password must be different from your current one. Nothing has been changed. If you are changing it because someone else may know it, reusing the same password leaves the account exactly as exposed as before — please choose a different one.',
+    });
   }
 
   const password_hash = await bcrypt.hash(String(new_password), 10);
@@ -281,6 +385,17 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
 // which row matched — the exact, case-insensitive comparison in JS below is.
 // That way a submitted "%@gmail.com" matches rows in the prefilter and then
 // matches nobody, rather than resolving to somebody else's account.
+//
+// THE .find() BELOW IS NOW UNAMBIGUOUS, AND IT WAS NOT BEFORE. It returns the
+// first exact match in PostgREST's return order, and this query carries no
+// ORDER BY — so while two accounts could share an address, one of them
+// silently received every reset link and the other could never recover its
+// password, with nothing reporting the clash. Migration 021's UNIQUE INDEX on
+// lower(email) makes at most one row match, so "first" and "only" are now the
+// same thing. The code is deliberately UNCHANGED: rewriting a lookup whose
+// behaviour is pinned by the reset test suite, to express a guarantee the
+// database now provides, would be risk without benefit. If that index is ever
+// dropped, this comment is the thing that stops being true.
 const EMAIL_PREFILTER_LIMIT = 25;
 
 async function eligibleResidentByEmail(email) {
@@ -306,7 +421,20 @@ async function eligibleResidentByEmail(email) {
 }
 
 // POST /api/auth/forgot-password — UNAUTHENTICATED.
-router.post('/forgot-password', async (req, res) => {
+//
+// RATE LIMITED — 10 per hour, and the limiter runs BEFORE the handler, which
+// is the point rather than an ordering detail. It has not looked at the
+// address when it decides, so its behaviour cannot vary with whether an
+// account exists — the same property FORGOT_PASSWORD_RESPONSE protects on the
+// success path. A limiter that only fired for real accounts would reopen the
+// enumeration oracle this whole route is written around.
+//
+// THE PER-USER COOLDOWN BELOW IS UNCHANGED AND STILL DOES ITS OWN JOB. This
+// limiter counts REQUESTS from one address; the cooldown counts EMAILS to one
+// account, in the password_resets table, and survives a restart. Neither
+// covers the other: the cooldown ignores a caller cycling addresses that do
+// not exist, and this limiter ignores one account targeted from many networks.
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
   // A 400 here is about the SHAPE of the request, not about whether an account
   // exists, so it discloses nothing: the answer is the same for every caller
@@ -403,8 +531,12 @@ router.post('/reset-password', async (req, res) => {
   if (!token) {
     return res.status(400).json({ error: INVALID_TOKEN_MESSAGE, code: 'RESET_TOKEN_INVALID' });
   }
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  // PRESENCE ONLY HERE. The full policy check needs the account's username to
+  // run its blocklist rule, and the username is not known until the token has
+  // been resolved to a user below — so the rules are applied there, not here.
+  // This one is about the SHAPE of the request and discloses nothing.
+  if (!newPassword) {
+    return res.status(400).json({ error: 'A new password is required.' });
   }
 
   // The stored value is a SHA-256 hash, so the raw token is hashed and the
@@ -428,9 +560,14 @@ router.post('/reset-password', async (req, res) => {
   // Re-checked at USE time, not just at request time: an account can be
   // archived (which deactivates it) or rejected in the hour a link is alive,
   // and a token must not outlive the eligibility that produced it.
+  // `username` is selected for the password blocklist and `password_hash` for
+  // the reuse check below — neither for anything else. Neither is ever
+  // returned to the caller: the response is the fixed success message, so this
+  // does not turn a reset link into a way to read the username, and the hash
+  // never leaves this handler.
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('user_id, role, is_active, is_rejected')
+    .select('user_id, username, password_hash, role, is_active, is_rejected')
     .eq('user_id', reset.user_id)
     .maybeSingle();
   if (userError) {
@@ -442,6 +579,51 @@ router.post('/reset-password', async (req, res) => {
     return res.status(400).json({
       error: 'This account is not active, so its password cannot be reset. Please contact the Barangay Office.',
       code: 'RESET_ACCOUNT_INACTIVE',
+    });
+  }
+
+  // THE POLICY IS CHECKED HERE — after the account is resolved, and BEFORE
+  // the token is claimed below.
+  //
+  // After, because the blocklist needs this account's username and there was
+  // no username to check against until now. Before the claim, because the
+  // claim is irreversible: a password refused for being too weak must leave
+  // the link still usable, or a resident who types "password" once has burned
+  // the email and has to wait out the 15-minute cooldown for another. A
+  // rejected password must cost them a retry, not the token.
+  const passwordCheck = validatePassword(newPassword, { username: user.username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
+  }
+
+  // THE NEW PASSWORD MUST ACTUALLY BE NEW — the same rule /change-password
+  // enforces above, and the reason bites harder here. The commonest reason to
+  // reset a password is that somebody else may know it; setting it back to
+  // itself leaves the account exactly as exposed as it was, while the screen
+  // says the reset succeeded.
+  //
+  // A REAL bcrypt COMPARE, unlike /change-password. That route holds both
+  // plaintexts and can compare strings; here only the new plaintext exists
+  // and the old one is a hash, so there is no cheaper way to ask. The cost is
+  // one bcrypt compare on an unauthenticated route — the same cost as the
+  // bcrypt.hash a few lines below, and the caller has already had to produce
+  // a valid unexpired token to get this far.
+  //
+  // PLACED BEFORE THE CLAIM, for the reason the comment above gives: a
+  // rejection after the claim burns the link, and the resident then waits out
+  // the 15-minute cooldown for another email over a password they can simply
+  // retype differently.
+  //
+  // KNOWN, ACCEPTED DISCLOSURE: this tells whoever holds the token that the
+  // password they submitted is the account's current one. They already hold a
+  // live reset token, so the marginal disclosure is small, and it was weighed
+  // against letting someone resetting a compromised password reuse it.
+  const reusesCurrent = await bcrypt.compare(String(newPassword), user.password_hash);
+  if (reusesCurrent) {
+    return res.status(400).json({
+      error:
+        'Your new password must be different from your current one. Nothing has been changed and this link still works, so please open it again and choose a different password. If you are resetting because someone else may know your password, reusing it leaves the account exactly as exposed as before.',
+      code: 'RESET_PASSWORD_REUSED',
     });
   }
 

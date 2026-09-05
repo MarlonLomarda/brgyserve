@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const supabase = require('./config/supabase');
 
 const authRoutes = require('./routes/auth');
@@ -27,6 +28,48 @@ const PORT = process.env.PORT || 5000;
 if (!process.env.JWT_SECRET) {
   throw new Error('Missing JWT_SECRET. Set it in backend/.env (see .env.example).');
 }
+
+// How many proxy hops to count in from the socket before believing an address.
+// Without this, Express defaults to `false`, `req.ip` is the nearest proxy and
+// `req.ips` is empty — so every caller on the internet shares one value and an
+// IP-keyed rate limiter would limit them as a single client.
+//
+// 3 IS MEASURED, NOT CHOSEN. The live chain is caller -> Cloudflare -> Render,
+// confirmed on two different networks against the temporary /api/proxy-probe
+// route (added in 3c699b6, removed in this change now that the reading is
+// taken). Custom Domains is empty and PR Previews is off, so the onrender.com
+// hostname is the only public path in and it is Cloudflare-fronted throughout.
+//
+// NOT `true`, and the difference is not stylistic. `true` tells Express to
+// believe the LEFTMOST X-Forwarded-For entry, which is caller-controlled —
+// a forged X-Forwarded-For is PREPENDED to the real chain rather than
+// rejected, so anyone could mint a fresh rate-limit bucket per request by
+// changing one header. express-rate-limit has a check for exactly this
+// (ERR_ERL_PERMISSIVE_TRUST_PROXY), but do NOT rely on it to catch a mistake
+// here: its validations are caught internally and become one console.error,
+// once per process, never an exception the request would surface.
+//
+// A count is what makes the header safe to read at all. RE-MEASURE IT if the
+// hosting changes — a Render region or plan change, a custom domain, or
+// anything put in front of Cloudflare moves the hop count, and a stale value
+// fails silently in whichever direction it moved.
+app.set('trust proxy', 3);
+
+// Security response headers. Before this, the API sent NONE — no CSP, no
+// X-Content-Type-Options, no Referrer-Policy, no X-Frame-Options — and
+// advertised `X-Powered-By: Express` on every single response, which
+// fingerprints the stack for free and is the first line of any scanner's
+// report. Verified live on the deployed instance before this was added.
+//
+// MOUNTED FIRST, ahead of cors() and ahead of the raw-body PayMongo webhook,
+// so the headers are on EVERY response — including the CORS preflight, which
+// cors() short-circuits with a 204 before any router runs, and including the
+// 500s from the error handler at the bottom of this file.
+//
+// Helmet only sets response headers and calls next(); it never reads the
+// request body or stream, so express.raw() on the webhook below is unaffected
+// and the PayMongo HMAC still covers the exact bytes sent.
+app.use(helmet());
 
 // FRONTEND_URL is a comma-separated allowlist of browser origins. Production
 // sets exactly one; local device testing (a phone reaching the dev server over

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import PasswordInput from "../components/PasswordInput";
+import PasswordChecklist from "../components/PasswordChecklist";
 
 const INITIAL = {
   username: "",
@@ -134,6 +135,7 @@ export default function RegisterPage() {
             minLength={8}
             autoComplete="new-password"
           />
+          <PasswordChecklist value={form.password} />
 
           <h2>Personal information</h2>
           <div className="grid-2">

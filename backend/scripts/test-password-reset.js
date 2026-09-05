@@ -52,6 +52,12 @@ const {
 } = require('../src/constants/passwordReset');
 
 const authRouter = require('../src/routes/auth');
+// Only for the email-uniqueness section below. The router-level
+// authenticate + requireRole('secretary') guard is a layer with no .route, so
+// handlerFor skips it and reaches the handler directly — and POST /accounts
+// reads nothing but req.body, so it runs without a session. That is fine here
+// because the only path exercised is the one that REFUSES before any insert.
+const secretaryRouter = require('../src/routes/secretary');
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -224,6 +230,65 @@ let skipReason = '';
     const staff = await mkUser('staff', { role: 'staff' });
     check('four throwaway fixtures created', created.users.length === 4, created.users.join(', '));
 
+    // ================================================================= B2
+    // EMAIL UNIQUENESS AT BOTH INSERT ROUTES.
+    //
+    // These live here rather than in a harness of their own because this is
+    // the only script with throwaway accounts whose addresses are known, and
+    // it already cleans them up. Both probes use a FREE username with a TAKEN
+    // address, so the username check cannot fire first and mask the result —
+    // and both exercise only the refusing path, which returns before any row
+    // is written. Nothing here can create an account.
+    section('B2. an email address cannot be claimed twice');
+
+    const registerHandler = handlerFor(authRouter, 'post', '/register');
+    const accountsHandler = handlerFor(secretaryRouter, 'post', '/accounts');
+
+    const dupRegister = await invoke(registerHandler, {
+      body: {
+        username: `${STAMP}_dupmail`,      // free, and valid under usernamePolicy
+        email: active.email,               // already held by the `active` fixture
+        password: 'Ubay-Sunrise-42!',
+        first_name: 'Dup', last_name: 'Email', address: 'Purok 1',
+      },
+    });
+    check('POST /register refuses an address another account holds',
+      dupRegister.status === 409, `${dupRegister.status} ${dupRegister.body?.error || ''}`);
+    check('  and it names the EMAIL, not the username',
+      /email address is already registered/i.test(dupRegister.body?.error || '')
+      && !/username/i.test(dupRegister.body?.error || ''), dupRegister.body?.error);
+    check('  with a code the frontend can branch on',
+      dupRegister.body?.code === 'EMAIL_TAKEN', String(dupRegister.body?.code));
+
+    const dupAccount = await invoke(accountsHandler, {
+      body: {
+        username: `${STAMP}_dupmail2`,
+        email: active.email.toUpperCase(),  // ALSO proves the check is case-insensitive
+        role: 'staff',
+        first_name: 'Dup', last_name: 'Email',
+      },
+    });
+    check('POST /secretary/accounts refuses it too, case-insensitively',
+      dupAccount.status === 409, `${dupAccount.status} ${dupAccount.body?.error || ''}`);
+    check('  and it names the EMAIL, not the username',
+      /email address is already registered/i.test(dupAccount.body?.error || '')
+      && !/username/i.test(dupAccount.body?.error || ''), dupAccount.body?.error);
+
+    // The refusals must have cost nothing: still four fixtures, no fifth or
+    // sixth account created by the probes above.
+    const { data: probeRows } = await supabase
+      .from('users').select('user_id, username')
+      .or(`username.eq.${STAMP}_dupmail,username.eq.${STAMP}_dupmail2`);
+    check('  NEITHER probe created an account', (probeRows?.length || 0) === 0,
+      `${probeRows?.length || 0} row(s)`);
+    // Register anything the probes DID create for cleanup, so the assertion
+    // above can fail without leaving accounts behind. It fails only against a
+    // route missing the guard — which is exactly when this runs, and exactly
+    // when a leak is least welcome: verified against the pre-fix code, both
+    // probes returned 201 and one of them was an ACTIVE staff account holding
+    // a duplicate address.
+    for (const row of probeRows || []) created.users.push(row.user_id);
+
     // ================================================================== C
     section('C. the response is byte-identical on every path');
     const pinned = JSON.stringify(FORGOT_PASSWORD_RESPONSE);
@@ -337,6 +402,50 @@ let skipReason = '';
     check('    (there really was another one to sweep)',
       afterRows.some((r) => r.reset_id === spare.reset_id), `spare ${spare.reset_id}`);
 
+    // ---- E1b. the new password must actually be NEW ---------------------
+    //
+    // THE ASSERTION ABOVE — "and the old one no longer does" — LOOKS like it
+    // covers this and does not. It passes because this test sets a DIFFERENT
+    // password; it would pass identically against a route that happily
+    // accepted the current one back. This section submits the account's
+    // CURRENT password and requires a refusal.
+    //
+    // NEW_PASSWORD is used rather than the fixture's original, because
+    // 'OriginalPass123' has no symbol and would be stopped by the composition
+    // rule before ever reaching the reuse check — a test that passed for the
+    // wrong reason.
+    section('E1b. the new password must differ from the current one');
+    const reuseToken = await issue(active.user_id);
+    const reuse = await invoke(reset, { body: { token: reuseToken.token, new_password: NEW_PASSWORD } });
+    check('submitting the CURRENT password as the new one is refused',
+      reuse.status === 400, `${reuse.status} ${reuse.body?.error || ''}`);
+    check('  with wording that says nothing changed and why it matters',
+      /different from your current/i.test(reuse.body?.error || '')
+      && /exposed/i.test(reuse.body?.error || ''), reuse.body?.error);
+    check('  and a code the frontend can branch on',
+      reuse.body?.code === 'RESET_PASSWORD_REUSED', String(reuse.body?.code));
+
+    const { data: unchangedUser } = await supabase
+      .from('users').select('password_hash').eq('user_id', active.user_id).single();
+    check('  the stored password is UNTOUCHED',
+      await bcrypt.compare(NEW_PASSWORD, unchangedUser.password_hash));
+
+    // The point of refusing BEFORE the status-guarded claim: a rejected
+    // password must cost the resident a retry, not the whole link.
+    const reuseRows = await rowsFor(active.user_id);
+    const stillLive = reuseRows.find((r) => r.reset_id === reuseToken.reset_id);
+    check('  THE TOKEN IS NOT BURNED — it is still unused',
+      !!stillLive && stillLive.used_at === null, `used_at=${String(stillLive?.used_at)}`);
+
+    const RETRY_PASSWORD = 'Retry-Pass-77!';
+    const retry = await invoke(reset, { body: { token: reuseToken.token, new_password: RETRY_PASSWORD } });
+    check('  and that same link then works with a different password',
+      retry.status === 200, `${retry.status} ${retry.body?.error || ''}`);
+    const { data: retriedUser } = await supabase
+      .from('users').select('password_hash').eq('user_id', active.user_id).single();
+    check('    the retry password is the one now stored',
+      await bcrypt.compare(RETRY_PASSWORD, retriedUser.password_hash));
+
     section('E2. a token can only be used once');
     const replay = await invoke(reset, { body: { token: good.token, new_password: 'AnotherPass!99' } });
     check('replaying the same token is refused', replay.status === 400, `${replay.status}`);
@@ -344,8 +453,12 @@ let skipReason = '';
       /request a new one/i.test(replay.body?.error || ''), replay.body?.error);
     const { data: unchanged } = await supabase
       .from('users').select('password_hash').eq('user_id', active.user_id).single();
+    // RETRY_PASSWORD, not NEW_PASSWORD: E1b above legitimately set the
+    // password again when it proved the un-burned link still worked. The
+    // claim here is unchanged — the replay must not move the password — only
+    // the value it is measured against.
     check('  and the password is UNCHANGED by the replay',
-      await bcrypt.compare(NEW_PASSWORD, unchanged.password_hash));
+      await bcrypt.compare(RETRY_PASSWORD, unchanged.password_hash));
 
     section('E3. the other ways a token fails');
     const expired = await issue(active.user_id, { minutesFromNow: -1 });

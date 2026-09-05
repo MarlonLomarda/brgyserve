@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { roleHome } from '../auth/roles';
 import PasswordInput from '../components/PasswordInput';
+import PasswordChecklist from '../components/PasswordChecklist';
 
 export default function ChangePasswordPage() {
   const { user, authFetch, updateUser, logout } = useAuth();
@@ -76,6 +77,7 @@ export default function ChangePasswordPage() {
             required
           />
         </label>
+        <PasswordChecklist value={newPassword} />
         <label>
           Confirm new password
           <PasswordInput

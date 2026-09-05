@@ -40,15 +40,22 @@ const hashToken = (token) => crypto.createHash('sha256').update(String(token)).d
 const TOKEN_TTL_MINUTES = 60;
 
 // Per-user cooldown between reset requests, counted against password_resets
-// rather than an in-memory counter — there is no rate limiting anywhere in
-// this API (see CLAUDE.md), and a table the route already writes to needs no
-// new dependency and survives a restart.
+// rather than an in-memory counter, so it survives a restart.
 //
-// It stops the realistic case: someone hammering the form and burning the
-// Resend free-tier quota (100/day, 3,000/month) for the whole barangay. It
-// does NOT stop distributed abuse, and it does nothing at all for
-// POST /api/auth/register, which has the same unauthenticated-write exposure
-// and still needs its own answer.
+// THIS IS NOT THE SAME THING AS forgotPasswordLimiter, and neither replaces
+// the other. This cooldown keys on a resolved user_id and limits EMAILS SENT
+// TO ONE ACCOUNT; the limiter in middleware/rateLimit.js keys on the caller's
+// address and limits REQUESTS MADE FROM ONE CONNECTION. The cooldown does
+// nothing about a caller cycling a thousand addresses that do not exist, and
+// the limiter does nothing about one account targeted from many networks.
+//
+// (This comment used to say "there is no rate limiting anywhere in this API".
+// That was true when it was written and stopped being true in 71bfc37, which
+// added limiters to /login, /register and /forgot-password.)
+//
+// What the cooldown stops is the realistic case: someone hammering the form
+// and burning the Resend free-tier quota (100/day, 3,000/month) for the whole
+// barangay. It does NOT stop distributed abuse.
 const REQUEST_COOLDOWN_MINUTES = 15;
 
 // ===========================================================================
