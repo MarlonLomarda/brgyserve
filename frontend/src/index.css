@@ -36,6 +36,27 @@ body {
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
+
+  /* OVERFLOW-X STAYS `auto`. `hidden` would look identical here and break
+     swiping on a phone, while the 6s auto-advance and the nav dots carried on
+     working — so nobody would notice until someone tried to swipe. Measured:
+     with `hidden`, programmatic scrollBy and the anchor dots still land on
+     631 and 1262 exactly as before, which is precisely why it would go
+     unnoticed. */
+  scrollbar-width: none;
+}
+
+/* The other half of hiding it. `scrollbar-width` is the standard property but
+   only reaches Chrome 121+, Safari 18.2+ and Firefox 64+; this covers the
+   Chrome and Safari versions below those, which is a real share of phones.
+   SCOPED TO .slider — a bare ::-webkit-scrollbar rule would strip the
+   scrollbar from .table-wrap and every dashboard list as well.
+   Measured: the bar reserves 15px INSIDE the element on Windows
+   (offsetHeight - clientHeight), so hiding it gives those 15px back to the
+   images. Snap, the auto-advance and the dots are unaffected — scrollLeft
+   lands on 631 and 1262 with the bar shown or hidden. */
+.slider::-webkit-scrollbar {
+  display: none;
 }
 
 .slider img {
@@ -115,6 +136,15 @@ body {
   max-width: 500px;
   border: none;
   box-shadow: none;
+
+  /* MOVED HERE from the shared `.card` rule (PR #5 put it there unscoped).
+     It is what `.forgot-password-link`'s `align-self: end` needs, and that
+     link exists only on /login — but `.card` itself is also the "Add a
+     member" panel on the Households screen, which has no business becoming a
+     flex column because the login form wanted one. (0,2,0) against `.card`'s
+     (0,1,0), so it wins wherever both apply. */
+  display: flex;
+  flex-direction: column;
 }
 
 .auth-page .card.wide {
@@ -131,6 +161,13 @@ body {
 
 .auth-page label {
   font-weight: 400;
+
+  /* MOVED HERE from the base `label` rule, which PR #5 changed from
+     `margin-bottom: 14px` to `margin: 14px 0 10px 0` unscoped — giving all 77
+     labels in the app a top margin they never had. (0,2,0) beats the bare
+     `label` element selector (0,0,1) comfortably, so the shorthand below
+     replaces the restored global margin on auth pages only. */
+  margin: 14px 0 10px 0;
 }
 
 .auth-page input {
@@ -142,15 +179,13 @@ body {
 }
 
 .card {
-  display: flex;
-  flex-direction: column;
-  
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 32px;
   width: 100%;
   max-width: 440px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .forgot-password-link {
@@ -184,14 +219,20 @@ body {
 }
 
 .subtitle {
-  margin: 0 0 15px;
+  margin: 0 0 20px;
   color: #64748b;
   font-size: 0.9rem;
 }
 
+/* PR #5's tighter subtitle, kept for the auth pages and nowhere else.
+   (0,2,0) against `.subtitle`'s (0,1,0). */
+.auth-page .subtitle {
+  margin: 0 0 15px;
+}
+
 label {
   display: block;
-  margin: 14px 0 10px 0;
+  margin-bottom: 14px;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -308,10 +349,22 @@ select:focus {
    yet, while someone is still typing, is "not done", not "wrong", and five
    red rows under a half-typed password reads as five errors.
 
-   The -6px cancels part of the 14px bottom margin the preceding `label`
-   carries (base rule, index.css:125), so the list sits snug under the field
-   it describes instead of floating midway to the next one. The 14px below
-   keeps the form's own rhythm. */
+   THE -6px CANCELS PART OF THE PRECEDING `label`'s BOTTOM MARGIN, and that
+   margin is now TWO different values depending on where the checklist is:
+     * dashboard screens — the base `label` rule (search for `^label {`, not a
+       line number: it has moved twice) carries `margin-bottom: 14px`, so the
+       gap measures 14 - 6 = 8px.
+     * auth pages — `.auth-page label` carries `margin: 14px 0 10px 0` (PR #5,
+       scoped in this pass), so the gap measures 10 - 6 = 4px.
+   The checklist only ever renders on /register, /change-password and
+   /reset-password, and ALL THREE are auth pages — so in practice it is always
+   the 4px. The 8px case is reachable only if a checklist is ever put on a
+   dashboard screen. One offset is kept rather than two because 4px and 8px
+   both read as "attached to the field above", and a second scoped rule would
+   be a second thing to keep in step with a margin that has already moved
+   once. If it ever needs to be exact, scope it — do not retune the -6px,
+   which would silently move the other case.
+   The 14px below keeps the form's own rhythm and is unaffected. */
 .pw-rules {
   list-style: none;
   margin: -6px 0 14px 0;
