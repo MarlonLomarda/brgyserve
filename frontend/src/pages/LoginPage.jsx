@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { roleHome } from "../auth/roles";
 import PasswordInput from "../components/PasswordInput";
-import brgyPersonnel from "../assets/brgy-personnel.jpg";
+import brgyPersonnel from "../assets/loginSlider/brgy-personnel.jpg";
+import groupFoto1 from "../assets/loginSlider/ubujan-event-group-foto.jpg";
+import groupFoto2 from "../assets/loginSlider/ubujan-group-photo.jpg";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -12,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const sliderRef = useRef(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -27,12 +30,63 @@ export default function LoginPage() {
     }
   }
 
+  useEffect(() => {
+    // set an interval to run every 3 seconds
+    const interval = setInterval(() => {
+      const slider = sliderRef.current;
+
+      // error safety net
+      if (!slider) return;
+
+      const sliderWidth = slider.clientWidth;
+
+      // move to the next slide
+      slider.scrollBy({
+        left: sliderWidth,
+        behavior: "smooth",
+      });
+
+      // if last slide na, go back to the first slide
+      if (slider.scrollLeft + slider.clientWidth >= slider.scrollWidth - 10) {
+        setTimeout(() => {
+          slider.scrollTo({
+            left: 0,
+            behavior: "smooth",
+          });
+        }, 500);
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="auth-page">
-      <div
-        className="login-form-image"
-        style={{ backgroundImage: `url(${brgyPersonnel})` }}
-      ></div>
+      <div className="slider-wrapper">
+        <div className="slider" ref={sliderRef}>
+          <img
+            id="slider-1"
+            src={brgyPersonnel}
+            alt="Barangay Ubujan personnel group photo"
+          />
+          <img
+            id="slider-2"
+            src={groupFoto1}
+            alt="Barangay Ubujan personnel group photo"
+          />
+          <img
+            id="slider-3"
+            src={groupFoto2}
+            alt="Barangay Ubujan personnel group photo"
+          />
+          <div className="slider-nav">
+            <a href="#slider-1"></a>
+            <a href="#slider-2"></a>
+            <a href="#slider-3"></a>
+          </div>
+        </div>
+      </div>
+
       <div className="login-form-wrapper">
         <form className="card" onSubmit={handleSubmit}>
           <h1>BrgyServe</h1>
@@ -60,13 +114,14 @@ export default function LoginPage() {
             />
           </label>
 
+          <Link className="forgot-password-link" to="/forgot-password">
+            Forgot your password?
+          </Link>
+
           <button type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
 
-          <p className="alt">
-            <Link to="/forgot-password">Forgot your password?</Link>
-          </p>
           <p className="alt">
             No account yet? <Link to="/register">Register as a resident</Link>
           </p>
