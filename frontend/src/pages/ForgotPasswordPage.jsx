@@ -37,17 +37,19 @@ export default function ForgotPasswordPage() {
   if (sent) {
     return (
       <div className="auth-page">
-        <div className="card">
-          <h1>Check your email</h1>
-          <div className="alert success">{sent}</div>
-          <p className="muted">
-            The link opens a page where you choose a new password. If nothing
-            arrives, the address may not have an account, or the account may
-            still be waiting for the Barangay Secretary&apos;s approval.
-          </p>
-          <Link className="button-link" to="/login">
-            Back to sign in
-          </Link>
+        <div className="forgot-password-form-wrapper">
+          <div className="card">
+            <h1>Check your email</h1>
+            <div className="alert success">{sent}</div>
+            <p className="muted">
+              The link opens a page where you choose a new password. If nothing
+              arrives, the address may not have an account, or the account may
+              still be waiting for the Barangay Secretary&apos;s approval.
+            </p>
+            <Link className="button-link" to="/login">
+              Back to sign in
+            </Link>
+          </div>
         </div>
       </div>
     );
