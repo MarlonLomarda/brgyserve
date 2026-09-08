@@ -2605,6 +2605,57 @@ button.link-button:hover:not(:disabled) {
   }
 }
 
+/* ISSUE 7 — every dashboard LIST screen scrolled the whole DOCUMENT sideways
+   at 390px, page header and all. .list-head and .head-actions are both nowrap
+   flex rows, so the heading, search box, filter select and action buttons were
+   pinned to a single line, and nothing catches what spills: there is no
+   overflow-x on html, body or .dash-main, so it reaches the viewport.
+   .dash-header is position: sticky with only a `top` offset, which pins it
+   vertically and NOT horizontally — that is why the header slid sideways with
+   the content rather than staying put.
+
+   MEASURED, headless Chrome against this file over file://. Widest row
+   min-content is 496.38px (.list-head on Resident records; its <h2> supplies
+   only 64.04px of that — an <h2> wraps, so it contributes its longest WORD —
+   and .head-actions the other 432.34px). .dash-main adds 48px of padding, so
+   the document begins to overflow below 544.38px of viewport.
+
+   640px is REUSED from ISSUE 6 above rather than adding a fourth breakpoint to
+   this file, and the measurement backs it twice over: it clears the 544.38px
+   threshold by 95.62px, and the search input is ALREADY unusable at 640 —
+   measured 61.09px wide there against 237.98px at 1280, and 26px at 390 — so
+   wrapping at that width repairs a broken row rather than disturbing a working
+   one.
+
+   The input rule is the idiom .notif-filters already uses, for the same
+   reason: the base `input { width: 100% }` makes the input demand the entire
+   line and then collapse under flex-shrink, which is what produced the 26px.
+   Releasing width, allowing it past its min-content with min-width: 0, and
+   giving it a 200px basis lets it share a line when 200px fits and take its
+   own when it does not. .list-head carries no `gap` of its own, so without
+   row-gap its wrapped lines would touch.
+
+   The table is deliberately NOT touched: .table-wrap already contains it with
+   overflow-x: auto, so it was never part of the document overflow. Nothing
+   here applies above 640px, and none of the six protected desktop rules is
+   referenced. */
+@media (max-width: 640px) {
+  .list-head,
+  .head-actions {
+    flex-wrap: wrap;
+  }
+
+  .list-head {
+    row-gap: 10px;
+  }
+
+  .head-actions input {
+    width: auto;
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .auth-page {
     grid-template-columns: 1fr;
