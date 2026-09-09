@@ -1,36 +1,36 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import ResidentPicker, { residentName } from '../components/ResidentPicker';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import ResidentPicker, { residentName } from "../components/ResidentPicker";
+import SearchBar from "../components/SearchBar";
 
 // Blotter (dispute records). Shared by the Secretary (canManage: create / edit
 // / settle) and the Punong Barangay (read-only) — pass the role's title, nav,
 // and canManage, like RentalBookingsPage.
 
-const NATURES = ['Criminal', 'Civil', 'Others'];
-const ROLES = ['Complainant', 'Respondent'];
+const NATURES = ["Criminal", "Civil", "Others"];
+const ROLES = ["Complainant", "Respondent"];
 const SETTLED_FILTERS = [
-  { value: 'open', label: 'Open' },
-  { value: 'settled', label: 'Settled' },
-  { value: 'all', label: 'All' },
+  { value: "open", label: "Open" },
+  { value: "settled", label: "Settled" },
+  { value: "all", label: "All" },
 ];
 
 function partyName(p) {
   if (p.resident_records) return residentName(p.resident_records);
-  return [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown';
+  return [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown";
 }
-const hm = (t) => (t ? String(t).slice(0, 5) : '');
-
+const hm = (t) => (t ? String(t).slice(0, 5) : "");
 
 // --- one party row in the form ---------------------------------------------
 let partyKeySeq = 0;
 const newParty = (role) => ({
   key: `p${partyKeySeq++}`,
-  mode: 'resident',
+  mode: "resident",
   role,
   resident: null, // { resident_id, label }
-  first_name: '',
-  last_name: '',
+  first_name: "",
+  last_name: "",
 });
 
 function PartyRow({ party, onChange, onRemove, canRemove }) {
@@ -40,26 +40,38 @@ function PartyRow({ party, onChange, onRemove, canRemove }) {
       <div className="party-controls">
         <label>
           Role
-          <select value={party.role} onChange={(e) => set({ role: e.target.value })}>
+          <select
+            value={party.role}
+            onChange={(e) => set({ role: e.target.value })}
+          >
             {ROLES.map((r) => (
-              <option key={r} value={r}>{r}</option>
+              <option key={r} value={r}>
+                {r}
+              </option>
             ))}
           </select>
         </label>
         <label>
           Party type
-          <select value={party.mode} onChange={(e) => set({ mode: e.target.value })}>
+          <select
+            value={party.mode}
+            onChange={(e) => set({ mode: e.target.value })}
+          >
             <option value="resident">Registered resident</option>
             <option value="nonresident">Non-resident (walk-in)</option>
           </select>
         </label>
         {canRemove && (
-          <button type="button" className="btn secondary danger" onClick={onRemove}>
+          <button
+            type="button"
+            className="btn secondary danger"
+            onClick={onRemove}
+          >
             Remove
           </button>
         )}
       </div>
-      {party.mode === 'resident' ? (
+      {party.mode === "resident" ? (
         <ResidentPicker
           value={party.resident}
           onPick={(resident) => set({ resident })}
@@ -69,11 +81,19 @@ function PartyRow({ party, onChange, onRemove, canRemove }) {
         <div className="grid-2">
           <label>
             First name
-            <input value={party.first_name} onChange={(e) => set({ first_name: e.target.value })} maxLength={100} />
+            <input
+              value={party.first_name}
+              onChange={(e) => set({ first_name: e.target.value })}
+              maxLength={100}
+            />
           </label>
           <label>
             Last name
-            <input value={party.last_name} onChange={(e) => set({ last_name: e.target.value })} maxLength={100} />
+            <input
+              value={party.last_name}
+              onChange={(e) => set({ last_name: e.target.value })}
+              maxLength={100}
+            />
           </label>
         </div>
       )}
@@ -94,59 +114,81 @@ function CaseForm({ dispute, onDone }) {
           filed_for: dispute.filed_for,
           nature_of_case: dispute.nature_of_case,
         }
-      : { barangay_case_no: '', date_filed: '', time_filed: '', filed_for: '', nature_of_case: 'Criminal' }
+      : {
+          barangay_case_no: "",
+          date_filed: "",
+          time_filed: "",
+          filed_for: "",
+          nature_of_case: "Criminal",
+        },
   );
   const [parties, setParties] = useState(() =>
     dispute
       ? dispute.dispute_parties.map((p) => ({
           key: `p${partyKeySeq++}`,
-          mode: p.resident_id ? 'resident' : 'nonresident',
+          mode: p.resident_id ? "resident" : "nonresident",
           role: p.role,
-          resident: p.resident_id ? { resident_id: p.resident_id, label: partyName(p) } : null,
-          first_name: p.first_name || '',
-          last_name: p.last_name || '',
+          resident: p.resident_id
+            ? { resident_id: p.resident_id, label: partyName(p) }
+            : null,
+          first_name: p.first_name || "",
+          last_name: p.last_name || "",
         }))
-      : [newParty('Complainant'), newParty('Respondent')]
+      : [newParty("Complainant"), newParty("Respondent")],
   );
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  const updateParty = (key, next) => setParties((ps) => ps.map((p) => (p.key === key ? next : p)));
-  const removeParty = (key) => setParties((ps) => ps.filter((p) => p.key !== key));
+  const handleChange = (e) =>
+    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const updateParty = (key, next) =>
+    setParties((ps) => ps.map((p) => (p.key === key ? next : p)));
+  const removeParty = (key) =>
+    setParties((ps) => ps.filter((p) => p.key !== key));
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
 
     // client-side gate (the server is the real one)
-    const hasComplainant = parties.some((p) => p.role === 'Complainant');
-    const hasRespondent = parties.some((p) => p.role === 'Respondent');
+    const hasComplainant = parties.some((p) => p.role === "Complainant");
+    const hasRespondent = parties.some((p) => p.role === "Respondent");
     if (!hasComplainant || !hasRespondent) {
-      setError('A case needs at least one Complainant and one Respondent.');
+      setError("A case needs at least one Complainant and one Respondent.");
       return;
     }
     const bad = parties.find((p) =>
-      p.mode === 'resident' ? !p.resident : !p.first_name.trim() || !p.last_name.trim()
+      p.mode === "resident"
+        ? !p.resident
+        : !p.first_name.trim() || !p.last_name.trim(),
     );
     if (bad) {
-      setError('Every party needs a chosen resident or a typed first and last name.');
+      setError(
+        "Every party needs a chosen resident or a typed first and last name.",
+      );
       return;
     }
 
     const payloadParties = parties.map((p) =>
-      p.mode === 'resident'
+      p.mode === "resident"
         ? { resident_id: p.resident.resident_id, role: p.role }
-        : { first_name: p.first_name.trim(), last_name: p.last_name.trim(), role: p.role }
+        : {
+            first_name: p.first_name.trim(),
+            last_name: p.last_name.trim(),
+            role: p.role,
+          },
     );
 
     setBusy(true);
     try {
       const body = { ...form, parties: payloadParties };
       const data = isEdit
-        ? await authFetch(`/disputes/${dispute.dispute_id}`, { method: 'PUT', body })
-        : await authFetch('/disputes', { method: 'POST', body });
-      onDone({ type: 'success', text: data.message }, data.dispute);
+        ? await authFetch(`/disputes/${dispute.dispute_id}`, {
+            method: "PUT",
+            body,
+          })
+        : await authFetch("/disputes", { method: "POST", body });
+      onDone({ type: "success", text: data.message }, data.dispute);
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -156,7 +198,11 @@ function CaseForm({ dispute, onDone }) {
   return (
     <div className="pending-card">
       <div className="pending-head">
-        <h3>{isEdit ? `Edit case ${dispute.barangay_case_no}` : 'Record a blotter case'}</h3>
+        <h3>
+          {isEdit
+            ? `Edit case ${dispute.barangay_case_no}`
+            : "Record a blotter case"}
+        </h3>
         <button className="btn secondary" onClick={() => onDone(null)}>
           ← Back to list
         </button>
@@ -168,35 +214,67 @@ function CaseForm({ dispute, onDone }) {
         <div className="grid-2">
           <label>
             Barangay case no.
-            <input name="barangay_case_no" value={form.barangay_case_no} onChange={handleChange} maxLength={50} required />
+            <input
+              name="barangay_case_no"
+              value={form.barangay_case_no}
+              onChange={handleChange}
+              maxLength={50}
+              required
+            />
           </label>
           <label>
             Nature of case
-            <select name="nature_of_case" value={form.nature_of_case} onChange={handleChange}>
+            <select
+              name="nature_of_case"
+              value={form.nature_of_case}
+              onChange={handleChange}
+            >
               {NATURES.map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={n}>
+                  {n}
+                </option>
               ))}
             </select>
           </label>
           <label>
             Date filed
-            <input name="date_filed" type="date" max={new Date().toISOString().slice(0, 10)} value={form.date_filed} onChange={handleChange} required />
+            <input
+              name="date_filed"
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={form.date_filed}
+              onChange={handleChange}
+              required
+            />
           </label>
           <label>
             Time filed <span className="hint">(defaults to now if blank)</span>
-            <input name="time_filed" type="time" value={form.time_filed} onChange={handleChange} />
+            <input
+              name="time_filed"
+              type="time"
+              value={form.time_filed}
+              onChange={handleChange}
+            />
           </label>
         </div>
         <label>
-          Filed for <span className="hint">(the complaint, e.g. Unjust Vexation)</span>
-          <input name="filed_for" value={form.filed_for} onChange={handleChange} maxLength={255} required />
+          Filed for{" "}
+          <span className="hint">(the complaint, e.g. Unjust Vexation)</span>
+          <input
+            name="filed_for"
+            value={form.filed_for}
+            onChange={handleChange}
+            maxLength={255}
+            required
+          />
         </label>
 
         <div className="suggest-section">
           <h4>Parties</h4>
           <p className="muted">
-            Each party is a registered resident (pick from the master list) or a non-resident
-            walk-in (type the name). At least one Complainant and one Respondent are required.
+            Each party is a registered resident (pick from the master list) or a
+            non-resident walk-in (type the name). At least one Complainant and
+            one Respondent are required.
           </p>
           {parties.map((p) => (
             <PartyRow
@@ -208,10 +286,22 @@ function CaseForm({ dispute, onDone }) {
             />
           ))}
           <div className="actions">
-            <button type="button" className="btn secondary" onClick={() => setParties((ps) => [...ps, newParty('Complainant')])}>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() =>
+                setParties((ps) => [...ps, newParty("Complainant")])
+              }
+            >
               + Add complainant
             </button>
-            <button type="button" className="btn secondary" onClick={() => setParties((ps) => [...ps, newParty('Respondent')])}>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() =>
+                setParties((ps) => [...ps, newParty("Respondent")])
+              }
+            >
               + Add respondent
             </button>
           </div>
@@ -219,7 +309,7 @@ function CaseForm({ dispute, onDone }) {
 
         <div className="actions">
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Record case'}
+            {busy ? "Saving…" : isEdit ? "Save changes" : "Record case"}
           </button>
         </div>
       </form>
@@ -231,11 +321,11 @@ function CaseForm({ dispute, onDone }) {
 function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
   const { authFetch } = useAuth();
   const [dispute, setDispute] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const data = await authFetch(`/disputes/${id}`);
       setDispute(data.dispute);
@@ -252,7 +342,7 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
     setBusy(true);
     try {
       const data = await authFetch(`/disputes/${id}/settle`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: { is_settled: !dispute.is_settled },
       });
       setDispute(data.dispute);
@@ -265,17 +355,20 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
   }
 
   const d = dispute;
-  const group = (role) => (d?.dispute_parties || []).filter((p) => p.role === role);
+  const group = (role) =>
+    (d?.dispute_parties || []).filter((p) => p.role === role);
 
   return (
     <div className="pending-card">
       <div className="pending-head">
         <div>
           <h3>
-            {d ? `Case ${d.barangay_case_no}` : `Case #${id}`}{' '}
+            {d ? `Case ${d.barangay_case_no}` : `Case #${id}`}{" "}
             {d && (
-              <span className={`badge ${d.is_settled ? 'status-claimed' : 'status-pending'}`}>
-                {d.is_settled ? 'Settled' : 'Open'}
+              <span
+                className={`badge ${d.is_settled ? "status-claimed" : "status-pending"}`}
+              >
+                {d.is_settled ? "Settled" : "Open"}
               </span>
             )}
           </h3>
@@ -283,11 +376,19 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
         <div className="head-actions">
           {canManage && d && (
             <>
-              <button className="btn secondary" disabled={busy} onClick={() => onEdit(d)}>
+              <button
+                className="btn secondary"
+                disabled={busy}
+                onClick={() => onEdit(d)}
+              >
                 Edit
               </button>
-              <button className="btn secondary" disabled={busy} onClick={toggleSettled}>
-                {busy ? 'Working…' : d.is_settled ? 'Reopen' : 'Mark settled'}
+              <button
+                className="btn secondary"
+                disabled={busy}
+                onClick={toggleSettled}
+              >
+                {busy ? "Working…" : d.is_settled ? "Reopen" : "Mark settled"}
               </button>
             </>
           )}
@@ -314,31 +415,37 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
             </div>
             <div>
               <dt>Date &amp; time filed</dt>
-              <dd>{d.date_filed} at {hm(d.time_filed)}</dd>
+              <dd>
+                {d.date_filed} at {hm(d.time_filed)}
+              </dd>
             </div>
             <div>
               <dt>Status</dt>
-              <dd>{d.is_settled ? 'Settled' : 'Open'}</dd>
+              <dd>{d.is_settled ? "Settled" : "Open"}</dd>
             </div>
           </dl>
 
           {ROLES.map((role) => (
             <div className="suggest-section" key={role}>
-              <h4>{role}{group(role).length === 1 ? '' : 's'}</h4>
+              <h4>
+                {role}
+                {group(role).length === 1 ? "" : "s"}
+              </h4>
               {group(role).length === 0 ? (
                 <p className="muted">None recorded.</p>
               ) : (
                 <ul className="suggestions">
                   {group(role).map((p) => (
                     <li key={p.dispute_party_id} className="suggestion">
-                      <span className={`badge ${p.resident_id ? '' : 'gray'}`}>
-                        {p.resident_id ? 'Resident' : 'Non-resident'}
+                      <span className={`badge ${p.resident_id ? "" : "gray"}`}>
+                        {p.resident_id ? "Resident" : "Non-resident"}
                       </span>
                       <div className="suggestion-info">
                         <strong>{partyName(p)}</strong>
                         {p.resident_records && (
                           <span className="muted">
-                            record #{p.resident_records.resident_id} · {p.resident_records.address || 'no address'}
+                            record #{p.resident_records.resident_id} ·{" "}
+                            {p.resident_records.address || "no address"}
                           </span>
                         )}
                       </div>
@@ -357,22 +464,26 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
 // --- page ------------------------------------------------------------------
 export default function DisputesPage({ title, nav, canManage = false }) {
   const { authFetch } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [settled, setSettled] = useState('open');
-  const [nature, setNature] = useState('all');
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [settled, setSettled] = useState("open");
+  const [nature, setNature] = useState("all");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | dispute object
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
-      const params = new URLSearchParams({ page: String(page), settled, nature });
-      if (search) params.set('search', search);
+      const params = new URLSearchParams({
+        page: String(page),
+        settled,
+        nature,
+      });
+      if (search) params.set("search", search);
       setData(await authFetch(`/disputes?${params}`));
     } catch (err) {
       setError(err.message);
@@ -394,12 +505,16 @@ export default function DisputesPage({ title, nav, canManage = false }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Barangay blotter / dispute records" nav={nav} />
+      <DashHeader
+        title={title}
+        subtitle="Barangay blotter / dispute records"
+        nav={nav}
+      />
 
       <main className="dash-main">
         {formTarget ? (
           <CaseForm
-            dispute={formTarget === 'new' ? null : formTarget}
+            dispute={formTarget === "new" ? null : formTarget}
             onDone={(result, dispute) => {
               setFormTarget(null);
               if (!result) return;
@@ -415,7 +530,7 @@ export default function DisputesPage({ title, nav, canManage = false }) {
             onBack={() => setSelectedId(null)}
             onEdit={(d) => setFormTarget(d)}
             onChanged={(message) => {
-              setFlash({ type: 'success', text: message });
+              setFlash({ type: "success", text: message });
               load();
             }}
           />
@@ -427,35 +542,55 @@ export default function DisputesPage({ title, nav, canManage = false }) {
             <div className="list-head">
               <h2>
                 {data === null
-                  ? 'Blotter cases'
-                  : `${data.total} case${data.total === 1 ? '' : 's'}`}
+                  ? "Blotter cases"
+                  : `${data.total} case${data.total === 1 ? "" : "s"}`}
               </h2>
+              <SearchBar
+                search={search}
+                onSearch={handleSearch}
+                searchInput={searchInput}
+                onSearchInput={(e) => setSearchInput(e.target.value)}
+                onClear={() => {
+                  setSearch("");
+                  setSearchInput("");
+                  setPage(1);
+                }}
+                placeholder={"Search by case number, complaint, or party"}
+              />
               <form className="head-actions" onSubmit={handleSearch}>
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search case no, complaint, or party…"
-                  maxLength={100}
-                />
-                <button className="btn secondary" type="submit">Search</button>
-                {search && (
-                  <button className="btn secondary" type="button" onClick={() => { setSearch(''); setSearchInput(''); setPage(1); }}>
-                    Clear
-                  </button>
-                )}
-                <select value={settled} onChange={(e) => { setSettled(e.target.value); setPage(1); }}>
+                <select
+                  value={settled}
+                  onChange={(e) => {
+                    setSettled(e.target.value);
+                    setPage(1);
+                  }}
+                >
                   {SETTLED_FILTERS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
                   ))}
                 </select>
-                <select value={nature} onChange={(e) => { setNature(e.target.value); setPage(1); }}>
+                <select
+                  value={nature}
+                  onChange={(e) => {
+                    setNature(e.target.value);
+                    setPage(1);
+                  }}
+                >
                   <option value="all">All natures</option>
                   {NATURES.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
                 </select>
                 {canManage && (
-                  <button className="btn" type="button" onClick={() => setFormTarget('new')}>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => setFormTarget("new")}
+                  >
                     Record case
                   </button>
                 )}
@@ -466,7 +601,15 @@ export default function DisputesPage({ title, nav, canManage = false }) {
               <p className="muted">Loading cases…</p>
             ) : disputes.length === 0 ? (
               <div className="empty">
-                <p>No blotter cases{search ? ` matching "${search}"` : settled === 'open' ? ' are open' : ''}.</p>
+                <p>
+                  No blotter cases
+                  {search
+                    ? ` matching "${search}"`
+                    : settled === "open"
+                      ? " are open"
+                      : ""}
+                  .
+                </p>
               </div>
             ) : (
               <>
@@ -486,18 +629,25 @@ export default function DisputesPage({ title, nav, canManage = false }) {
                     <tbody>
                       {disputes.map((d) => (
                         <tr key={d.dispute_id}>
-                          <td><strong>{d.barangay_case_no}</strong></td>
+                          <td>
+                            <strong>{d.barangay_case_no}</strong>
+                          </td>
                           <td className="muted">{d.date_filed}</td>
                           <td>{d.filed_for}</td>
                           <td className="muted">{d.nature_of_case}</td>
                           <td className="muted truncate">{d.party_summary}</td>
                           <td>
-                            <span className={`badge ${d.is_settled ? 'status-claimed' : 'status-pending'}`}>
-                              {d.is_settled ? 'Settled' : 'Open'}
+                            <span
+                              className={`badge ${d.is_settled ? "status-claimed" : "status-pending"}`}
+                            >
+                              {d.is_settled ? "Settled" : "Open"}
                             </span>
                           </td>
                           <td className="row-actions">
-                            <button className="btn secondary" onClick={() => setSelectedId(d.dispute_id)}>
+                            <button
+                              className="btn secondary"
+                              onClick={() => setSelectedId(d.dispute_id)}
+                            >
                               View
                             </button>
                           </td>
@@ -509,12 +659,22 @@ export default function DisputesPage({ title, nav, canManage = false }) {
 
                 {data.total_pages > 1 && (
                   <div className="list-head">
-                    <span className="muted">Page {data.page} of {data.total_pages}</span>
+                    <span className="muted">
+                      Page {data.page} of {data.total_pages}
+                    </span>
                     <div className="head-actions">
-                      <button className="btn secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      <button
+                        className="btn secondary"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => p - 1)}
+                      >
                         ← Previous
                       </button>
-                      <button className="btn secondary" disabled={page >= data.total_pages} onClick={() => setPage((p) => p + 1)}>
+                      <button
+                        className="btn secondary"
+                        disabled={page >= data.total_pages}
+                        onClick={() => setPage((p) => p + 1)}
+                      >
                         Next →
                       </button>
                     </div>

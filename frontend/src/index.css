@@ -892,7 +892,20 @@ button.link-button:hover:not(:disabled) {
 
 .head-actions {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.head-actions section {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.head-actions select {
+  width: auto;
+  margin-top: 0;
+  height: 40px;
 }
 
 .table-wrap {
@@ -2320,10 +2333,11 @@ button.link-button:hover:not(:disabled) {
   margin-bottom: 14px;
 }
 
-.notif-filters select {
+/* .notif-filters select {
   width: auto;
   margin-top: 0;
-}
+  height: 40px;
+} */
 
 .notif-filters input {
   width: auto;

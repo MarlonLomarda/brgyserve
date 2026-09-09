@@ -1,29 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import AttendanceScanner from '../components/AttendanceScanner';
-import DashHeader from '../components/DashHeader';
-import { chargeMeta, formatDate } from '../constants/requestStatus';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import AttendanceScanner from "../components/AttendanceScanner";
+import DashHeader from "../components/DashHeader";
+import { chargeMeta, formatDate } from "../constants/requestStatus";
 import {
   EVENT_TYPE_LABELS,
   EVENT_VIEWS,
   eventStatusMeta,
   formatWindow,
   toDateTimeLocal,
-} from '../constants/events';
+} from "../constants/events";
+import SearchBar from "../components/SearchBar";
 
 // Events & Activities, stage 1: management (CRUD + manual archive) shared by
 // the Secretary and Barangay Staff — both maintain the calendar, and there is
 // no approval gate. The resident / Punong Barangay read-only view is stage 2.
 
 const EMPTY_FORM = {
-  type: 'activity',
-  title: '',
-  description: '',
-  location: '',
-  start_datetime: '',
-  end_datetime: '',
+  type: "activity",
+  title: "",
+  description: "",
+  location: "",
+  start_datetime: "",
+  end_datetime: "",
   attendance_required: false,
-  fine_amount: '',
+  fine_amount: "",
 };
 
 // --- create / edit form ----------------------------------------------------
@@ -35,28 +36,29 @@ function EventForm({ event, onDone }) {
       ? {
           type: event.type,
           title: event.title,
-          description: event.description || '',
-          location: event.location || '',
+          description: event.description || "",
+          location: event.location || "",
           start_datetime: toDateTimeLocal(event.start_datetime),
           end_datetime: toDateTimeLocal(event.end_datetime),
           attendance_required: !!event.attendance_required,
-          fine_amount: event.fine_amount == null ? '' : String(event.fine_amount),
+          fine_amount:
+            event.fine_amount == null ? "" : String(event.fine_amount),
         }
-      : { ...EMPTY_FORM }
+      : { ...EMPTY_FORM },
   );
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const isActivity = form.type === 'activity';
+  const isActivity = form.type === "activity";
   const handleChange = (e) => {
     const { name, type, value, checked } = e.target;
     setForm((f) => {
-      const next = { ...f, [name]: type === 'checkbox' ? checked : value };
+      const next = { ...f, [name]: type === "checkbox" ? checked : value };
       // An announcement has no schedule, so it can never take attendance —
       // clear it rather than sending a value the server would reject.
-      if (name === 'type' && value !== 'activity') {
+      if (name === "type" && value !== "activity") {
         next.attendance_required = false;
-        next.fine_amount = '';
+        next.fine_amount = "";
       }
       return next;
     });
@@ -64,24 +66,31 @@ function EventForm({ event, onDone }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
 
     // client-side mirror of the per-type rules (the server is the real gate)
     if (isActivity && (!form.start_datetime || !form.end_datetime)) {
-      setError('An activity needs both a start and an end date/time.');
+      setError("An activity needs both a start and an end date/time.");
       return;
     }
-    if (form.start_datetime && form.end_datetime && form.end_datetime <= form.start_datetime) {
-      setError('The end date/time must be after the start.');
+    if (
+      form.start_datetime &&
+      form.end_datetime &&
+      form.end_datetime <= form.start_datetime
+    ) {
+      setError("The end date/time must be after the start.");
       return;
     }
 
     setBusy(true);
     try {
       const data = isEdit
-        ? await authFetch(`/events/${event.event_id}`, { method: 'PUT', body: form })
-        : await authFetch('/events', { method: 'POST', body: form });
-      onDone({ type: 'success', text: data.message }, data.event);
+        ? await authFetch(`/events/${event.event_id}`, {
+            method: "PUT",
+            body: form,
+          })
+        : await authFetch("/events", { method: "POST", body: form });
+      onDone({ type: "success", text: data.message }, data.event);
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -92,7 +101,9 @@ function EventForm({ event, onDone }) {
     <div className="pending-card">
       <div className="pending-head">
         <h3>
-          {isEdit ? `Edit ${EVENT_TYPE_LABELS[event.type].toLowerCase()}` : 'New event or announcement'}
+          {isEdit
+            ? `Edit ${EVENT_TYPE_LABELS[event.type].toLowerCase()}`
+            : "New event or announcement"}
         </h3>
         <button className="btn secondary" onClick={() => onDone(null)}>
           ← Back to list
@@ -105,14 +116,24 @@ function EventForm({ event, onDone }) {
         <label>
           Type
           <select name="type" value={form.type} onChange={handleChange}>
-            <option value="activity">Activity — a scheduled event with a start and end</option>
-            <option value="announcement">Announcement — a notice, no schedule required</option>
+            <option value="activity">
+              Activity — a scheduled event with a start and end
+            </option>
+            <option value="announcement">
+              Announcement — a notice, no schedule required
+            </option>
           </select>
         </label>
 
         <label>
           Title
-          <input name="title" value={form.title} onChange={handleChange} maxLength={255} required />
+          <input
+            name="title"
+            value={form.title}
+            onChange={handleChange}
+            maxLength={255}
+            required
+          />
         </label>
 
         {isActivity ? (
@@ -141,7 +162,12 @@ function EventForm({ event, onDone }) {
             </div>
             <label>
               Location
-              <input name="location" value={form.location} onChange={handleChange} maxLength={255} />
+              <input
+                name="location"
+                value={form.location}
+                onChange={handleChange}
+                maxLength={255}
+              />
             </label>
 
             {/* Attendance is opt-in and only offered for activities. */}
@@ -154,13 +180,17 @@ function EventForm({ event, onDone }) {
               />
               <span>
                 Attendance required
-                <span className="hint"> — record which households attend this activity</span>
+                <span className="hint">
+                  {" "}
+                  — record which households attend this activity
+                </span>
               </span>
             </label>
 
             {form.attendance_required && (
               <label>
-                Fine per absent household <span className="hint">(optional)</span>
+                Fine per absent household{" "}
+                <span className="hint">(optional)</span>
                 <input
                   name="fine_amount"
                   type="number"
@@ -171,8 +201,8 @@ function EventForm({ event, onDone }) {
                   placeholder="e.g. 100.00"
                 />
                 <span className="hint">
-                  Leave blank to take attendance without any fine. Fines are generated later as an
-                  explicit action — never automatically.
+                  Leave blank to take attendance without any fine. Fines are
+                  generated later as an explicit action — never automatically.
                 </span>
               </label>
             )}
@@ -180,8 +210,8 @@ function EventForm({ event, onDone }) {
         ) : (
           <>
             <p className="muted">
-              Announcements stay on the active list until you archive them. Add a schedule only if
-              the notice refers to a specific time.
+              Announcements stay on the active list until you archive them. Add
+              a schedule only if the notice refers to a specific time.
             </p>
             <div className="grid-2">
               <label>
@@ -205,19 +235,29 @@ function EventForm({ event, onDone }) {
             </div>
             <label>
               Location <span className="hint">(optional)</span>
-              <input name="location" value={form.location} onChange={handleChange} maxLength={255} />
+              <input
+                name="location"
+                value={form.location}
+                onChange={handleChange}
+                maxLength={255}
+              />
             </label>
           </>
         )}
 
         <label>
           Description {isActivity && <span className="hint">(optional)</span>}
-          <textarea name="description" value={form.description} onChange={handleChange} rows={4} />
+          <textarea
+            name="description"
+            value={form.description}
+            onChange={handleChange}
+            rows={4}
+          />
         </label>
 
         <div className="actions">
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Publish'}
+            {busy ? "Saving…" : isEdit ? "Save changes" : "Publish"}
           </button>
         </div>
       </form>
@@ -229,11 +269,11 @@ function EventForm({ event, onDone }) {
 function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
   const { authFetch } = useAuth();
   const [event, setEvent] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const data = await authFetch(`/events/${id}`);
       setEvent(data.event);
@@ -249,8 +289,10 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
   async function toggleArchive() {
     setBusy(true);
     try {
-      const action = event.is_archived ? 'unarchive' : 'archive';
-      const data = await authFetch(`/events/${id}/${action}`, { method: 'PATCH' });
+      const action = event.is_archived ? "unarchive" : "archive";
+      const data = await authFetch(`/events/${id}/${action}`, {
+        method: "PATCH",
+      });
       setEvent(data.event);
       onChanged(data.message);
     } catch (err) {
@@ -268,30 +310,43 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
       <div className="pending-head">
         <div>
           <h3>
-            {e ? e.title : `Event #${id}`}{' '}
-            {e && <span className={`badge ${meta.className}`}>{meta.label}</span>}{' '}
+            {e ? e.title : `Event #${id}`}{" "}
+            {e && (
+              <span className={`badge ${meta.className}`}>{meta.label}</span>
+            )}{" "}
             {e?.is_archived && <span className="badge gray">Archived</span>}
           </h3>
-          {e && <p className="muted">{EVENT_TYPE_LABELS[e.type]} · posted {formatDate(e.date_created)}</p>}
+          {e && (
+            <p className="muted">
+              {EVENT_TYPE_LABELS[e.type]} · posted {formatDate(e.date_created)}
+            </p>
+          )}
         </div>
         <div className="head-actions">
-          {e && e.type === 'activity' && e.attendance_required && (
-            <button className="btn" onClick={() => onOpenAttendance(e.event_id)}>
+          {e && e.type === "activity" && e.attendance_required && (
+            <button
+              className="btn"
+              onClick={() => onOpenAttendance(e.event_id)}
+            >
               Record attendance
             </button>
           )}
           {e && !e.is_archived && (
-            <button className="btn secondary" disabled={busy} onClick={() => onEdit(e)}>
+            <button
+              className="btn secondary"
+              disabled={busy}
+              onClick={() => onEdit(e)}
+            >
               Edit
             </button>
           )}
           {e && (
             <button
-              className={`btn secondary${e.is_archived ? '' : ' danger'}`}
+              className={`btn secondary${e.is_archived ? "" : " danger"}`}
               disabled={busy}
               onClick={toggleArchive}
             >
-              {busy ? 'Working…' : e.is_archived ? 'Unarchive' : 'Archive'}
+              {busy ? "Working…" : e.is_archived ? "Unarchive" : "Archive"}
             </button>
           )}
           <button className="btn secondary" onClick={onBack}>
@@ -304,7 +359,8 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
 
       {e?.is_archived && (
         <div className="alert info">
-          This record is archived: it is hidden from the active and past lists until restored.
+          This record is archived: it is hidden from the active and past lists
+          until restored.
         </div>
       )}
 
@@ -327,9 +383,9 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
             </div>
             <div className="span-2">
               <dt>Location</dt>
-              <dd>{e.location || '—'}</dd>
+              <dd>{e.location || "—"}</dd>
             </div>
-            {e.type === 'activity' && (
+            {e.type === "activity" && (
               <div className="span-2">
                 <dt>Attendance</dt>
                 <dd>
@@ -338,17 +394,17 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
                       Required per household
                       {e.fine_amount != null
                         ? ` · ₱${Number(e.fine_amount).toFixed(2)} fine per absent household`
-                        : ' · no fine'}
+                        : " · no fine"}
                     </>
                   ) : (
-                    'Not tracked for this activity'
+                    "Not tracked for this activity"
                   )}
                 </dd>
               </div>
             )}
             <div className="span-2">
               <dt>Description</dt>
-              <dd>{e.description || '—'}</dd>
+              <dd>{e.description || "—"}</dd>
             </div>
           </dl>
         </>
@@ -364,23 +420,29 @@ function EventDetail({ id, onBack, onEdit, onChanged, onOpenAttendance }) {
 function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
   const s = fines.summary;
   const raised = fines.households.filter((h) => h.charge);
-  const mismatched = fines.households.filter((h) => h.state === 'mismatch');
+  const mismatched = fines.households.filter((h) => h.state === "mismatch");
   const peso = (n) => `₱${Number(n).toFixed(2)}`;
 
   return (
     <div className="fines-panel">
       <div className="list-head">
         <h4>
-          Fines{' '}
+          Fines{" "}
           {s.fine_amount != null && (
-            <span className="muted">· {peso(s.fine_amount)} per absent household</span>
+            <span className="muted">
+              · {peso(s.fine_amount)} per absent household
+            </span>
           )}
         </h4>
         {s.to_charge > 0 && !fines.blocked_reason && (
-          <button className="btn" disabled={busyId === 'fines'} onClick={onGenerate}>
-            {busyId === 'fines'
-              ? 'Raising…'
-              : `Generate ${s.to_charge} fine${s.to_charge === 1 ? '' : 's'} · ${peso(s.total_amount)}`}
+          <button
+            className="btn"
+            disabled={busyId === "fines"}
+            onClick={onGenerate}
+          >
+            {busyId === "fines"
+              ? "Raising…"
+              : `Generate ${s.to_charge} fine${s.to_charge === 1 ? "" : "s"} · ${peso(s.total_amount)}`}
           </button>
         )}
       </div>
@@ -390,33 +452,39 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
       {mismatched.length > 0 && (
         <div className="alert error fines-mismatch">
           <strong>
-            {mismatched.length} household{mismatched.length === 1 ? '' : 's'} marked present but still
-            {mismatched.length === 1 ? ' has' : ' have'} a fine for this activity.
+            {mismatched.length} household{mismatched.length === 1 ? "" : "s"}{" "}
+            marked present but still
+            {mismatched.length === 1 ? " has" : " have"} a fine for this
+            activity.
           </strong>
           <p>
-            Recording attendance does not change a fine. Review each one and void it if the fine is
-            wrong — voiding is permanent for this activity and cannot be undone.
+            Recording attendance does not change a fine. Review each one and
+            void it if the fine is wrong — voiding is permanent for this
+            activity and cannot be undone.
           </p>
           <ul className="mismatch-list">
             {mismatched.map((h) => (
               <li key={h.household_id}>
                 <span>
-                  <strong>#{h.household_id}</strong>{' '}
-                  {h.head_name || <span className="muted">no head assigned</span>} ·{' '}
-                  {peso(h.charge.amount)} {chargeMeta(h.charge.status).label.toLowerCase()}
+                  <strong>#{h.household_id}</strong>{" "}
+                  {h.head_name || (
+                    <span className="muted">no head assigned</span>
+                  )}{" "}
+                  · {peso(h.charge.amount)}{" "}
+                  {chargeMeta(h.charge.status).label.toLowerCase()}
                 </span>
-                {h.charge.status === 'UNPAID' ? (
+                {h.charge.status === "UNPAID" ? (
                   <button
                     className="btn secondary danger"
                     disabled={busyId === h.household_id}
                     onClick={() => onVoid(h)}
                   >
-                    {busyId === h.household_id ? 'Voiding…' : 'Void this fine'}
+                    {busyId === h.household_id ? "Voiding…" : "Void this fine"}
                   </button>
                 ) : (
                   <span className="muted small-note">
-                    Already paid — it cannot be voided here. Refunds are handled at the Barangay
-                    Office.
+                    Already paid — it cannot be voided here. Refunds are handled
+                    at the Barangay Office.
                   </span>
                 )}
               </li>
@@ -431,17 +499,23 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
         <p className="muted">
           {s.to_charge > 0 ? (
             <>
-              <strong>{s.to_charge}</strong> household{s.to_charge === 1 ? '' : 's'} would be charged{' '}
+              <strong>{s.to_charge}</strong> household
+              {s.to_charge === 1 ? "" : "s"} would be charged{" "}
               {peso(s.total_amount)} in total.
             </>
           ) : (
-            <>Nothing to raise — every active household is recorded present or already has a fine.</>
+            <>
+              Nothing to raise — every active household is recorded present or
+              already has a fine.
+            </>
           )}
           {s.registered_after > 0 && (
             <>
-              {' '}
-              {s.registered_after} household{s.registered_after === 1 ? '' : 's'} registered after this
-              activity ended and {s.registered_after === 1 ? 'is' : 'are'} not counted.
+              {" "}
+              {s.registered_after} household
+              {s.registered_after === 1 ? "" : "s"} registered after this
+              activity ended and {s.registered_after === 1 ? "is" : "are"} not
+              counted.
             </>
           )}
         </p>
@@ -464,15 +538,19 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
                 return (
                   <tr key={h.household_id}>
                     <td>
-                      <strong>#{h.household_id}</strong>{' '}
-                      {h.head_name || <span className="muted">no head assigned</span>}
+                      <strong>#{h.household_id}</strong>{" "}
+                      {h.head_name || (
+                        <span className="muted">no head assigned</span>
+                      )}
                     </td>
                     <td className="num">{peso(h.charge.amount)}</td>
                     <td>
-                      <span className={`badge ${meta.className}`}>{meta.label}</span>
+                      <span className={`badge ${meta.className}`}>
+                        {meta.label}
+                      </span>
                     </td>
                     <td className="roster-action">
-                      {h.charge.status === 'UNPAID' && (
+                      {h.charge.status === "UNPAID" && (
                         <button
                           className="btn secondary danger"
                           disabled={busyId === h.household_id}
@@ -501,16 +579,16 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
 function AttendanceRoster({ eventId, onBack }) {
   const { authFetch, user } = useAuth();
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [scanning, setScanning] = useState(false);
   // Fines are Secretary-only (stage 3b). Staff still record attendance here,
   // they just never see the money side; the server refuses them regardless.
-  const canFine = user?.role === 'secretary';
+  const canFine = user?.role === "secretary";
   const [fines, setFines] = useState(null);
 
   const loadFines = useCallback(async () => {
@@ -525,10 +603,10 @@ function AttendanceRoster({ eventId, onBack }) {
   }, [authFetch, eventId, canFine]);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ page: String(page) });
-      if (search) params.set('search', search);
+      if (search) params.set("search", search);
       setData(await authFetch(`/events/${eventId}/attendance?${params}`));
     } catch (err) {
       setError(err.message);
@@ -549,15 +627,18 @@ function AttendanceRoster({ eventId, onBack }) {
     setBusyId(h.household_id);
     try {
       const result = await authFetch(`/events/${eventId}/attendance`, {
-        method: 'POST',
+        method: "POST",
         body: { household_id: h.household_id },
       });
       // Recording an already-recorded household is a no-op, not an error.
-      setFlash({ type: result.already_recorded ? 'info' : 'success', text: result.message });
+      setFlash({
+        type: result.already_recorded ? "info" : "success",
+        text: result.message,
+      });
       await load();
       await loadFines();
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusyId(null);
     }
@@ -570,40 +651,42 @@ function AttendanceRoster({ eventId, onBack }) {
     async (token) => {
       try {
         const result = await authFetch(`/events/${eventId}/attendance`, {
-          method: 'POST',
+          method: "POST",
           body: { qr_token: token },
         });
         // Not awaited — the roster catching up must not hold up the next scan.
         load();
         loadFines();
         return {
-          type: result.already_recorded ? 'info' : 'success',
+          type: result.already_recorded ? "info" : "success",
           text: result.message,
         };
       } catch (err) {
-        return { type: 'error', text: err.message };
+        return { type: "error", text: err.message };
       }
     },
-    [authFetch, eventId, load, loadFines]
+    [authFetch, eventId, load, loadFines],
   );
 
   async function generateFines() {
     const s = fines?.summary;
     const ok = window.confirm(
-      `Raise ${s.to_charge} fine${s.to_charge === 1 ? '' : 's'} of ₱${Number(s.fine_amount).toFixed(2)} ` +
+      `Raise ${s.to_charge} fine${s.to_charge === 1 ? "" : "s"} of ₱${Number(s.fine_amount).toFixed(2)} ` +
         `(₱${Number(s.total_amount).toFixed(2)} total)?\n\n` +
-        'Each absent household will owe this at the Barangay Office. ' +
-        'Households already recorded present are not charged.'
+        "Each absent household will owe this at the Barangay Office. " +
+        "Households already recorded present are not charged.",
     );
     if (!ok) return;
     setFlash(null);
-    setBusyId('fines');
+    setBusyId("fines");
     try {
-      const result = await authFetch(`/events/${eventId}/fines`, { method: 'POST' });
-      setFlash({ type: 'success', text: result.message });
+      const result = await authFetch(`/events/${eventId}/fines`, {
+        method: "POST",
+      });
+      setFlash({ type: "success", text: result.message });
       await loadFines();
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusyId(null);
     }
@@ -613,38 +696,49 @@ function AttendanceRoster({ eventId, onBack }) {
     if (
       !window.confirm(
         `Void the ₱${Number(row.charge.amount).toFixed(2)} fine for household #${row.household_id}?\n\n` +
-          'This cannot be undone — no replacement fine can be raised for this activity afterwards.'
+          "This cannot be undone — no replacement fine can be raised for this activity afterwards.",
       )
     )
       return;
     setFlash(null);
     setBusyId(row.household_id);
     try {
-      const result = await authFetch(`/events/${eventId}/fines/${row.household_id}/void`, {
-        method: 'POST',
-      });
-      setFlash({ type: 'success', text: result.message });
+      const result = await authFetch(
+        `/events/${eventId}/fines/${row.household_id}/void`,
+        {
+          method: "POST",
+        },
+      );
+      setFlash({ type: "success", text: result.message });
       await loadFines();
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusyId(null);
     }
   }
 
   async function undo(h) {
-    if (!window.confirm(`Remove the attendance record for household #${h.household_id}?`)) return;
+    if (
+      !window.confirm(
+        `Remove the attendance record for household #${h.household_id}?`,
+      )
+    )
+      return;
     setFlash(null);
     setBusyId(h.household_id);
     try {
-      const result = await authFetch(`/events/${eventId}/attendance/${h.household_id}`, {
-        method: 'DELETE',
-      });
-      setFlash({ type: 'success', text: result.message });
+      const result = await authFetch(
+        `/events/${eventId}/attendance/${h.household_id}`,
+        {
+          method: "DELETE",
+        },
+      );
+      setFlash({ type: "success", text: result.message });
       await load();
       await loadFines();
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusyId(null);
     }
@@ -670,7 +764,9 @@ function AttendanceRoster({ eventId, onBack }) {
   // too, so the clash is visible where the attendance edit was made and not
   // only in the panel above.
   const mismatchIds = new Set(
-    (fines?.households || []).filter((h) => h.state === 'mismatch').map((h) => h.household_id)
+    (fines?.households || [])
+      .filter((h) => h.state === "mismatch")
+      .map((h) => h.household_id),
   );
 
   return (
@@ -681,7 +777,11 @@ function AttendanceRoster({ eventId, onBack }) {
           <p className="muted">
             {formatWindow(data.event.start_datetime, data.event.end_datetime)}
             {data.event.fine_amount != null && (
-              <> · ₱{Number(data.event.fine_amount).toFixed(2)} fine per absent household</>
+              <>
+                {" "}
+                · ₱{Number(data.event.fine_amount).toFixed(2)} fine per absent
+                household
+              </>
             )}
           </p>
         </div>
@@ -698,8 +798,8 @@ function AttendanceRoster({ eventId, onBack }) {
             <strong>There are no active households yet.</strong>
           </p>
           <p className="muted">
-            Attendance is recorded per household, so the Households module must have at least one
-            active household before a roster can be taken.
+            Attendance is recorded per household, so the Households module must
+            have at least one active household before a roster can be taken.
           </p>
         </div>
       ) : (
@@ -715,7 +815,9 @@ function AttendanceRoster({ eventId, onBack }) {
               <span className="roster-label">Still missing</span>
             </div>
             <div className="roster-stat">
-              <span className="roster-value muted">{summary.total_households}</span>
+              <span className="roster-value muted">
+                {summary.total_households}
+              </span>
               <span className="roster-label">Active households</span>
             </div>
           </div>
@@ -724,14 +826,28 @@ function AttendanceRoster({ eventId, onBack }) {
               under the counts and above the fines panel, which is a job for
               after the event rather than during it. */}
           {scanning ? (
-            <AttendanceScanner onScan={submitToken} onClose={() => setScanning(false)} />
+            <AttendanceScanner
+              onScan={submitToken}
+              onClose={() => setScanning(false)}
+            />
           ) : (
-            <button className="btn scan-open" type="button" onClick={() => setScanning(true)}>
+            <button
+              className="btn scan-open"
+              type="button"
+              onClick={() => setScanning(true)}
+            >
               Scan QR code
             </button>
           )}
 
-          {canFine && fines && <FinesPanel fines={fines} busyId={busyId} onGenerate={generateFines} onVoid={voidFine} />}
+          {canFine && fines && (
+            <FinesPanel
+              fines={fines}
+              busyId={busyId}
+              onGenerate={generateFines}
+              onVoid={voidFine}
+            />
+          )}
 
           <form
             className="head-actions"
@@ -754,8 +870,8 @@ function AttendanceRoster({ eventId, onBack }) {
                 className="btn secondary"
                 type="button"
                 onClick={() => {
-                  setSearchInput('');
-                  setSearch('');
+                  setSearchInput("");
+                  setSearch("");
                   setPage(1);
                 }}
               >
@@ -779,28 +895,38 @@ function AttendanceRoster({ eventId, onBack }) {
                 </thead>
                 <tbody>
                   {data.households.map((h) => (
-                    <tr key={h.household_id} className={h.attendance ? 'row-recorded' : undefined}>
+                    <tr
+                      key={h.household_id}
+                      className={h.attendance ? "row-recorded" : undefined}
+                    >
                       <td>
-                        <strong>#{h.household_id}</strong>{' '}
-                        {h.head_name || <span className="muted">no head assigned</span>}
+                        <strong>#{h.household_id}</strong>{" "}
+                        {h.head_name || (
+                          <span className="muted">no head assigned</span>
+                        )}
                       </td>
                       <td className="muted">{h.address}</td>
                       <td className="num">{h.member_count}</td>
                       <td className="roster-action">
                         {h.attendance ? (
                           <>
-                            <span className="badge status-claimed">Present</span>{' '}
+                            <span className="badge status-claimed">
+                              Present
+                            </span>{" "}
                             {mismatchIds.has(h.household_id) && (
-                              <span className="badge status-rejected" title="Marked present but still has a fine for this activity">
+                              <span
+                                className="badge status-rejected"
+                                title="Marked present but still has a fine for this activity"
+                              >
                                 Fine outstanding
                               </span>
-                            )}{' '}
+                            )}{" "}
                             <span className="muted small-note">
                               {formatDate(h.attendance.recorded_at)}
                               {h.attendance.recorded_by_username
                                 ? ` · ${h.attendance.recorded_by_username}`
-                                : ''}
-                            </span>{' '}
+                                : ""}
+                            </span>{" "}
                             <button
                               className="btn secondary danger"
                               disabled={busyId === h.household_id}
@@ -815,7 +941,9 @@ function AttendanceRoster({ eventId, onBack }) {
                             disabled={busyId === h.household_id}
                             onClick={() => mark(h)}
                           >
-                            {busyId === h.household_id ? 'Recording…' : 'Mark present'}
+                            {busyId === h.household_id
+                              ? "Recording…"
+                              : "Mark present"}
                           </button>
                         )}
                       </td>
@@ -832,7 +960,11 @@ function AttendanceRoster({ eventId, onBack }) {
                 Page {data.page} of {data.total_pages}
               </span>
               <div className="head-actions">
-                <button className="btn secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <button
+                  className="btn secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
                   ← Previous
                 </button>
                 <button
@@ -854,23 +986,23 @@ function AttendanceRoster({ eventId, onBack }) {
 // --- page ------------------------------------------------------------------
 export default function EventsPage({ title, nav }) {
   const { authFetch } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [view, setView] = useState('active');
-  const [type, setType] = useState('all');
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState("active");
+  const [type, setType] = useState("all");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | event object
   const [attendanceId, setAttendanceId] = useState(null); // event whose roster is open
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ page: String(page), view, type });
-      if (search) params.set('search', search);
+      if (search) params.set("search", search);
       setData(await authFetch(`/events?${params}`));
     } catch (err) {
       setError(err.message);
@@ -889,14 +1021,14 @@ export default function EventsPage({ title, nav }) {
   }
 
   const events = data?.events;
-  const announcements = (events || []).filter((e) => e.type === 'announcement');
-  const activities = (events || []).filter((e) => e.type === 'activity');
+  const announcements = (events || []).filter((e) => e.type === "announcement");
+  const activities = (events || []).filter((e) => e.type === "activity");
 
   const renderRows = (rows) =>
     rows.map((e) => {
       const meta = eventStatusMeta(e.status);
       return (
-        <tr key={e.event_id} className={e.is_archived ? 'inactive-row' : ''}>
+        <tr key={e.event_id} className={e.is_archived ? "inactive-row" : ""}>
           <td>
             <strong>{e.title}</strong>
             {e.is_archived && (
@@ -906,12 +1038,15 @@ export default function EventsPage({ title, nav }) {
             )}
           </td>
           <td>{formatWindow(e.start_datetime, e.end_datetime)}</td>
-          <td className="muted">{e.location || '—'}</td>
+          <td className="muted">{e.location || "—"}</td>
           <td>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
           </td>
           <td className="row-actions">
-            <button className="btn secondary" onClick={() => setSelectedId(e.event_id)}>
+            <button
+              className="btn secondary"
+              onClick={() => setSelectedId(e.event_id)}
+            >
               View
             </button>
           </td>
@@ -949,14 +1084,21 @@ export default function EventsPage({ title, nav }) {
 
   return (
     <div className="dash">
-      <DashHeader title={title} subtitle="Barangay events and announcements" nav={nav} />
+      <DashHeader
+        title={title}
+        subtitle="Barangay events and announcements"
+        nav={nav}
+      />
 
       <main className="dash-main">
         {attendanceId ? (
-          <AttendanceRoster eventId={attendanceId} onBack={() => setAttendanceId(null)} />
+          <AttendanceRoster
+            eventId={attendanceId}
+            onBack={() => setAttendanceId(null)}
+          />
         ) : formTarget ? (
           <EventForm
-            event={formTarget === 'new' ? null : formTarget}
+            event={formTarget === "new" ? null : formTarget}
             onDone={(result, event) => {
               setFormTarget(null);
               if (!result) return;
@@ -972,7 +1114,7 @@ export default function EventsPage({ title, nav }) {
             onEdit={(e) => setFormTarget(e)}
             onOpenAttendance={(id) => setAttendanceId(id)}
             onChanged={(message) => {
-              setFlash({ type: 'success', text: message });
+              setFlash({ type: "success", text: message });
               load();
             }}
           />
@@ -983,31 +1125,23 @@ export default function EventsPage({ title, nav }) {
 
             <div className="list-head">
               <h2>
-                {data === null ? 'Events' : `${data.total} record${data.total === 1 ? '' : 's'}`}
+                {data === null
+                  ? "Events"
+                  : `${data.total} record${data.total === 1 ? "" : "s"}`}
               </h2>
+              <SearchBar
+                search={search}
+                onSearch={handleSearch}
+                searchInput={searchInput}
+                onSearchInput={(e) => setSearchInput(e.target.value)}
+                onClear={() => {
+                  setSearch("");
+                  setSearchInput("");
+                  setPage(1);
+                }}
+                placeholder={"Search by title, details, or location"}
+              />
               <form className="head-actions" onSubmit={handleSearch}>
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search title, details, or location…"
-                  maxLength={100}
-                />
-                <button className="btn secondary" type="submit">
-                  Search
-                </button>
-                {search && (
-                  <button
-                    className="btn secondary"
-                    type="button"
-                    onClick={() => {
-                      setSearch('');
-                      setSearchInput('');
-                      setPage(1);
-                    }}
-                  >
-                    Clear
-                  </button>
-                )}
                 <select
                   value={view}
                   onChange={(e) => {
@@ -1032,7 +1166,11 @@ export default function EventsPage({ title, nav }) {
                   <option value="activity">Activities</option>
                   <option value="announcement">Announcements</option>
                 </select>
-                <button className="btn" type="button" onClick={() => setFormTarget('new')}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setFormTarget("new")}
+                >
                   New
                 </button>
               </form>
@@ -1043,23 +1181,32 @@ export default function EventsPage({ title, nav }) {
             ) : events.length === 0 ? (
               <div className="empty">
                 <p>
-                  No {view === 'past' ? 'past activities' : view === 'archived' ? 'archived records' : 'events'}
-                  {search ? ` matching "${search}"` : ''}.
+                  No{" "}
+                  {view === "past"
+                    ? "past activities"
+                    : view === "archived"
+                      ? "archived records"
+                      : "events"}
+                  {search ? ` matching "${search}"` : ""}.
                 </p>
               </div>
             ) : (
               <>
                 {/* The two record kinds are listed separately so the untimed
                     announcements never get lost among scheduled activities. */}
-                {type !== 'announcement' &&
+                {type !== "announcement" &&
                   section(
-                    view === 'past' ? 'Past activities' : 'Activities',
+                    view === "past" ? "Past activities" : "Activities",
                     activities,
-                    'No activities in this view.'
+                    "No activities in this view.",
                   )}
-                {type !== 'activity' &&
-                  view !== 'past' &&
-                  section('Announcements', announcements, 'No announcements in this view.')}
+                {type !== "activity" &&
+                  view !== "past" &&
+                  section(
+                    "Announcements",
+                    announcements,
+                    "No announcements in this view.",
+                  )}
 
                 {data.total_pages > 1 && (
                   <div className="list-head">
@@ -1067,7 +1214,11 @@ export default function EventsPage({ title, nav }) {
                       Page {data.page} of {data.total_pages}
                     </span>
                     <div className="head-actions">
-                      <button className="btn secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      <button
+                        className="btn secondary"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => p - 1)}
+                      >
                         ← Previous
                       </button>
                       <button

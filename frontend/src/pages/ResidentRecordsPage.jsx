@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { formatDate } from '../constants/requestStatus';
-import { formatSchedule } from '../constants/rentals';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import { formatDate } from "../constants/requestStatus";
+import { formatSchedule } from "../constants/rentals";
+import SearchBar from "../components/SearchBar";
 
 // Resident Records Management: browse + search the master list (stage 1),
 // add with the fuzzy duplicate check + edit (stage 2), archive/unarchive with
@@ -24,42 +25,53 @@ import { formatSchedule } from '../constants/rentals';
 // Detail rows that may or may not be present depending on the viewer's
 // projection. Order matches the old fixed markup.
 const OPTIONAL_DETAIL_FIELDS = [
-  { key: 'birthdate', label: 'Birthdate' },
-  { key: 'birthplace', label: 'Birthplace' },
-  { key: 'sex', label: 'Sex' },
-  { key: 'civil_status', label: 'Civil status' },
-  { key: 'religion', label: 'Religion' },
-  { key: 'educational_attainment', label: 'Educational attainment' },
-  { key: 'contact_number', label: 'Contact number' },
+  { key: "birthdate", label: "Birthdate" },
+  { key: "birthplace", label: "Birthplace" },
+  { key: "sex", label: "Sex" },
+  { key: "civil_status", label: "Civil status" },
+  { key: "religion", label: "Religion" },
+  { key: "educational_attainment", label: "Educational attainment" },
+  { key: "contact_number", label: "Contact number" },
   // Withheld from Staff (migration 018) for the same reason date_registered
   // is: no Staff task uses it, and the six-month residency judgement belongs
   // to the Secretary. The row disappears for Staff because the KEY IS ABSENT
   // from a narrowed payload — the filter below tests `key in r` and never the
   // viewer's role.
-  { key: 'masterlist_registered_on', label: 'Registered in masterlist' },
+  { key: "masterlist_registered_on", label: "Registered in masterlist" },
 ];
 
 const ARCHIVED_FILTERS = [
-  { value: 'false', label: 'Active records' },
-  { value: 'true', label: 'Archived records' },
-  { value: 'all', label: 'All records' },
+  { value: "false", label: "Active records" },
+  { value: "true", label: "Archived records" },
+  { value: "all", label: "All records" },
 ];
 
-const SEX_OPTIONS = ['Male', 'Female'];
-const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'];
+const SEX_OPTIONS = ["Male", "Female"];
+const CIVIL_STATUS_OPTIONS = ["Single", "Married", "Widowed", "Separated"];
 
 // EMPTY_FORM is also what the EDIT form prefills from — it maps over these
 // keys against the record — so a writable column missing here is silently
 // dropped on save rather than merely absent from the add form.
 const EMPTY_FORM = {
-  first_name: '', middle_name: '', last_name: '', suffix: '',
-  birthdate: '', birthplace: '', address: '', sex: '', civil_status: '',
-  religion: '', educational_attainment: '', contact_number: '',
-  masterlist_registered_on: '',
+  first_name: "",
+  middle_name: "",
+  last_name: "",
+  suffix: "",
+  birthdate: "",
+  birthplace: "",
+  address: "",
+  sex: "",
+  civil_status: "",
+  religion: "",
+  educational_attainment: "",
+  contact_number: "",
+  masterlist_registered_on: "",
 };
 
 function fullName(r) {
-  const name = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ');
+  const name = [r.first_name, r.middle_name, r.last_name]
+    .filter(Boolean)
+    .join(" ");
   return r.suffix ? `${name}, ${r.suffix}` : name;
 }
 
@@ -73,18 +85,22 @@ function DuplicateMatches({ matches }) {
   return (
     <>
       <p className="muted">
-        {matches.length} existing record{matches.length === 1 ? '' : 's'} may be the same person:
+        {matches.length} existing record{matches.length === 1 ? "" : "s"} may be
+        the same person:
       </p>
       <ul className="suggestions">
         {matches.map((m) => (
           <li key={m.resident_id} className="suggestion">
-            <span className="badge score">{Math.round(m.score * 100)}% match</span>
+            <span className="badge score">
+              {Math.round(m.score * 100)}% match
+            </span>
             <div className="suggestion-info">
               <strong>
-                {fullName(m)} <span className="muted">(record #{m.resident_id})</span>
+                {fullName(m)}{" "}
+                <span className="muted">(record #{m.resident_id})</span>
               </strong>
               <span className="muted">
-                b. {m.birthdate || '—'} · {m.address || '—'}
+                b. {m.birthdate || "—"} · {m.address || "—"}
               </span>
             </div>
           </li>
@@ -103,13 +119,16 @@ function RecordForm({ record, onDone }) {
   const [form, setForm] = useState(() =>
     record
       ? Object.fromEntries(
-          Object.keys(EMPTY_FORM).map((k) => [k, record[k] == null ? '' : String(record[k])])
+          Object.keys(EMPTY_FORM).map((k) => [
+            k,
+            record[k] == null ? "" : String(record[k]),
+          ]),
         )
-      : { ...EMPTY_FORM }
+      : { ...EMPTY_FORM },
   );
   const [matches, setMatches] = useState(null); // null = not checked yet
   const [needsConfirm, setNeedsConfirm] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const canCheck = form.first_name.trim() && form.last_name.trim();
@@ -118,18 +137,18 @@ function RecordForm({ record, onDone }) {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
     // any name edit invalidates a previous check
-    if (name === 'first_name' || name === 'last_name') {
+    if (name === "first_name" || name === "last_name") {
       setMatches(null);
       setNeedsConfirm(false);
     }
   }
 
   async function handleCheck() {
-    setError('');
+    setError("");
     setBusy(true);
     try {
-      const data = await authFetch('/resident-records/check-duplicates', {
-        method: 'POST',
+      const data = await authFetch("/resident-records/check-duplicates", {
+        method: "POST",
         body: { first_name: form.first_name, last_name: form.last_name },
       });
       setMatches(data.matches);
@@ -141,16 +160,19 @@ function RecordForm({ record, onDone }) {
   }
 
   async function save(confirmDuplicate) {
-    setError('');
+    setError("");
     setBusy(true);
     try {
       const data = isEdit
-        ? await authFetch(`/resident-records/${record.resident_id}`, { method: 'PUT', body: form })
-        : await authFetch('/resident-records', {
-            method: 'POST',
+        ? await authFetch(`/resident-records/${record.resident_id}`, {
+            method: "PUT",
+            body: form,
+          })
+        : await authFetch("/resident-records", {
+            method: "POST",
             body: { ...form, confirm_duplicate: confirmDuplicate },
           });
-      onDone({ type: 'success', text: data.message }, data.record);
+      onDone({ type: "success", text: data.message }, data.record);
     } catch (err) {
       // 409 = the server found duplicates and refused to create without an
       // explicit confirmation; show them and switch to the confirm action.
@@ -169,7 +191,7 @@ function RecordForm({ record, onDone }) {
     <div className="pending-card">
       <div className="pending-head">
         <div>
-          <h3>{isEdit ? `Edit ${fullName(record)}` : 'Add resident record'}</h3>
+          <h3>{isEdit ? `Edit ${fullName(record)}` : "Add resident record"}</h3>
           {isEdit && <p className="muted">Record #{record.resident_id}</p>}
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
@@ -188,19 +210,41 @@ function RecordForm({ record, onDone }) {
         <div className="grid-2">
           <label>
             First name
-            <input name="first_name" value={form.first_name} onChange={handleChange} maxLength={100} required />
+            <input
+              name="first_name"
+              value={form.first_name}
+              onChange={handleChange}
+              maxLength={100}
+              required
+            />
           </label>
           <label>
             Middle name <span className="hint">(optional)</span>
-            <input name="middle_name" value={form.middle_name} onChange={handleChange} maxLength={100} />
+            <input
+              name="middle_name"
+              value={form.middle_name}
+              onChange={handleChange}
+              maxLength={100}
+            />
           </label>
           <label>
             Last name
-            <input name="last_name" value={form.last_name} onChange={handleChange} maxLength={100} required />
+            <input
+              name="last_name"
+              value={form.last_name}
+              onChange={handleChange}
+              maxLength={100}
+              required
+            />
           </label>
           <label>
             Suffix <span className="hint">(Jr., Sr., III)</span>
-            <input name="suffix" value={form.suffix} onChange={handleChange} maxLength={20} />
+            <input
+              name="suffix"
+              value={form.suffix}
+              onChange={handleChange}
+              maxLength={20}
+            />
           </label>
           <label>
             Birthdate
@@ -230,29 +274,47 @@ function RecordForm({ record, onDone }) {
           </label>
           <label>
             Birthplace
-            <input name="birthplace" value={form.birthplace} onChange={handleChange} maxLength={255} />
+            <input
+              name="birthplace"
+              value={form.birthplace}
+              onChange={handleChange}
+              maxLength={255}
+            />
           </label>
           <label>
             Sex
             <select name="sex" value={form.sex} onChange={handleChange}>
               <option value="">—</option>
               {SEX_OPTIONS.map((o) => (
-                <option key={o} value={o}>{o}</option>
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
             </select>
           </label>
           <label>
             Civil status
-            <select name="civil_status" value={form.civil_status} onChange={handleChange}>
+            <select
+              name="civil_status"
+              value={form.civil_status}
+              onChange={handleChange}
+            >
               <option value="">—</option>
               {CIVIL_STATUS_OPTIONS.map((o) => (
-                <option key={o} value={o}>{o}</option>
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
             </select>
           </label>
           <label>
             Religion
-            <input name="religion" value={form.religion} onChange={handleChange} maxLength={100} />
+            <input
+              name="religion"
+              value={form.religion}
+              onChange={handleChange}
+              maxLength={100}
+            />
           </label>
           <label>
             Educational attainment
@@ -265,24 +327,41 @@ function RecordForm({ record, onDone }) {
           </label>
           <label>
             Contact number
-            <input name="contact_number" value={form.contact_number} onChange={handleChange} maxLength={20} />
+            <input
+              name="contact_number"
+              value={form.contact_number}
+              onChange={handleChange}
+              maxLength={20}
+            />
           </label>
         </div>
         <label>
           Address
-          <input name="address" value={form.address} onChange={handleChange} maxLength={255} required />
+          <input
+            name="address"
+            value={form.address}
+            onChange={handleChange}
+            maxLength={255}
+            required
+          />
         </label>
 
         {!isEdit && (
           <div className="suggest-section">
             <h4>Duplicate check</h4>
             <p className="muted">
-              Checks the master list for existing records with a similar name before adding.
+              Checks the master list for existing records with a similar name
+              before adding.
             </p>
             <DuplicateMatches matches={matches} />
             <div className="actions">
-              <button className="btn secondary" type="button" disabled={!canCheck || busy} onClick={handleCheck}>
-                {busy ? 'Checking…' : 'Check for duplicates'}
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={!canCheck || busy}
+                onClick={handleCheck}
+              >
+                {busy ? "Checking…" : "Check for duplicates"}
               </button>
             </div>
           </div>
@@ -290,12 +369,17 @@ function RecordForm({ record, onDone }) {
 
         <div className="actions">
           {needsConfirm ? (
-            <button className="btn" type="button" disabled={busy} onClick={() => save(true)}>
-              {busy ? 'Adding…' : 'This is a new person — add anyway'}
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={() => save(true)}
+            >
+              {busy ? "Adding…" : "This is a new person — add anyway"}
             </button>
           ) : (
             <button className="btn" type="submit" disabled={busy}>
-              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add resident'}
+              {busy ? "Saving…" : isEdit ? "Save changes" : "Add resident"}
             </button>
           )}
         </div>
@@ -307,13 +391,13 @@ function RecordForm({ record, onDone }) {
 function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
   const { authFetch } = useAuth();
   const [data, setData] = useState(null); // { record, linked_accounts }
-  const [error, setError] = useState('');
-  const [actionError, setActionError] = useState('');
+  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [warning, setWarning] = useState(null); // the 409 dependency payload
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       setData(await authFetch(`/resident-records/${id}`));
     } catch (err) {
@@ -330,16 +414,16 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
   // about them, which is a different fact from an empty array meaning "this
   // resident has no account". Only the latter may claim "not registered
   // online" on screen; the former renders no section at all.
-  const showAccounts = !!data && 'linked_accounts' in data;
+  const showAccounts = !!data && "linked_accounts" in data;
   const accounts = data?.linked_accounts || [];
 
   async function act(action, confirm) {
-    setActionError('');
+    setActionError("");
     setBusy(true);
     try {
       const result = await authFetch(`/resident-records/${id}/${action}`, {
-        method: 'POST',
-        body: action === 'archive' ? { confirm_archive: confirm } : undefined,
+        method: "POST",
+        body: action === "archive" ? { confirm_archive: confirm } : undefined,
       });
       setWarning(null);
       await load();
@@ -361,30 +445,43 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
       <div className="pending-head">
         <div>
           <h3>
-            {r ? fullName(r) : `Resident record #${id}`}{' '}
+            {r ? fullName(r) : `Resident record #${id}`}{" "}
             {r?.is_archived && <span className="badge gray">Archived</span>}
           </h3>
           {r && (
             <p className="muted">
               Record #{r.resident_id}
-              {'date_registered' in r && ` · registered ${formatDate(r.date_registered)}`}
+              {"date_registered" in r &&
+                ` · registered ${formatDate(r.date_registered)}`}
             </p>
           )}
         </div>
         <div className="head-actions">
           {canManage && r && !r.is_archived && (
             <>
-              <button className="btn secondary" disabled={busy} onClick={() => onEdit(r)}>
+              <button
+                className="btn secondary"
+                disabled={busy}
+                onClick={() => onEdit(r)}
+              >
                 Edit
               </button>
-              <button className="btn secondary danger" disabled={busy} onClick={() => act('archive', false)}>
-                {busy ? 'Working…' : 'Archive'}
+              <button
+                className="btn secondary danger"
+                disabled={busy}
+                onClick={() => act("archive", false)}
+              >
+                {busy ? "Working…" : "Archive"}
               </button>
             </>
           )}
           {canManage && r?.is_archived && (
-            <button className="btn" disabled={busy} onClick={() => act('unarchive')}>
-              {busy ? 'Working…' : 'Unarchive'}
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => act("unarchive")}
+            >
+              {busy ? "Working…" : "Unarchive"}
             </button>
           )}
           <button className="btn secondary" onClick={onBack}>
@@ -398,9 +495,10 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
 
       {r?.is_archived && (
         <div className="alert info">
-          This record is archived: it is hidden from the active master list and its linked account
-          cannot log in. Existing document requests and rental bookings are unaffected. Unarchive
-          restores both the record and the account.
+          This record is archived: it is hidden from the active master list and
+          its linked account cannot log in. Existing document requests and
+          rental bookings are unaffected. Unarchive restores both the record and
+          the account.
         </div>
       )}
 
@@ -412,7 +510,10 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
               <li key={`d${d.request_id}`} className="suggestion">
                 <span className="badge score">Open</span>
                 <div className="suggestion-info">
-                  <strong>{d.document_types?.name || 'Document request'} #{d.request_id}</strong>
+                  <strong>
+                    {d.document_types?.name || "Document request"} #
+                    {d.request_id}
+                  </strong>
                   <span className="muted">status: {d.status}</span>
                 </div>
               </li>
@@ -421,8 +522,12 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
               <li key={`r${b.request_id}`} className="suggestion">
                 <span className="badge score">Active</span>
                 <div className="suggestion-info">
-                  <strong>{b.rental_items?.name || 'Rental booking'} #{b.request_id}</strong>
-                  <span className="muted">{formatSchedule(b.start_datetime, b.end_datetime)}</span>
+                  <strong>
+                    {b.rental_items?.name || "Rental booking"} #{b.request_id}
+                  </strong>
+                  <span className="muted">
+                    {formatSchedule(b.start_datetime, b.end_datetime)}
+                  </span>
                 </div>
               </li>
             ))}
@@ -430,21 +535,34 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
           {warning.dependencies.accounts.length > 0 && (
             <p>
               <strong>
-                Account{warning.dependencies.accounts.length === 1 ? '' : 's'}{' '}
-                {warning.dependencies.accounts.map((a) => `@${a.username}`).join(', ')} will be
-                deactivated and can no longer log in.
+                Account{warning.dependencies.accounts.length === 1 ? "" : "s"}{" "}
+                {warning.dependencies.accounts
+                  .map((a) => `@${a.username}`)
+                  .join(", ")}{" "}
+                will be deactivated and can no longer log in.
               </strong>
             </p>
           )}
           <div className="actions">
-            <button className="btn secondary danger" disabled={busy} onClick={() => act('archive', true)}>
+            <button
+              className="btn secondary danger"
+              disabled={busy}
+              onClick={() => act("archive", true)}
+            >
               {busy
-                ? 'Archiving…'
+                ? "Archiving…"
                 : warning.dependencies.accounts.length
-                  ? 'Archive and deactivate account'
-                  : 'Archive anyway'}
+                  ? "Archive and deactivate account"
+                  : "Archive anyway"}
             </button>
-            <button className="btn secondary" type="button" onClick={() => { setWarning(null); setActionError(''); }}>
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() => {
+                setWarning(null);
+                setActionError("");
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -463,12 +581,12 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
             {OPTIONAL_DETAIL_FIELDS.filter((f) => f.key in r).map((f) => (
               <div key={f.key}>
                 <dt>{f.label}</dt>
-                <dd>{r[f.key] || '—'}</dd>
+                <dd>{r[f.key] || "—"}</dd>
               </div>
             ))}
             <div>
               <dt>Archived</dt>
-              <dd>{r.is_archived ? 'Yes' : 'No'}</dd>
+              <dd>{r.is_archived ? "Yes" : "No"}</dd>
             </div>
             <div className="span-2">
               <dt>Address</dt>
@@ -484,13 +602,16 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
               <h4>Linked user account</h4>
               {accounts.length === 0 ? (
                 <p className="muted">
-                  Not linked to any account — this resident has not registered online.
+                  Not linked to any account — this resident has not registered
+                  online.
                 </p>
               ) : (
                 accounts.map((a) => (
                   <p key={a.user_id}>
                     <strong>@{a.username}</strong>
-                    {a.email && <span className="muted"> · {a.email}</span>}{' '}
+                    {a.email && (
+                      <span className="muted"> · {a.email}</span>
+                    )}{" "}
                     {a.is_active ? (
                       <span className="badge">Active</span>
                     ) : (
@@ -509,21 +630,21 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
 
 export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const { authFetch } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState(''); // the applied search
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState(""); // the applied search
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null); // null = loading
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | record object
-  const [archived, setArchived] = useState('false');
+  const [archived, setArchived] = useState("false");
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ page: String(page), archived });
-      if (search) params.set('search', search);
+      if (search) params.set("search", search);
       const result = await authFetch(`/resident-records?${params}`);
       setData(result);
     } catch (err) {
@@ -543,8 +664,8 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   }
 
   function clearSearch() {
-    setSearchInput('');
-    setSearch('');
+    setSearchInput("");
+    setSearch("");
     setPage(1);
   }
 
@@ -557,8 +678,8 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   // support. `account` only became detectable this way once the server stopped
   // sending it as null; before that a withheld value and a genuine absence
   // were indistinguishable here.
-  const showContact = !!records?.some((r) => 'contact_number' in r);
-  const showAccount = !!records?.some((r) => 'account' in r);
+  const showContact = !!records?.some((r) => "contact_number" in r);
+  const showAccount = !!records?.some((r) => "account" in r);
 
   return (
     <div className="dash">
@@ -567,9 +688,9 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
       <main className="dash-main">
         {canManage && formTarget ? (
           <RecordForm
-            record={formTarget === 'new' ? null : formTarget}
+            record={formTarget === "new" ? null : formTarget}
             onDone={(result, record) => {
-              const wasAdd = formTarget === 'new';
+              const wasAdd = formTarget === "new";
               setFormTarget(null);
               if (!result) return;
               setFlash(result);
@@ -591,7 +712,7 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
             onBack={() => setSelectedId(null)}
             onEdit={(record) => setFormTarget(record)}
             onChanged={(message) => {
-              setFlash({ type: 'success', text: message });
+              setFlash({ type: "success", text: message });
               load();
             }}
           />
@@ -603,24 +724,18 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
             <div className="list-head">
               <h2>
                 {data === null
-                  ? 'Resident records'
-                  : `${data.total} resident record${data.total === 1 ? '' : 's'}${search ? ` matching "${search}"` : ''}`}
+                  ? "Resident records"
+                  : `${data.total} resident record${data.total === 1 ? "" : "s"}${search ? ` matching "${search}"` : ""}`}
               </h2>
+              <SearchBar
+                search={search}
+                onSearch={handleSearch}
+                searchInput={searchInput}
+                onSearchInput={(e) => setSearchInput(e.target.value)}
+                onClear={clearSearch}
+                placeholder={"Search by name, address or purok"}
+              />
               <form className="head-actions" onSubmit={handleSearch}>
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search name or address/purok…"
-                  maxLength={100}
-                />
-                <button className="btn secondary" type="submit">
-                  Search
-                </button>
-                {search && (
-                  <button className="btn secondary" type="button" onClick={clearSearch}>
-                    Clear
-                  </button>
-                )}
                 <select
                   value={archived}
                   onChange={(e) => {
@@ -635,7 +750,11 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
                   ))}
                 </select>
                 {canManage && (
-                  <button className="btn" type="button" onClick={() => setFormTarget('new')}>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => setFormTarget("new")}
+                  >
                     Add resident
                   </button>
                 )}
@@ -649,7 +768,7 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
                 <p>
                   {search
                     ? `No resident records match "${search}".`
-                    : 'No resident records yet.'}
+                    : "No resident records yet."}
                 </p>
               </div>
             ) : (
@@ -672,7 +791,10 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
                     </thead>
                     <tbody>
                       {records.map((r) => (
-                        <tr key={r.resident_id} className={r.is_archived ? 'inactive-row' : ''}>
+                        <tr
+                          key={r.resident_id}
+                          className={r.is_archived ? "inactive-row" : ""}
+                        >
                           <td>
                             <strong>{fullName(r)}</strong>
                             {r.is_archived && (
@@ -682,18 +804,20 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
                             )}
                           </td>
                           <td className="muted col-date" data-label="Birthdate">
-                            {r.birthdate || '—'}
+                            {r.birthdate || "—"}
                           </td>
                           <td className="muted">{r.address}</td>
                           {showContact && (
                             <td className="muted" data-label="Contact">
-                              {r.contact_number || '—'}
+                              {r.contact_number || "—"}
                             </td>
                           )}
                           {showAccount && (
                             <td data-label="Account">
                               {r.account ? (
-                                <span className="badge">@{r.account.username}</span>
+                                <span className="badge">
+                                  @{r.account.username}
+                                </span>
                               ) : (
                                 <span className="muted">—</span>
                               )}

@@ -937,7 +937,8 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                     search={search}
                     searchInput={searchInput}
                     onSearchInput={(e) => setSearchInput(e.target.value)}
-                    onSearch={() => {
+                    onSearch={(e) => {
+                      e.preventDefault();
                       setPage(1);
                       setSearch(searchInput.trim());
                     }}
