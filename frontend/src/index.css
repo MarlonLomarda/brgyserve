@@ -2673,6 +2673,198 @@ button.link-button:hover:not(:disabled) {
   }
 }
 
+/* ISSUE 7 — every dashboard LIST screen scrolled the whole DOCUMENT sideways
+   at 390px, page header and all. .list-head and .head-actions are both nowrap
+   flex rows, so the heading, search box, filter select and action buttons were
+   pinned to a single line, and nothing catches what spills: there is no
+   overflow-x on html, body or .dash-main, so it reaches the viewport.
+   .dash-header is position: sticky with only a `top` offset, which pins it
+   vertically and NOT horizontally — that is why the header slid sideways with
+   the content rather than staying put.
+
+   MEASURED, headless Chrome against this file over file://. Widest row
+   min-content is 496.38px (.list-head on Resident records; its <h2> supplies
+   only 64.04px of that — an <h2> wraps, so it contributes its longest WORD —
+   and .head-actions the other 432.34px). .dash-main adds 48px of padding, so
+   the document begins to overflow below 544.38px of viewport.
+
+   640px is REUSED from ISSUE 6 above rather than adding a fourth breakpoint to
+   this file, and the measurement backs it twice over: it clears the 544.38px
+   threshold by 95.62px, and the search input is ALREADY unusable at 640 —
+   measured 61.09px wide there against 237.98px at 1280, and 26px at 390 — so
+   wrapping at that width repairs a broken row rather than disturbing a working
+   one.
+
+   The input rule is the idiom .notif-filters already uses, for the same
+   reason: the base `input { width: 100% }` makes the input demand the entire
+   line and then collapse under flex-shrink, which is what produced the 26px.
+   Releasing width, allowing it past its min-content with min-width: 0, and
+   giving it a 200px basis lets it share a line when 200px fits and take its
+   own when it does not. .list-head carries no `gap` of its own, so without
+   row-gap its wrapped lines would touch.
+
+   The table is deliberately NOT touched: .table-wrap already contains it with
+   overflow-x: auto, so it was never part of the document overflow. Nothing
+   here applies above 640px, and none of the six protected desktop rules is
+   referenced. */
+@media (max-width: 640px) {
+  .list-head,
+  .head-actions {
+    flex-wrap: wrap;
+  }
+
+  .list-head {
+    row-gap: 10px;
+  }
+
+  .head-actions input {
+    width: auto;
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+}
+
+/* ISSUE 8 — the resident records table itself at 390px. Six columns inside a
+   340px .table-wrap left Address 97px wide and five lines tall, and pushed the
+   action column past the right edge. The table scrolled INSIDE its wrap, so
+   this was never the ISSUE 7 document overflow — it is a legibility problem,
+   and stacking each record into a card is the fix. Measured: the table drops
+   from 728.9px to 340, Address from 97px wide / 144.5px tall to 314 / 24.
+
+   SCOPED TO A MODIFIER, NOT TO .data-table. Twenty tables across fifteen files
+   carry .data-table. Stacking all of them would make the payments queue's
+   measured column budget inert, and would change report PDFs — exportPdf.js
+   runs html2canvas over the LIVE DOM with no forced width, so an export from a
+   narrow window would capture stacked, header-less tables. .stack-narrow is
+   named for the behaviour rather than the screen (unlike .roster-table), so a
+   second table can opt in later without inheriting this one's name.
+
+   KNOWN DUPLICATION, ACCEPTED ON PURPOSE. This block is a near-copy of the
+   .roster-table rules further up, and this file records duplication as a
+   mistake everywhere else. Consolidating the two means editing a screen used
+   on a phone at an assembly, and that risk was declined 34 days out from the
+   defense. IF ONE IS EVER CHANGED, CHECK THE OTHER. Two deliberate
+   differences: the roster's `td.num { text-align: left }` is not copied,
+   because this table has no .num cells and a rule for a hypothetical one is
+   how dead CSS starts; and the cell padding is 4px rather than the roster's
+   2px, because these cells are two lines (label above value) and not one.
+
+   LABELS. Hiding thead takes away every cell's only heading, so a cell that
+   is not self-describing loses its meaning. Name, Address, the @username
+   badge and the View button all say what they are. A bare date and a bare
+   phone number do not — and an empty value renders as a lone em-dash with
+   nothing to explain it. Resident #40 (Aleja Yap Bagas) has no birthdate, no
+   contact and no account, so without this her card is three unexplained
+   dashes. data-label is set in ResidentRecordsPage.jsx and printed by ::before
+   HERE, inside the media query, so above 640px the attribute is inert and
+   nothing is injected anywhere. The ACTION cell is deliberately unlabelled:
+   its <th> is empty on desktop, so a label would invent a heading the table
+   does not have.
+
+   .row-actions keeps `min-width: 200px` untouched — measured inert once the
+   cell is a full-width block (314px against a 200px floor), so the protected
+   rule still stands and simply stops being what decides the width. */
+@media (max-width: 640px) {
+  .data-table.stack-narrow thead {
+    display: none;
+  }
+
+  .data-table.stack-narrow,
+  .data-table.stack-narrow tbody,
+  .data-table.stack-narrow tr,
+  .data-table.stack-narrow td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table.stack-narrow tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+  }
+
+  .data-table.stack-narrow td {
+    border: none;
+    padding: 4px 0;
+  }
+
+  /* Reuses the <th> type scale this is standing in for, so a stacked field
+     reads as the same kind of thing the column header was. No new colour. */
+  .data-table.stack-narrow td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+  }
+
+  .data-table.stack-narrow .row-actions .btn {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
+     ISSUE 8 built the mechanism for one table; these three rules are all that
+     was missing to reuse it everywhere else. The tables now carrying
+     .stack-narrow are Payments, Document requests, Household members,
+     Unassigned residents, Households, Blotter, Rental bookings, Document
+     types, My requests, My rentals, Notifications, the Events list, the
+     events viewer and the fines panel — fifteen with Resident records.
+
+     BLOTTER IS STACKED DESPITE LOSING THE MOST SCANNING DENSITY: 64.5px rows
+     become 246px cards, roughly nine visible rows down to two. It goes in
+     anyway because at 390px four of its seven columns are off-screen
+     entirely, so those nine rows were only ever showing two fields each. Two
+     complete cases beat nine truncated ones.
+
+     NOT STACKED, each for its own reason: Rental items (tallest card of the
+     set at 294px, a small admin catalogue nobody opens on a phone);
+     ReportRenderers (exportPdf.js runs html2canvas over the live DOM, so a
+     narrow window would bake stacked tables into the PDF); the household
+     header and the payment-result panel (key-value tables whose <th> IS the
+     label, so hiding thead does nothing and blocking the <td> alone would
+     leave a broken half-table); and the attendance roster, which keeps its
+     own block. */
+
+  /* Right alignment is a table convention for numbers and reads as a stray
+     indent in a left-aligned card. Resident records had no .num cells, which
+     is why ISSUE 8 left this out; six of the tables above have them. */
+  .data-table.stack-narrow td.num {
+    text-align: left;
+  }
+
+  /* Width caps that are correct in a column and wrong in a 314px card.
+     Measured against the card: .col-resident held a resident's name to 170px
+     and .col-declared a GCash reference to 200px, both leaving most of the
+     card empty; .truncate cut the text at 240px with an ellipsis while 74px
+     sat unused, which is the worst of the three because it destroys content
+     rather than just wrapping it.
+
+     THE PROTECTED RULES ARE NOT EDITED. `.data-table.stack-narrow .col-… .cell-clamp`
+     is (0,4,0) against `.data-table .col-… .cell-clamp` at (0,3,0), so it wins
+     on specificity alone, exactly as .row-actions was left alone in ISSUE 8.
+
+     DELIBERATELY NOT RELEASED: .col-billed (nowrap, already inert — a date
+     fits in 314px), .col-purpose .cell-clamp (caps at 300 in a 314 cell, a
+     14px difference not worth a rule) and .col-message .cell-clamp (its 420px
+     cap already exceeds the cell, so it never binds). */
+  .data-table.stack-narrow .col-resident .cell-clamp,
+  .data-table.stack-narrow .col-declared .cell-clamp {
+    max-width: none;
+  }
+
+  /* .truncate is max-width + nowrap + ellipsis together, so releasing the
+     width alone would leave it on one clipped line. All four are undone. */
+  .data-table.stack-narrow .truncate {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
 @media (max-width: 768px) {
   .auth-page {
     grid-template-columns: 1fr;

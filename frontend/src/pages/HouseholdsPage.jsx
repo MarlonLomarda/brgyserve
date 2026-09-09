@@ -530,7 +530,7 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
       )}
 
       <div className="table-wrap">
-        <table className="data-table">
+        <table className="data-table stack-narrow">
           <thead>
             <tr>
               <th>Name</th>
@@ -556,7 +556,7 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
                         <span className="muted"> · ended {dateOnly(m.date_ended)}</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Role">
                       {canManage && m.is_active && !isHead ? (
                         <select
                           value={m.role}
@@ -573,9 +573,15 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
                         m.role
                       )}
                     </td>
-                    <td className="muted">{m.sex || '—'}</td>
-                    <td className="num">{ageFrom(m.birthdate)}</td>
-                    <td className="muted">{dateOnly(m.date_started)}</td>
+                    <td className="muted" data-label="Sex">
+                      {m.sex || '—'}
+                    </td>
+                    <td className="num" data-label="Age">
+                      {ageFrom(m.birthdate)}
+                    </td>
+                    <td className="muted" data-label="Date started">
+                      {dateOnly(m.date_started)}
+                    </td>
                     {canManage && (
                       <td className="row-actions">
                         {m.is_active && !isHead && household.is_active && (
@@ -698,7 +704,7 @@ function UnassignedResidents() {
       ) : (
         <>
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table stack-narrow">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -715,10 +721,16 @@ function UnassignedResidents() {
                       <strong>{r.name}</strong>{' '}
                       <span className="muted">(#{r.resident_id})</span>
                     </td>
-                    <td className="muted">{r.sex || '—'}</td>
-                    <td className="num">{ageFrom(r.birthdate)}</td>
+                    <td className="muted" data-label="Sex">
+                      {r.sex || '—'}
+                    </td>
+                    <td className="num" data-label="Age">
+                      {ageFrom(r.birthdate)}
+                    </td>
                     <td className="muted">{r.address}</td>
-                    <td className="muted">{r.contact_number || '—'}</td>
+                    <td className="muted" data-label="Contact">
+                      {r.contact_number || '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -894,7 +906,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                       </h2>
                     </div>
                     <div className="table-wrap">
-                      <table className="data-table">
+                      <table className="data-table stack-narrow">
                         <thead>
                           <tr>
                             <th>Household #</th>
@@ -915,12 +927,16 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                               <td>
                                 <strong>#{h.household_id}</strong>
                               </td>
-                              <td>
+                              <td data-label="Head">
                                 {h.head_name || <span className="muted">no head assigned</span>}
                               </td>
                               <td className="muted">{h.address}</td>
-                              <td className="num">{h.member_count}</td>
-                              <td className="muted">{formatDate(h.registered_at)}</td>
+                              <td className="num" data-label="Members">
+                                {h.member_count}
+                              </td>
+                              <td className="muted" data-label="Registered">
+                                {formatDate(h.registered_at)}
+                              </td>
                               <td>
                                 <span
                                   className={`badge ${h.is_active ? 'status-claimed' : 'status-cancelled'}`}
