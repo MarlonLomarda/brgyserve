@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { SECRETARY_NAV } from '../constants/nav';
-import { formatDate } from '../constants/requestStatus';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import { SECRETARY_NAV } from "../constants/nav";
+import { formatDate } from "../constants/requestStatus";
 import {
   NOTIFICATION_STATUS_FILTERS,
   RELATED_TYPE_FILTERS,
   deliveryBanner,
   notificationStatusMeta,
   relatedLabel,
-} from '../constants/notifications';
+} from "../constants/notifications";
+import SearchBar from "../components/SearchBar";
 
 // Secretary-only log of every notification the system generated.
 //
@@ -22,21 +23,21 @@ import {
 export default function NotificationsPage() {
   const { authFetch } = useAuth();
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('all');
-  const [relatedType, setRelatedType] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState("all");
+  const [relatedType, setRelatedType] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(null);
 
   const load = useCallback(async () => {
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ page: String(page) });
-      if (status !== 'all') params.set('status', status);
-      if (relatedType !== 'all') params.set('related_type', relatedType);
-      if (search) params.set('search', search);
+      if (status !== "all") params.set("status", status);
+      if (relatedType !== "all") params.set("related_type", relatedType);
+      if (search) params.set("search", search);
       setData(await authFetch(`/notifications?${params}`));
     } catch (err) {
       setError(err.message);
@@ -89,7 +90,9 @@ export default function NotificationsPage() {
                 <span className="roster-label">Composed &amp; addressed</span>
               </div>
               <div className="roster-stat">
-                <span className="roster-value warn">{summary.unreachable ?? 0}</span>
+                <span className="roster-value warn">
+                  {summary.unreachable ?? 0}
+                </span>
                 <span className="roster-label">No contact number</span>
               </div>
               {(summary.FAILED ?? 0) > 0 && (
@@ -101,41 +104,53 @@ export default function NotificationsPage() {
             </div>
           )}
 
-          <form
-            className="head-actions notif-filters"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setPage(1);
-              setSearch(searchInput.trim());
-            }}
-          >
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
+          <div className="head-actions notif-filters">
+            <SearchBar
+              search={search}
+              onSearch={(e) => {
+                e.preventDefault();
+                setPage(1);
+                setSearch(searchInput.trim());
+              }}
+              searchInput={searchInput}
+              onSearchInput={(e) => setSearchInput(e.target.value)}
+              onClear={() => {
+                setSearchInput("");
+                setSearch("");
                 setPage(1);
               }}
-            >
-              {NOTIFICATION_STATUS_FILTERS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={relatedType}
-              onChange={(e) => {
-                setRelatedType(e.target.value);
-                setPage(1);
-              }}
-            >
-              {RELATED_TYPE_FILTERS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-            <input
+              placeholder={"Search by message or number"}
+            />
+
+            <section>
+              <select
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+              >
+                {NOTIFICATION_STATUS_FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={relatedType}
+                onChange={(e) => {
+                  setRelatedType(e.target.value);
+                  setPage(1);
+                }}
+              >
+                {RELATED_TYPE_FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </section>
+            {/* <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search message or number"
@@ -155,8 +170,8 @@ export default function NotificationsPage() {
               >
                 Clear
               </button>
-            )}
-          </form>
+            )} */}
+          </div>
 
           {!data ? (
             <p className="muted">Loading notifications…</p>
@@ -166,9 +181,9 @@ export default function NotificationsPage() {
                 <strong>No notifications yet.</strong>
               </p>
               <p className="muted">
-                A row appears here whenever the system would send a message — a request approved or
-                rejected, a payment verified, a booking confirmed or cancelled, a return recorded,
-                or a fine raised.
+                A row appears here whenever the system would send a message — a
+                request approved or rejected, a payment verified, a booking
+                confirmed or cancelled, a return recorded, or a fine raised.
               </p>
             </div>
           ) : (
@@ -193,7 +208,10 @@ export default function NotificationsPage() {
                           <span className="cell-clamp">
                             {n.recipient_name || n.recipient_username ? (
                               <>
-                                <strong>{n.recipient_name || `@${n.recipient_username}`}</strong>
+                                <strong>
+                                  {n.recipient_name ||
+                                    `@${n.recipient_username}`}
+                                </strong>
                                 <br />
                               </>
                             ) : n.household_id ? (
@@ -203,7 +221,7 @@ export default function NotificationsPage() {
                               </>
                             ) : null}
                             <span className="muted small-note">
-                              {n.destination || 'No contact number on record'}
+                              {n.destination || "No contact number on record"}
                             </span>
                           </span>
                         </td>
@@ -223,13 +241,15 @@ export default function NotificationsPage() {
                               : `${n.message.slice(0, 90)}…`}
                             {n.message.length > 90 && (
                               <>
-                                {' '}
+                                {" "}
                                 <button
                                   className="btn secondary notif-more"
                                   type="button"
-                                  onClick={() => setExpanded(open ? null : n.notification_id)}
+                                  onClick={() =>
+                                    setExpanded(open ? null : n.notification_id)
+                                  }
                                 >
-                                  {open ? 'Less' : 'More'}
+                                  {open ? "Less" : "More"}
                                 </button>
                               </>
                             )}
@@ -239,7 +259,12 @@ export default function NotificationsPage() {
                           {relatedLabel(n)}
                         </td>
                         <td>
-                          <span className={`badge ${meta.className}`}>{meta.label}</span>
+                          <span className={`badge ${meta.className}`}>
+                            {meta.label}
+                          </span>
+                        </td>
+                        <td className="muted small-note">
+                          {formatDate(n.created_at)}
                         </td>
                         <td className="muted small-note" data-label="Generated">
                           {formatDate(n.created_at)}
