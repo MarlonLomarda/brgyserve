@@ -263,9 +263,6 @@ export default function NotificationsPage() {
                             {meta.label}
                           </span>
                         </td>
-                        <td className="muted small-note">
-                          {formatDate(n.created_at)}
-                        </td>
                         <td className="muted small-note" data-label="Generated">
                           {formatDate(n.created_at)}
                         </td>
