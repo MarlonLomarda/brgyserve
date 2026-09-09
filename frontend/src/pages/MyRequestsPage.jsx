@@ -27,6 +27,43 @@ export default function MyRequestsPage() {
     load();
   }, [load]);
 
+  // BACK FROM PAYMONGO — the back-forward cache.
+  //
+  // handlePayOnline below hands the browser to PayMongo with
+  // window.location.href and deliberately never clears busyId, because on that
+  // path the page is expected to be gone. It is not always gone: pressing the
+  // browser's BACK button on PayMongo restores this page from the bfcache
+  // frozen exactly as it left. React resumes with busyId still holding the
+  // request id, so that row's three payment buttons stay disabled under
+  // "Opening GCash…" until the resident thinks to refresh — and nothing on
+  // screen suggests refreshing.
+  //
+  // `event.persisted` IS THE WHOLE GUARD. It is true only for a bfcache
+  // restore, so a first load, a client-side route change and a hard reload all
+  // fall straight through and behave exactly as they did before.
+  //
+  // load() RUNS TOO, AND NOT JUST THE FLAG CLEAR, because the resident may
+  // have actually completed the payment before pressing back. Clearing busyId
+  // alone would leave the row still offering "Pay online via GCash" for money
+  // PayMongo has already taken. The signed webhook is what settles the charge;
+  // this re-read is what makes the screen agree with it.
+  //
+  // The listener depends on `load` so it can never close over a stale one.
+  //
+  // MyRentalsPage.jsx carries the identical effect for the identical reason.
+  // The two pay flows are near-duplicates and were deliberately left that way
+  // rather than introducing this codebase's first shared lifecycle hook.
+  // IF ONE CHANGES, CHECK THE OTHER.
+  useEffect(() => {
+    function handlePageShow(event) {
+      if (!event.persisted) return;
+      setBusyId(null);
+      load();
+    }
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [load]);
+
   const [payTarget, setPayTarget] = useState(null); // request_id entering a GCash ref
   const [gcashRef, setGcashRef] = useState('');
 
