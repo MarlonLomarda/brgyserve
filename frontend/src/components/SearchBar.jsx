@@ -1,3 +1,6 @@
+import { IoSearch } from "react-icons/io5";
+import { IoClose } from "react-icons/io5";
+
 function SearchBar({ search, onSearch, onClear, searchInput, onSearchInput }) {
   return (
     <form
@@ -5,21 +8,21 @@ function SearchBar({ search, onSearch, onClear, searchInput, onSearchInput }) {
         e.preventDefault();
         onSearch();
       }}
-      className="head-actions"
+      className="searchbar"
     >
       <input
         value={searchInput}
         onChange={onSearchInput}
         placeholder="Search by head, member, address, or household #"
       />
-      <button className="btn secondary" type="submit">
-        Search
-      </button>
-      {search && (
-        <button className="btn secondary" type="button" onClick={onClear}>
-          Clear
-        </button>
-      )}
+      <section>
+        <button className="search-btn" type="submit"><IoSearch /></button>
+        {search && (
+          <button className="clear-search-btn secondary" type="button" onClick={onClear}>
+            <IoClose />
+          </button>
+        )}
+      </section>
     </form>
   );
 }

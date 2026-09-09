@@ -22,7 +22,7 @@ body {
 
 .slider-wrapper {
   position: relative;
-  
+
   grid-column: 1;
   height: 100%;
 }
@@ -2521,6 +2521,47 @@ button.link-button:hover:not(:disabled) {
   flex: none;
   padding: 14px 16px;
   border-top: 1px solid #e2e8f0;
+}
+
+/* search bar styling */
+.searchbar {
+  width: 500px;
+}
+
+.searchbar,
+.searchbar section {
+  display: flex;
+  align-items: center;
+}
+
+.searchbar section {
+  gap: 0.3rem;
+}
+
+.searchbar input {
+  border-radius: 8px 0 0 8px;
+}
+
+.searchbar,
+.searchbar input,
+.search-btn,
+.clear-search-btn {
+  margin: 0;
+  height: 40px;
+}
+
+.search-btn {
+  border-radius: 0 8px 8px 0;
+}
+
+.clear-search-btn {
+  background: #fff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.clear-search-btn:hover:not(:disabled) {
+  background: #eff6ff;
 }
 
 /* — end of the drawer section. Everything above applies at every width. — */
