@@ -123,7 +123,7 @@ export default function MyRequestsPage() {
               </button>
             </div>
             <div className="table-wrap">
-              <table className="data-table">
+              <table className="data-table stack-narrow">
                 <thead>
                   <tr>
                     <th>Document</th>
@@ -143,7 +143,7 @@ export default function MyRequestsPage() {
                         <td>
                           <strong>{r.document_types?.name || '—'}</strong>
                         </td>
-                        <td className="muted col-purpose">
+                        <td className="muted col-purpose" data-label="Purpose">
                           <span className="cell-clamp">{r.purpose}</span>
                         </td>
                         <td className="num">₱{Number(r.document_types?.fee ?? 0).toFixed(2)}</td>
@@ -175,7 +175,9 @@ export default function MyRequestsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="muted">{formatDate(r.requested_at)}</td>
+                        <td className="muted" data-label="Submitted">
+                          {formatDate(r.requested_at)}
+                        </td>
                         <td className="row-actions">
                           {r.status === 'pending' && (
                             <button

@@ -102,7 +102,7 @@ export default function MyRentalsPage() {
               </button>
             </div>
             <div className="table-wrap">
-              <table className="data-table">
+              <table className="data-table stack-narrow">
                 <thead>
                   <tr>
                     <th>Item</th>
@@ -122,9 +122,15 @@ export default function MyRentalsPage() {
                         <td>
                           <strong>{r.rental_items?.name || '—'}</strong>
                         </td>
-                        <td>{formatSchedule(r.start_datetime, r.end_datetime)}</td>
-                        <td className="num">{r.quantity_requested}</td>
-                        <td className="muted">{r.purpose}</td>
+                        <td data-label="Schedule">
+                          {formatSchedule(r.start_datetime, r.end_datetime)}
+                        </td>
+                        <td className="num" data-label="Qty">
+                          {r.quantity_requested}
+                        </td>
+                        <td className="muted" data-label="Purpose">
+                          {r.purpose}
+                        </td>
                         <td>
                           <span className={`badge ${meta.className}`}>{meta.label}</span>
                           {r.return_note && (

@@ -614,7 +614,7 @@ export default function DisputesPage({ title, nav, canManage = false }) {
             ) : (
               <>
                 <div className="table-wrap">
-                  <table className="data-table">
+                  <table className="data-table stack-narrow">
                     <thead>
                       <tr>
                         <th>Case no.</th>
@@ -629,13 +629,17 @@ export default function DisputesPage({ title, nav, canManage = false }) {
                     <tbody>
                       {disputes.map((d) => (
                         <tr key={d.dispute_id}>
-                          <td>
-                            <strong>{d.barangay_case_no}</strong>
+                          <td><strong>{d.barangay_case_no}</strong></td>
+                          <td className="muted" data-label="Filed">
+                            {d.date_filed}
                           </td>
-                          <td className="muted">{d.date_filed}</td>
-                          <td>{d.filed_for}</td>
-                          <td className="muted">{d.nature_of_case}</td>
-                          <td className="muted truncate">{d.party_summary}</td>
+                          <td data-label="Filed for">{d.filed_for}</td>
+                          <td className="muted" data-label="Nature">
+                            {d.nature_of_case}
+                          </td>
+                          <td className="muted truncate" data-label="Parties">
+                            {d.party_summary}
+                          </td>
                           <td>
                             <span
                               className={`badge ${d.is_settled ? "status-claimed" : "status-pending"}`}

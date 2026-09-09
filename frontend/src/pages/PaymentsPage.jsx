@@ -251,7 +251,7 @@ export default function PaymentsPage({ title, nav }) {
               </div>
             ) : (
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table stack-narrow">
                   <thead>
                     <tr>
                       <th className="col-resident">Resident</th>
@@ -275,15 +275,15 @@ export default function PaymentsPage({ title, nav }) {
                             )}
                           </div>
                         </td>
-                        <td>{CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}</td>
-                        <td>
+                        <td data-label="Type">{CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}</td>
+                        <td data-label="For">
                           {chargeSubject(c).main}
                           {chargeSubject(c).note && (
                             <div className="muted small-note">{chargeSubject(c).note}</div>
                           )}
                         </td>
                         <td className="num">₱{Number(c.amount).toFixed(2)}</td>
-                        <td className="muted col-declared">
+                        <td className="muted col-declared" data-label="Declared payment">
                           <span className="cell-clamp">{declaredInfo(c) || '—'}</span>
                         </td>
                         <td>
@@ -291,7 +291,9 @@ export default function PaymentsPage({ title, nav }) {
                             {chargeMeta(c.status).label}
                           </span>
                         </td>
-                        <td className="muted col-billed">{formatDate(c.created_at)}</td>
+                        <td className="muted col-billed" data-label="Billed">
+                          {formatDate(c.created_at)}
+                        </td>
                         <td className="row-actions">
                           {c.status === 'UNPAID' && (
                             <button className="btn secondary" onClick={() => setSelected(c)}>
