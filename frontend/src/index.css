@@ -2551,7 +2551,7 @@ button.link-button:hover:not(:disabled) {
 /* search bar styling */
 .searchbar {
   width: 100%;
-  max-width: 550px;
+  max-width: 680px;
 }
 
 .searchbar,
@@ -2623,7 +2623,7 @@ button.link-button:hover:not(:disabled) {
 }
 
 #unassigned-tab-searchbar {
-  display: none;
+  max-width: 100%;
 }
 
 @keyframes dash-drawer-in {

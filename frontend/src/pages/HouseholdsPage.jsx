@@ -759,7 +759,7 @@ function UnassignedResidents({ unassignedData }) {
 
       <div className="list-head">
         <SearchBar
-          id="unassigned-tab-searchbar"
+          id={"unassigned-tab-searchbar"}
           search={search}
           onSearch={(e) => {
             e.preventDefault();
@@ -768,6 +768,11 @@ function UnassignedResidents({ unassignedData }) {
           }}
           searchInput={searchInput}
           onSearchInput={(e) => setSearchInput(e.target.value)}
+          onClear={() => {
+            setSearch("");
+            setSearchInput("");
+            setData(unassignedData);
+          }}
           placeholder={"Search by name or address"}
         />
       </div>
