@@ -2484,12 +2484,22 @@ button.link-button:hover:not(:disabled) {
   padding: 14px 16px;
   border-bottom: 1px solid #e2e8f0;
   flex: none;
+
+  position: relative;
+}
+
+.dash-drawer-arrow {
+  position: absolute;
+  right: 10px;
+  color: #334155;
+  cursor: pointer;
 }
 
 .dash-drawer-title {
   font-size: 1.05rem;
   font-weight: 700;
   color: #1e293b;
+  padding: 0.5rem 0.5rem 0.5rem 0;
 }
 
 .dash-drawer-close {

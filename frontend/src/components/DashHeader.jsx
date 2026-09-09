@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../auth/roles";
-import { IoCloseSharp } from "react-icons/io5";
+import { IoIosClose } from "react-icons/io";
 
 // Shared dashboard header: title, current user, logout, and the slide-in
 // navigation drawer.
@@ -20,7 +20,7 @@ import { IoCloseSharp } from "react-icons/io5";
 // The product name alone, matching the static <title> in index.html. That is
 // what the tab reads before React mounts, and on the pages that do not render
 // this header (landing, login, register, change-password).
-const BASE_TITLE = 'BrgyServe';
+const BASE_TITLE = "BrgyServe";
 
 export default function DashHeader({ title, subtitle, nav = [] }) {
   const { user, logout } = useAuth();
@@ -162,14 +162,11 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
             tabIndex={-1}
           >
             <div className="dash-drawer-head">
-              <button
-                type="button"
-                className="btn secondary dash-drawer-close"
+              <IoIosClose
+                className="dash-drawer-arrow"
+                size={30}
                 onClick={closeAndRefocus}
-                aria-label="Close menu"
-              >
-                <IoCloseSharp size={20} />
-              </button>
+              />
               {/* The role, not the product name. .dash-username hides the
                   header's @username at every width now, so this and the
                   drawer's own footer are the only things left on screen that
