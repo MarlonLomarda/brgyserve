@@ -2656,6 +2656,88 @@ button.link-button:hover:not(:disabled) {
   }
 }
 
+/* ISSUE 8 — the resident records table itself at 390px. Six columns inside a
+   340px .table-wrap left Address 97px wide and five lines tall, and pushed the
+   action column past the right edge. The table scrolled INSIDE its wrap, so
+   this was never the ISSUE 7 document overflow — it is a legibility problem,
+   and stacking each record into a card is the fix. Measured: the table drops
+   from 728.9px to 340, Address from 97px wide / 144.5px tall to 314 / 24.
+
+   SCOPED TO A MODIFIER, NOT TO .data-table. Twenty tables across fifteen files
+   carry .data-table. Stacking all of them would make the payments queue's
+   measured column budget inert, and would change report PDFs — exportPdf.js
+   runs html2canvas over the LIVE DOM with no forced width, so an export from a
+   narrow window would capture stacked, header-less tables. .stack-narrow is
+   named for the behaviour rather than the screen (unlike .roster-table), so a
+   second table can opt in later without inheriting this one's name.
+
+   KNOWN DUPLICATION, ACCEPTED ON PURPOSE. This block is a near-copy of the
+   .roster-table rules further up, and this file records duplication as a
+   mistake everywhere else. Consolidating the two means editing a screen used
+   on a phone at an assembly, and that risk was declined 34 days out from the
+   defense. IF ONE IS EVER CHANGED, CHECK THE OTHER. Two deliberate
+   differences: the roster's `td.num { text-align: left }` is not copied,
+   because this table has no .num cells and a rule for a hypothetical one is
+   how dead CSS starts; and the cell padding is 4px rather than the roster's
+   2px, because these cells are two lines (label above value) and not one.
+
+   LABELS. Hiding thead takes away every cell's only heading, so a cell that
+   is not self-describing loses its meaning. Name, Address, the @username
+   badge and the View button all say what they are. A bare date and a bare
+   phone number do not — and an empty value renders as a lone em-dash with
+   nothing to explain it. Resident #40 (Aleja Yap Bagas) has no birthdate, no
+   contact and no account, so without this her card is three unexplained
+   dashes. data-label is set in ResidentRecordsPage.jsx and printed by ::before
+   HERE, inside the media query, so above 640px the attribute is inert and
+   nothing is injected anywhere. The ACTION cell is deliberately unlabelled:
+   its <th> is empty on desktop, so a label would invent a heading the table
+   does not have.
+
+   .row-actions keeps `min-width: 200px` untouched — measured inert once the
+   cell is a full-width block (314px against a 200px floor), so the protected
+   rule still stands and simply stops being what decides the width. */
+@media (max-width: 640px) {
+  .data-table.stack-narrow thead {
+    display: none;
+  }
+
+  .data-table.stack-narrow,
+  .data-table.stack-narrow tbody,
+  .data-table.stack-narrow tr,
+  .data-table.stack-narrow td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table.stack-narrow tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+  }
+
+  .data-table.stack-narrow td {
+    border: none;
+    padding: 4px 0;
+  }
+
+  /* Reuses the <th> type scale this is standing in for, so a stacked field
+     reads as the same kind of thing the column header was. No new colour. */
+  .data-table.stack-narrow td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+  }
+
+  .data-table.stack-narrow .row-actions .btn {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
 @media (max-width: 768px) {
   .auth-page {
     grid-template-columns: 1fr;

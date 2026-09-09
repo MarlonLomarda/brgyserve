@@ -655,7 +655,11 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
             ) : (
               <>
                 <div className="table-wrap">
-                  <table className="data-table">
+                  {/* stack-narrow: below 640px each record becomes a card
+                      instead of a six-column row. The data-label attributes
+                      below are what the hidden column headers are replaced
+                      with — see ISSUE 8 in index.css. */}
+                  <table className="data-table stack-narrow">
                     <thead>
                       <tr>
                         <th>Name</th>
@@ -677,11 +681,17 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
                               </div>
                             )}
                           </td>
-                          <td className="muted col-date">{r.birthdate || '—'}</td>
+                          <td className="muted col-date" data-label="Birthdate">
+                            {r.birthdate || '—'}
+                          </td>
                           <td className="muted">{r.address}</td>
-                          {showContact && <td className="muted">{r.contact_number || '—'}</td>}
+                          {showContact && (
+                            <td className="muted" data-label="Contact">
+                              {r.contact_number || '—'}
+                            </td>
+                          )}
                           {showAccount && (
-                            <td>
+                            <td data-label="Account">
                               {r.account ? (
                                 <span className="badge">@{r.account.username}</span>
                               ) : (
