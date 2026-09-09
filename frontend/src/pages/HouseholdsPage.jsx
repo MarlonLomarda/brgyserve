@@ -931,6 +931,9 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
 
                 <div className="list-head">
                   <SearchBar
+                    placeholder={
+                      "Search by head, member, address, or household #"
+                    }
                     search={search}
                     searchInput={searchInput}
                     onSearchInput={(e) => setSearchInput(e.target.value)}
