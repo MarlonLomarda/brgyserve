@@ -286,9 +286,9 @@ export default function LoginPage() {
                   <h4>2. Eligibility</h4>
                   <p>
                     You must be a registered resident of{" "}
-                    <strong>Barangay Ubujan</strong>
-                    and at least 18 years old to create an account. Minors may
-                    use the portal under parental or guardian supervision.
+                    <strong>Barangay Ubujan</strong> and at least 18 years old
+                    to create an account. Minors may use the portal under
+                    parental or guardian supervision.
                   </p>
 
                   <h4>3. Account Responsibilities</h4>

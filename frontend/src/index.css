@@ -22,7 +22,7 @@ body {
 
 .slider-wrapper {
   position: relative;
-  
+
   grid-column: 1;
   height: 100%;
 }
@@ -112,14 +112,14 @@ body {
 }
 
 .legal-links a {
-  color: #0000ee;
+  color: #6666e7;
   font-size: 0.8rem;
   text-decoration: none;
   cursor: pointer;
 }
 
 .legal-links a:hover {
-  color: #0000ee;
+  color: #6666e7;
   text-decoration: none;
 }
 
