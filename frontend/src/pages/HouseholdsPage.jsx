@@ -659,7 +659,7 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
                       )}
                     </td>
                     <td className="muted" data-label="Sex">
-                      {m.sex || '—'}
+                      {m.sex || "—"}
                     </td>
                     <td className="num" data-label="Age">
                       {ageFrom(m.birthdate)}
@@ -817,7 +817,7 @@ function UnassignedResidents() {
                       <span className="muted">(#{r.resident_id})</span>
                     </td>
                     <td className="muted" data-label="Sex">
-                      {r.sex || '—'}
+                      {r.sex || "—"}
                     </td>
                     <td className="num" data-label="Age">
                       {ageFrom(r.birthdate)}
@@ -914,21 +914,20 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
           />
         ) : (
           <>
-            <div className="list-head">
-              <div className="head-actions">
-                <button
-                  className={view === "households" ? "btn" : "btn secondary"}
-                  onClick={() => setView("households")}
-                >
-                  Households
-                </button>
-                <button
-                  className={view === "unassigned" ? "btn" : "btn secondary"}
-                  onClick={() => setView("unassigned")}
-                >
-                  Unassigned residents
-                </button>
-              </div>
+            <div className="tab-container">
+              <span
+                className={`tab ${view === "households" ? "active-tab" : ""}`}
+                onClick={() => setView("households")}
+              >
+                Household{data?.total > 1 ? "s " : " "}
+                {data?.total && `(${data?.total})`}
+              </span>
+              <span
+                className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
+                onClick={() => setView("unassigned")}
+              >
+                Unassigned residents
+              </span>
             </div>
 
             {view === "unassigned" ? (
@@ -1002,11 +1001,8 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   </div>
                 ) : (
                   <>
-                    <div className="list-head">
-                      <h2>
-                        {data.total} household{data.total === 1 ? "" : "s"}
-                      </h2>
-                    </div>
+                    {/* <div className="list-head">
+                    </div> */}
                     <div className="table-wrap">
                       <table className="data-table stack-narrow">
                         <thead>
@@ -1030,7 +1026,11 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                                 <strong>#{h.household_id}</strong>
                               </td>
                               <td data-label="Head">
-                                {h.head_name || <span className="muted">no head assigned</span>}
+                                {h.head_name || (
+                                  <span className="muted">
+                                    no head assigned
+                                  </span>
+                                )}
                               </td>
                               <td className="muted">{h.address}</td>
                               <td className="num" data-label="Members">
