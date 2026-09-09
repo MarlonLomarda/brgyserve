@@ -17,7 +17,7 @@ function SearchBar({
         placeholder={placeholder}
       />
       <section>
-        <button className="search-btn" type="submit">
+        <button title="Search" className="search-btn" type="submit">
           <IoSearch />
         </button>
         {search && (
@@ -25,6 +25,7 @@ function SearchBar({
             className="clear-search-btn secondary"
             type="button"
             onClick={onClear}
+            title="Clear search result"
           >
             <IoClose />
           </button>
