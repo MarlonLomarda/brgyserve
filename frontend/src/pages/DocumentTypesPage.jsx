@@ -161,7 +161,7 @@ export default function DocumentTypesPage() {
           </div>
         ) : (
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table stack-narrow">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -177,7 +177,9 @@ export default function DocumentTypesPage() {
                     <td>
                       <strong>{t.name}</strong>
                     </td>
-                    <td className="muted">{t.description || '—'}</td>
+                    <td className="muted" data-label="Description">
+                      {t.description || '—'}
+                    </td>
                     <td className="num">₱{Number(t.fee).toFixed(2)}</td>
                     <td>
                       {t.is_active ? (

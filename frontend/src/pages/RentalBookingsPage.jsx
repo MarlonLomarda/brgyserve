@@ -337,7 +337,7 @@ export default function RentalBookingsPage({ title, nav, canManage = false, canR
               </div>
             ) : (
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table stack-narrow">
                   <thead>
                     <tr>
                       <th>Resident</th>
@@ -362,10 +362,16 @@ export default function RentalBookingsPage({ title, nav, canManage = false, canR
                               <div className="muted small-note">@{r.requester.username}</div>
                             )}
                           </td>
-                          <td>{r.rental_items?.name || '—'}</td>
-                          <td>{formatSchedule(r.start_datetime, r.end_datetime)}</td>
-                          <td className="num">{r.quantity_requested}</td>
-                          <td className="muted truncate">{r.purpose}</td>
+                          <td data-label="Item">{r.rental_items?.name || '—'}</td>
+                          <td data-label="Schedule">
+                            {formatSchedule(r.start_datetime, r.end_datetime)}
+                          </td>
+                          <td className="num" data-label="Qty">
+                            {r.quantity_requested}
+                          </td>
+                          <td className="muted truncate" data-label="Purpose">
+                            {r.purpose}
+                          </td>
                           <td>
                             <span className={`badge ${meta.className}`}>{meta.label}</span>
                             {r.return_note && (

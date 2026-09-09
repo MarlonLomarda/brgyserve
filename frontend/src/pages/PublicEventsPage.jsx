@@ -136,7 +136,7 @@ export default function PublicEventsPage({ title, nav }) {
         <p className="muted">{emptyText}</p>
       ) : (
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table stack-narrow">
             <thead>
               <tr>
                 <th>Title</th>
@@ -154,8 +154,12 @@ export default function PublicEventsPage({ title, nav }) {
                     <td>
                       <strong>{e.title}</strong>
                     </td>
-                    <td>{formatWindow(e.start_datetime, e.end_datetime)}</td>
-                    <td className="muted">{e.location || '—'}</td>
+                    <td data-label="Schedule">
+                      {formatWindow(e.start_datetime, e.end_datetime)}
+                    </td>
+                    <td className="muted" data-label="Location">
+                      {e.location || '—'}
+                    </td>
                     <td>
                       <span className={`badge ${meta.className}`}>{meta.label}</span>
                     </td>

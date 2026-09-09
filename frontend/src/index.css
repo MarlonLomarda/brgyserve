@@ -2736,6 +2736,65 @@ button.link-button:hover:not(:disabled) {
     width: 100%;
     margin-top: 8px;
   }
+
+  /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
+     ISSUE 8 built the mechanism for one table; these three rules are all that
+     was missing to reuse it everywhere else. The tables now carrying
+     .stack-narrow are Payments, Document requests, Household members,
+     Unassigned residents, Households, Blotter, Rental bookings, Document
+     types, My requests, My rentals, Notifications, the Events list, the
+     events viewer and the fines panel — fifteen with Resident records.
+
+     BLOTTER IS STACKED DESPITE LOSING THE MOST SCANNING DENSITY: 64.5px rows
+     become 246px cards, roughly nine visible rows down to two. It goes in
+     anyway because at 390px four of its seven columns are off-screen
+     entirely, so those nine rows were only ever showing two fields each. Two
+     complete cases beat nine truncated ones.
+
+     NOT STACKED, each for its own reason: Rental items (tallest card of the
+     set at 294px, a small admin catalogue nobody opens on a phone);
+     ReportRenderers (exportPdf.js runs html2canvas over the live DOM, so a
+     narrow window would bake stacked tables into the PDF); the household
+     header and the payment-result panel (key-value tables whose <th> IS the
+     label, so hiding thead does nothing and blocking the <td> alone would
+     leave a broken half-table); and the attendance roster, which keeps its
+     own block. */
+
+  /* Right alignment is a table convention for numbers and reads as a stray
+     indent in a left-aligned card. Resident records had no .num cells, which
+     is why ISSUE 8 left this out; six of the tables above have them. */
+  .data-table.stack-narrow td.num {
+    text-align: left;
+  }
+
+  /* Width caps that are correct in a column and wrong in a 314px card.
+     Measured against the card: .col-resident held a resident's name to 170px
+     and .col-declared a GCash reference to 200px, both leaving most of the
+     card empty; .truncate cut the text at 240px with an ellipsis while 74px
+     sat unused, which is the worst of the three because it destroys content
+     rather than just wrapping it.
+
+     THE PROTECTED RULES ARE NOT EDITED. `.data-table.stack-narrow .col-… .cell-clamp`
+     is (0,4,0) against `.data-table .col-… .cell-clamp` at (0,3,0), so it wins
+     on specificity alone, exactly as .row-actions was left alone in ISSUE 8.
+
+     DELIBERATELY NOT RELEASED: .col-billed (nowrap, already inert — a date
+     fits in 314px), .col-purpose .cell-clamp (caps at 300 in a 314 cell, a
+     14px difference not worth a rule) and .col-message .cell-clamp (its 420px
+     cap already exceeds the cell, so it never binds). */
+  .data-table.stack-narrow .col-resident .cell-clamp,
+  .data-table.stack-narrow .col-declared .cell-clamp {
+    max-width: none;
+  }
+
+  /* .truncate is max-width + nowrap + ellipsis together, so releasing the
+     width alone would leave it on one clipped line. All four are undone. */
+  .data-table.stack-narrow .truncate {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 
 @media (max-width: 768px) {

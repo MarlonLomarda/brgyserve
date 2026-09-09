@@ -449,7 +449,7 @@ function FinesPanel({ fines, busyId, onGenerate, onVoid }) {
 
       {raised.length > 0 && (
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table stack-narrow">
             <thead>
               <tr>
                 <th>Household</th>
@@ -905,8 +905,10 @@ export default function EventsPage({ title, nav }) {
               </div>
             )}
           </td>
-          <td>{formatWindow(e.start_datetime, e.end_datetime)}</td>
-          <td className="muted">{e.location || '—'}</td>
+          <td data-label="Schedule">{formatWindow(e.start_datetime, e.end_datetime)}</td>
+          <td className="muted" data-label="Location">
+            {e.location || '—'}
+          </td>
           <td>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
           </td>
@@ -930,7 +932,7 @@ export default function EventsPage({ title, nav }) {
         <p className="muted">{emptyText}</p>
       ) : (
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table stack-narrow">
             <thead>
               <tr>
                 <th>Title</th>

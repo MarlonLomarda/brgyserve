@@ -378,7 +378,7 @@ export default function SecretaryRequestsPage({ title, nav, canManage = false })
               </div>
             ) : (
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table stack-narrow">
                   <thead>
                     <tr>
                       <th>Requester</th>
@@ -396,12 +396,16 @@ export default function SecretaryRequestsPage({ title, nav, canManage = false })
                           <strong>{personName(r.resident_records) || `@${r.requester?.username}`}</strong>
                           <div className="muted small-note">@{r.requester?.username}</div>
                         </td>
-                        <td>{r.document_types?.name}</td>
-                        <td className="muted truncate">{r.purpose}</td>
+                        <td data-label="Document">{r.document_types?.name}</td>
+                        <td className="muted truncate" data-label="Purpose">
+                          {r.purpose}
+                        </td>
                         <td>
                           <StatusBadge status={r.status} />
                         </td>
-                        <td className="muted">{formatDate(r.requested_at)}</td>
+                        <td className="muted" data-label="Submitted">
+                          {formatDate(r.requested_at)}
+                        </td>
                         <td className="row-actions">
                           <button
                             className="btn secondary"

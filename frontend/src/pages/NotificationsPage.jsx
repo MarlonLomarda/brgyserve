@@ -173,7 +173,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="data-table">
+              <table className="data-table stack-narrow">
                 <thead>
                   <tr>
                     <th>Recipient</th>
@@ -207,7 +207,7 @@ export default function NotificationsPage() {
                             </span>
                           </span>
                         </td>
-                        <td className="col-message">
+                        <td className="col-message" data-label="Message">
                           <span className="cell-clamp">
                             {/* Email carries a subject; SMS stores null and
                                 renders nothing. Same <strong> + <br> shape the
@@ -235,11 +235,15 @@ export default function NotificationsPage() {
                             )}
                           </span>
                         </td>
-                        <td className="muted">{relatedLabel(n)}</td>
+                        <td className="muted" data-label="About">
+                          {relatedLabel(n)}
+                        </td>
                         <td>
                           <span className={`badge ${meta.className}`}>{meta.label}</span>
                         </td>
-                        <td className="muted small-note">{formatDate(n.created_at)}</td>
+                        <td className="muted small-note" data-label="Generated">
+                          {formatDate(n.created_at)}
+                        </td>
                       </tr>
                     );
                   })}
