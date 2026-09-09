@@ -5,7 +5,6 @@ import ResidentPicker from "../components/ResidentPicker";
 import { ASSIGNABLE_ROLES, HOUSEHOLD_ROLE } from "../constants/households";
 import { formatDate } from "../constants/requestStatus";
 import SearchBar from "../components/SearchBar";
-import { AiOutlineExclamationCircle } from "react-icons/ai";
 
 // Households module. Shared by the Secretary (canManage: create, member
 // management, headship, edit/deactivate) and Staff (read-only) — pass the
@@ -759,36 +758,18 @@ function UnassignedResidents({ unassignedData }) {
       </div>
 
       <div className="list-head">
-        <form
-          className="head-actions"
-          onSubmit={(e) => {
+        <SearchBar
+          id="unassigned-tab-searchbar"
+          search={search}
+          onSearch={(e) => {
             e.preventDefault();
             setPage(1);
             setSearch(searchInput.trim());
           }}
-        >
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by name or address"
-          />
-          <button className="btn secondary" type="submit">
-            Search
-          </button>
-          {search && (
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={() => {
-                setSearchInput("");
-                setSearch("");
-                setData(unassignedData);
-              }}
-            >
-              Clear
-            </button>
-          )}
-        </form>
+          searchInput={searchInput}
+          onSearchInput={(e) => setSearchInput(e.target.value)}
+          placeholder={"Search by name or address"}
+        />
       </div>
 
       {data.residents.length === 0 ? (

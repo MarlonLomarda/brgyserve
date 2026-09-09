@@ -2550,7 +2550,8 @@ button.link-button:hover:not(:disabled) {
 
 /* search bar styling */
 .searchbar {
-  width: 500px;
+  width: 100%;
+  max-width: 550px;
 }
 
 .searchbar,
@@ -2619,6 +2620,10 @@ button.link-button:hover:not(:disabled) {
   background-color: #1d4ed8;
   bottom: -1rem;
   left: 0;
+}
+
+#unassigned-tab-searchbar {
+  display: none;
 }
 
 @keyframes dash-drawer-in {
