@@ -1030,9 +1030,10 @@ button.link-button:hover:not(:disabled) {
 }
 
 .reason-note {
-  margin-top: 4px;
+  padding: 0 0 0.9rem 0;
   font-size: 0.8rem;
-  max-width: 280px;
+  max-width: 600px;
+  color: #64748b;
 }
 
 /* Inline charge-status words (badge color classes are scoped to .badge) */
