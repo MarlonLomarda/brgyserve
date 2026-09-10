@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../auth/roles";
 import { IoIosClose } from "react-icons/io";
+import { MdKeyboardDoubleArrowLeft } from "react-icons/md";
 
 // Shared dashboard header: title, current user, logout, and the slide-in
 // navigation drawer.
@@ -115,7 +116,13 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
   return (
     <>
-      <aside className="dash-side">{navLinks(close)}</aside>
+      <aside className="dash-side close">
+        <section>
+          <span>BrgyServe</span>
+          <MdKeyboardDoubleArrowLeft size={23} />
+        </section>
+        {navLinks(close)}
+      </aside>
       <header className="dash-header">
         {nav.length > 0 && (
           <section className="dash-header-section">
