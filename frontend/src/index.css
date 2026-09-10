@@ -576,6 +576,8 @@ a {
 
 .dash {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: auto 1fr;
 }
 
 /* STICKY, and z-index: 30 is the load-bearing number. It must stay BELOW
@@ -629,9 +631,39 @@ a {
   gap: 12px;
 }
 
+.dash-side {
+  grid-column: 1;
+
+  width: 57px;
+  overflow: hidden;
+  height: 100vh;
+
+  position: sticky;
+  top: 0;
+  align-self: start;
+
+  background-color: #fff;
+  border-right: 1px solid #e2e8f0;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-side.close {
+  width: 60px;
+}
+
 @media (max-width: 640px) {
+  .dash {
+    display: block;
+  }
+
   .dash-header {
     display: flex;
+  }
+
+  .dash-side {
+    display: none;
   }
 }
 
@@ -651,9 +683,12 @@ a {
 }
 
 .dash-main {
+  grid-column: 2;
+
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 1rem;
 }
 
 /* Forms and read-only detail panels must NOT stretch to the full dashboard
@@ -2592,25 +2627,35 @@ button.link-button:hover:not(:disabled) {
   padding: 8px 0;
 }
 
-.dash-drawer-nav a {
+.dash-drawer-nav a,
+.dash-side a {
   display: flex;
   align-items: center;
   gap: 1rem;
+
+  width: 100%;
+  min-width: 230px;
+
   padding: 13px 16px;
   min-height: 44px;
-  font-size: 0.95rem;
+  
+  font-size: 0.9rem;
   font-weight: 600;
+  white-space: nowrap;
+
   color: #334155;
   text-decoration: none;
   border-left: 3px solid transparent;
 }
 
-.dash-drawer-nav a:hover {
+.dash-drawer-nav a:hover,
+.dash-side a:hover {
   background: #f8fafc;
   color: #1d4ed8;
 }
 
-.dash-drawer-nav a.active {
+.dash-drawer-nav a.active,
+.dash-side a.active {
   color: #1d4ed8;
   background: #eff6ff;
   border-left-color: #1d4ed8;
