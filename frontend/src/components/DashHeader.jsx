@@ -30,6 +30,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef(null);
   const drawerRef = useRef(null);
+  const [sidebar, setSidebar] = useState(false);
 
   function handleLogout() {
     logout();
@@ -116,10 +117,13 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
   return (
     <>
-      <aside className="dash-side close">
+      <aside className={`dash-side ${!sidebar ? "close" : ""}`}>
         <section>
           <span>BrgyServe</span>
-          <MdKeyboardDoubleArrowLeft size={23} />
+          <MdKeyboardDoubleArrowLeft
+            size={23}
+            onClick={() => setSidebar((prev) => !prev)}
+          />
         </section>
         {navLinks(close)}
       </aside>
