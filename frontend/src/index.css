@@ -590,7 +590,7 @@ a {
    judgement about density, and .dash-header padding has already been through
    one revert cycle (2c6d7c1 / 07cc26d). */
 .dash-header {
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: center;
   background: #fff;
@@ -627,6 +627,12 @@ a {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .dash-header {
+    display: flex;
+  }
 }
 
 /* "Log out" contains a SPACE, so its min-content is the width of "Log" — not
