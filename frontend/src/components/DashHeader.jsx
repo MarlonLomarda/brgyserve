@@ -109,7 +109,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
       return (
         <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-          {Icon && <Icon size={20} />}
+          {Icon && <Icon size={18} />}
           {item.label}
         </NavLink>
       );
@@ -124,7 +124,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
             <span>Serve</span>
           </p>
           <MdKeyboardDoubleArrowLeft
-            size={23}
+            size={25}
             onClick={() => setSidebar((prev) => !prev)}
           />
         </section>
