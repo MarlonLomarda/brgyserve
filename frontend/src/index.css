@@ -802,23 +802,32 @@ a {
 }
 
 .dash-side section {
-  padding: 13px 16px 18px 16px;
+  padding: 13px 16px 25px 16px;
   display: flex;
   align-items: center;
+
+  svg {
+    cursor: pointer;
+    margin-left: auto;
+    transition: rotate 150ms ease;
+  }
+
+  span {
+    opacity: 1;
+    transition: opacity 300ms ease-in-out;
+  }
 }
 
-.dash-side section svg {
-  margin-left: auto;
-}
+.dash-side.close section {
+  svg {
+    rotate: 180deg;
+  }
 
-.dash-side section span {
-  opacity: 1;
-  transition: opacity 300ms ease-in-out;
-}
-
-.dash-side.close section span {
-  width: 0;
-  opacity: 0;
+  span {
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 @media (max-width: 640px) {
