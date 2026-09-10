@@ -10,7 +10,7 @@
 export default function HelpCenter() {
   return (
     <>
-      <h2>Help Center</h2>
+      <h2 id="legal-modal-title">Help Center</h2>
 
       <p>
         Answers to what residents actually run into. If your question is not

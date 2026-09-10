@@ -9,7 +9,7 @@
 export default function TermsOfUse() {
   return (
     <>
-      <h2>Terms of Use</h2>
+      <h2 id="legal-modal-title">Terms of Use</h2>
       <p className="legal-effective">Effective: 10 September 2026</p>
 
       <h3>1. What BrgyServe is</h3>

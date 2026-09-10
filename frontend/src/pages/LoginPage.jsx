@@ -44,9 +44,46 @@ export default function LoginPage() {
     }
   }
 
+  // Which of the three links opened the modal, so focus can go back to it.
+  // Captured from the click rather than kept as three refs: a fourth legal
+  // link would then need no change here, and the two cannot drift apart.
+  const openerRef = useRef(null);
+  const modalRef = useRef(null);
+
+  // EVERY close route goes through this — Escape, the Close button, and the
+  // backdrop click all call it. Returning focus is the whole point: without
+  // it a keyboard user closes the modal and focus falls back to <body>, with
+  // nothing to tab from. Same shape as closeAndRefocus in DashHeader.jsx,
+  // which is where this convention already existed.
   function closeModal() {
     setActiveModal(null);
+    openerRef.current?.focus();
   }
+
+  // Escape, body-scroll lock and focus, all only while a modal is open, and
+  // all undone in the cleanup so nothing survives the close. This mirrors the
+  // drawer effect in DashHeader.jsx rather than introducing a second way of
+  // doing it.
+  useEffect(() => {
+    if (!activeModal) return undefined;
+
+    const onKey = (event) => {
+      if (event.key === "Escape") closeModal();
+    };
+
+    document.addEventListener("keydown", onKey);
+
+    // Captured, not assumed to be '': restoring a value the page did not have
+    // would be its own bug.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    modalRef.current?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [activeModal]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -148,6 +185,7 @@ export default function LoginPage() {
               href="#help"
               onClick={(e) => {
                 e.preventDefault();
+                openerRef.current = e.currentTarget;
                 setActiveModal("help");
               }}
             >
@@ -160,6 +198,7 @@ export default function LoginPage() {
               href="#terms"
               onClick={(e) => {
                 e.preventDefault();
+                openerRef.current = e.currentTarget;
                 setActiveModal("terms");
               }}
             >
@@ -172,6 +211,7 @@ export default function LoginPage() {
               href="#privacy"
               onClick={(e) => {
                 e.preventDefault();
+                openerRef.current = e.currentTarget;
                 setActiveModal("privacy");
               }}
             >
@@ -180,13 +220,37 @@ export default function LoginPage() {
           </div>
         </form>
 
-        {/* Modal */}
+        {/* Modal.
+            The panel is a flex COLUMN: .legal-modal-body scrolls, the footer
+            does not, so Close is on screen without scrolling a long document.
+            aria-labelledby names the h2 each component renders — only one is
+            mounted at a time, so they can share the id. */}
         {activeModal && (
           <div className="modal-overlay" onClick={closeModal}>
-            <div className="legal-modal" onClick={(e) => e.stopPropagation()}>
-              {activeModal === "help" && <HelpCenter />}
-              {activeModal === "terms" && <TermsOfUse />}
-              {activeModal === "privacy" && <PrivacyPolicy />}
+            <div
+              className="legal-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="legal-modal-title"
+              ref={modalRef}
+              tabIndex={-1}
+            >
+              <div className="legal-modal-body">
+                {activeModal === "help" && <HelpCenter />}
+                {activeModal === "terms" && <TermsOfUse />}
+                {activeModal === "privacy" && <PrivacyPolicy />}
+              </div>
+
+              <div className="legal-modal-footer">
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={closeModal}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

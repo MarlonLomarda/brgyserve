@@ -168,18 +168,78 @@ body {
 }
 
 /* Modal */
+/* A FLEX COLUMN: the body scrolls, the footer does not. Before this the whole
+   panel was one scrolling box with `padding: 30px`, so the only way out was a
+   backdrop click — and at 390px the backdrop is a 20px strip around a nearly
+   full-screen panel. A Close button inside a scrolling box would have been at
+   the bottom of a 2,000px document, which is no better.
+
+   `overflow: hidden` here (the scroll moved to .legal-modal-body) is what
+   keeps the footer clipped inside the 10px radius instead of squaring off the
+   bottom corners. The 30px padding moved to the body for the same reason —
+   the footer needs to sit flush against the panel edge. */
 .legal-modal {
   width: 100%;
   max-width: 700px;
   max-height: 85vh;
 
-  padding: 30px;
   box-sizing: border-box;
 
   background: #fff;
   border-radius: 10px;
 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* `min-height: 0` IS LOAD-BEARING, not tidying. A flex item defaults to
+   `min-height: auto`, which refuses to shrink below its content — so a long
+   document would push the panel past 85vh and carry the footer off the bottom
+   of the screen, which is the exact failure this whole change exists to fix. */
+.legal-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  padding: 30px;
+}
+
+.legal-modal-footer {
+  flex: none;
+  padding: 12px 30px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* (0,2,0), and it has to be. `.auth-page button` is (0,1,1) and sets
+   `width: 100%` and `padding: 15px`; `.btn` is only (0,1,0) and loses to it,
+   so a single class here would give a full-width Close button at every width.
+   This is the same specificity trap recorded for `.pw-field .pw-toggle` —
+   a new control inside /login needs at least two classes to hold its own. */
+.legal-modal-footer .btn {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 20px;
+}
+
+/* Full width on a phone, where this button is the ONLY way out of the modal
+   and the backdrop is a 20px strip. Reuses 640px — the file's single
+   breakpoint — rather than introducing a second one. */
+@media (max-width: 640px) {
+  .legal-modal-body {
+    padding: 20px;
+  }
+
+  .legal-modal-footer {
+    padding: 12px 20px;
+  }
+
+  .legal-modal-footer .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
 }
 
 /* Modal Text */

@@ -30,7 +30,7 @@
 export default function PrivacyPolicy() {
   return (
     <>
-      <h2>Privacy Policy</h2>
+      <h2 id="legal-modal-title">Privacy Policy</h2>
       <p className="legal-effective">Effective: 10 September 2026</p>
 
       <h3>Who we are, and what this system is</h3>
