@@ -634,7 +634,7 @@ a {
 .dash-side {
   grid-column: 1;
 
-  width: 57px;
+  width: 230px;
   overflow: hidden;
   height: 100vh;
 
@@ -647,10 +647,32 @@ a {
 
   display: flex;
   flex-direction: column;
+
+  transition: 300ms ease-in-out;
 }
 
 .dash-side.close {
-  width: 60px;
+  width: 57px;
+}
+
+.dash-side section {
+  padding: 13px 16px 18px 16px;
+  display: flex;
+  align-items: center;
+}
+
+.dash-side section svg {
+  margin-left: auto;
+}
+
+.dash-side section span {
+  opacity: 1;
+  transition: opacity 300ms ease-in-out;
+}
+
+.dash-side.close section span {
+  width: 0;
+  opacity: 0;
 }
 
 @media (max-width: 640px) {
@@ -2638,7 +2660,7 @@ button.link-button:hover:not(:disabled) {
 
   padding: 13px 16px;
   min-height: 44px;
-  
+
   font-size: 0.9rem;
   font-weight: 600;
   white-space: nowrap;
