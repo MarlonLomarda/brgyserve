@@ -2673,7 +2673,7 @@ button.link-button:hover:not(:disabled) {
 .dash-side a {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.15rem;
 
   width: 100%;
   min-width: 230px;
