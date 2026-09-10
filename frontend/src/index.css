@@ -123,15 +123,41 @@ body {
   text-decoration: none;
 }
 
-.legal-links a:focus {
-  outline: none;
-}
+/* PR #8 shipped a `.legal-links a:focus` rule here setting `outline: none`,
+   which removed the focus ring and put nothing back — measured at 390,
+   641, 1280 and 1920, so a keyboard user had no indication of which of the
+   three links they were on. The rule is deleted rather than replaced, and the
+   browser default returns.
+
+   THE FILE'S 2px TRANSLUCENT RING WAS THE OTHER CANDIDATE AND WAS MEASURED
+   AGAINST, NOT ASSUMED. `outline: 2px solid rgba(37, 99, 235, 0.2)` is real,
+   but tabbing the whole login form shows it is a FORM-CONTROL convention:
+   `input`, `select`, `textarea` and `.pw-field .pw-toggle` carry it, and every
+   ANCHOR gets the browser default instead — "Forgot password?" and "Register
+   as a resident" both compute `auto 1px`, and they sit in this same card a few
+   lines above these three. No link anywhere in this file has a custom ring.
+   Styling these three would have made them the only ones, which is a new
+   inconsistency in place of the old one. */
 
 /* Modal Background */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+
+  /* 50, matching `.modal-backdrop` — the Households create modal, which is the
+     app's other "a modal is open" overlay. PR #8 shipped 9999, two orders of
+     magnitude above every other value in the file (the ladder is .slider-nav 1,
+     .landing-nav 20, .dash-header 30, .dash-backdrop 40, then .modal-backdrop
+     and .dash-drawer at 50).
+
+     50 rather than something small: /login has no drawer and no dash-header, so
+     the only competitor on this page is `.slider-nav` at 1 — but the value has
+     to say what the element IS, not what today's page happens to contain. This
+     is a modal overlay, the app already has one at 50, and a second modal
+     sitting lower would be a difference with no reason behind it that the next
+     reader has to work out. It also means the panel still covers everything if
+     these links are ever rendered on a dashboard screen. */
+  z-index: 50;
 
   display: flex;
   justify-content: center;
