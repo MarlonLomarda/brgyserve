@@ -666,9 +666,20 @@ a {
     transition: rotate 150ms ease;
   }
 
-  span {
+  svg:hover {
+    color: #1d4ed8;
+  }
+
+  p {
+    font-weight: 600;
+    margin: 0;
+    padding: 0;
     opacity: 1;
     transition: opacity 300ms ease-in-out;
+
+    span:last-child {
+      color: #1d4ed8;
+    }
   }
 }
 
@@ -677,7 +688,7 @@ a {
     rotate: 180deg;
   }
 
-  span {
+  p {
     width: 0;
     opacity: 0;
     pointer-events: none;

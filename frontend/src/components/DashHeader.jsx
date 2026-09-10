@@ -119,7 +119,10 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
     <>
       <aside className={`dash-side ${!sidebar ? "close" : ""}`}>
         <section>
-          <span>BrgyServe</span>
+          <p>
+            <span>Brgy</span>
+            <span>Serve</span>
+          </p>
           <MdKeyboardDoubleArrowLeft
             size={23}
             onClick={() => setSidebar((prev) => !prev)}
