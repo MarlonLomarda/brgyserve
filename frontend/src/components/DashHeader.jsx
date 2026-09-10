@@ -115,6 +115,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
   return (
     <>
+      <aside className="dash-side">{navLinks(close)}</aside>
       <header className="dash-header">
         {nav.length > 0 && (
           <section className="dash-header-section">
