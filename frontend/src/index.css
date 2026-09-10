@@ -183,18 +183,78 @@ body {
 }
 
 /* Modal Text */
+/* THE THREE HEADING LEVELS INSIDE A LEGAL MODAL, AND WHY THEY ARE EXPLICIT.
+   The documents nest three deep — h2 is the document title, h3 a numbered
+   section, h4 a sub-point within one — and the browser's own defaults do not
+   separate the lower two usefully: an h4 renders at 1em, which is body size
+   exactly, and an h3 at 1.17em, close enough to body text to read as emphasis
+   rather than as a heading. Before this, `.legal-modal h3` set margins only
+   and there was no h4 rule at all, so every sub-point in the Help Center and
+   the Privacy Policy rendered at 16px — the same as the paragraphs under it.
+
+   All three are therefore sized, weighted and coloured here, and they differ
+   on all three axes at once so the hierarchy survives being skim-read:
+   24 / 20 / 16.8px, and 700 weight against the paragraphs' 400. The section
+   rule above each h3 is what makes a numbered section findable while
+   scrolling a long document. No CSS variables — none exist in this file. */
 .legal-modal h2 {
   margin-top: 0;
-  margin-bottom: 20px;
+  margin-bottom: 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .legal-modal h3 {
+  margin-top: 32px;
+  margin-bottom: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.legal-modal h4 {
   margin-top: 20px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #334155;
 }
 
 .legal-modal p {
   line-height: 1.6;
+  color: #475569;
+}
+
+/* The date line under the title on the Privacy Policy and the Terms of Use.
+   The Help Center has none — it is not a document that takes effect. */
+.legal-modal .legal-effective {
+  margin-top: 0;
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.legal-modal ul {
+  margin: 10px 0;
+  padding-left: 22px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.legal-modal li {
+  margin-bottom: 8px;
+}
+
+/* The provider table in Privacy Policy §3 reuses `.table-wrap` and
+   `.data-table.stack-narrow` wholesale, so it needs no sizing of its own —
+   only the breathing room a block element inside prose wants. Below 640px the
+   existing .stack-narrow rules turn each row into a labelled card, which is
+   what keeps it inside the modal on a phone. */
+.legal-modal .table-wrap {
+  margin: 16px 0 20px 0;
 }
 
 .register-form-wrapper {
