@@ -910,7 +910,7 @@ a {
    COUPLED TO THE 720px ABOVE. The two values must stay equal or the column
    stops lining up, and this file has no CSS variables to bind them. Change one,
    change the other. */
-.dash-main.capped-column > :is(.list-head, .alert, .empty) {
+.capped-column > :is(.list-head, .alert, .empty) {
   max-width: 720px;
 }
 
