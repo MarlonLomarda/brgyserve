@@ -123,15 +123,41 @@ body {
   text-decoration: none;
 }
 
-.legal-links a:focus {
-  outline: none;
-}
+/* PR #8 shipped a `.legal-links a:focus` rule here setting `outline: none`,
+   which removed the focus ring and put nothing back — measured at 390,
+   641, 1280 and 1920, so a keyboard user had no indication of which of the
+   three links they were on. The rule is deleted rather than replaced, and the
+   browser default returns.
+
+   THE FILE'S 2px TRANSLUCENT RING WAS THE OTHER CANDIDATE AND WAS MEASURED
+   AGAINST, NOT ASSUMED. `outline: 2px solid rgba(37, 99, 235, 0.2)` is real,
+   but tabbing the whole login form shows it is a FORM-CONTROL convention:
+   `input`, `select`, `textarea` and `.pw-field .pw-toggle` carry it, and every
+   ANCHOR gets the browser default instead — "Forgot password?" and "Register
+   as a resident" both compute `auto 1px`, and they sit in this same card a few
+   lines above these three. No link anywhere in this file has a custom ring.
+   Styling these three would have made them the only ones, which is a new
+   inconsistency in place of the old one. */
 
 /* Modal Background */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+
+  /* 50, matching `.modal-backdrop` — the Households create modal, which is the
+     app's other "a modal is open" overlay. PR #8 shipped 9999, two orders of
+     magnitude above every other value in the file (the ladder is .slider-nav 1,
+     .landing-nav 20, .dash-header 30, .dash-backdrop 40, then .modal-backdrop
+     and .dash-drawer at 50).
+
+     50 rather than something small: /login has no drawer and no dash-header, so
+     the only competitor on this page is `.slider-nav` at 1 — but the value has
+     to say what the element IS, not what today's page happens to contain. This
+     is a modal overlay, the app already has one at 50, and a second modal
+     sitting lower would be a difference with no reason behind it that the next
+     reader has to work out. It also means the panel still covers everything if
+     these links are ever rendered on a dashboard screen. */
+  z-index: 50;
 
   display: flex;
   justify-content: center;
@@ -142,33 +168,153 @@ body {
 }
 
 /* Modal */
+/* A FLEX COLUMN: the body scrolls, the footer does not. Before this the whole
+   panel was one scrolling box with `padding: 30px`, so the only way out was a
+   backdrop click — and at 390px the backdrop is a 20px strip around a nearly
+   full-screen panel. A Close button inside a scrolling box would have been at
+   the bottom of a 2,000px document, which is no better.
+
+   `overflow: hidden` here (the scroll moved to .legal-modal-body) is what
+   keeps the footer clipped inside the 10px radius instead of squaring off the
+   bottom corners. The 30px padding moved to the body for the same reason —
+   the footer needs to sit flush against the panel edge. */
 .legal-modal {
   width: 100%;
   max-width: 700px;
   max-height: 85vh;
 
-  padding: 30px;
   box-sizing: border-box;
 
   background: #fff;
   border-radius: 10px;
 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* `min-height: 0` IS LOAD-BEARING, not tidying. A flex item defaults to
+   `min-height: auto`, which refuses to shrink below its content — so a long
+   document would push the panel past 85vh and carry the footer off the bottom
+   of the screen, which is the exact failure this whole change exists to fix. */
+.legal-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  padding: 30px;
+}
+
+.legal-modal-footer {
+  flex: none;
+  padding: 12px 30px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* (0,2,0), and it has to be. `.auth-page button` is (0,1,1) and sets
+   `width: 100%` and `padding: 15px`; `.btn` is only (0,1,0) and loses to it,
+   so a single class here would give a full-width Close button at every width.
+   This is the same specificity trap recorded for `.pw-field .pw-toggle` —
+   a new control inside /login needs at least two classes to hold its own. */
+.legal-modal-footer .btn {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 20px;
+}
+
+/* Full width on a phone, where this button is the ONLY way out of the modal
+   and the backdrop is a 20px strip. Reuses 640px — the file's single
+   breakpoint — rather than introducing a second one. */
+@media (max-width: 640px) {
+  .legal-modal-body {
+    padding: 20px;
+  }
+
+  .legal-modal-footer {
+    padding: 12px 20px;
+  }
+
+  .legal-modal-footer .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
 }
 
 /* Modal Text */
+/* THE THREE HEADING LEVELS INSIDE A LEGAL MODAL, AND WHY THEY ARE EXPLICIT.
+   The documents nest three deep — h2 is the document title, h3 a numbered
+   section, h4 a sub-point within one — and the browser's own defaults do not
+   separate the lower two usefully: an h4 renders at 1em, which is body size
+   exactly, and an h3 at 1.17em, close enough to body text to read as emphasis
+   rather than as a heading. Before this, `.legal-modal h3` set margins only
+   and there was no h4 rule at all, so every sub-point in the Help Center and
+   the Privacy Policy rendered at 16px — the same as the paragraphs under it.
+
+   All three are therefore sized, weighted and coloured here, and they differ
+   on all three axes at once so the hierarchy survives being skim-read:
+   24 / 20 / 16.8px, and 700 weight against the paragraphs' 400. The section
+   rule above each h3 is what makes a numbered section findable while
+   scrolling a long document. No CSS variables — none exist in this file. */
 .legal-modal h2 {
   margin-top: 0;
-  margin-bottom: 20px;
+  margin-bottom: 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .legal-modal h3 {
+  margin-top: 32px;
+  margin-bottom: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.legal-modal h4 {
   margin-top: 20px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #334155;
 }
 
 .legal-modal p {
   line-height: 1.6;
+  color: #475569;
+}
+
+/* The date line under the title on the Privacy Policy and the Terms of Use.
+   The Help Center has none — it is not a document that takes effect. */
+.legal-modal .legal-effective {
+  margin-top: 0;
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.legal-modal ul {
+  margin: 10px 0;
+  padding-left: 22px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.legal-modal li {
+  margin-bottom: 8px;
+}
+
+/* The provider table in Privacy Policy §3 reuses `.table-wrap` and
+   `.data-table.stack-narrow` wholesale, so it needs no sizing of its own —
+   only the breathing room a block element inside prose wants. Below 640px the
+   existing .stack-narrow rules turn each row into a labelled card, which is
+   what keeps it inside the modal on a phone. */
+.legal-modal .table-wrap {
+  margin: 16px 0 20px 0;
 }
 
 .register-form-wrapper {
@@ -2641,10 +2787,16 @@ button.link-button:hover:not(:disabled) {
 }
 
 .dash-drawer-arrow {
+  padding: 0;
+  background: none;
   position: absolute;
   right: 10px;
   color: #334155;
   cursor: pointer;
+}
+
+.dash-drawer-arrow:hover {
+  background: none !important;
 }
 
 .dash-drawer-title {

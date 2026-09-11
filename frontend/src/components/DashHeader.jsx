@@ -141,6 +141,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               aria-expanded={open}
               aria-controls="dash-drawer"
               onClick={() => setOpen((wasOpen) => !wasOpen)}
+              tabIndex={0}
             >
               <span className="dash-menu-icon" aria-hidden="true">
                 <span />
@@ -177,11 +178,13 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
             tabIndex={-1}
           >
             <div className="dash-drawer-head">
-              <IoIosClose
+              <button
                 className="dash-drawer-arrow"
-                size={30}
+                tabIndex={0}
                 onClick={closeAndRefocus}
-              />
+              >
+                <IoIosClose size={30} />
+              </button>
               {/* The role, not the product name. .dash-username hides the
                   header's @username at every width now, so this and the
                   drawer's own footer are the only things left on screen that
