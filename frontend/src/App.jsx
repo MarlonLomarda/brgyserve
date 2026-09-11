@@ -41,7 +41,15 @@ import PageLayout from "./components/PageLayout";
 // placeholder landing page. Staff and the Punong Barangay get the read-only
 // rental-bookings view (no canManage) — writes are blocked server-side too.
 const ROLE_PAGES = {
-  secretary: <SecretaryReviewPage />,
+  secretary: (
+    <PageLayout
+      dashTitle={"Resident review"}
+      dashSubtitle={"Manage accounts and review pending residents"}
+      navItems={SECRETARY_NAV}
+    >
+      <SecretaryReviewPage />
+    </PageLayout>
+  ),
   resident: <MyRequestsPage />,
   treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
   staff: (
