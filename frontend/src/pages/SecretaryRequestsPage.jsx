@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { statusMeta, chargeMeta, chargeOf, formatDate, STATUS_META } from '../constants/requestStatus';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import {
+  statusMeta,
+  chargeMeta,
+  chargeOf,
+  formatDate,
+  STATUS_META,
+} from "../constants/requestStatus";
 
 // Document request processing. Shared by three roles: the Secretary passes
 // canManage and gets the four workflow actions; Staff and the Punong Barangay
@@ -13,20 +19,26 @@ import { statusMeta, chargeMeta, chargeOf, formatDate, STATUS_META } from '../co
 // and the requester's email. This component renders whatever it was handed and
 // never checks the viewer's role to decide: `key in object` tests the DATA.
 
-const FILTERS = ['pending', 'all', ...Object.keys(STATUS_META).filter((s) => s !== 'pending')];
+const FILTERS = [
+  "pending",
+  "all",
+  ...Object.keys(STATUS_META).filter((s) => s !== "pending"),
+];
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
-  { key: 'birthdate', label: 'Birthdate' },
-  { key: 'birthplace', label: 'Birthplace' },
-  { key: 'sex', label: 'Sex' },
-  { key: 'civil_status', label: 'Civil status' },
-  { key: 'contact_number', label: 'Contact number' },
+  { key: "birthdate", label: "Birthdate" },
+  { key: "birthplace", label: "Birthplace" },
+  { key: "sex", label: "Sex" },
+  { key: "civil_status", label: "Civil status" },
+  { key: "contact_number", label: "Contact number" },
 ];
 
 function personName(p) {
   if (!p) return null;
-  const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
+  const name = [p.first_name, p.middle_name, p.last_name]
+    .filter(Boolean)
+    .join(" ");
   return p.suffix ? `${name}, ${p.suffix}` : name;
 }
 
@@ -38,11 +50,11 @@ function StatusBadge({ status }) {
 function RequestDetail({ id, canManage, onBack }) {
   const { authFetch } = useAuth();
   const [request, setRequest] = useState(null); // null = loading
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState("");
   const [acted, setActed] = useState(false); // tells the list to refresh on back
 
   useEffect(() => {
@@ -65,16 +77,16 @@ function RequestDetail({ id, canManage, onBack }) {
     setFlash(null);
     try {
       const data = await authFetch(`/document-requests/${id}/${action}`, {
-        method: 'POST',
-        body: action === 'reject' ? { reason } : undefined,
+        method: "POST",
+        body: action === "reject" ? { reason } : undefined,
       });
       setRequest(data.request);
-      setFlash({ type: 'success', text: data.message });
+      setFlash({ type: "success", text: data.message });
       setRejecting(false);
-      setReason('');
+      setReason("");
       setActed(true);
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusy(false);
     }
@@ -128,8 +140,10 @@ function RequestDetail({ id, canManage, onBack }) {
               <dd>
                 {charge ? (
                   <>
-                    ₱{Number(charge.amount).toFixed(2)}{' '}
-                    <span className={`badge ${chargeMeta(charge.status).className}`}>
+                    ₱{Number(charge.amount).toFixed(2)}{" "}
+                    <span
+                      className={`badge ${chargeMeta(charge.status).className}`}
+                    >
                       {chargeMeta(charge.status).label}
                     </span>
                   </>
@@ -140,7 +154,9 @@ function RequestDetail({ id, canManage, onBack }) {
             </div>
             <div>
               <dt>Billed</dt>
-              <dd className="muted">{charge ? formatDate(charge.created_at) : '—'}</dd>
+              <dd className="muted">
+                {charge ? formatDate(charge.created_at) : "—"}
+              </dd>
             </div>
             <div>
               <dt>Submitted</dt>
@@ -187,17 +203,21 @@ function RequestDetail({ id, canManage, onBack }) {
                 <div>
                   <dt>Name</dt>
                   <dd>
-                    <strong>{personName(resident)}</strong>{' '}
-                    <span className="muted">(record #{resident.resident_id})</span>
+                    <strong>{personName(resident)}</strong>{" "}
+                    <span className="muted">
+                      (record #{resident.resident_id})
+                    </span>
                   </dd>
                 </div>
-                {OPTIONAL_RESIDENT_FIELDS.filter((f) => f.key in resident).map((f) => (
-                  <div key={f.key}>
-                    <dt>{f.label}</dt>
-                    <dd>{resident[f.key] || '—'}</dd>
-                  </div>
-                ))}
-                {'date_registered' in resident && (
+                {OPTIONAL_RESIDENT_FIELDS.filter((f) => f.key in resident).map(
+                  (f) => (
+                    <div key={f.key}>
+                      <dt>{f.label}</dt>
+                      <dd>{resident[f.key] || "—"}</dd>
+                    </div>
+                  ),
+                )}
+                {"date_registered" in resident && (
                   <div>
                     <dt>Registered</dt>
                     <dd>{formatDate(resident.date_registered)}</dd>
@@ -205,7 +225,7 @@ function RequestDetail({ id, canManage, onBack }) {
                 )}
                 <div className="span-2">
                   <dt>Address</dt>
-                  <dd>{resident.address || '—'}</dd>
+                  <dd>{resident.address || "—"}</dd>
                 </div>
               </dl>
             )}
@@ -213,39 +233,52 @@ function RequestDetail({ id, canManage, onBack }) {
 
           {/* Stage 4c release flow: approved + paid → ready_for_release → claimed */}
           {canManage &&
-            r.status === 'approved' &&
-            (charge?.status === 'PAID' ? (
+            r.status === "approved" &&
+            (charge?.status === "PAID" ? (
               <div className="actions">
-                <button className="btn" disabled={busy} onClick={() => decide('ready-for-release')}>
-                  {busy ? 'Working…' : 'Mark ready for release'}
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => decide("ready-for-release")}
+                >
+                  {busy ? "Working…" : "Mark ready for release"}
                 </button>
               </div>
             ) : (
               <p className="muted">
-                Awaiting payment — verify it under the Payments tab before releasing this document.
+                Awaiting payment — verify it under the Payments tab before
+                releasing this document.
               </p>
             ))}
 
-          {canManage && r.status === 'ready_for_release' && (
+          {canManage && r.status === "ready_for_release" && (
             <div className="actions">
               <button
                 className="btn"
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm('Mark this document as claimed? This records that it was handed to the resident and cannot be undone.')) {
-                    decide('claim');
+                  if (
+                    window.confirm(
+                      "Mark this document as claimed? This records that it was handed to the resident and cannot be undone.",
+                    )
+                  ) {
+                    decide("claim");
                   }
                 }}
               >
-                {busy ? 'Working…' : 'Mark as claimed'}
+                {busy ? "Working…" : "Mark as claimed"}
               </button>
             </div>
           )}
 
-          {canManage && r.status === 'pending' && !rejecting && (
+          {canManage && r.status === "pending" && !rejecting && (
             <div className="actions">
-              <button className="btn" disabled={busy} onClick={() => decide('approve')}>
-                {busy ? 'Working…' : 'Approve request'}
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => decide("approve")}
+              >
+                {busy ? "Working…" : "Approve request"}
               </button>
               <button
                 className="btn secondary danger"
@@ -257,12 +290,12 @@ function RequestDetail({ id, canManage, onBack }) {
             </div>
           )}
 
-          {canManage && r.status === 'pending' && rejecting && (
+          {canManage && r.status === "pending" && rejecting && (
             <form
               className="reject-form"
               onSubmit={(e) => {
                 e.preventDefault();
-                decide('reject');
+                decide("reject");
               }}
             >
               <label>
@@ -276,19 +309,25 @@ function RequestDetail({ id, canManage, onBack }) {
                   autoFocus
                 />
               </label>
-              <div className={`char-counter muted${reason.length >= 500 ? ' at-limit' : ''}`}>
+              <div
+                className={`char-counter muted${reason.length >= 500 ? " at-limit" : ""}`}
+              >
                 {reason.length}/500
               </div>
               <div className="actions">
-                <button className="btn secondary danger" type="submit" disabled={busy}>
-                  {busy ? 'Working…' : 'Confirm rejection'}
+                <button
+                  className="btn secondary danger"
+                  type="submit"
+                  disabled={busy}
+                >
+                  {busy ? "Working…" : "Confirm rejection"}
                 </button>
                 <button
                   className="btn secondary"
                   type="button"
                   onClick={() => {
                     setRejecting(false);
-                    setReason('');
+                    setReason("");
                   }}
                 >
                   Cancel
@@ -302,17 +341,21 @@ function RequestDetail({ id, canManage, onBack }) {
   );
 }
 
-export default function SecretaryRequestsPage({ title, nav, canManage = false }) {
+export default function SecretaryRequestsPage({
+  title,
+  nav,
+  canManage = false,
+}) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState('pending');
+  const [filter, setFilter] = useState("pending");
   const [requests, setRequests] = useState(null); // null = loading
-  const [listError, setListError] = useState('');
+  const [listError, setListError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
 
   const load = useCallback(async () => {
-    setListError('');
+    setListError("");
     try {
-      const query = filter === 'all' ? '' : `?status=${filter}`;
+      const query = filter === "all" ? "" : `?status=${filter}`;
       const data = await authFetch(`/document-requests${query}`);
       setRequests(data.requests);
     } catch (err) {
@@ -326,103 +369,112 @@ export default function SecretaryRequestsPage({ title, nav, canManage = false })
   }, [load]);
 
   return (
-    <div className="dash">
-      <DashHeader
-        title={title}
-        subtitle={canManage ? 'Process document requests' : 'Document requests across residents'}
-        nav={nav}
-      />
+    // <DashHeader
+    //   title={title}
+    //   subtitle={canManage ? 'Process document requests' : 'Document requests across residents'}
+    //   nav={nav}
+    // />
 
-      <main className="dash-main">
-        {selectedId ? (
-          <RequestDetail
-            id={selectedId}
-            canManage={canManage}
-            onBack={(refresh) => {
-              setSelectedId(null);
-              if (refresh) load();
-            }}
-          />
-        ) : (
-          <>
-            {listError && <div className="alert error">{listError}</div>}
+    <>
+      {selectedId ? (
+        <RequestDetail
+          id={selectedId}
+          canManage={canManage}
+          onBack={(refresh) => {
+            setSelectedId(null);
+            if (refresh) load();
+          }}
+        />
+      ) : (
+        <>
+          {listError && <div className="alert error">{listError}</div>}
 
-            <div className="list-head">
-              <h2>
-                {requests === null
-                  ? 'Document requests'
-                  : `${requests.length} request${requests.length === 1 ? '' : 's'}`}
-              </h2>
-              <div className="head-actions">
-                <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                  {FILTERS.map((f) => (
-                    <option key={f} value={f}>
-                      {f === 'all' ? 'All statuses' : statusMeta(f).label}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn secondary" onClick={load}>
-                  Refresh
-                </button>
-              </div>
+          <div className="list-head">
+            <h2>
+              {requests === null
+                ? "Document requests"
+                : `${requests.length} request${requests.length === 1 ? "" : "s"}`}
+            </h2>
+            <div className="head-actions">
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              >
+                {FILTERS.map((f) => (
+                  <option key={f} value={f}>
+                    {f === "all" ? "All statuses" : statusMeta(f).label}
+                  </option>
+                ))}
+              </select>
+              <button className="btn secondary" onClick={load}>
+                Refresh
+              </button>
             </div>
+          </div>
 
-            {requests === null ? (
-              <p className="muted">Loading requests…</p>
-            ) : requests.length === 0 ? (
-              <div className="empty">
-                <p>
-                  No {filter === 'all' ? '' : `${statusMeta(filter).label.toLowerCase()} `}
-                  requests.
-                </p>
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table className="data-table stack-narrow">
-                  <thead>
-                    <tr>
-                      <th>Requester</th>
-                      <th>Document</th>
-                      <th>Purpose</th>
-                      <th>Status</th>
-                      <th>Submitted</th>
-                      <th></th>
+          {requests === null ? (
+            <p className="muted">Loading requests…</p>
+          ) : requests.length === 0 ? (
+            <div className="empty">
+              <p>
+                No{" "}
+                {filter === "all"
+                  ? ""
+                  : `${statusMeta(filter).label.toLowerCase()} `}
+                requests.
+              </p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table stack-narrow">
+                <thead>
+                  <tr>
+                    <th>Requester</th>
+                    <th>Document</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((r) => (
+                    <tr key={r.request_id}>
+                      <td>
+                        <strong>
+                          {personName(r.resident_records) ||
+                            `@${r.requester?.username}`}
+                        </strong>
+                        <div className="muted small-note">
+                          @{r.requester?.username}
+                        </div>
+                      </td>
+                      <td data-label="Document">{r.document_types?.name}</td>
+                      <td className="muted truncate" data-label="Purpose">
+                        {r.purpose}
+                      </td>
+                      <td>
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="muted" data-label="Submitted">
+                        {formatDate(r.requested_at)}
+                      </td>
+                      <td className="row-actions">
+                        <button
+                          className="btn secondary"
+                          onClick={() => setSelectedId(r.request_id)}
+                        >
+                          {canManage ? "Review" : "View"}
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {requests.map((r) => (
-                      <tr key={r.request_id}>
-                        <td>
-                          <strong>{personName(r.resident_records) || `@${r.requester?.username}`}</strong>
-                          <div className="muted small-note">@{r.requester?.username}</div>
-                        </td>
-                        <td data-label="Document">{r.document_types?.name}</td>
-                        <td className="muted truncate" data-label="Purpose">
-                          {r.purpose}
-                        </td>
-                        <td>
-                          <StatusBadge status={r.status} />
-                        </td>
-                        <td className="muted" data-label="Submitted">
-                          {formatDate(r.requested_at)}
-                        </td>
-                        <td className="row-actions">
-                          <button
-                            className="btn secondary"
-                            onClick={() => setSelectedId(r.request_id)}
-                          >
-                            {canManage ? 'Review' : 'View'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }

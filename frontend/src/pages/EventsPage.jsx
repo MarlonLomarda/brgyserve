@@ -1037,9 +1037,11 @@ export default function EventsPage({ title, nav }) {
               </div>
             )}
           </td>
-          <td data-label="Schedule">{formatWindow(e.start_datetime, e.end_datetime)}</td>
+          <td data-label="Schedule">
+            {formatWindow(e.start_datetime, e.end_datetime)}
+          </td>
           <td className="muted" data-label="Location">
-            {e.location || '—'}
+            {e.location || "—"}
           </td>
           <td>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
@@ -1085,159 +1087,157 @@ export default function EventsPage({ title, nav }) {
   );
 
   return (
-    <div className="dash">
-      <DashHeader
+    <>
+      {/* <DashHeader
         title={title}
         subtitle="Barangay events and announcements"
         nav={nav}
-      />
+      /> */}
 
-      <main className="dash-main">
-        {attendanceId ? (
-          <AttendanceRoster
-            eventId={attendanceId}
-            onBack={() => setAttendanceId(null)}
-          />
-        ) : formTarget ? (
-          <EventForm
-            event={formTarget === "new" ? null : formTarget}
-            onDone={(result, event) => {
-              setFormTarget(null);
-              if (!result) return;
-              setFlash(result);
-              if (event) setSelectedId(event.event_id);
-              load();
-            }}
-          />
-        ) : selectedId ? (
-          <EventDetail
-            id={selectedId}
-            onBack={() => setSelectedId(null)}
-            onEdit={(e) => setFormTarget(e)}
-            onOpenAttendance={(id) => setAttendanceId(id)}
-            onChanged={(message) => {
-              setFlash({ type: "success", text: message });
-              load();
-            }}
-          />
-        ) : (
-          <>
-            {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-            {error && <div className="alert error">{error}</div>}
+      {attendanceId ? (
+        <AttendanceRoster
+          eventId={attendanceId}
+          onBack={() => setAttendanceId(null)}
+        />
+      ) : formTarget ? (
+        <EventForm
+          event={formTarget === "new" ? null : formTarget}
+          onDone={(result, event) => {
+            setFormTarget(null);
+            if (!result) return;
+            setFlash(result);
+            if (event) setSelectedId(event.event_id);
+            load();
+          }}
+        />
+      ) : selectedId ? (
+        <EventDetail
+          id={selectedId}
+          onBack={() => setSelectedId(null)}
+          onEdit={(e) => setFormTarget(e)}
+          onOpenAttendance={(id) => setAttendanceId(id)}
+          onChanged={(message) => {
+            setFlash({ type: "success", text: message });
+            load();
+          }}
+        />
+      ) : (
+        <>
+          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {error && <div className="alert error">{error}</div>}
 
-            <div className="list-head">
-              <h2>
-                {data === null
-                  ? "Events"
-                  : `${data.total} record${data.total === 1 ? "" : "s"}`}
-              </h2>
-              <SearchBar
-                search={search}
-                onSearch={handleSearch}
-                searchInput={searchInput}
-                onSearchInput={(e) => setSearchInput(e.target.value)}
-                onClear={() => {
-                  setSearch("");
-                  setSearchInput("");
+          <div className="list-head">
+            <h2>
+              {data === null
+                ? "Events"
+                : `${data.total} record${data.total === 1 ? "" : "s"}`}
+            </h2>
+            <SearchBar
+              search={search}
+              onSearch={handleSearch}
+              searchInput={searchInput}
+              onSearchInput={(e) => setSearchInput(e.target.value)}
+              onClear={() => {
+                setSearch("");
+                setSearchInput("");
+                setPage(1);
+              }}
+              placeholder={"Search by title, details, or location"}
+            />
+            <form className="head-actions" onSubmit={handleSearch}>
+              <select
+                value={view}
+                onChange={(e) => {
+                  setView(e.target.value);
                   setPage(1);
                 }}
-                placeholder={"Search by title, details, or location"}
-              />
-              <form className="head-actions" onSubmit={handleSearch}>
-                <select
-                  value={view}
-                  onChange={(e) => {
-                    setView(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  {EVENT_VIEWS.map((v) => (
-                    <option key={v.value} value={v.value}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={type}
-                  onChange={(e) => {
-                    setType(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="all">All types</option>
-                  <option value="activity">Activities</option>
-                  <option value="announcement">Announcements</option>
-                </select>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => setFormTarget("new")}
-                >
-                  New
-                </button>
-              </form>
+              >
+                {EVENT_VIEWS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={type}
+                onChange={(e) => {
+                  setType(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">All types</option>
+                <option value="activity">Activities</option>
+                <option value="announcement">Announcements</option>
+              </select>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setFormTarget("new")}
+              >
+                New
+              </button>
+            </form>
+          </div>
+
+          {data === null ? (
+            <p className="muted">Loading events…</p>
+          ) : events.length === 0 ? (
+            <div className="empty">
+              <p>
+                No{" "}
+                {view === "past"
+                  ? "past activities"
+                  : view === "archived"
+                    ? "archived records"
+                    : "events"}
+                {search ? ` matching "${search}"` : ""}.
+              </p>
             </div>
-
-            {data === null ? (
-              <p className="muted">Loading events…</p>
-            ) : events.length === 0 ? (
-              <div className="empty">
-                <p>
-                  No{" "}
-                  {view === "past"
-                    ? "past activities"
-                    : view === "archived"
-                      ? "archived records"
-                      : "events"}
-                  {search ? ` matching "${search}"` : ""}.
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* The two record kinds are listed separately so the untimed
+          ) : (
+            <>
+              {/* The two record kinds are listed separately so the untimed
                     announcements never get lost among scheduled activities. */}
-                {type !== "announcement" &&
-                  section(
-                    view === "past" ? "Past activities" : "Activities",
-                    activities,
-                    "No activities in this view.",
-                  )}
-                {type !== "activity" &&
-                  view !== "past" &&
-                  section(
-                    "Announcements",
-                    announcements,
-                    "No announcements in this view.",
-                  )}
-
-                {data.total_pages > 1 && (
-                  <div className="list-head">
-                    <span className="muted">
-                      Page {data.page} of {data.total_pages}
-                    </span>
-                    <div className="head-actions">
-                      <button
-                        className="btn secondary"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => p - 1)}
-                      >
-                        ← Previous
-                      </button>
-                      <button
-                        className="btn secondary"
-                        disabled={page >= data.total_pages}
-                        onClick={() => setPage((p) => p + 1)}
-                      >
-                        Next →
-                      </button>
-                    </div>
-                  </div>
+              {type !== "announcement" &&
+                section(
+                  view === "past" ? "Past activities" : "Activities",
+                  activities,
+                  "No activities in this view.",
                 )}
-              </>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+              {type !== "activity" &&
+                view !== "past" &&
+                section(
+                  "Announcements",
+                  announcements,
+                  "No announcements in this view.",
+                )}
+
+              {data.total_pages > 1 && (
+                <div className="list-head">
+                  <span className="muted">
+                    Page {data.page} of {data.total_pages}
+                  </span>
+                  <div className="head-actions">
+                    <button
+                      className="btn secondary"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      className="btn secondary"
+                      disabled={page >= data.total_pages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
   );
 }
