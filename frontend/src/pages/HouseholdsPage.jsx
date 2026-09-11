@@ -920,46 +920,44 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
   const households = householdData?.households;
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle="Household records" nav={nav} />
+    <>
+      {/* <DashHeader title={title} subtitle="Household records" nav={nav} /> */}
 
-      <main className="dash-main">
-        {selectedId ? (
-          <HouseholdDetail
-            householdId={selectedId}
-            canManage={canManage}
-            onBack={() => setSelectedId(null)}
-            onChanged={reloadBoth}
-          />
-        ) : (
-          <>
+      {selectedId ? (
+        <HouseholdDetail
+          householdId={selectedId}
+          canManage={canManage}
+          onBack={() => setSelectedId(null)}
+          onChanged={reloadBoth}
+        />
+      ) : (
+        <>
             {/* Buttons, not spans: a span is not in the tab order, which left a
                 keyboard user no way at all into the Unassigned residents view.
                 The count is shown once it is a number — `total && …` printed a
                 bare 0 — so a list still loading, or one that failed, shows its
                 label with no count. Every count but one takes the plural, as
                 the old "N households" heading did. */}
-            <div className="tab-container">
-              <button
+          <div className="tab-container">
+            <button
                 type="button"
-                className={`tab ${view === "households" ? "active-tab" : ""}`}
-                onClick={() => setView("households")}
-              >
-                Household{householdData?.total === 1 ? " " : "s "}
-                {typeof householdData?.total === "number" &&
-                  `(${householdData.total})`}
-              </button>
-              <button
+              className={`tab ${view === "households" ? "active-tab" : ""}`}
+              onClick={() => setView("households")}
+            >
+              Household{householdData?.total === 1 ? " " : "s "}
+              {typeof householdData?.total === "number" && `(${householdData.total})`}
+            </button>
+            <button
                 type="button"
-                className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
-                onClick={() => setView("unassigned")}
-              >
-                Unassigned resident
-                {unassignedData?.total === 1 ? " " : "s "}
-                {typeof unassignedData?.total === "number" &&
-                  `(${unassignedData.total})`}
-              </button>
-            </div>
+              className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
+              onClick={() => setView("unassigned")}
+            >
+              Unassigned resident
+              {unassignedData?.total === 1 ? " " : "s "}
+              {typeof unassignedData?.total === "number" &&
+                `(${unassignedData.total})`}
+            </button>
+          </div>
 
             {/* A failed page-1 load replaces the whole unassigned view with its
                 error, the same way UnassignedResidents handles its own failures
@@ -978,49 +976,46 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                 )}
                 {notice && <div className="alert">{notice}</div>}
 
-                <div className="list-head">
-                  <SearchBar
-                    placeholder={
-                      "Search by head, member, address, or household #"
-                    }
-                    search={search}
-                    searchInput={searchInput}
-                    onSearchInput={(e) => setSearchInput(e.target.value)}
-                    onSearch={(e) => {
-                      e.preventDefault();
+              <div className="list-head">
+                <SearchBar
+                  placeholder={
+                    "Search by head, member, address, or household #"
+                  }
+                  search={search}
+                  searchInput={searchInput}
+                  onSearchInput={(e) => setSearchInput(e.target.value)}
+                  onSearch={(e) => {
+                    e.preventDefault();
+                    setPage(1);
+                    setSearch(searchInput.trim());
+                  }}
+                  onClear={() => {
+                    setSearchInput("");
+                    setSearch("");
+                    setPage(1);
+                  }}
+                />
+                <div className="head-actions">
+                  <select
+                    value={active}
+                    onChange={(e) => {
+                      setActive(e.target.value);
                       setPage(1);
-                      setSearch(searchInput.trim());
                     }}
-                    onClear={() => {
-                      setSearchInput("");
-                      setSearch("");
-                      setPage(1);
-                    }}
-                  />
-                  <div className="head-actions">
-                    <select
-                      value={active}
-                      onChange={(e) => {
-                        setActive(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      {ACTIVE_FILTERS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                    {canManage && (
-                      <button
-                        className="btn"
-                        onClick={() => setShowCreate(true)}
-                      >
-                        New household
-                      </button>
-                    )}
-                  </div>
+                  >
+                    {ACTIVE_FILTERS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  {canManage && (
+                    <button className="btn" onClick={() => setShowCreate(true)}>
+                      New household
+                    </button>
+                  )}
                 </div>
+              </div>
 
                 {/* Error first, then loading, then empty — the order
                     MatchSuggestions uses — so a failed request can never reach
@@ -1049,86 +1044,83 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   <>
                     {/* <div className="list-head">
                     </div> */}
-                    <div className="table-wrap">
-                      <table className="data-table stack-narrow">
-                        <thead>
-                          <tr>
-                            <th>Household #</th>
-                            <th>Head</th>
-                            <th>Address</th>
-                            <th className="num">Members</th>
-                            <th>Registered</th>
-                            <th>Status</th>
+                  <div className="table-wrap">
+                    <table className="data-table stack-narrow">
+                      <thead>
+                        <tr>
+                          <th>Household #</th>
+                          <th>Head</th>
+                          <th>Address</th>
+                          <th className="num">Members</th>
+                          <th>Registered</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {households.map((h) => (
+                          <tr
+                            key={h.household_id}
+                            className="clickable-row"
+                            onClick={() => setSelectedId(h.household_id)}
+                          >
+                            <td>
+                              <strong>#{h.household_id}</strong>
+                            </td>
+                            <td data-label="Head">
+                              {h.head_name || (
+                                <span className="muted">no head assigned</span>
+                              )}
+                            </td>
+                            <td className="muted">{h.address}</td>
+                            <td className="num" data-label="Members">
+                              {h.member_count}
+                            </td>
+                            <td className="muted" data-label="Registered">
+                              {formatDate(h.registered_at)}
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${h.is_active ? "status-claimed" : "status-cancelled"}`}
+                              >
+                                {h.is_active ? "Active" : "Inactive"}
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {households.map((h) => (
-                            <tr
-                              key={h.household_id}
-                              className="clickable-row"
-                              onClick={() => setSelectedId(h.household_id)}
-                            >
-                              <td>
-                                <strong>#{h.household_id}</strong>
-                              </td>
-                              <td data-label="Head">
-                                {h.head_name || (
-                                  <span className="muted">
-                                    no head assigned
-                                  </span>
-                                )}
-                              </td>
-                              <td className="muted">{h.address}</td>
-                              <td className="num" data-label="Members">
-                                {h.member_count}
-                              </td>
-                              <td className="muted" data-label="Registered">
-                                {formatDate(h.registered_at)}
-                              </td>
-                              <td>
-                                <span
-                                  className={`badge ${h.is_active ? "status-claimed" : "status-cancelled"}`}
-                                >
-                                  {h.is_active ? "Active" : "Inactive"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    {householdData.total_pages > 1 && (
-                      <div className="list-head">
-                        <span className="muted">
-                          Page {householdData.page} of{" "}
-                          {householdData.total_pages}
-                        </span>
-                        <div className="head-actions">
-                          <button
-                            className="btn secondary"
-                            disabled={page <= 1}
-                            onClick={() => setPage((p) => p - 1)}
-                          >
-                            ← Previous
-                          </button>
-                          <button
-                            className="btn secondary"
-                            disabled={page >= householdData.total_pages}
-                            onClick={() => setPage((p) => p + 1)}
-                          >
-                            Next →
-                          </button>
-                        </div>
+                  {householdData.total_pages > 1 && (
+                    <div className="list-head">
+                      <span className="muted">
+                        Page {householdData.page} of{" "}
+                        {householdData.total_pages}
+                      </span>
+                      <div className="head-actions">
+                        <button
+                          className="btn secondary"
+                          disabled={page <= 1}
+                          onClick={() => setPage((p) => p - 1)}
+                        >
+                          ← Previous
+                        </button>
+                        <button
+                          className="btn secondary"
+                          disabled={page >= householdData.total_pages}
+                          onClick={() => setPage((p) => p + 1)}
+                        >
+                          Next →
+                        </button>
                       </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </main>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {showCreate && (
         <CreateHouseholdModal
@@ -1143,6 +1135,6 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
