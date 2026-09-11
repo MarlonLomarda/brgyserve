@@ -2558,10 +2558,16 @@ button.link-button:hover:not(:disabled) {
 }
 
 .dash-drawer-arrow {
+  padding: 0;
+  background: none;
   position: absolute;
   right: 10px;
   color: #334155;
   cursor: pointer;
+}
+
+.dash-drawer-arrow:hover {
+  background: none !important;
 }
 
 .dash-drawer-title {
