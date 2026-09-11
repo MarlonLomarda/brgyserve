@@ -8,9 +8,10 @@ function SearchBar({
   searchInput,
   onSearchInput,
   placeholder,
+  id,
 }) {
   return (
-    <form onSubmit={onSearch} className="searchbar">
+    <form onSubmit={onSearch} id={id} className="searchbar">
       <input
         value={searchInput}
         onChange={onSearchInput}

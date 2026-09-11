@@ -659,7 +659,7 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
                       )}
                     </td>
                     <td className="muted" data-label="Sex">
-                      {m.sex || '—'}
+                      {m.sex || "—"}
                     </td>
                     <td className="num" data-label="Age">
                       {ageFrom(m.birthdate)}
@@ -715,13 +715,17 @@ function HouseholdDetail({ householdId, canManage, onBack, onChanged }) {
 }
 
 // --- unassigned residents --------------------------------------------------
-function UnassignedResidents() {
+function UnassignedResidents({ unassignedData }) {
   const { authFetch } = useAuth();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setData(unassignedData);
+  }, [unassignedData]);
 
   const load = useCallback(async () => {
     setError("");
@@ -736,56 +740,42 @@ function UnassignedResidents() {
   }, [authFetch, page, search]);
 
   useEffect(() => {
+    if (page === 1 && !search) {
+      setData(unassignedData);
+      return;
+    }
+
     load();
-  }, [load]);
+  }, [load, page, search]);
 
   if (error) return <div className="alert error">{error}</div>;
   if (!data) return <p className="muted">Loading residents…</p>;
 
   return (
     <>
-      <div className="alert">
-        <strong>
-          {data.total} resident{data.total === 1 ? "" : "s"} not yet in a
-          household
-        </strong>
-        <div className="reason-note">
-          Active residents with no current membership. Add them from a
-          household&apos;s detail page.
-        </div>
+      <div className="reason-note">
+        These are active residents who aren’t currently assigned to a household.
+        To assign them, add them from a household’s detail page.
       </div>
 
       <div className="list-head">
-        <form
-          className="head-actions"
-          onSubmit={(e) => {
+        <SearchBar
+          id={"unassigned-tab-searchbar"}
+          search={search}
+          onSearch={(e) => {
             e.preventDefault();
             setPage(1);
             setSearch(searchInput.trim());
           }}
-        >
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by name or address"
-          />
-          <button className="btn secondary" type="submit">
-            Search
-          </button>
-          {search && (
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={() => {
-                setSearchInput("");
-                setSearch("");
-                setPage(1);
-              }}
-            >
-              Clear
-            </button>
-          )}
-        </form>
+          searchInput={searchInput}
+          onSearchInput={(e) => setSearchInput(e.target.value)}
+          onClear={() => {
+            setSearch("");
+            setSearchInput("");
+            setData(unassignedData);
+          }}
+          placeholder={"Search by name or address"}
+        />
       </div>
 
       {data.residents.length === 0 ? (
@@ -817,7 +807,7 @@ function UnassignedResidents() {
                       <span className="muted">(#{r.resident_id})</span>
                     </td>
                     <td className="muted" data-label="Sex">
-                      {r.sex || '—'}
+                      {r.sex || "—"}
                     </td>
                     <td className="num" data-label="Age">
                       {ageFrom(r.birthdate)}
@@ -869,7 +859,10 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState("true");
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({
+    householdData: null,
+    unassignedData: null,
+  });
   const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -879,17 +872,34 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
   const load = useCallback(async () => {
     setError("");
     try {
-      const params = new URLSearchParams({ page: String(page), active });
-      if (search) params.set("search", search);
-      setData(await authFetch(`/households?${params}`));
+      const householdParams = new URLSearchParams({
+        page: String(page),
+        active,
+      });
+      const unassignedParams = new URLSearchParams({ page: "1" });
+
+      if (search) householdParams.set("search", search);
+
+      const [householdData, unassignedData] = await Promise.all([
+        authFetch(`/households?${householdParams}`),
+        authFetch(`/households/unassigned-residents?${unassignedParams}`),
+      ]);
+
+      setData({
+        householdData,
+        unassignedData,
+      });
     } catch (err) {
       setError(err.message);
       setData({
-        households: [],
-        total: 0,
-        page: 1,
-        total_pages: 0,
-        total_all: 0,
+        householdData: {
+          households: [],
+          total: 0,
+          page: 1,
+          total_pages: 0,
+          total_all: 0,
+        },
+        unassignedData: { residents: [], total: 0, page: 1, total_pages: 0 },
       });
     }
   }, [authFetch, page, search, active]);
@@ -898,7 +908,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
     load();
   }, [load]);
 
-  const households = data?.households;
+  const households = data?.householdData?.households;
 
   return (
     <div className="dash">
@@ -914,25 +924,28 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
           />
         ) : (
           <>
-            <div className="list-head">
-              <div className="head-actions">
-                <button
-                  className={view === "households" ? "btn" : "btn secondary"}
-                  onClick={() => setView("households")}
-                >
-                  Households
-                </button>
-                <button
-                  className={view === "unassigned" ? "btn" : "btn secondary"}
-                  onClick={() => setView("unassigned")}
-                >
-                  Unassigned residents
-                </button>
-              </div>
+            <div className="tab-container">
+              <span
+                className={`tab ${view === "households" ? "active-tab" : ""}`}
+                onClick={() => setView("households")}
+              >
+                Household{data?.householdData?.total > 1 ? "s " : " "}
+                {data?.householdData?.total &&
+                  `(${data?.householdData?.total})`}
+              </span>
+              <span
+                className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
+                onClick={() => setView("unassigned")}
+              >
+                Unassigned resident
+                {data?.unassignedData?.total > 1 ? "s " : " "}
+                {data?.unassignedData?.total &&
+                  `(${data?.unassignedData?.total})`}
+              </span>
             </div>
 
             {view === "unassigned" ? (
-              <UnassignedResidents />
+              <UnassignedResidents unassignedData={data.unassignedData} />
             ) : (
               <>
                 {flash && (
@@ -989,9 +1002,19 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   <p className="muted">Loading households…</p>
                 ) : households.length === 0 ? (
                   <div className="empty">
-                    <p>{emptyMessage(search, active, data.total_all)}</p>
+                    <p>
+                      {emptyMessage(
+                        search,
+                        active,
+                        data.householdData.total_all,
+                      )}
+                    </p>
                     {canManage &&
-                      isTrulyEmpty(search, active, data.total_all) && (
+                      isTrulyEmpty(
+                        search,
+                        active,
+                        data.householdData.total_all,
+                      ) && (
                         <button
                           className="btn"
                           onClick={() => setShowCreate(true)}
@@ -1002,11 +1025,8 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   </div>
                 ) : (
                   <>
-                    <div className="list-head">
-                      <h2>
-                        {data.total} household{data.total === 1 ? "" : "s"}
-                      </h2>
-                    </div>
+                    {/* <div className="list-head">
+                    </div> */}
                     <div className="table-wrap">
                       <table className="data-table stack-narrow">
                         <thead>
@@ -1030,7 +1050,11 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                                 <strong>#{h.household_id}</strong>
                               </td>
                               <td data-label="Head">
-                                {h.head_name || <span className="muted">no head assigned</span>}
+                                {h.head_name || (
+                                  <span className="muted">
+                                    no head assigned
+                                  </span>
+                                )}
                               </td>
                               <td className="muted">{h.address}</td>
                               <td className="num" data-label="Members">
@@ -1052,10 +1076,11 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                       </table>
                     </div>
 
-                    {data.total_pages > 1 && (
+                    {data.householdData.total_pages > 1 && (
                       <div className="list-head">
                         <span className="muted">
-                          Page {data.page} of {data.total_pages}
+                          Page {data.householdData.page} of{" "}
+                          {data.householdData.total_pages}
                         </span>
                         <div className="head-actions">
                           <button
@@ -1067,7 +1092,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                           </button>
                           <button
                             className="btn secondary"
-                            disabled={page >= data.total_pages}
+                            disabled={page >= data.householdData.total_pages}
                             onClick={() => setPage((p) => p + 1)}
                           >
                             Next →

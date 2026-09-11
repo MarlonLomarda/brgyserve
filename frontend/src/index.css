@@ -1244,9 +1244,10 @@ button.link-button:hover:not(:disabled) {
 }
 
 .reason-note {
-  margin-top: 4px;
+  padding: 0 0 0.9rem 0;
   font-size: 0.8rem;
-  max-width: 280px;
+  max-width: 600px;
+  color: #64748b;
 }
 
 /* Inline charge-status words (badge color classes are scoped to .badge) */
@@ -2698,12 +2699,28 @@ button.link-button:hover:not(:disabled) {
   padding: 14px 16px;
   border-bottom: 1px solid #e2e8f0;
   flex: none;
+
+  position: relative;
+}
+
+.dash-drawer-arrow {
+  padding: 0;
+  background: none;
+  position: absolute;
+  right: 10px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.dash-drawer-arrow:hover {
+  background: none !important;
 }
 
 .dash-drawer-title {
   font-size: 1.05rem;
   font-weight: 700;
   color: #1e293b;
+  padding: 0.5rem 0.5rem 0.5rem 0;
 }
 
 .dash-drawer-close {
@@ -2753,7 +2770,8 @@ button.link-button:hover:not(:disabled) {
 
 /* search bar styling */
 .searchbar {
-  width: 500px;
+  width: 100%;
+  max-width: 680px;
 }
 
 .searchbar,
@@ -2793,6 +2811,40 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* — end of the drawer section. Everything above applies at every width. — */
+
+.tab-container {
+  padding: 1rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #cbd5e1;
+
+  display: flex;
+  gap: 1.5rem;
+}
+
+.tab {
+  cursor: pointer;
+  position: relative;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.active-tab {
+  color: #1d4ed8;
+}
+
+.tab.active-tab::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 3px;
+  background-color: #1d4ed8;
+  bottom: -1rem;
+  left: 0;
+}
+
+#unassigned-tab-searchbar {
+  max-width: 100%;
+}
 
 @keyframes dash-drawer-in {
   from {
