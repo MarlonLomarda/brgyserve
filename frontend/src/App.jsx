@@ -102,11 +102,13 @@ export default function App() {
         path="/secretary/residents"
         element={
           <ProtectedRoute role="secretary">
-            <ResidentRecordsPage
-              title="Resident records"
-              nav={SECRETARY_NAV}
-              canManage
-            />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident masterlist"}
+              navItems={SECRETARY_NAV}
+            >
+              <ResidentRecordsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -160,7 +162,15 @@ export default function App() {
         path="/secretary/document-types"
         element={
           <ProtectedRoute role="secretary">
-            <DocumentTypesPage />
+            <PageLayout
+              dashTitle={"Document types"}
+              dashSubtitle={
+                "Manage the document types that residents can request"
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <DocumentTypesPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -168,11 +178,13 @@ export default function App() {
         path="/secretary/requests"
         element={
           <ProtectedRoute role="secretary">
-            <SecretaryRequestsPage
-              title="Document requests"
-              nav={SECRETARY_NAV}
-              canManage
-            />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Document requests across residents"}
+              navItems={SECRETARY_NAV}
+            >
+              <SecretaryRequestsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -201,7 +213,13 @@ export default function App() {
         path="/secretary/payments"
         element={
           <ProtectedRoute role="secretary">
-            <PaymentsPage title="Payments" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Payments"}
+              dashSubtitle={"Record and verify payments"}
+              navItems={SECRETARY_NAV}
+            >
+              <PaymentsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -209,7 +227,15 @@ export default function App() {
         path="/secretary/rental-items"
         element={
           <ProtectedRoute role="secretary">
-            <RentalItemsPage />
+            <PageLayout
+              dashTitle={"Rental items"}
+              dashSubtitle={
+                "Manage the facilities and items residents can rent"
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <RentalItemsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -217,11 +243,13 @@ export default function App() {
         path="/secretary/rentals"
         element={
           <ProtectedRoute role="secretary">
-            <RentalBookingsPage
-              title="Rental bookings"
-              nav={SECRETARY_NAV}
-              canManage
-            />
+            <PageLayout
+              dashTitle={"Rental bookings"}
+              dashSubtitle={"Barangay's facility and item bookings"}
+              navItems={SECRETARY_NAV}
+            >
+              <RentalBookingsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -229,7 +257,13 @@ export default function App() {
         path="/secretary/blotter"
         element={
           <ProtectedRoute role="secretary">
-            <DisputesPage title="Blotter" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Blotter"}
+              dashSubtitle={"Baragnay's blotter list"}
+              navItems={SECRETARY_NAV}
+            >
+              <DisputesPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -237,7 +271,13 @@ export default function App() {
         path="/secretary/events"
         element={
           <ProtectedRoute role="secretary">
-            <EventsPage title="Events" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={SECRETARY_NAV}
+            >
+              <EventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -253,7 +293,15 @@ export default function App() {
         path="/secretary/notifications"
         element={
           <ProtectedRoute role="secretary">
-            <NotificationsPage />
+            <PageLayout
+              dashTitle={"Notifications"}
+              dashSubtitle={
+                "Every message the system generated, who it was for, and what happened to it."
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <NotificationsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -261,7 +309,13 @@ export default function App() {
         path="/secretary/reports"
         element={
           <ProtectedRoute role="secretary">
-            <ReportsPage title="Reports" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={SECRETARY_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />

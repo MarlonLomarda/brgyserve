@@ -682,189 +682,187 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const showAccount = !!records?.some((r) => "account" in r);
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle="Resident master list" nav={nav} />
+    // <DashHeader title={title} subtitle="Resident master list" nav={nav} />
 
-      <main className="dash-main">
-        {canManage && formTarget ? (
-          <RecordForm
-            record={formTarget === "new" ? null : formTarget}
-            onDone={(result, record) => {
-              const wasAdd = formTarget === "new";
-              setFormTarget(null);
-              if (!result) return;
-              setFlash(result);
-              setSelectedId(null);
-              if (wasAdd && record) {
-                // land back on the list with the new record in view: the master
-                // list is paginated by surname, so search for it
-                setSearchInput(record.last_name);
-                setSearch(record.last_name);
-                setPage(1);
-              }
-              load();
-            }}
-          />
-        ) : selectedId ? (
-          <RecordDetail
-            id={selectedId}
-            canManage={canManage}
-            onBack={() => setSelectedId(null)}
-            onEdit={(record) => setFormTarget(record)}
-            onChanged={(message) => {
-              setFlash({ type: "success", text: message });
-              load();
-            }}
-          />
-        ) : (
-          <>
-            {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-            {error && <div className="alert error">{error}</div>}
+    <>
+      {canManage && formTarget ? (
+        <RecordForm
+          record={formTarget === "new" ? null : formTarget}
+          onDone={(result, record) => {
+            const wasAdd = formTarget === "new";
+            setFormTarget(null);
+            if (!result) return;
+            setFlash(result);
+            setSelectedId(null);
+            if (wasAdd && record) {
+              // land back on the list with the new record in view: the master
+              // list is paginated by surname, so search for it
+              setSearchInput(record.last_name);
+              setSearch(record.last_name);
+              setPage(1);
+            }
+            load();
+          }}
+        />
+      ) : selectedId ? (
+        <RecordDetail
+          id={selectedId}
+          canManage={canManage}
+          onBack={() => setSelectedId(null)}
+          onEdit={(record) => setFormTarget(record)}
+          onChanged={(message) => {
+            setFlash({ type: "success", text: message });
+            load();
+          }}
+        />
+      ) : (
+        <>
+          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {error && <div className="alert error">{error}</div>}
 
-            <div className="list-head">
-              <h2>
-                {data === null
-                  ? "Resident records"
-                  : `${data.total} resident record${data.total === 1 ? "" : "s"}${search ? ` matching "${search}"` : ""}`}
-              </h2>
-              <SearchBar
-                search={search}
-                onSearch={handleSearch}
-                searchInput={searchInput}
-                onSearchInput={(e) => setSearchInput(e.target.value)}
-                onClear={clearSearch}
-                placeholder={"Search by name, address or purok"}
-              />
-              <form className="head-actions" onSubmit={handleSearch}>
-                <select
-                  value={archived}
-                  onChange={(e) => {
-                    setArchived(e.target.value);
-                    setPage(1);
-                  }}
+          <div className="list-head">
+            <h2>
+              {data === null
+                ? "Resident records"
+                : `${data.total} resident record${data.total === 1 ? "" : "s"}${search ? ` matching "${search}"` : ""}`}
+            </h2>
+            <SearchBar
+              search={search}
+              onSearch={handleSearch}
+              searchInput={searchInput}
+              onSearchInput={(e) => setSearchInput(e.target.value)}
+              onClear={clearSearch}
+              placeholder={"Search by name, address or purok"}
+            />
+            <form className="head-actions" onSubmit={handleSearch}>
+              <select
+                value={archived}
+                onChange={(e) => {
+                  setArchived(e.target.value);
+                  setPage(1);
+                }}
+              >
+                {ARCHIVED_FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              {canManage && (
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setFormTarget("new")}
                 >
-                  {ARCHIVED_FILTERS.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-                {canManage && (
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => setFormTarget("new")}
-                  >
-                    Add resident
-                  </button>
-                )}
-              </form>
-            </div>
+                  Add resident
+                </button>
+              )}
+            </form>
+          </div>
 
-            {records === undefined || data === null ? (
-              <p className="muted">Loading resident records…</p>
-            ) : records.length === 0 ? (
-              <div className="empty">
-                <p>
-                  {search
-                    ? `No resident records match "${search}".`
-                    : "No resident records yet."}
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="table-wrap">
-                  {/* stack-narrow: below 640px each record becomes a card
+          {records === undefined || data === null ? (
+            <p className="muted">Loading resident records…</p>
+          ) : records.length === 0 ? (
+            <div className="empty">
+              <p>
+                {search
+                  ? `No resident records match "${search}".`
+                  : "No resident records yet."}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="table-wrap">
+                {/* stack-narrow: below 640px each record becomes a card
                       instead of a six-column row. The data-label attributes
                       below are what the hidden column headers are replaced
                       with — see ISSUE 8 in index.css. */}
-                  <table className="data-table stack-narrow">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th className="col-date">Birthdate</th>
-                        <th>Address</th>
-                        {showContact && <th>Contact</th>}
-                        {showAccount && <th>Account</th>}
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {records.map((r) => (
-                        <tr
-                          key={r.resident_id}
-                          className={r.is_archived ? "inactive-row" : ""}
-                        >
-                          <td>
-                            <strong>{fullName(r)}</strong>
-                            {r.is_archived && (
-                              <div>
-                                <span className="badge gray">Archived</span>
-                              </div>
+                <table className="data-table stack-narrow">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th className="col-date">Birthdate</th>
+                      <th>Address</th>
+                      {showContact && <th>Contact</th>}
+                      {showAccount && <th>Account</th>}
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((r) => (
+                      <tr
+                        key={r.resident_id}
+                        className={r.is_archived ? "inactive-row" : ""}
+                      >
+                        <td>
+                          <strong>{fullName(r)}</strong>
+                          {r.is_archived && (
+                            <div>
+                              <span className="badge gray">Archived</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="muted col-date" data-label="Birthdate">
+                          {r.birthdate || "—"}
+                        </td>
+                        <td className="muted">{r.address}</td>
+                        {showContact && (
+                          <td className="muted" data-label="Contact">
+                            {r.contact_number || "—"}
+                          </td>
+                        )}
+                        {showAccount && (
+                          <td data-label="Account">
+                            {r.account ? (
+                              <span className="badge">
+                                @{r.account.username}
+                              </span>
+                            ) : (
+                              <span className="muted">—</span>
                             )}
                           </td>
-                          <td className="muted col-date" data-label="Birthdate">
-                            {r.birthdate || "—"}
-                          </td>
-                          <td className="muted">{r.address}</td>
-                          {showContact && (
-                            <td className="muted" data-label="Contact">
-                              {r.contact_number || "—"}
-                            </td>
-                          )}
-                          {showAccount && (
-                            <td data-label="Account">
-                              {r.account ? (
-                                <span className="badge">
-                                  @{r.account.username}
-                                </span>
-                              ) : (
-                                <span className="muted">—</span>
-                              )}
-                            </td>
-                          )}
-                          <td className="row-actions">
-                            <button
-                              className="btn secondary"
-                              onClick={() => setSelectedId(r.resident_id)}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        )}
+                        <td className="row-actions">
+                          <button
+                            className="btn secondary"
+                            onClick={() => setSelectedId(r.resident_id)}
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                {data.total_pages > 1 && (
-                  <div className="list-head">
-                    <span className="muted">
-                      Page {data.page} of {data.total_pages}
-                    </span>
-                    <div className="head-actions">
-                      <button
-                        className="btn secondary"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => p - 1)}
-                      >
-                        ← Previous
-                      </button>
-                      <button
-                        className="btn secondary"
-                        disabled={page >= data.total_pages}
-                        onClick={() => setPage((p) => p + 1)}
-                      >
-                        Next →
-                      </button>
-                    </div>
+              {data.total_pages > 1 && (
+                <div className="list-head">
+                  <span className="muted">
+                    Page {data.page} of {data.total_pages}
+                  </span>
+                  <div className="head-actions">
+                    <button
+                      className="btn secondary"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      className="btn secondary"
+                      disabled={page >= data.total_pages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next →
+                    </button>
                   </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
   );
 }
