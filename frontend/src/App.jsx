@@ -1,34 +1,41 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuth } from './auth/AuthContext';
-import { ROLE_HOME, roleHome } from './auth/roles';
-import ProtectedRoute from './components/ProtectedRoute';
-import BookRentalPage from './pages/BookRentalPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
-import DisputesPage from './pages/DisputesPage';
-import DocumentTypesPage from './pages/DocumentTypesPage';
-import EventsPage from './pages/EventsPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import HouseholdsPage from './pages/HouseholdsPage';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import MyHouseholdPage from './pages/MyHouseholdPage';
-import MyRentalsPage from './pages/MyRentalsPage';
-import NotificationsPage from './pages/NotificationsPage';
-import MyRequestsPage from './pages/MyRequestsPage';
-import PaymentResultPage from './pages/PaymentResultPage';
-import PaymentsPage from './pages/PaymentsPage';
-import PublicEventsPage from './pages/PublicEventsPage';
-import RegisterPage from './pages/RegisterPage';
-import ReportsPage from './pages/ReportsPage';
-import RentalBookingsPage from './pages/RentalBookingsPage';
-import RentalItemsPage from './pages/RentalItemsPage';
-import RequestDocumentPage from './pages/RequestDocumentPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import ResidentRecordsPage from './pages/ResidentRecordsPage';
-import RoleLandingPage from './pages/RoleLandingPage';
-import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
-import SecretaryReviewPage from './pages/SecretaryReviewPage';
-import { PUNONG_BARANGAY_NAV, RESIDENT_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_NAV } from './constants/nav';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./auth/AuthContext";
+import { ROLE_HOME, roleHome } from "./auth/roles";
+import ProtectedRoute from "./components/ProtectedRoute";
+import BookRentalPage from "./pages/BookRentalPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
+import DisputesPage from "./pages/DisputesPage";
+import DocumentTypesPage from "./pages/DocumentTypesPage";
+import EventsPage from "./pages/EventsPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import HouseholdsPage from "./pages/HouseholdsPage";
+import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
+import MyHouseholdPage from "./pages/MyHouseholdPage";
+import MyRentalsPage from "./pages/MyRentalsPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import MyRequestsPage from "./pages/MyRequestsPage";
+import PaymentResultPage from "./pages/PaymentResultPage";
+import PaymentsPage from "./pages/PaymentsPage";
+import PublicEventsPage from "./pages/PublicEventsPage";
+import RegisterPage from "./pages/RegisterPage";
+import ReportsPage from "./pages/ReportsPage";
+import RentalBookingsPage from "./pages/RentalBookingsPage";
+import RentalItemsPage from "./pages/RentalItemsPage";
+import RequestDocumentPage from "./pages/RequestDocumentPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ResidentRecordsPage from "./pages/ResidentRecordsPage";
+import RoleLandingPage from "./pages/RoleLandingPage";
+import SecretaryRequestsPage from "./pages/SecretaryRequestsPage";
+import SecretaryReviewPage from "./pages/SecretaryReviewPage";
+import {
+  PUNONG_BARANGAY_NAV,
+  RESIDENT_NAV,
+  SECRETARY_NAV,
+  STAFF_NAV,
+  TREASURER_NAV,
+} from "./constants/nav";
+import PageLayout from "./components/PageLayout";
 
 // Per-role home pages; roles without a real screen yet fall back to the
 // placeholder landing page. Staff and the Punong Barangay get the read-only
@@ -37,7 +44,9 @@ const ROLE_PAGES = {
   secretary: <SecretaryReviewPage />,
   resident: <MyRequestsPage />,
   treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
-  staff: <RentalBookingsPage title="Rental bookings" nav={STAFF_NAV} canReturn />,
+  staff: (
+    <RentalBookingsPage title="Rental bookings" nav={STAFF_NAV} canReturn />
+  ),
   punong_barangay: (
     <RentalBookingsPage title="Rental bookings" nav={PUNONG_BARANGAY_NAV} />
   ),
@@ -49,9 +58,9 @@ export default function App() {
   // anything else (the backend enforces this on the API side too).
   const home = user
     ? user.must_change_password
-      ? '/change-password'
+      ? "/change-password"
       : roleHome(user.role)
-    : '/login';
+    : "/login";
 
   return (
     <Routes>
@@ -61,8 +70,14 @@ export default function App() {
           never becomes a third opinion about where a user belongs. */}
       <Route path="/" element={<LandingPage />} />
 
-      <Route path="/login" element={user ? <Navigate to={home} replace /> : <LoginPage />} />
-      <Route path="/register" element={user ? <Navigate to={home} replace /> : <RegisterPage />} />
+      <Route
+        path="/login"
+        element={user ? <Navigate to={home} replace /> : <LoginPage />}
+      />
+      <Route
+        path="/register"
+        element={user ? <Navigate to={home} replace /> : <RegisterPage />}
+      />
       {/* Forgot password bounces a signed-in user for the same reason /login
           and /register do: they already have a working session, and
           /change-password is the screen they want. */}
@@ -78,14 +93,20 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/change-password"
-        element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />}
+        element={
+          user ? <ChangePasswordPage /> : <Navigate to="/login" replace />
+        }
       />
 
       <Route
         path="/secretary/residents"
         element={
           <ProtectedRoute role="secretary">
-            <ResidentRecordsPage title="Resident records" nav={SECRETARY_NAV} canManage />
+            <ResidentRecordsPage
+              title="Resident records"
+              nav={SECRETARY_NAV}
+              canManage
+            />
           </ProtectedRoute>
         }
       />
@@ -104,7 +125,10 @@ export default function App() {
         path="/punong-barangay/residents"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ResidentRecordsPage title="Resident records" nav={PUNONG_BARANGAY_NAV} />
+            <ResidentRecordsPage
+              title="Resident records"
+              nav={PUNONG_BARANGAY_NAV}
+            />
           </ProtectedRoute>
         }
       />
@@ -112,7 +136,13 @@ export default function App() {
         path="/secretary/households"
         element={
           <ProtectedRoute role="secretary">
-            <HouseholdsPage title="Households" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Households"}
+              dashSubtitle={"Household records"}
+              navItems={SECRETARY_NAV}
+            >
+              <HouseholdsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -138,7 +168,11 @@ export default function App() {
         path="/secretary/requests"
         element={
           <ProtectedRoute role="secretary">
-            <SecretaryRequestsPage title="Document requests" nav={SECRETARY_NAV} canManage />
+            <SecretaryRequestsPage
+              title="Document requests"
+              nav={SECRETARY_NAV}
+              canManage
+            />
           </ProtectedRoute>
         }
       />
@@ -156,7 +190,10 @@ export default function App() {
         path="/punong-barangay/requests"
         element={
           <ProtectedRoute role="punong_barangay">
-            <SecretaryRequestsPage title="Document requests" nav={PUNONG_BARANGAY_NAV} />
+            <SecretaryRequestsPage
+              title="Document requests"
+              nav={PUNONG_BARANGAY_NAV}
+            />
           </ProtectedRoute>
         }
       />
@@ -180,7 +217,11 @@ export default function App() {
         path="/secretary/rentals"
         element={
           <ProtectedRoute role="secretary">
-            <RentalBookingsPage title="Rental bookings" nav={SECRETARY_NAV} canManage />
+            <RentalBookingsPage
+              title="Rental bookings"
+              nav={SECRETARY_NAV}
+              canManage
+            />
           </ProtectedRoute>
         }
       />

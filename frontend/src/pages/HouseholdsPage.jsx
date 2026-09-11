@@ -911,202 +911,190 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
   const households = data?.householdData?.households;
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle="Household records" nav={nav} />
+    <>
+      {/* <DashHeader title={title} subtitle="Household records" nav={nav} /> */}
 
-      <main className="dash-main">
-        {selectedId ? (
-          <HouseholdDetail
-            householdId={selectedId}
-            canManage={canManage}
-            onBack={() => setSelectedId(null)}
-            onChanged={load}
-          />
-        ) : (
-          <>
-            <div className="tab-container">
-              <span
-                className={`tab ${view === "households" ? "active-tab" : ""}`}
-                onClick={() => setView("households")}
-              >
-                Household{data?.householdData?.total > 1 ? "s " : " "}
-                {data?.householdData?.total &&
-                  `(${data?.householdData?.total})`}
-              </span>
-              <span
-                className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
-                onClick={() => setView("unassigned")}
-              >
-                Unassigned resident
-                {data?.unassignedData?.total > 1 ? "s " : " "}
-                {data?.unassignedData?.total &&
-                  `(${data?.unassignedData?.total})`}
-              </span>
-            </div>
+      {selectedId ? (
+        <HouseholdDetail
+          householdId={selectedId}
+          canManage={canManage}
+          onBack={() => setSelectedId(null)}
+          onChanged={load}
+        />
+      ) : (
+        <>
+          <div className="tab-container">
+            <span
+              className={`tab ${view === "households" ? "active-tab" : ""}`}
+              onClick={() => setView("households")}
+            >
+              Household{data?.householdData?.total > 1 ? "s " : " "}
+              {data?.householdData?.total && `(${data?.householdData?.total})`}
+            </span>
+            <span
+              className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
+              onClick={() => setView("unassigned")}
+            >
+              Unassigned resident
+              {data?.unassignedData?.total > 1 ? "s " : " "}
+              {data?.unassignedData?.total &&
+                `(${data?.unassignedData?.total})`}
+            </span>
+          </div>
 
-            {view === "unassigned" ? (
-              <UnassignedResidents unassignedData={data.unassignedData} />
-            ) : (
-              <>
-                {flash && (
-                  <div className={`alert ${flash.type}`}>{flash.text}</div>
-                )}
-                {notice && <div className="alert">{notice}</div>}
-                {error && <div className="alert error">{error}</div>}
+          {view === "unassigned" ? (
+            <UnassignedResidents unassignedData={data.unassignedData} />
+          ) : (
+            <>
+              {flash && (
+                <div className={`alert ${flash.type}`}>{flash.text}</div>
+              )}
+              {notice && <div className="alert">{notice}</div>}
+              {error && <div className="alert error">{error}</div>}
 
-                <div className="list-head">
-                  <SearchBar
-                    placeholder={
-                      "Search by head, member, address, or household #"
-                    }
-                    search={search}
-                    searchInput={searchInput}
-                    onSearchInput={(e) => setSearchInput(e.target.value)}
-                    onSearch={(e) => {
-                      e.preventDefault();
+              <div className="list-head">
+                <SearchBar
+                  placeholder={
+                    "Search by head, member, address, or household #"
+                  }
+                  search={search}
+                  searchInput={searchInput}
+                  onSearchInput={(e) => setSearchInput(e.target.value)}
+                  onSearch={(e) => {
+                    e.preventDefault();
+                    setPage(1);
+                    setSearch(searchInput.trim());
+                  }}
+                  onClear={() => {
+                    setSearchInput("");
+                    setSearch("");
+                    setPage(1);
+                  }}
+                />
+                <div className="head-actions">
+                  <select
+                    value={active}
+                    onChange={(e) => {
+                      setActive(e.target.value);
                       setPage(1);
-                      setSearch(searchInput.trim());
                     }}
-                    onClear={() => {
-                      setSearchInput("");
-                      setSearch("");
-                      setPage(1);
-                    }}
-                  />
-                  <div className="head-actions">
-                    <select
-                      value={active}
-                      onChange={(e) => {
-                        setActive(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      {ACTIVE_FILTERS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                    {canManage && (
+                  >
+                    {ACTIVE_FILTERS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  {canManage && (
+                    <button className="btn" onClick={() => setShowCreate(true)}>
+                      New household
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {households === undefined ? (
+                <p className="muted">Loading households…</p>
+              ) : households.length === 0 ? (
+                <div className="empty">
+                  <p>
+                    {emptyMessage(search, active, data.householdData.total_all)}
+                  </p>
+                  {canManage &&
+                    isTrulyEmpty(
+                      search,
+                      active,
+                      data.householdData.total_all,
+                    ) && (
                       <button
                         className="btn"
                         onClick={() => setShowCreate(true)}
                       >
-                        New household
+                        Create the first household
                       </button>
                     )}
-                  </div>
                 </div>
-
-                {households === undefined ? (
-                  <p className="muted">Loading households…</p>
-                ) : households.length === 0 ? (
-                  <div className="empty">
-                    <p>
-                      {emptyMessage(
-                        search,
-                        active,
-                        data.householdData.total_all,
-                      )}
-                    </p>
-                    {canManage &&
-                      isTrulyEmpty(
-                        search,
-                        active,
-                        data.householdData.total_all,
-                      ) && (
-                        <button
-                          className="btn"
-                          onClick={() => setShowCreate(true)}
-                        >
-                          Create the first household
-                        </button>
-                      )}
-                  </div>
-                ) : (
-                  <>
-                    {/* <div className="list-head">
+              ) : (
+                <>
+                  {/* <div className="list-head">
                     </div> */}
-                    <div className="table-wrap">
-                      <table className="data-table stack-narrow">
-                        <thead>
-                          <tr>
-                            <th>Household #</th>
-                            <th>Head</th>
-                            <th>Address</th>
-                            <th className="num">Members</th>
-                            <th>Registered</th>
-                            <th>Status</th>
+                  <div className="table-wrap">
+                    <table className="data-table stack-narrow">
+                      <thead>
+                        <tr>
+                          <th>Household #</th>
+                          <th>Head</th>
+                          <th>Address</th>
+                          <th className="num">Members</th>
+                          <th>Registered</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {households.map((h) => (
+                          <tr
+                            key={h.household_id}
+                            className="clickable-row"
+                            onClick={() => setSelectedId(h.household_id)}
+                          >
+                            <td>
+                              <strong>#{h.household_id}</strong>
+                            </td>
+                            <td data-label="Head">
+                              {h.head_name || (
+                                <span className="muted">no head assigned</span>
+                              )}
+                            </td>
+                            <td className="muted">{h.address}</td>
+                            <td className="num" data-label="Members">
+                              {h.member_count}
+                            </td>
+                            <td className="muted" data-label="Registered">
+                              {formatDate(h.registered_at)}
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${h.is_active ? "status-claimed" : "status-cancelled"}`}
+                              >
+                                {h.is_active ? "Active" : "Inactive"}
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {households.map((h) => (
-                            <tr
-                              key={h.household_id}
-                              className="clickable-row"
-                              onClick={() => setSelectedId(h.household_id)}
-                            >
-                              <td>
-                                <strong>#{h.household_id}</strong>
-                              </td>
-                              <td data-label="Head">
-                                {h.head_name || (
-                                  <span className="muted">
-                                    no head assigned
-                                  </span>
-                                )}
-                              </td>
-                              <td className="muted">{h.address}</td>
-                              <td className="num" data-label="Members">
-                                {h.member_count}
-                              </td>
-                              <td className="muted" data-label="Registered">
-                                {formatDate(h.registered_at)}
-                              </td>
-                              <td>
-                                <span
-                                  className={`badge ${h.is_active ? "status-claimed" : "status-cancelled"}`}
-                                >
-                                  {h.is_active ? "Active" : "Inactive"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    {data.householdData.total_pages > 1 && (
-                      <div className="list-head">
-                        <span className="muted">
-                          Page {data.householdData.page} of{" "}
-                          {data.householdData.total_pages}
-                        </span>
-                        <div className="head-actions">
-                          <button
-                            className="btn secondary"
-                            disabled={page <= 1}
-                            onClick={() => setPage((p) => p - 1)}
-                          >
-                            ← Previous
-                          </button>
-                          <button
-                            className="btn secondary"
-                            disabled={page >= data.householdData.total_pages}
-                            onClick={() => setPage((p) => p + 1)}
-                          >
-                            Next →
-                          </button>
-                        </div>
+                  {data.householdData.total_pages > 1 && (
+                    <div className="list-head">
+                      <span className="muted">
+                        Page {data.householdData.page} of{" "}
+                        {data.householdData.total_pages}
+                      </span>
+                      <div className="head-actions">
+                        <button
+                          className="btn secondary"
+                          disabled={page <= 1}
+                          onClick={() => setPage((p) => p - 1)}
+                        >
+                          ← Previous
+                        </button>
+                        <button
+                          className="btn secondary"
+                          disabled={page >= data.householdData.total_pages}
+                          onClick={() => setPage((p) => p + 1)}
+                        >
+                          Next →
+                        </button>
                       </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </main>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {showCreate && (
         <CreateHouseholdModal
@@ -1121,6 +1109,6 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
