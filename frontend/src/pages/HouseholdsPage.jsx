@@ -742,6 +742,7 @@ function UnassignedResidents({ unassignedData }) {
   useEffect(() => {
     if (page === 1 && !search) {
       setData(unassignedData);
+      return;
     }
 
     load();
@@ -875,7 +876,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
         page: String(page),
         active,
       });
-      const unassignedParams = new URLSearchParams({ page: String(page) });
+      const unassignedParams = new URLSearchParams({ page: "1" });
 
       if (search) householdParams.set("search", search);
 
