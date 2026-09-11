@@ -2703,11 +2703,18 @@ button.link-button:hover:not(:disabled) {
   position: relative;
 }
 
+/* 44x44 is the tap target — the close button measured 50x44 before it became
+   an icon. The 30px icon is centred in that box, 7px in from each side, so
+   `right` moves from 10px to 3px to keep the icon's right edge where it was.
+   Nothing moves vertically: the head centres the box, and the box centres the
+   icon's line. */
 .dash-drawer-arrow {
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   background: none;
   position: absolute;
-  right: 10px;
+  right: 3px;
   color: #334155;
   cursor: pointer;
 }
@@ -2821,11 +2828,26 @@ button.link-button:hover:not(:disabled) {
   gap: 1.5rem;
 }
 
+/* The tabs are <button>s so a keyboard can reach them. The last five lines
+   undo the global `button` rule and the browser's own button styling, so they
+   still render as the plain text they were designed as — text-align matters
+   only on a narrow phone, where a label wraps and a button would centre it. */
 .tab {
   cursor: pointer;
   position: relative;
   font-size: 0.9rem;
   color: #64748b;
+  padding: 0;
+  background: none;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: inherit;
+}
+
+/* The global button:hover:not(:disabled) is (0,2,1) and would paint a tab
+   blue on hover; this is (0,3,1), the same way button.link-button escapes it. */
+button.tab:hover:not(:disabled) {
+  background: none;
 }
 
 .active-tab {

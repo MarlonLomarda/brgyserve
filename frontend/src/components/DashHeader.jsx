@@ -126,7 +126,6 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
               aria-expanded={open}
               aria-controls="dash-drawer"
               onClick={() => setOpen((wasOpen) => !wasOpen)}
-              tabIndex={0}
             >
               <span className="dash-menu-icon" aria-hidden="true">
                 <span />
@@ -164,9 +163,10 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
           >
             <div className="dash-drawer-head">
               <button
+                type="button"
                 className="dash-drawer-arrow"
-                tabIndex={0}
                 onClick={closeAndRefocus}
+                aria-label="Close menu"
               >
                 <IoIosClose size={30} />
               </button>

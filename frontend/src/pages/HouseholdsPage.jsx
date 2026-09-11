@@ -772,6 +772,7 @@ function UnassignedResidents({ unassignedData }) {
           onClear={() => {
             setSearch("");
             setSearchInput("");
+            setPage(1);
             setData(unassignedData);
           }}
           placeholder={"Search by name or address"}
@@ -924,24 +925,31 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
           />
         ) : (
           <>
+            {/* Buttons, not spans: a span is not in the tab order, which left a
+                keyboard user no way at all into the Unassigned residents view.
+                The count is shown once it is a number — `total && …` printed a
+                bare 0 — and every count but one takes the plural, as the old
+                "N households" heading did. */}
             <div className="tab-container">
-              <span
+              <button
+                type="button"
                 className={`tab ${view === "households" ? "active-tab" : ""}`}
                 onClick={() => setView("households")}
               >
-                Household{data?.householdData?.total > 1 ? "s " : " "}
-                {data?.householdData?.total &&
-                  `(${data?.householdData?.total})`}
-              </span>
-              <span
+                Household{data?.householdData?.total === 1 ? " " : "s "}
+                {typeof data?.householdData?.total === "number" &&
+                  `(${data.householdData.total})`}
+              </button>
+              <button
+                type="button"
                 className={`tab ${view === "unassigned" ? "active-tab" : ""}`}
                 onClick={() => setView("unassigned")}
               >
                 Unassigned resident
-                {data?.unassignedData?.total > 1 ? "s " : " "}
-                {data?.unassignedData?.total &&
-                  `(${data?.unassignedData?.total})`}
-              </span>
+                {data?.unassignedData?.total === 1 ? " " : "s "}
+                {typeof data?.unassignedData?.total === "number" &&
+                  `(${data.unassignedData.total})`}
+              </button>
             </div>
 
             {view === "unassigned" ? (
