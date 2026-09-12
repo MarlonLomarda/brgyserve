@@ -191,121 +191,119 @@ export default function PublicEventsPage({ title, nav }) {
   );
 
   return (
-    <div className="dash">
-      <DashHeader
+    <>
+      {/* <DashHeader
         title={title}
         subtitle="Barangay events and announcements"
         nav={nav}
-      />
+      /> */}
 
-      <main className="dash-main">
-        {selectedId ? (
-          <EventDetail id={selectedId} onBack={() => setSelectedId(null)} />
-        ) : (
-          <>
-            {error && <div className="alert error">{error}</div>}
+      {selectedId ? (
+        <EventDetail id={selectedId} onBack={() => setSelectedId(null)} />
+      ) : (
+        <>
+          {error && <div className="alert error">{error}</div>}
 
-            <div className="list-head">
-              <h2>
-                {data === null
-                  ? "Events"
-                  : `${data.total} ${view === "past" ? "past activity" : "event"}${data.total === 1 ? "" : view === "past" ? " records" : "s"}`}
-              </h2>
-              <SearchBar
-                search={search}
-                onSearch={handleSearch}
-                searchInput={searchInput}
-                onSearchInput={(e) => setSearchInput(e.target.value)}
-                onClear={() => {
-                  setSearch("");
-                  setSearchInput("");
+          <div className="list-head">
+            <h2>
+              {data === null
+                ? "Events"
+                : `${data.total} ${view === "past" ? "past activity" : "event"}${data.total === 1 ? "" : view === "past" ? " records" : "s"}`}
+            </h2>
+            <SearchBar
+              search={search}
+              onSearch={handleSearch}
+              searchInput={searchInput}
+              onSearchInput={(e) => setSearchInput(e.target.value)}
+              onClear={() => {
+                setSearch("");
+                setSearchInput("");
+                setPage(1);
+              }}
+              placeholder={"Search by event name"}
+            />
+            <div className="head-actions">
+              <select
+                value={view}
+                onChange={(e) => {
+                  setView(e.target.value);
                   setPage(1);
                 }}
-                placeholder={"Search by event name"}
-              />
-              <div className="head-actions" >
-                <select
-                  value={view}
-                  onChange={(e) => {
-                    setView(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  {VIEWS.map((v) => (
-                    <option key={v.value} value={v.value}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={type}
-                  onChange={(e) => {
-                    setType(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="all">All types</option>
-                  <option value="activity">Activities</option>
-                  <option value="announcement">Announcements</option>
-                </select>
-              </div>
+              >
+                {VIEWS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={type}
+                onChange={(e) => {
+                  setType(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">All types</option>
+                <option value="activity">Activities</option>
+                <option value="announcement">Announcements</option>
+              </select>
             </div>
+          </div>
 
-            {data === null ? (
-              <p className="muted">Loading events…</p>
-            ) : events.length === 0 ? (
-              <div className="empty">
-                <p>
-                  {view === "past"
-                    ? "No past activities"
-                    : "Nothing posted by the barangay right now"}
-                  {search ? ` matching "${search}"` : ""}.
-                </p>
-              </div>
-            ) : (
-              <>
-                {type !== "announcement" &&
-                  section(
-                    view === "past" ? "Past activities" : "Activities",
-                    activities,
-                    "No activities to show.",
-                  )}
-                {type !== "activity" &&
-                  view !== "past" &&
-                  section(
-                    "Announcements",
-                    announcements,
-                    "No announcements to show.",
-                  )}
-
-                {data.total_pages > 1 && (
-                  <div className="list-head">
-                    <span className="muted">
-                      Page {data.page} of {data.total_pages}
-                    </span>
-                    <div className="head-actions">
-                      <button
-                        className="btn secondary"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => p - 1)}
-                      >
-                        ← Previous
-                      </button>
-                      <button
-                        className="btn secondary"
-                        disabled={page >= data.total_pages}
-                        onClick={() => setPage((p) => p + 1)}
-                      >
-                        Next →
-                      </button>
-                    </div>
-                  </div>
+          {data === null ? (
+            <p className="muted">Loading events…</p>
+          ) : events.length === 0 ? (
+            <div className="empty">
+              <p>
+                {view === "past"
+                  ? "No past activities"
+                  : "Nothing posted by the barangay right now"}
+                {search ? ` matching "${search}"` : ""}.
+              </p>
+            </div>
+          ) : (
+            <>
+              {type !== "announcement" &&
+                section(
+                  view === "past" ? "Past activities" : "Activities",
+                  activities,
+                  "No activities to show.",
                 )}
-              </>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+              {type !== "activity" &&
+                view !== "past" &&
+                section(
+                  "Announcements",
+                  announcements,
+                  "No announcements to show.",
+                )}
+
+              {data.total_pages > 1 && (
+                <div className="list-head">
+                  <span className="muted">
+                    Page {data.page} of {data.total_pages}
+                  </span>
+                  <div className="head-actions">
+                    <button
+                      className="btn secondary"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      className="btn secondary"
+                      disabled={page >= data.total_pages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
   );
 }

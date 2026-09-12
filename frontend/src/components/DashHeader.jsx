@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS } from "../auth/roles";
 import { IoIosClose } from "react-icons/io";
+import { MdKeyboardDoubleArrowLeft } from "react-icons/md";
 
 // Shared dashboard header: title, current user, logout, and the slide-in
 // navigation drawer.
@@ -22,18 +22,18 @@ import { IoIosClose } from "react-icons/io";
 // this header (landing, login, register, change-password).
 const BASE_TITLE = "BrgyServe";
 
-export default function DashHeader({ title, subtitle, nav = [] }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+export default function DashHeader({
+  title,
+  subtitle,
+  nav = [],
+  user,
+  handleLogout,
+}) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef(null);
   const drawerRef = useRef(null);
-
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
+  const [sidebar, setSidebar] = useState(true);
 
   const close = () => setOpen(false);
   const closeAndRefocus = () => {
@@ -107,7 +107,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
       return (
         <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate}>
-          {Icon && <Icon size={20} />}
+          {Icon && <Icon size={18} />}
           {item.label}
         </NavLink>
       );
@@ -115,6 +115,23 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
 
   return (
     <>
+      <aside className={`dash-side ${!sidebar ? "close" : ""}`}>
+        <section>
+          <p>
+            <span>Brgy</span>
+            <span>Serve</span>
+          </p>
+          <MdKeyboardDoubleArrowLeft
+            size={25}
+            onClick={() => setSidebar((prev) => !prev)}
+          />
+        </section>
+        {navLinks(close)}
+        <div className="dash-drawer-foot">
+          <p>{ROLE_LABELS[user.role]}</p>
+          <span className="muted">@{user.username}</span>
+        </div>
+      </aside>
       <header className="dash-header">
         {nav.length > 0 && (
           <section className="dash-header-section">

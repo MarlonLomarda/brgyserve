@@ -722,6 +722,8 @@ a {
 
 .dash {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: auto 1fr;
 }
 
 /* STICKY, and z-index: 30 is the load-bearing number. It must stay BELOW
@@ -736,7 +738,7 @@ a {
    judgement about density, and .dash-header padding has already been through
    one revert cycle (2c6d7c1 / 07cc26d). */
 .dash-header {
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: center;
   background: #fff;
@@ -775,6 +777,96 @@ a {
   gap: 12px;
 }
 
+.dash-side {
+  grid-column: 1;
+
+  width: 230px;
+  overflow: hidden;
+  height: 100vh;
+
+  position: sticky;
+  top: 0;
+  align-self: start;
+
+  background-color: #fff;
+  border-right: 1px solid #e2e8f0;
+
+  display: flex;
+  flex-direction: column;
+
+  transition: 300ms ease-in-out;
+}
+
+.dash-side.close {
+  width: 57px;
+}
+
+.dash-side .dash-drawer-foot {
+  opacity: 1;
+  transition: opacity 300ms ease-in-out;
+  white-space: nowrap;
+}
+
+.dash-side section {
+  padding: 13px 16px 25px 16px;
+  display: flex;
+  align-items: center;
+
+  svg {
+    cursor: pointer;
+    margin-left: auto;
+    transition: rotate 150ms ease;
+  }
+
+  svg:hover {
+    color: #1d4ed8;
+  }
+
+  p {
+    font-weight: 600;
+    margin: 0;
+    padding: 0;
+    opacity: 1;
+    transition: opacity 300ms ease-in-out;
+
+    span:last-child {
+      color: #1d4ed8;
+    }
+  }
+}
+
+.dash-side.close .dash-drawer-foot {
+  /* width: 0; */
+  pointer-events: none;
+  opacity: 0;
+}
+
+.dash-side.close section {
+  svg {
+    rotate: 180deg;
+  }
+
+  p {
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+@media (max-width: 1045px) {
+  .dash {
+    display: block;
+  }
+
+  .dash-header {
+    display: flex;
+  }
+
+  .dash-side {
+    display: none;
+  }
+}
+
 /* "Log out" contains a SPACE, so its min-content is the width of "Log" — not
    of the whole label. .dash-header is a nowrap flex row and .dash-user carries
    the defaults (flex-shrink: 1, min-width: auto), so as soon as the row is
@@ -791,9 +883,12 @@ a {
 }
 
 .dash-main {
+  grid-column: 2;
+
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 1rem;
 }
 
 /* Forms and read-only detail panels must NOT stretch to the full dashboard
@@ -827,7 +922,7 @@ a {
    COUPLED TO THE 720px ABOVE. The two values must stay equal or the column
    stops lining up, and this file has no CSS variables to bind them. Change one,
    change the other. */
-.dash-main.capped-column > :is(.list-head, .alert, .empty) {
+.capped-column > :is(.list-head, .alert, .empty) {
   max-width: 720px;
 }
 
@@ -2744,25 +2839,35 @@ button.link-button:hover:not(:disabled) {
   padding: 8px 0;
 }
 
-.dash-drawer-nav a {
+.dash-drawer-nav a,
+.dash-side a {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.15rem;
+
+  width: 100%;
+  min-width: 230px;
+
   padding: 13px 16px;
   min-height: 44px;
-  font-size: 0.95rem;
+
+  font-size: 0.9rem;
   font-weight: 600;
+  white-space: nowrap;
+
   color: #334155;
   text-decoration: none;
   border-left: 3px solid transparent;
 }
 
-.dash-drawer-nav a:hover {
+.dash-drawer-nav a:hover,
+.dash-side a:hover {
   background: #f8fafc;
   color: #1d4ed8;
 }
 
-.dash-drawer-nav a.active {
+.dash-drawer-nav a.active,
+.dash-side a.active {
   color: #1d4ed8;
   background: #eff6ff;
   border-left-color: #1d4ed8;
@@ -2772,6 +2877,18 @@ button.link-button:hover:not(:disabled) {
   flex: none;
   padding: 14px 16px;
   border-top: 1px solid #e2e8f0;
+  margin-top: auto;
+
+  p {
+    margin: 0 0 0.1rem 0;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #334155;
+  }
+
+  span {
+    font-size: 0.8rem;
+  }
 }
 
 /* search bar styling */
@@ -2818,7 +2935,7 @@ button.link-button:hover:not(:disabled) {
 /* — end of the drawer section. Everything above applies at every width. — */
 
 .tab-container {
-  padding: 1rem 0;
+  padding: 0 0 1rem 0;
   margin-bottom: 1rem;
   border-bottom: 1px solid #cbd5e1;
 
@@ -2880,6 +2997,36 @@ button.tab:hover:not(:disabled) {
    every class in the file whatever the order. */
 .unassigned-search > .searchbar {
   width: 100%;
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  h1 {
+    margin: 0 0 0.3rem 0;
+    font-size: 1.5rem;
+    color: #1e293b;
+  }
+
+  span {
+    font-size: 0.9rem;
+    color: #64748b;
+  }
+}
+
+.page-header-wrapper {
+  margin: 0 0 2.5rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (max-width: 1045px) {
+  .page-header-wrapper {
+    display: none;
+  }
 }
 
 @keyframes dash-drawer-in {
