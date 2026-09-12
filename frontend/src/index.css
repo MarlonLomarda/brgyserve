@@ -801,6 +801,12 @@ a {
   width: 57px;
 }
 
+.dash-side .dash-drawer-foot {
+  opacity: 1;
+  transition: opacity 300ms ease-in-out;
+  white-space: nowrap;
+}
+
 .dash-side section {
   padding: 13px 16px 25px 16px;
   display: flex;
@@ -827,6 +833,12 @@ a {
       color: #1d4ed8;
     }
   }
+}
+
+.dash-side.close .dash-drawer-foot {
+  /* width: 0; */
+  pointer-events: none;
+  opacity: 0;
 }
 
 .dash-side.close section {
@@ -2869,10 +2881,14 @@ button.link-button:hover:not(:disabled) {
   margin-top: auto;
 
   p {
-    margin: 0 0 0.3rem 0;
-    font-weight: 500;
-    font-size: 0.9rem;
+    margin: 0 0 0.1rem 0;
+    font-weight: 600;
+    font-size: 0.8rem;
     color: #334155;
+  }
+
+  span {
+    font-size: 0.8rem;
   }
 }
 
