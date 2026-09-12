@@ -55,14 +55,20 @@ const ROLE_PAGES = {
   staff: (
     <PageLayout
       dashTitle={"Rental bookings"}
-      dashSubtitle={"blabla"}
+      dashSubtitle={"Barangay's facility and item bookings"}
       navItems={STAFF_NAV}
     >
       <RentalBookingsPage canReturn />
     </PageLayout>
   ),
   punong_barangay: (
-    <RentalBookingsPage title="Rental bookings" nav={PUNONG_BARANGAY_NAV} />
+    <PageLayout
+      dashTitle={"Rental bookings"}
+      dashSubtitle={"Barangay's facility and item bookings"}
+      navItems={PUNONG_BARANGAY_NAV}
+    >
+      <RentalBookingsPage />
+    </PageLayout>
   ),
 };
 
@@ -147,10 +153,13 @@ export default function App() {
         path="/punong-barangay/residents"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ResidentRecordsPage
-              title="Resident records"
-              nav={PUNONG_BARANGAY_NAV}
-            />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident master list"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <ResidentRecordsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -234,10 +243,13 @@ export default function App() {
         path="/punong-barangay/requests"
         element={
           <ProtectedRoute role="punong_barangay">
-            <SecretaryRequestsPage
-              title="Document requests"
-              nav={PUNONG_BARANGAY_NAV}
-            />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Document requests across residents"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <SecretaryRequestsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -369,7 +381,13 @@ export default function App() {
         path="/punong-barangay/reports"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -385,7 +403,13 @@ export default function App() {
         path="/punong-barangay/events"
         element={
           <ProtectedRoute role="punong_barangay">
-            <PublicEventsPage title="Events" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <PublicEventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -393,7 +417,13 @@ export default function App() {
         path="/punong-barangay/blotter"
         element={
           <ProtectedRoute role="punong_barangay">
-            <DisputesPage title="Blotter" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Blotter"}
+              dashSubtitle={"Barangay blotter records"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <DisputesPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
