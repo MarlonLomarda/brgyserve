@@ -53,7 +53,13 @@ const ROLE_PAGES = {
   resident: <MyRequestsPage />,
   treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
   staff: (
-    <RentalBookingsPage title="Rental bookings" nav={STAFF_NAV} canReturn />
+    <PageLayout
+      dashTitle={"Rental bookings"}
+      dashSubtitle={"blabla"}
+      navItems={STAFF_NAV}
+    >
+      <RentalBookingsPage canReturn />
+    </PageLayout>
   ),
   punong_barangay: (
     <RentalBookingsPage title="Rental bookings" nav={PUNONG_BARANGAY_NAV} />
@@ -127,7 +133,13 @@ export default function App() {
         path="/staff/residents"
         element={
           <ProtectedRoute role="staff">
-            <ResidentRecordsPage title="Resident records" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident master list"}
+              navItems={STAFF_NAV}
+            >
+              <ResidentRecordsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -162,7 +174,13 @@ export default function App() {
         path="/staff/households"
         element={
           <ProtectedRoute role="staff">
-            <HouseholdsPage title="Households" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Households"}
+              dashSubtitle={"Household records"}
+              navItems={STAFF_NAV}
+            >
+              <HouseholdsPage title="Households" nav={STAFF_NAV} />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -188,7 +206,7 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               dashTitle={"Document requests"}
-              dashSubtitle={"Document requests across residents"}
+              dashSubtitle={"Process document requests"}
               navItems={SECRETARY_NAV}
             >
               <SecretaryRequestsPage canManage />
@@ -202,7 +220,13 @@ export default function App() {
         path="/staff/requests"
         element={
           <ProtectedRoute role="staff">
-            <SecretaryRequestsPage title="Document requests" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Document requests across residents"}
+              navItems={STAFF_NAV}
+            >
+              <SecretaryRequestsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -293,7 +317,13 @@ export default function App() {
         path="/staff/events"
         element={
           <ProtectedRoute role="staff">
-            <EventsPage title="Events" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={STAFF_NAV}
+            >
+              <EventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
