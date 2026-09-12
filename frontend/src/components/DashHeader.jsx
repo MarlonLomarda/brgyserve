@@ -23,19 +23,18 @@ import { MdKeyboardDoubleArrowLeft } from "react-icons/md";
 // this header (landing, login, register, change-password).
 const BASE_TITLE = "BrgyServe";
 
-export default function DashHeader({ title, subtitle, nav = [] }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+export default function DashHeader({
+  title,
+  subtitle,
+  nav = [],
+  user,
+  handleLogout,
+}) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef(null);
   const drawerRef = useRef(null);
   const [sidebar, setSidebar] = useState(true);
-
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
 
   const close = () => setOpen(false);
   const closeAndRefocus = () => {

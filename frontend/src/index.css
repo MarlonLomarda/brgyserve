@@ -841,7 +841,7 @@ a {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 1045px) {
   .dash {
     display: block;
   }
@@ -2913,7 +2913,7 @@ button.link-button:hover:not(:disabled) {
 /* — end of the drawer section. Everything above applies at every width. — */
 
 .tab-container {
-  padding: 1rem 0;
+  padding: 0 0 1rem 0;
   margin-bottom: 1rem;
   border-bottom: 1px solid #cbd5e1;
 
@@ -2965,7 +2965,6 @@ button.tab:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: 0 0 1.5rem 0;
 
   h1 {
     margin: 0 0 0.3rem 0;
@@ -2976,6 +2975,19 @@ button.tab:hover:not(:disabled) {
   span {
     font-size: 0.9rem;
     color: #64748b;
+  }
+}
+
+.page-header-wrapper {
+  margin: 0 0 2.5rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (max-width: 1045px) {
+  .page-header-wrapper {
+    display: none;
   }
 }
 
