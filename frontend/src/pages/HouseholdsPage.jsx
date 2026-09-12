@@ -753,14 +753,13 @@ function UnassignedResidents({ unassignedData }) {
 
   return (
     <>
-      <div className="reason-note">
+      <div className="reason-note unassigned-note">
         These are active residents who aren’t currently assigned to a household.
         To assign them, add them from a household’s detail page.
       </div>
 
-      <div className="list-head">
+      <div className="list-head unassigned-search">
         <SearchBar
-          id={"unassigned-tab-searchbar"}
           search={search}
           onSearch={(e) => {
             e.preventDefault();
@@ -1047,8 +1046,6 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   </div>
                 ) : (
                   <>
-                    {/* <div className="list-head">
-                    </div> */}
                     <div className="table-wrap">
                       <table className="data-table stack-narrow">
                         <thead>
