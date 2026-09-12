@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS } from "../auth/roles";
 import { IoIosClose } from "react-icons/io";
 import { MdKeyboardDoubleArrowLeft } from "react-icons/md";
@@ -128,6 +127,10 @@ export default function DashHeader({
           />
         </section>
         {navLinks(close)}
+        <div className="dash-drawer-foot">
+          <p>{ROLE_LABELS[user.role]}</p>
+          <span className="muted">@{user.username}</span>
+        </div>
       </aside>
       <header className="dash-header">
         {nav.length > 0 && (

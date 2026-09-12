@@ -2866,6 +2866,14 @@ button.link-button:hover:not(:disabled) {
   flex: none;
   padding: 14px 16px;
   border-top: 1px solid #e2e8f0;
+  margin-top: auto;
+
+  p {
+    margin: 0 0 0.3rem 0;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #334155;
+  }
 }
 
 /* search bar styling */
