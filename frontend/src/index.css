@@ -1339,10 +1339,9 @@ button.link-button:hover:not(:disabled) {
 }
 
 .reason-note {
-  padding: 0 0 0.9rem 0;
+  margin-top: 4px;
   font-size: 0.8rem;
-  max-width: 600px;
-  color: #64748b;
+  max-width: 280px;
 }
 
 /* Inline charge-status words (badge color classes are scoped to .badge) */
@@ -2894,8 +2893,7 @@ button.link-button:hover:not(:disabled) {
 
 /* search bar styling */
 .searchbar {
-  width: 100%;
-  max-width: 680px;
+  width: 500px;
 }
 
 .searchbar,
@@ -2981,8 +2979,24 @@ button.tab:hover:not(:disabled) {
   left: 0;
 }
 
-#unassigned-tab-searchbar {
-  max-width: 100%;
+/* The Unassigned residents intro line is the one .reason-note not inside an
+   .alert: it sits between the tabs and the search row. The shared rule is sized
+   for a line under an alert's bold heading — 4px below it, 280px wide, in the
+   alert's colour — so this line carries its own class instead of moving every
+   note. Without the bottom padding its last line sits flush on the search bar. */
+.reason-note.unassigned-note {
+  margin-top: 0;
+  padding-bottom: 0.9rem;
+  max-width: 600px;
+  color: #64748b;
+}
+
+/* The Unassigned residents search bar spans the whole column; every other
+   search bar is .searchbar's 500px. Keyed on a class on its own row, not an id:
+   (0,2,0) beats .searchbar by specificity alone, where an id would outrank
+   every class in the file whatever the order. */
+.unassigned-search > .searchbar {
+  width: 100%;
 }
 
 .page-title {
