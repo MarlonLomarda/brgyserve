@@ -30,7 +30,7 @@ export default function DashHeader({ title, subtitle, nav = [] }) {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef(null);
   const drawerRef = useRef(null);
-  const [sidebar, setSidebar] = useState(false);
+  const [sidebar, setSidebar] = useState(true);
 
   function handleLogout() {
     logout();

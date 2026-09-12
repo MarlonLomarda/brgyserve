@@ -2961,6 +2961,24 @@ button.tab:hover:not(:disabled) {
   max-width: 100%;
 }
 
+.page-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 0 1.5rem 0;
+
+  h1 {
+    margin: 0 0 0.3rem 0;
+    font-size: 1.5rem;
+    color: #1e293b;
+  }
+
+  span {
+    font-size: 0.9rem;
+    color: #64748b;
+  }
+}
+
 @keyframes dash-drawer-in {
   from {
     transform: translateX(-100%);
