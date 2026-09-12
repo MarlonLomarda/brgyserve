@@ -51,7 +51,15 @@ const ROLE_PAGES = {
     </PageLayout>
   ),
   resident: <MyRequestsPage />,
-  treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
+  treasurer: (
+    <PageLayout
+      dashTitle={"Payments"}
+      dashSubtitle={"Record and verify payments"}
+      navItems={TREASURER_NAV}
+    >
+      <PaymentsPage />
+    </PageLayout>
+  ),
   staff: (
     <PageLayout
       dashTitle={"Rental bookings"}
@@ -373,7 +381,13 @@ export default function App() {
         path="/treasurer/reports"
         element={
           <ProtectedRoute role="treasurer">
-            <ReportsPage title="Reports" nav={TREASURER_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={TREASURER_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
