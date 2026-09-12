@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { RESIDENT_NAV } from '../constants/nav';
-import { chargeMeta } from '../constants/requestStatus';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import { RESIDENT_NAV } from "../constants/nav";
+import { chargeMeta } from "../constants/requestStatus";
 
 // Where PayMongo sends the resident back to after the hosted checkout.
 //
@@ -25,12 +25,12 @@ const RECHECK_COOLDOWN_S = 10;
 export default function PaymentResultPage() {
   const { authFetch } = useAuth();
   const [params] = useSearchParams();
-  const chargeId = params.get('charge');
-  const result = params.get('result');
+  const chargeId = params.get("charge");
+  const result = params.get("result");
 
   const [charge, setCharge] = useState(null);
-  const [error, setError] = useState('');
-  const [waiting, setWaiting] = useState(result === 'success');
+  const [error, setError] = useState("");
+  const [waiting, setWaiting] = useState(result === "success");
   const attemptsRef = useRef(0);
 
   const check = useCallback(async () => {
@@ -40,13 +40,13 @@ export default function PaymentResultPage() {
       return data.status;
     } catch (err) {
       setError(err.message);
-      return 'ERROR';
+      return "ERROR";
     }
   }, [authFetch, chargeId]);
 
   useEffect(() => {
     if (!chargeId) {
-      setError('No charge was specified.');
+      setError("No charge was specified.");
       setWaiting(false);
       return undefined;
     }
@@ -58,7 +58,7 @@ export default function PaymentResultPage() {
       const status = await check();
       if (cancelled) return;
       // Stop as soon as it is settled, or once we have waited long enough.
-      if (status === 'PAID' || status === 'ERROR' || result !== 'success') {
+      if (status === "PAID" || status === "ERROR" || result !== "success") {
         setWaiting(false);
         return;
       }
@@ -93,104 +93,116 @@ export default function PaymentResultPage() {
   async function askGcash() {
     setRecheckBusy(true);
     setRecheckMsg(null);
-    setError('');
+    setError("");
     try {
-      const data = await authFetch(`/payments/gcash/recheck/${chargeId}`, { method: 'POST' });
-      setRecheckMsg({ kind: data.settled ? 'success' : '', text: data.message });
+      const data = await authFetch(`/payments/gcash/recheck/${chargeId}`, {
+        method: "POST",
+      });
+      setRecheckMsg({
+        kind: data.settled ? "success" : "",
+        text: data.message,
+      });
       // ONE source of truth for the charge itself: re-read it through the same
       // status endpoint the poll uses, rather than trusting this response to
       // describe the row. If a poll is in flight they cannot disagree — both
       // read the same record after the settlement has been committed.
       await check();
     } catch (err) {
-      setRecheckMsg({ kind: 'error', text: err.message });
+      setRecheckMsg({ kind: "error", text: err.message });
     } finally {
       setRecheckBusy(false);
       setCooldown(RECHECK_COOLDOWN_S);
     }
   }
 
-  const paid = charge?.status === 'PAID';
+  const paid = charge?.status === "PAID";
 
   return (
-    <div className="dash">
-      <DashHeader
+    <>
+      {/* <DashHeader
         title="GCash payment"
         subtitle="Your online payment for a barangay charge"
         nav={RESIDENT_NAV}
-      />
+      /> */}
 
-      <main className="dash-main">
-        {error && <div className="alert error">{error}</div>}
+      {error && <div className="alert error">{error}</div>}
 
-        {result === 'cancelled' && !paid && (
-          <div className="alert">
-            <strong>Payment cancelled.</strong>
-            <div className="reason-note">
-              Nothing was charged. You can try again, or pay at the barangay hall instead.
-            </div>
+      {result === "cancelled" && !paid && (
+        <div className="alert">
+          <strong>Payment cancelled.</strong>
+          <div className="reason-note">
+            Nothing was charged. You can try again, or pay at the barangay hall
+            instead.
           </div>
-        )}
+        </div>
+      )}
 
-        {result === 'success' && waiting && (
-          <div className="alert">
-            <strong>Confirming your payment…</strong>
-            <div className="reason-note">
-              GCash has sent you back to BrgyServe. We are waiting for PayMongo to confirm the
-              payment before marking this as paid — this usually takes a few seconds.
-            </div>
+      {result === "success" && waiting && (
+        <div className="alert">
+          <strong>Confirming your payment…</strong>
+          <div className="reason-note">
+            GCash has sent you back to BrgyServe. We are waiting for PayMongo to
+            confirm the payment before marking this as paid — this usually takes
+            a few seconds.
           </div>
-        )}
+        </div>
+      )}
 
-        {result === 'success' && !waiting && !paid && (
-          <div className="alert">
-            <strong>Payment not confirmed yet.</strong>
-            <div className="reason-note">
-              We have not received confirmation from PayMongo. If the amount was deducted from your
-              GCash account, do not pay again — refresh this page in a moment, or show your GCash
-              receipt to the barangay treasurer and they will confirm it for you.
-            </div>
+      {result === "success" && !waiting && !paid && (
+        <div className="alert">
+          <strong>Payment not confirmed yet.</strong>
+          <div className="reason-note">
+            We have not received confirmation from PayMongo. If the amount was
+            deducted from your GCash account, do not pay again — refresh this
+            page in a moment, or show your GCash receipt to the barangay
+            treasurer and they will confirm it for you.
           </div>
-        )}
+        </div>
+      )}
 
-        {paid && (
-          <div className="alert success">
-            <strong>Payment confirmed.</strong>
-            <div className="reason-note">
-              Your payment of ₱{Number(charge.amount).toFixed(2)} for {charge.label} has been
-              received. No need to pay again at the barangay hall.
-            </div>
+      {paid && (
+        <div className="alert success">
+          <strong>Payment confirmed.</strong>
+          <div className="reason-note">
+            Your payment of ₱{Number(charge.amount).toFixed(2)} for{" "}
+            {charge.label} has been received. No need to pay again at the
+            barangay hall.
           </div>
-        )}
+        </div>
+      )}
 
-        {charge && (
-          <div className="table-wrap">
-            <table className="data-table">
-              <tbody>
-                <tr>
-                  <th>For</th>
-                  <td>{charge.label}</td>
-                </tr>
-                <tr>
-                  <th>Amount</th>
-                  <td className="num">₱{Number(charge.amount).toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <th>Status</th>
-                  <td>
-                    <span className={`badge ${chargeMeta(charge.status).className}`}>
-                      {chargeMeta(charge.status).label}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
+      {charge && (
+        <div className="table-wrap">
+          <table className="data-table">
+            <tbody>
+              <tr>
+                <th>For</th>
+                <td>{charge.label}</td>
+              </tr>
+              <tr>
+                <th>Amount</th>
+                <td className="num">₱{Number(charge.amount).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <th>Status</th>
+                <td>
+                  <span
+                    className={`badge ${chargeMeta(charge.status).className}`}
+                  >
+                    {chargeMeta(charge.status).label}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        {recheckMsg && <div className={`alert ${recheckMsg.kind}`}>{recheckMsg.text}</div>}
+      {recheckMsg && (
+        <div className={`alert ${recheckMsg.kind}`}>{recheckMsg.text}</div>
+      )}
 
-        {/* The helper line and BOTH check buttons sit under ONE `!paid` guard,
+      {/* The helper line and BOTH check buttons sit under ONE `!paid` guard,
             rather than three parallel ones, so the explanation cannot outlive
             the buttons it describes. The navigation links are always shown,
             which is why they keep a row of their own below.
@@ -201,24 +213,25 @@ export default function PaymentResultPage() {
             caption for it — .row-actions is justify-content: flex-end, so the
             buttons are right-aligned and cannot be lined up with body text
             without a new rule. */}
-        {!paid && (
-          <>
-            <p className="muted" style={{ marginTop: '1rem' }}>
-              “Check again” looks for a confirmation we may already have received. “Ask GCash”
-              contacts GCash itself — use that one if the wait is taking too long.
-            </p>
-            <div className="row-actions" style={{ marginTop: '8px' }}>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  attemptsRef.current = 0;
-                  setError('');
-                  check();
-                }}
-              >
-                Check again
-              </button>
-              {/* Deliberately a SEPARATE action from "Check again", not a
+      {!paid && (
+        <>
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            “Check again” looks for a confirmation we may already have received.
+            “Ask GCash” contacts GCash itself — use that one if the wait is
+            taking too long.
+          </p>
+          <div className="row-actions" style={{ marginTop: "8px" }}>
+            <button
+              className="btn secondary"
+              onClick={() => {
+                attemptsRef.current = 0;
+                setError("");
+                check();
+              }}
+            >
+              Check again
+            </button>
+            {/* Deliberately a SEPARATE action from "Check again", not a
                   replacement. That one re-reads our own record and is right for
                   the normal case, where the webhook is seconds away. This one
                   asks GCash — the helper line above now carries the "directly"
@@ -228,30 +241,29 @@ export default function PaymentResultPage() {
                   The seconds are padded with a figure space (U+2007, the width
                   of a digit) so the button does not change width when the
                   countdown ticks from 10 to 9. */}
-              <button
-                className="btn secondary"
-                onClick={askGcash}
-                disabled={recheckBusy || cooldown > 0}
-              >
-                {recheckBusy
-                  ? 'Asking GCash…'
-                  : cooldown > 0
-                    ? `Ask GCash (${String(cooldown).padStart(2, ' ')}s)`
-                    : 'Ask GCash'}
-              </button>
-            </div>
-          </>
-        )}
+            <button
+              className="btn secondary"
+              onClick={askGcash}
+              disabled={recheckBusy || cooldown > 0}
+            >
+              {recheckBusy
+                ? "Asking GCash…"
+                : cooldown > 0
+                  ? `Ask GCash (${String(cooldown).padStart(2, " ")}s)`
+                  : "Ask GCash"}
+            </button>
+          </div>
+        </>
+      )}
 
-        <div className="row-actions" style={{ marginTop: '1rem' }}>
-          <Link className="button-link inline" to="/resident">
-            Back to my requests
-          </Link>
-          <Link className="button-link inline" to="/resident/rentals">
-            My rentals
-          </Link>
-        </div>
-      </main>
-    </div>
+      <div className="row-actions" style={{ marginTop: "1rem" }}>
+        <Link className="button-link inline" to="/resident">
+          Back to my requests
+        </Link>
+        <Link className="button-link inline" to="/resident/rentals">
+          My rentals
+        </Link>
+      </div>
+    </>
   );
 }

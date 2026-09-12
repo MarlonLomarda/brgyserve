@@ -50,7 +50,15 @@ const ROLE_PAGES = {
       <SecretaryReviewPage />
     </PageLayout>
   ),
-  resident: <MyRequestsPage />,
+  resident: (
+    <PageLayout
+      dashTitle={"My requests"}
+      dashSubtitle={"Track your barangay document request"}
+      navItems={RESIDENT_NAV}
+    >
+      <MyRequestsPage />
+    </PageLayout>
+  ),
   treasurer: (
     <PageLayout
       dashTitle={"Payments"}
@@ -409,7 +417,13 @@ export default function App() {
         path="/resident/events"
         element={
           <ProtectedRoute role="resident">
-            <PublicEventsPage title="Events" nav={RESIDENT_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={RESIDENT_NAV}
+            >
+              <PublicEventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -445,7 +459,13 @@ export default function App() {
         path="/resident/request"
         element={
           <ProtectedRoute role="resident">
-            <RequestDocumentPage />
+            <PageLayout
+              dashTitle={"Request a document"}
+              dashSubtitle={"Request an official barangay document"}
+              navItems={RESIDENT_NAV}
+            >
+              <RequestDocumentPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -453,7 +473,13 @@ export default function App() {
         path="/resident/rentals"
         element={
           <ProtectedRoute role="resident">
-            <MyRentalsPage />
+            <PageLayout
+              dashTitle={"My rentals"}
+              dashSubtitle={"Your facility and item bookings"}
+              navItems={RESIDENT_NAV}
+            >
+              <MyRentalsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -461,7 +487,13 @@ export default function App() {
         path="/resident/book-rental"
         element={
           <ProtectedRoute role="resident">
-            <BookRentalPage />
+            <PageLayout
+              dashTitle={"Book a facility"}
+              dashSubtitle={"Book a barangay facility or item"}
+              navItems={RESIDENT_NAV}
+            >
+              <BookRentalPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -471,7 +503,13 @@ export default function App() {
         path="/resident/household"
         element={
           <ProtectedRoute role="resident">
-            <MyHouseholdPage />
+            <PageLayout
+              dashTitle={"My household"}
+              dashSubtitle={"Your household QR"}
+              navItems={RESIDENT_NAV}
+            >
+              <MyHouseholdPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -482,7 +520,13 @@ export default function App() {
         path="/resident/payment-result"
         element={
           <ProtectedRoute role="resident">
-            <PaymentResultPage />
+            <PageLayout
+              dashTitle={"GCash payment"}
+              dashSubtitle={"Your online payment for a barangay charge"}
+              navItems={RESIDENT_NAV}
+            >
+              <PaymentResultPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
