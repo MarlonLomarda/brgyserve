@@ -860,56 +860,64 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState("true");
-  const [data, setData] = useState({
-    householdData: null,
-    unassignedData: null,
-  });
-  const [error, setError] = useState("");
+  const [householdData, setHouseholdData] = useState(null);
+  const [householdError, setHouseholdError] = useState("");
+  const [unassignedData, setUnassignedData] = useState(null);
+  const [unassignedError, setUnassignedError] = useState("");
   const [flash, setFlash] = useState(null);
   const [notice, setNotice] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
-  const load = useCallback(async () => {
-    setError("");
+  // Two loaders, each with its own state, error and effect — the shape of the
+  // attendance roster in EventsPage. One Promise.all with one catch let either
+  // failure empty BOTH lists, so the page claimed no household had ever been
+  // registered while /households had just returned sixty. A failure stores
+  // null, never an empty list: an empty list is the claim "we looked and
+  // there are none".
+  const loadHouseholds = useCallback(async () => {
+    setHouseholdError("");
     try {
-      const householdParams = new URLSearchParams({
-        page: String(page),
-        active,
-      });
-      const unassignedParams = new URLSearchParams({ page: "1" });
-
-      if (search) householdParams.set("search", search);
-
-      const [householdData, unassignedData] = await Promise.all([
-        authFetch(`/households?${householdParams}`),
-        authFetch(`/households/unassigned-residents?${unassignedParams}`),
-      ]);
-
-      setData({
-        householdData,
-        unassignedData,
-      });
+      const params = new URLSearchParams({ page: String(page), active });
+      if (search) params.set("search", search);
+      setHouseholdData(await authFetch(`/households?${params}`));
     } catch (err) {
-      setError(err.message);
-      setData({
-        householdData: {
-          households: [],
-          total: 0,
-          page: 1,
-          total_pages: 0,
-          total_all: 0,
-        },
-        unassignedData: { residents: [], total: 0, page: 1, total_pages: 0 },
-      });
+      setHouseholdError(err.message);
+      setHouseholdData(null);
     }
   }, [authFetch, page, search, active]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Page 1 only: it feeds the tab count and lets the Unassigned view open
+  // without a second request, while UnassignedResidents fetches its own later
+  // pages and searches. No page, search or filter here, so paging or
+  // filtering the households list does not re-request this one.
+  const loadUnassigned = useCallback(async () => {
+    setUnassignedError("");
+    try {
+      setUnassignedData(
+        await authFetch("/households/unassigned-residents?page=1"),
+      );
+    } catch (err) {
+      setUnassignedError(err.message);
+      setUnassignedData(null);
+    }
+  }, [authFetch]);
 
-  const households = data?.householdData?.households;
+  useEffect(() => {
+    loadHouseholds();
+  }, [loadHouseholds]);
+
+  useEffect(() => {
+    loadUnassigned();
+  }, [loadUnassigned]);
+
+  // A new household or a membership change alters both lists.
+  const reloadBoth = () => {
+    loadHouseholds();
+    loadUnassigned();
+  };
+
+  const households = householdData?.households;
 
   return (
     <div className="dash">
@@ -921,24 +929,25 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
             householdId={selectedId}
             canManage={canManage}
             onBack={() => setSelectedId(null)}
-            onChanged={load}
+            onChanged={reloadBoth}
           />
         ) : (
           <>
             {/* Buttons, not spans: a span is not in the tab order, which left a
                 keyboard user no way at all into the Unassigned residents view.
                 The count is shown once it is a number — `total && …` printed a
-                bare 0 — and every count but one takes the plural, as the old
-                "N households" heading did. */}
+                bare 0 — so a list still loading, or one that failed, shows its
+                label with no count. Every count but one takes the plural, as
+                the old "N households" heading did. */}
             <div className="tab-container">
               <button
                 type="button"
                 className={`tab ${view === "households" ? "active-tab" : ""}`}
                 onClick={() => setView("households")}
               >
-                Household{data?.householdData?.total === 1 ? " " : "s "}
-                {typeof data?.householdData?.total === "number" &&
-                  `(${data.householdData.total})`}
+                Household{householdData?.total === 1 ? " " : "s "}
+                {typeof householdData?.total === "number" &&
+                  `(${householdData.total})`}
               </button>
               <button
                 type="button"
@@ -946,21 +955,28 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                 onClick={() => setView("unassigned")}
               >
                 Unassigned resident
-                {data?.unassignedData?.total === 1 ? " " : "s "}
-                {typeof data?.unassignedData?.total === "number" &&
-                  `(${data.unassignedData.total})`}
+                {unassignedData?.total === 1 ? " " : "s "}
+                {typeof unassignedData?.total === "number" &&
+                  `(${unassignedData.total})`}
               </button>
             </div>
 
+            {/* A failed page-1 load replaces the whole unassigned view with its
+                error, the same way UnassignedResidents handles its own failures
+                — it never reaches the child, whose empty text would claim every
+                resident has a household. */}
             {view === "unassigned" ? (
-              <UnassignedResidents unassignedData={data.unassignedData} />
+              unassignedError ? (
+                <div className="alert error">{unassignedError}</div>
+              ) : (
+                <UnassignedResidents unassignedData={unassignedData} />
+              )
             ) : (
               <>
                 {flash && (
                   <div className={`alert ${flash.type}`}>{flash.text}</div>
                 )}
                 {notice && <div className="alert">{notice}</div>}
-                {error && <div className="alert error">{error}</div>}
 
                 <div className="list-head">
                   <SearchBar
@@ -1006,23 +1022,21 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                   </div>
                 </div>
 
-                {households === undefined ? (
+                {/* Error first, then loading, then empty — the order
+                    MatchSuggestions uses — so a failed request can never reach
+                    "No households have been registered yet." The search and
+                    filter above stay, and changing either loads again. */}
+                {householdError ? (
+                  <div className="alert error">{householdError}</div>
+                ) : !householdData ? (
                   <p className="muted">Loading households…</p>
                 ) : households.length === 0 ? (
                   <div className="empty">
                     <p>
-                      {emptyMessage(
-                        search,
-                        active,
-                        data.householdData.total_all,
-                      )}
+                      {emptyMessage(search, active, householdData.total_all)}
                     </p>
                     {canManage &&
-                      isTrulyEmpty(
-                        search,
-                        active,
-                        data.householdData.total_all,
-                      ) && (
+                      isTrulyEmpty(search, active, householdData.total_all) && (
                         <button
                           className="btn"
                           onClick={() => setShowCreate(true)}
@@ -1084,11 +1098,11 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                       </table>
                     </div>
 
-                    {data.householdData.total_pages > 1 && (
+                    {householdData.total_pages > 1 && (
                       <div className="list-head">
                         <span className="muted">
-                          Page {data.householdData.page} of{" "}
-                          {data.householdData.total_pages}
+                          Page {householdData.page} of{" "}
+                          {householdData.total_pages}
                         </span>
                         <div className="head-actions">
                           <button
@@ -1100,7 +1114,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
                           </button>
                           <button
                             className="btn secondary"
-                            disabled={page >= data.householdData.total_pages}
+                            disabled={page >= householdData.total_pages}
                             onClick={() => setPage((p) => p + 1)}
                           >
                             Next →
@@ -1125,7 +1139,7 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
             setNotice(result.notice);
             setSelectedId(null);
             setPage(1);
-            load();
+            reloadBoth();
           }}
         />
       )}
