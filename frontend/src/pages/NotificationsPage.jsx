@@ -54,103 +54,103 @@ export default function NotificationsPage() {
   const banner = deliveryBanner(data?.mode, data?.email_mode);
 
   return (
-    <div className="dash">
+    <>
       {/* The card used to repeat the page name in an <h3> with this same
           description under it. The h1 carries the name now, so the card head
           is gone and the description has moved up to the subtitle. */}
-      <DashHeader
+      {/* <DashHeader
         title="Notifications"
         subtitle="Every message the system generated, who it was for, and what happened to it."
         nav={SECRETARY_NAV}
-      />
-      <main className="dash-main">
-        <div className="pending-card">
-          {/* Stated plainly and permanently — not a dismissible notice. It is
+      /> */}
+
+      <div className="pending-card">
+        {/* Stated plainly and permanently — not a dismissible notice. It is
               shown in EVERY mode, including when both providers are live: a
               screen listing residents' numbers and message bodies should say
               whether what it lists actually went out. The old version rendered
               only when SMS was simulated, which is how it ended up asserting
               "no provider is connected" above a row Resend had sent. */}
-          {banner && (
-            <div className="alert info notif-mode">
-              <strong>{banner.heading}</strong> {banner.body}
+        {banner && (
+          <div className="alert info notif-mode">
+            <strong>{banner.heading}</strong> {banner.body}
+          </div>
+        )}
+
+        {error && <div className="alert error">{error}</div>}
+
+        {summary && (
+          <div className="roster-summary">
+            <div className="roster-stat">
+              <span className="roster-value muted">{summary.total}</span>
+              <span className="roster-label">Total generated</span>
             </div>
-          )}
-
-          {error && <div className="alert error">{error}</div>}
-
-          {summary && (
-            <div className="roster-summary">
-              <div className="roster-stat">
-                <span className="roster-value muted">{summary.total}</span>
-                <span className="roster-label">Total generated</span>
-              </div>
-              <div className="roster-stat">
-                <span className="roster-value">{summary.SIMULATED ?? 0}</span>
-                <span className="roster-label">Composed &amp; addressed</span>
-              </div>
-              <div className="roster-stat">
-                <span className="roster-value warn">
-                  {summary.unreachable ?? 0}
-                </span>
-                <span className="roster-label">No contact number</span>
-              </div>
-              {(summary.FAILED ?? 0) > 0 && (
-                <div className="roster-stat">
-                  <span className="roster-value warn">{summary.FAILED}</span>
-                  <span className="roster-label">Failed</span>
-                </div>
-              )}
+            <div className="roster-stat">
+              <span className="roster-value">{summary.SIMULATED ?? 0}</span>
+              <span className="roster-label">Composed &amp; addressed</span>
             </div>
-          )}
+            <div className="roster-stat">
+              <span className="roster-value warn">
+                {summary.unreachable ?? 0}
+              </span>
+              <span className="roster-label">No contact number</span>
+            </div>
+            {(summary.FAILED ?? 0) > 0 && (
+              <div className="roster-stat">
+                <span className="roster-value warn">{summary.FAILED}</span>
+                <span className="roster-label">Failed</span>
+              </div>
+            )}
+          </div>
+        )}
 
-          <div className="head-actions notif-filters">
-            <SearchBar
-              search={search}
-              onSearch={(e) => {
-                e.preventDefault();
-                setPage(1);
-                setSearch(searchInput.trim());
-              }}
-              searchInput={searchInput}
-              onSearchInput={(e) => setSearchInput(e.target.value)}
-              onClear={() => {
-                setSearchInput("");
-                setSearch("");
-                setPage(1);
-              }}
-              placeholder={"Search by message or number"}
-            />
+        <div className="head-actions notif-filters">
+          <SearchBar
+            search={search}
+            onSearch={(e) => {
+              e.preventDefault();
+              setPage(1);
+              setSearch(searchInput.trim());
+            }}
+            searchInput={searchInput}
+            onSearchInput={(e) => setSearchInput(e.target.value)}
+            onClear={() => {
+              setSearchInput("");
+              setSearch("");
+              setPage(1);
+            }}
+            placeholder={"Search by message or number"}
+          />
 
-            <section>
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {NOTIFICATION_STATUS_FILTERS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={relatedType}
-                onChange={(e) => {
-                  setRelatedType(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {RELATED_TYPE_FILTERS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </section>
-            {/* <input
+          <section>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              {NOTIFICATION_STATUS_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={relatedType}
+              onChange={(e) => {
+                setRelatedType(e.target.value);
+                setPage(1);
+              }}
+            >
+              {RELATED_TYPE_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </section>
+          {/* <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search message or number"
@@ -171,134 +171,132 @@ export default function NotificationsPage() {
                 Clear
               </button>
             )} */}
-          </div>
+        </div>
 
-          {!data ? (
-            <p className="muted">Loading notifications…</p>
-          ) : data.notifications.length === 0 ? (
-            <div className="empty">
-              <p>
-                <strong>No notifications yet.</strong>
-              </p>
-              <p className="muted">
-                A row appears here whenever the system would send a message — a
-                request approved or rejected, a payment verified, a booking
-                confirmed or cancelled, a return recorded, or a fine raised.
-              </p>
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table className="data-table stack-narrow">
-                <thead>
-                  <tr>
-                    <th>Recipient</th>
-                    <th className="col-message">Message</th>
-                    <th>About</th>
-                    <th>Status</th>
-                    <th>Generated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.notifications.map((n) => {
-                    const meta = notificationStatusMeta(n.status);
-                    const open = expanded === n.notification_id;
-                    return (
-                      <tr key={n.notification_id}>
-                        <td className="col-resident">
-                          <span className="cell-clamp">
-                            {n.recipient_name || n.recipient_username ? (
-                              <>
-                                <strong>
-                                  {n.recipient_name ||
-                                    `@${n.recipient_username}`}
-                                </strong>
-                                <br />
-                              </>
-                            ) : n.household_id ? (
-                              <>
-                                <strong>Household #{n.household_id}</strong>
-                                <br />
-                              </>
-                            ) : null}
-                            <span className="muted small-note">
-                              {n.destination || "No contact number on record"}
-                            </span>
+        {!data ? (
+          <p className="muted">Loading notifications…</p>
+        ) : data.notifications.length === 0 ? (
+          <div className="empty">
+            <p>
+              <strong>No notifications yet.</strong>
+            </p>
+            <p className="muted">
+              A row appears here whenever the system would send a message — a
+              request approved or rejected, a payment verified, a booking
+              confirmed or cancelled, a return recorded, or a fine raised.
+            </p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table stack-narrow">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th className="col-message">Message</th>
+                  <th>About</th>
+                  <th>Status</th>
+                  <th>Generated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.notifications.map((n) => {
+                  const meta = notificationStatusMeta(n.status);
+                  const open = expanded === n.notification_id;
+                  return (
+                    <tr key={n.notification_id}>
+                      <td className="col-resident">
+                        <span className="cell-clamp">
+                          {n.recipient_name || n.recipient_username ? (
+                            <>
+                              <strong>
+                                {n.recipient_name || `@${n.recipient_username}`}
+                              </strong>
+                              <br />
+                            </>
+                          ) : n.household_id ? (
+                            <>
+                              <strong>Household #{n.household_id}</strong>
+                              <br />
+                            </>
+                          ) : null}
+                          <span className="muted small-note">
+                            {n.destination || "No contact number on record"}
                           </span>
-                        </td>
-                        <td className="col-message" data-label="Message">
-                          <span className="cell-clamp">
-                            {/* Email carries a subject; SMS stores null and
+                        </span>
+                      </td>
+                      <td className="col-message" data-label="Message">
+                        <span className="cell-clamp">
+                          {/* Email carries a subject; SMS stores null and
                                 renders nothing. Same <strong> + <br> shape the
                                 recipient cell uses, so no CSS was needed. */}
-                            {n.subject && (
-                              <>
-                                <strong>{n.subject}</strong>
-                                <br />
-                              </>
-                            )}
-                            {open || n.message.length <= 90
-                              ? n.message
-                              : `${n.message.slice(0, 90)}…`}
-                            {n.message.length > 90 && (
-                              <>
-                                {" "}
-                                <button
-                                  className="btn secondary notif-more"
-                                  type="button"
-                                  onClick={() =>
-                                    setExpanded(open ? null : n.notification_id)
-                                  }
-                                >
-                                  {open ? "Less" : "More"}
-                                </button>
-                              </>
-                            )}
-                          </span>
-                        </td>
-                        <td className="muted" data-label="About">
-                          {relatedLabel(n)}
-                        </td>
-                        <td>
-                          <span className={`badge ${meta.className}`}>
-                            {meta.label}
-                          </span>
-                        </td>
-                        <td className="muted small-note" data-label="Generated">
-                          {formatDate(n.created_at)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          {n.subject && (
+                            <>
+                              <strong>{n.subject}</strong>
+                              <br />
+                            </>
+                          )}
+                          {open || n.message.length <= 90
+                            ? n.message
+                            : `${n.message.slice(0, 90)}…`}
+                          {n.message.length > 90 && (
+                            <>
+                              {" "}
+                              <button
+                                className="btn secondary notif-more"
+                                type="button"
+                                onClick={() =>
+                                  setExpanded(open ? null : n.notification_id)
+                                }
+                              >
+                                {open ? "Less" : "More"}
+                              </button>
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="muted" data-label="About">
+                        {relatedLabel(n)}
+                      </td>
+                      <td>
+                        <span className={`badge ${meta.className}`}>
+                          {meta.label}
+                        </span>
+                      </td>
+                      <td className="muted small-note" data-label="Generated">
+                        {formatDate(n.created_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {data && data.total_pages > 1 && (
-            <div className="list-head">
-              <span className="muted">
-                Page {data.page} of {data.total_pages}
-              </span>
-              <div className="head-actions">
-                <button
-                  className="btn secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  ← Previous
-                </button>
-                <button
-                  className="btn secondary"
-                  disabled={page >= data.total_pages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next →
-                </button>
-              </div>
+        {data && data.total_pages > 1 && (
+          <div className="list-head">
+            <span className="muted">
+              Page {data.page} of {data.total_pages}
+            </span>
+            <div className="head-actions">
+              <button
+                className="btn secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                ← Previous
+              </button>
+              <button
+                className="btn secondary"
+                disabled={page >= data.total_pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next →
+              </button>
             </div>
-          )}
-        </div>
-      </main>
-    </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

@@ -1,45 +1,90 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuth } from './auth/AuthContext';
-import { ROLE_HOME, roleHome } from './auth/roles';
-import ProtectedRoute from './components/ProtectedRoute';
-import BookRentalPage from './pages/BookRentalPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
-import DisputesPage from './pages/DisputesPage';
-import DocumentTypesPage from './pages/DocumentTypesPage';
-import EventsPage from './pages/EventsPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import HouseholdsPage from './pages/HouseholdsPage';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import MyHouseholdPage from './pages/MyHouseholdPage';
-import MyRentalsPage from './pages/MyRentalsPage';
-import NotificationsPage from './pages/NotificationsPage';
-import MyRequestsPage from './pages/MyRequestsPage';
-import PaymentResultPage from './pages/PaymentResultPage';
-import PaymentsPage from './pages/PaymentsPage';
-import PublicEventsPage from './pages/PublicEventsPage';
-import RegisterPage from './pages/RegisterPage';
-import ReportsPage from './pages/ReportsPage';
-import RentalBookingsPage from './pages/RentalBookingsPage';
-import RentalItemsPage from './pages/RentalItemsPage';
-import RequestDocumentPage from './pages/RequestDocumentPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import ResidentRecordsPage from './pages/ResidentRecordsPage';
-import RoleLandingPage from './pages/RoleLandingPage';
-import SecretaryRequestsPage from './pages/SecretaryRequestsPage';
-import SecretaryReviewPage from './pages/SecretaryReviewPage';
-import { PUNONG_BARANGAY_NAV, RESIDENT_NAV, SECRETARY_NAV, STAFF_NAV, TREASURER_NAV } from './constants/nav';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./auth/AuthContext";
+import { ROLE_HOME, roleHome } from "./auth/roles";
+import ProtectedRoute from "./components/ProtectedRoute";
+import BookRentalPage from "./pages/BookRentalPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
+import DisputesPage from "./pages/DisputesPage";
+import DocumentTypesPage from "./pages/DocumentTypesPage";
+import EventsPage from "./pages/EventsPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import HouseholdsPage from "./pages/HouseholdsPage";
+import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
+import MyHouseholdPage from "./pages/MyHouseholdPage";
+import MyRentalsPage from "./pages/MyRentalsPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import MyRequestsPage from "./pages/MyRequestsPage";
+import PaymentResultPage from "./pages/PaymentResultPage";
+import PaymentsPage from "./pages/PaymentsPage";
+import PublicEventsPage from "./pages/PublicEventsPage";
+import RegisterPage from "./pages/RegisterPage";
+import ReportsPage from "./pages/ReportsPage";
+import RentalBookingsPage from "./pages/RentalBookingsPage";
+import RentalItemsPage from "./pages/RentalItemsPage";
+import RequestDocumentPage from "./pages/RequestDocumentPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ResidentRecordsPage from "./pages/ResidentRecordsPage";
+import RoleLandingPage from "./pages/RoleLandingPage";
+import SecretaryRequestsPage from "./pages/SecretaryRequestsPage";
+import SecretaryReviewPage from "./pages/SecretaryReviewPage";
+import {
+  PUNONG_BARANGAY_NAV,
+  RESIDENT_NAV,
+  SECRETARY_NAV,
+  STAFF_NAV,
+  TREASURER_NAV,
+} from "./constants/nav";
+import PageLayout from "./components/PageLayout";
 
 // Per-role home pages; roles without a real screen yet fall back to the
 // placeholder landing page. Staff and the Punong Barangay get the read-only
 // rental-bookings view (no canManage) — writes are blocked server-side too.
 const ROLE_PAGES = {
-  secretary: <SecretaryReviewPage />,
-  resident: <MyRequestsPage />,
-  treasurer: <PaymentsPage title="Payments" nav={TREASURER_NAV} />,
-  staff: <RentalBookingsPage title="Rental bookings" nav={STAFF_NAV} canReturn />,
+  secretary: (
+    <PageLayout
+      dashTitle={"Resident review"}
+      dashSubtitle={"Manage accounts and review pending residents"}
+      navItems={SECRETARY_NAV}
+    >
+      <SecretaryReviewPage />
+    </PageLayout>
+  ),
+  resident: (
+    <PageLayout
+      dashTitle={"My requests"}
+      dashSubtitle={"Track your barangay document request"}
+      navItems={RESIDENT_NAV}
+    >
+      <MyRequestsPage />
+    </PageLayout>
+  ),
+  treasurer: (
+    <PageLayout
+      dashTitle={"Payments"}
+      dashSubtitle={"Record and verify payments"}
+      navItems={TREASURER_NAV}
+    >
+      <PaymentsPage />
+    </PageLayout>
+  ),
+  staff: (
+    <PageLayout
+      dashTitle={"Rental bookings"}
+      dashSubtitle={"Barangay's facility and item bookings"}
+      navItems={STAFF_NAV}
+    >
+      <RentalBookingsPage canReturn />
+    </PageLayout>
+  ),
   punong_barangay: (
-    <RentalBookingsPage title="Rental bookings" nav={PUNONG_BARANGAY_NAV} />
+    <PageLayout
+      dashTitle={"Rental bookings"}
+      dashSubtitle={"Barangay's facility and item bookings"}
+      navItems={PUNONG_BARANGAY_NAV}
+    >
+      <RentalBookingsPage />
+    </PageLayout>
   ),
 };
 
@@ -49,9 +94,9 @@ export default function App() {
   // anything else (the backend enforces this on the API side too).
   const home = user
     ? user.must_change_password
-      ? '/change-password'
+      ? "/change-password"
       : roleHome(user.role)
-    : '/login';
+    : "/login";
 
   return (
     <Routes>
@@ -61,8 +106,14 @@ export default function App() {
           never becomes a third opinion about where a user belongs. */}
       <Route path="/" element={<LandingPage />} />
 
-      <Route path="/login" element={user ? <Navigate to={home} replace /> : <LoginPage />} />
-      <Route path="/register" element={user ? <Navigate to={home} replace /> : <RegisterPage />} />
+      <Route
+        path="/login"
+        element={user ? <Navigate to={home} replace /> : <LoginPage />}
+      />
+      <Route
+        path="/register"
+        element={user ? <Navigate to={home} replace /> : <RegisterPage />}
+      />
       {/* Forgot password bounces a signed-in user for the same reason /login
           and /register do: they already have a working session, and
           /change-password is the screen they want. */}
@@ -78,14 +129,22 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/change-password"
-        element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />}
+        element={
+          user ? <ChangePasswordPage /> : <Navigate to="/login" replace />
+        }
       />
 
       <Route
         path="/secretary/residents"
         element={
           <ProtectedRoute role="secretary">
-            <ResidentRecordsPage title="Resident records" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident masterlist"}
+              navItems={SECRETARY_NAV}
+            >
+              <ResidentRecordsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -96,7 +155,13 @@ export default function App() {
         path="/staff/residents"
         element={
           <ProtectedRoute role="staff">
-            <ResidentRecordsPage title="Resident records" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident master list"}
+              navItems={STAFF_NAV}
+            >
+              <ResidentRecordsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -104,7 +169,13 @@ export default function App() {
         path="/punong-barangay/residents"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ResidentRecordsPage title="Resident records" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Resident records"}
+              dashSubtitle={"Resident master list"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <ResidentRecordsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -112,7 +183,13 @@ export default function App() {
         path="/secretary/households"
         element={
           <ProtectedRoute role="secretary">
-            <HouseholdsPage title="Households" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Households"}
+              dashSubtitle={"Household records"}
+              navItems={SECRETARY_NAV}
+            >
+              <HouseholdsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -122,7 +199,13 @@ export default function App() {
         path="/staff/households"
         element={
           <ProtectedRoute role="staff">
-            <HouseholdsPage title="Households" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Households"}
+              dashSubtitle={"Household records"}
+              navItems={STAFF_NAV}
+            >
+              <HouseholdsPage title="Households" nav={STAFF_NAV} />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -130,7 +213,15 @@ export default function App() {
         path="/secretary/document-types"
         element={
           <ProtectedRoute role="secretary">
-            <DocumentTypesPage />
+            <PageLayout
+              dashTitle={"Document types"}
+              dashSubtitle={
+                "Manage the document types that residents can request"
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <DocumentTypesPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -138,7 +229,13 @@ export default function App() {
         path="/secretary/requests"
         element={
           <ProtectedRoute role="secretary">
-            <SecretaryRequestsPage title="Document requests" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Process document requests"}
+              navItems={SECRETARY_NAV}
+            >
+              <SecretaryRequestsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -148,7 +245,13 @@ export default function App() {
         path="/staff/requests"
         element={
           <ProtectedRoute role="staff">
-            <SecretaryRequestsPage title="Document requests" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Document requests across residents"}
+              navItems={STAFF_NAV}
+            >
+              <SecretaryRequestsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -156,7 +259,13 @@ export default function App() {
         path="/punong-barangay/requests"
         element={
           <ProtectedRoute role="punong_barangay">
-            <SecretaryRequestsPage title="Document requests" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Document requests"}
+              dashSubtitle={"Document requests across residents"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <SecretaryRequestsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -164,7 +273,13 @@ export default function App() {
         path="/secretary/payments"
         element={
           <ProtectedRoute role="secretary">
-            <PaymentsPage title="Payments" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Payments"}
+              dashSubtitle={"Record and verify payments"}
+              navItems={SECRETARY_NAV}
+            >
+              <PaymentsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -172,7 +287,15 @@ export default function App() {
         path="/secretary/rental-items"
         element={
           <ProtectedRoute role="secretary">
-            <RentalItemsPage />
+            <PageLayout
+              dashTitle={"Rental items"}
+              dashSubtitle={
+                "Manage the facilities and items residents can rent"
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <RentalItemsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -180,7 +303,13 @@ export default function App() {
         path="/secretary/rentals"
         element={
           <ProtectedRoute role="secretary">
-            <RentalBookingsPage title="Rental bookings" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Rental bookings"}
+              dashSubtitle={"Barangay's facility and item bookings"}
+              navItems={SECRETARY_NAV}
+            >
+              <RentalBookingsPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -188,7 +317,13 @@ export default function App() {
         path="/secretary/blotter"
         element={
           <ProtectedRoute role="secretary">
-            <DisputesPage title="Blotter" nav={SECRETARY_NAV} canManage />
+            <PageLayout
+              dashTitle={"Blotter"}
+              dashSubtitle={"Baragnay's blotter list"}
+              navItems={SECRETARY_NAV}
+            >
+              <DisputesPage canManage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -196,7 +331,13 @@ export default function App() {
         path="/secretary/events"
         element={
           <ProtectedRoute role="secretary">
-            <EventsPage title="Events" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={SECRETARY_NAV}
+            >
+              <EventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -204,7 +345,13 @@ export default function App() {
         path="/staff/events"
         element={
           <ProtectedRoute role="staff">
-            <EventsPage title="Events" nav={STAFF_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={STAFF_NAV}
+            >
+              <EventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -212,7 +359,15 @@ export default function App() {
         path="/secretary/notifications"
         element={
           <ProtectedRoute role="secretary">
-            <NotificationsPage />
+            <PageLayout
+              dashTitle={"Notifications"}
+              dashSubtitle={
+                "Every message the system generated, who it was for, and what happened to it."
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <NotificationsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -220,7 +375,13 @@ export default function App() {
         path="/secretary/reports"
         element={
           <ProtectedRoute role="secretary">
-            <ReportsPage title="Reports" nav={SECRETARY_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={SECRETARY_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -228,7 +389,13 @@ export default function App() {
         path="/treasurer/reports"
         element={
           <ProtectedRoute role="treasurer">
-            <ReportsPage title="Reports" nav={TREASURER_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={TREASURER_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -236,7 +403,13 @@ export default function App() {
         path="/punong-barangay/reports"
         element={
           <ProtectedRoute role="punong_barangay">
-            <ReportsPage title="Reports" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Reports"}
+              dashSubtitle={"Reports and statistics"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <ReportsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -244,7 +417,13 @@ export default function App() {
         path="/resident/events"
         element={
           <ProtectedRoute role="resident">
-            <PublicEventsPage title="Events" nav={RESIDENT_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={RESIDENT_NAV}
+            >
+              <PublicEventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -252,7 +431,13 @@ export default function App() {
         path="/punong-barangay/events"
         element={
           <ProtectedRoute role="punong_barangay">
-            <PublicEventsPage title="Events" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Events"}
+              dashSubtitle={"Barangay events and announcements"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <PublicEventsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -260,7 +445,13 @@ export default function App() {
         path="/punong-barangay/blotter"
         element={
           <ProtectedRoute role="punong_barangay">
-            <DisputesPage title="Blotter" nav={PUNONG_BARANGAY_NAV} />
+            <PageLayout
+              dashTitle={"Blotter"}
+              dashSubtitle={"Barangay blotter records"}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <DisputesPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -268,7 +459,13 @@ export default function App() {
         path="/resident/request"
         element={
           <ProtectedRoute role="resident">
-            <RequestDocumentPage />
+            <PageLayout
+              dashTitle={"Request a document"}
+              dashSubtitle={"Request an official barangay document"}
+              navItems={RESIDENT_NAV}
+            >
+              <RequestDocumentPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -276,7 +473,13 @@ export default function App() {
         path="/resident/rentals"
         element={
           <ProtectedRoute role="resident">
-            <MyRentalsPage />
+            <PageLayout
+              dashTitle={"My rentals"}
+              dashSubtitle={"Your facility and item bookings"}
+              navItems={RESIDENT_NAV}
+            >
+              <MyRentalsPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -284,7 +487,13 @@ export default function App() {
         path="/resident/book-rental"
         element={
           <ProtectedRoute role="resident">
-            <BookRentalPage />
+            <PageLayout
+              dashTitle={"Book a facility"}
+              dashSubtitle={"Book a barangay facility or item"}
+              navItems={RESIDENT_NAV}
+            >
+              <BookRentalPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -294,7 +503,13 @@ export default function App() {
         path="/resident/household"
         element={
           <ProtectedRoute role="resident">
-            <MyHouseholdPage />
+            <PageLayout
+              dashTitle={"My household"}
+              dashSubtitle={"Your household QR"}
+              navItems={RESIDENT_NAV}
+            >
+              <MyHouseholdPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />
@@ -305,7 +520,13 @@ export default function App() {
         path="/resident/payment-result"
         element={
           <ProtectedRoute role="resident">
-            <PaymentResultPage />
+            <PageLayout
+              dashTitle={"GCash payment"}
+              dashSubtitle={"Your online payment for a barangay charge"}
+              navItems={RESIDENT_NAV}
+            >
+              <PaymentResultPage />
+            </PageLayout>
           </ProtectedRoute>
         }
       />

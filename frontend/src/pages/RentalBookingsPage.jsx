@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import { formatDate } from '../constants/requestStatus';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import { formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
   RETURN_OUTCOMES,
@@ -9,7 +9,7 @@ import {
   formatSchedule,
   isReturnable,
   rentalMeta,
-} from '../constants/rentals';
+} from "../constants/rentals";
 
 // All-bookings view, shared by three roles: the Secretary manages
 // (canManage — edit/cancel), Barangay Staff mark physical items returned
@@ -17,36 +17,38 @@ import {
 // nav like PaymentsPage.
 
 const FILTERS = [
-  'confirmed',
-  'overdue',
-  'completed',
-  'returned',
-  'returned_late',
-  'returned_with_issue',
-  'cancelled',
-  'all',
+  "confirmed",
+  "overdue",
+  "completed",
+  "returned",
+  "returned_late",
+  "returned_with_issue",
+  "cancelled",
+  "all",
 ];
 const FILTER_LABELS = {
-  confirmed: 'Confirmed / upcoming',
-  overdue: 'Overdue (awaiting return)',
-  completed: 'Completed (facilities)',
-  returned: 'Returned',
-  returned_late: 'Returned late',
-  returned_with_issue: 'Returned with issue',
-  cancelled: 'Cancelled',
-  all: 'All bookings',
+  confirmed: "Confirmed / upcoming",
+  overdue: "Overdue (awaiting return)",
+  completed: "Completed (facilities)",
+  returned: "Returned",
+  returned_late: "Returned late",
+  returned_with_issue: "Returned with issue",
+  cancelled: "Cancelled",
+  all: "All bookings",
 };
 
 function residentName(booking) {
   const p = booking.requester?.profiles;
   if (p) {
-    const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
+    const name = [p.first_name, p.middle_name, p.last_name]
+      .filter(Boolean)
+      .join(" ");
     if (name) return p.suffix ? `${name}, ${p.suffix}` : name;
   }
-  return booking.requester?.username ? `@${booking.requester.username}` : '—';
+  return booking.requester?.username ? `@${booking.requester.username}` : "—";
 }
 
-const pad = (n) => String(n).padStart(2, '0');
+const pad = (n) => String(n).padStart(2, "0");
 const toDateInput = (iso) => {
   const d = new Date(iso);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -67,7 +69,7 @@ function EditPanel({ booking, onDone }) {
     quantity: String(booking.quantity_requested),
     purpose: booking.purpose,
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   function handleChange(e) {
@@ -77,11 +79,11 @@ function EditPanel({ booking, onDone }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
     setBusy(true);
     try {
       const data = await authFetch(`/rental-requests/${booking.request_id}`, {
-        method: 'PUT',
+        method: "PUT",
         body: {
           date: form.date,
           start_time: form.start_time,
@@ -90,7 +92,7 @@ function EditPanel({ booking, onDone }) {
           purpose: form.purpose,
         },
       });
-      onDone({ type: 'success', text: data.message });
+      onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message); // conflict messages land here
       setBusy(false);
@@ -105,7 +107,8 @@ function EditPanel({ booking, onDone }) {
         <div>
           <h3>Edit booking #{booking.request_id}</h3>
           <p className="muted">
-            {residentName(booking)} · {item?.name} ({ITEM_TYPE_LABELS[item?.type] || item?.type})
+            {residentName(booking)} · {item?.name} (
+            {ITEM_TYPE_LABELS[item?.type] || item?.type})
           </p>
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
@@ -119,11 +122,19 @@ function EditPanel({ booking, onDone }) {
         <div className="grid-2">
           <label>
             Date
-            <input name="date" type="date" min={today} value={form.date} onChange={handleChange} required />
+            <input
+              name="date"
+              type="date"
+              min={today}
+              value={form.date}
+              onChange={handleChange}
+              required
+            />
           </label>
           {isCountable && (
             <label>
-              Quantity <span className="hint">(up to {item.quantity_total})</span>
+              Quantity{" "}
+              <span className="hint">(up to {item.quantity_total})</span>
               <input
                 name="quantity"
                 type="number"
@@ -138,20 +149,39 @@ function EditPanel({ booking, onDone }) {
           )}
           <label>
             Start time
-            <input name="start_time" type="time" value={form.start_time} onChange={handleChange} required />
+            <input
+              name="start_time"
+              type="time"
+              value={form.start_time}
+              onChange={handleChange}
+              required
+            />
           </label>
           <label>
             End time
-            <input name="end_time" type="time" value={form.end_time} onChange={handleChange} required />
+            <input
+              name="end_time"
+              type="time"
+              value={form.end_time}
+              onChange={handleChange}
+              required
+            />
           </label>
         </div>
         <label>
           Purpose
-          <textarea name="purpose" value={form.purpose} onChange={handleChange} rows={3} maxLength={1000} required />
+          <textarea
+            name="purpose"
+            value={form.purpose}
+            onChange={handleChange}
+            rows={3}
+            maxLength={1000}
+            required
+          />
         </label>
         <div className="actions">
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Checking availability…' : 'Save changes'}
+            {busy ? "Checking availability…" : "Save changes"}
           </button>
         </div>
       </form>
@@ -164,20 +194,23 @@ function ReturnPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
   const [outcome, setOutcome] = useState(RETURN_OUTCOMES[0].value);
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
     setBusy(true);
     try {
-      const data = await authFetch(`/rental-requests/${booking.request_id}/return`, {
-        method: 'POST',
-        body: { outcome, note: note.trim() || undefined },
-      });
-      onDone({ type: 'success', text: data.message });
+      const data = await authFetch(
+        `/rental-requests/${booking.request_id}/return`,
+        {
+          method: "POST",
+          body: { outcome, note: note.trim() || undefined },
+        },
+      );
+      onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -190,10 +223,14 @@ function ReturnPanel({ booking, onDone }) {
         <div>
           <h3>Mark returned — booking #{booking.request_id}</h3>
           <p className="muted">
-            {residentName(booking)} · {item?.name} ({ITEM_TYPE_LABELS[item?.type] || item?.type}) ·{' '}
-            {booking.quantity_requested} unit{booking.quantity_requested === 1 ? '' : 's'}
+            {residentName(booking)} · {item?.name} (
+            {ITEM_TYPE_LABELS[item?.type] || item?.type}) ·{" "}
+            {booking.quantity_requested} unit
+            {booking.quantity_requested === 1 ? "" : "s"}
           </p>
-          <p className="muted">{formatSchedule(booking.start_datetime, booking.end_datetime)}</p>
+          <p className="muted">
+            {formatSchedule(booking.start_datetime, booking.end_datetime)}
+          </p>
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
           ← Back to list
@@ -214,12 +251,20 @@ function ReturnPanel({ booking, onDone }) {
           </select>
         </label>
         <label>
-          Note <span className="hint">(optional — e.g. what was damaged or missing)</span>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} />
+          Note{" "}
+          <span className="hint">
+            (optional — e.g. what was damaged or missing)
+          </span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            maxLength={1000}
+          />
         </label>
         <div className="actions">
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Recording…' : 'Record return'}
+            {busy ? "Recording…" : "Record return"}
           </button>
         </div>
       </form>
@@ -227,20 +272,25 @@ function ReturnPanel({ booking, onDone }) {
   );
 }
 
-export default function RentalBookingsPage({ title, nav, canManage = false, canReturn = false }) {
+export default function RentalBookingsPage({
+  title,
+  nav,
+  canManage = false,
+  canReturn = false,
+}) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState(canReturn ? 'overdue' : 'confirmed');
+  const [filter, setFilter] = useState(canReturn ? "overdue" : "confirmed");
   const [requests, setRequests] = useState(null); // null = loading
-  const [listError, setListError] = useState('');
+  const [listError, setListError] = useState("");
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
 
   const load = useCallback(async () => {
-    setListError('');
+    setListError("");
     try {
-      const query = filter === 'all' ? '' : `?status=${filter}`;
+      const query = filter === "all" ? "" : `?status=${filter}`;
       const data = await authFetch(`/rental-requests${query}`);
       setRequests(data.requests);
     } catch (err) {
@@ -255,155 +305,180 @@ export default function RentalBookingsPage({ title, nav, canManage = false, canR
 
   async function handleCancel(r) {
     const when = formatSchedule(r.start_datetime, r.end_datetime);
-    if (!window.confirm(`Cancel ${residentName(r)}'s booking of ${r.rental_items?.name} (${when})? The slot will be freed for others.`)) {
+    if (
+      !window.confirm(
+        `Cancel ${residentName(r)}'s booking of ${r.rental_items?.name} (${when})? The slot will be freed for others.`,
+      )
+    ) {
       return;
     }
     setFlash(null);
     setBusyId(r.request_id);
     try {
-      const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, { method: 'POST' });
-      setFlash({ type: 'success', text: data.message });
+      const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, {
+        method: "POST",
+      });
+      setFlash({ type: "success", text: data.message });
       await load();
     } catch (err) {
-      setFlash({ type: 'error', text: err.message });
+      setFlash({ type: "error", text: err.message });
     } finally {
       setBusyId(null);
     }
   }
 
-  const subtitle = canManage
-    ? 'Manage facility and item bookings'
-    : canReturn
-      ? 'Track what is out and record returns'
-      : 'Facility and item bookings (view only)';
+  // const subtitle = canManage
+  //   ? "Manage facility and item bookings"
+  //   : canReturn
+  //     ? "Track what is out and record returns"
+  //     : "Facility and item bookings (view only)";
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle={subtitle} nav={nav} />
+    <>
+      {/* <DashHeader title={title} subtitle={subtitle} nav={nav} /> */}
 
-      <main className="dash-main">
-        {editing ? (
-          <EditPanel
-            booking={editing}
-            onDone={(result) => {
-              setEditing(null);
-              if (result) {
-                setFlash(result);
-                load();
-              }
-            }}
-          />
-        ) : returning ? (
-          <ReturnPanel
-            booking={returning}
-            onDone={(result) => {
-              setReturning(null);
-              if (result) {
-                setFlash(result);
-                load();
-              }
-            }}
-          />
-        ) : (
-          <>
-            {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-            {listError && <div className="alert error">{listError}</div>}
+      {editing ? (
+        <EditPanel
+          booking={editing}
+          onDone={(result) => {
+            setEditing(null);
+            if (result) {
+              setFlash(result);
+              load();
+            }
+          }}
+        />
+      ) : returning ? (
+        <ReturnPanel
+          booking={returning}
+          onDone={(result) => {
+            setReturning(null);
+            if (result) {
+              setFlash(result);
+              load();
+            }
+          }}
+        />
+      ) : (
+        <>
+          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {listError && <div className="alert error">{listError}</div>}
 
-            <div className="list-head">
-              <h2>
-                {requests === null
-                  ? 'Bookings'
-                  : `${requests.length} booking${requests.length === 1 ? '' : 's'}`}
-              </h2>
-              <div className="head-actions">
-                <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                  {FILTERS.map((f) => (
-                    <option key={f} value={f}>
-                      {FILTER_LABELS[f]}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn secondary" onClick={load}>
-                  Refresh
-                </button>
-              </div>
+          <div className="list-head">
+            <h2>
+              {requests === null
+                ? "Bookings"
+                : `${requests.length} booking${requests.length === 1 ? "" : "s"}`}
+            </h2>
+            <div className="head-actions">
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              >
+                {FILTERS.map((f) => (
+                  <option key={f} value={f}>
+                    {FILTER_LABELS[f]}
+                  </option>
+                ))}
+              </select>
+              <button className="btn secondary" onClick={load}>
+                Refresh
+              </button>
             </div>
+          </div>
 
-            {requests === null ? (
-              <p className="muted">Loading bookings…</p>
-            ) : requests.length === 0 ? (
-              <div className="empty">
-                <p>No {filter === 'all' ? '' : `${FILTER_LABELS[filter].toLowerCase()} `}bookings.</p>
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table className="data-table stack-narrow">
-                  <thead>
-                    <tr>
-                      <th>Resident</th>
-                      <th>Item</th>
-                      <th>Schedule</th>
-                      <th className="num">Qty</th>
-                      <th>Purpose</th>
-                      <th>Status</th>
-                      {(canManage || canReturn) && <th></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {requests.map((r) => {
-                      const shown = displayStatus(r);
-                      const meta = rentalMeta(shown);
-                      const returnable = isReturnable(r.rental_items?.type);
-                      return (
-                        <tr key={r.request_id}>
-                          <td>
-                            <strong>{residentName(r)}</strong>
-                            {r.requester?.username && (
-                              <div className="muted small-note">@{r.requester.username}</div>
+          {requests === null ? (
+            <p className="muted">Loading bookings…</p>
+          ) : requests.length === 0 ? (
+            <div className="empty">
+              <p>
+                No{" "}
+                {filter === "all"
+                  ? ""
+                  : `${FILTER_LABELS[filter].toLowerCase()} `}
+                bookings.
+              </p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table stack-narrow">
+                <thead>
+                  <tr>
+                    <th>Resident</th>
+                    <th>Item</th>
+                    <th>Schedule</th>
+                    <th className="num">Qty</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    {(canManage || canReturn) && <th></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((r) => {
+                    const shown = displayStatus(r);
+                    const meta = rentalMeta(shown);
+                    const returnable = isReturnable(r.rental_items?.type);
+                    return (
+                      <tr key={r.request_id}>
+                        <td>
+                          <strong>{residentName(r)}</strong>
+                          {r.requester?.username && (
+                            <div className="muted small-note">
+                              @{r.requester.username}
+                            </div>
+                          )}
+                        </td>
+                        <td data-label="Item">{r.rental_items?.name || "—"}</td>
+                        <td data-label="Schedule">
+                          {formatSchedule(r.start_datetime, r.end_datetime)}
+                        </td>
+                        <td className="num" data-label="Qty">
+                          {r.quantity_requested}
+                        </td>
+                        <td className="muted truncate" data-label="Purpose">
+                          {r.purpose}
+                        </td>
+                        <td>
+                          <span className={`badge ${meta.className}`}>
+                            {meta.label}
+                          </span>
+                          {r.return_note && (
+                            <div className="muted reason-note">
+                              Note: {r.return_note}
+                            </div>
+                          )}
+                          {r.returned_at && r.returned_by?.username && (
+                            <div className="muted small-note">
+                              by @{r.returned_by.username} on{" "}
+                              {formatDate(r.returned_at)}
+                            </div>
+                          )}
+                        </td>
+                        {(canManage || canReturn) && (
+                          <td className="row-actions">
+                            {canManage && r.status === "confirmed" && (
+                              <>
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => setEditing(r)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn secondary danger"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handleCancel(r)}
+                                >
+                                  {busyId === r.request_id
+                                    ? "Cancelling…"
+                                    : "Cancel"}
+                                </button>
+                              </>
                             )}
-                          </td>
-                          <td data-label="Item">{r.rental_items?.name || '—'}</td>
-                          <td data-label="Schedule">
-                            {formatSchedule(r.start_datetime, r.end_datetime)}
-                          </td>
-                          <td className="num" data-label="Qty">
-                            {r.quantity_requested}
-                          </td>
-                          <td className="muted truncate" data-label="Purpose">
-                            {r.purpose}
-                          </td>
-                          <td>
-                            <span className={`badge ${meta.className}`}>{meta.label}</span>
-                            {r.return_note && (
-                              <div className="muted reason-note">Note: {r.return_note}</div>
-                            )}
-                            {r.returned_at && r.returned_by?.username && (
-                              <div className="muted small-note">
-                                by @{r.returned_by.username} on {formatDate(r.returned_at)}
-                              </div>
-                            )}
-                          </td>
-                          {(canManage || canReturn) && (
-                            <td className="row-actions">
-                              {canManage && r.status === 'confirmed' && (
-                                <>
-                                  <button
-                                    className="btn secondary"
-                                    disabled={busyId === r.request_id}
-                                    onClick={() => setEditing(r)}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    className="btn secondary danger"
-                                    disabled={busyId === r.request_id}
-                                    onClick={() => handleCancel(r)}
-                                  >
-                                    {busyId === r.request_id ? 'Cancelling…' : 'Cancel'}
-                                  </button>
-                                </>
-                              )}
-                              {canReturn && r.status === 'confirmed' && returnable && (
+                            {canReturn &&
+                              r.status === "confirmed" &&
+                              returnable && (
                                 <button
                                   className="btn secondary"
                                   disabled={busyId === r.request_id}
@@ -412,18 +487,17 @@ export default function RentalBookingsPage({ title, nav, canManage = false, canR
                                   Mark returned
                                 </button>
                               )}
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }

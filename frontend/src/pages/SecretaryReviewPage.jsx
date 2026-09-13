@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import { ROLE_LABELS, STAFF_ROLES } from '../auth/roles';
-import DashHeader from '../components/DashHeader';
-import { SECRETARY_NAV } from '../constants/nav';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { ROLE_LABELS, STAFF_ROLES } from "../auth/roles";
+import DashHeader from "../components/DashHeader";
+import { SECRETARY_NAV } from "../constants/nav";
 import {
   PENDING_STATUS_FILTERS,
   REJECTION_REASON_OPTIONS,
@@ -10,21 +10,21 @@ import {
   formatResidency,
   rejectionReasonLabel,
   rejectionReasonRequiresNote,
-} from '../constants/registration';
+} from "../constants/registration";
 
 const EMPTY_ACCOUNT_FORM = {
-  first_name: '',
-  last_name: '',
-  email: '',
-  username: '',
-  role: 'staff',
+  first_name: "",
+  last_name: "",
+  email: "",
+  username: "",
+  role: "staff",
 };
 
 function CreateAccountSection() {
   const { authFetch } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_ACCOUNT_FORM);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,10 +35,13 @@ function CreateAccountSection() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
     setBusy(true);
     try {
-      const data = await authFetch('/secretary/accounts', { method: 'POST', body: form });
+      const data = await authFetch("/secretary/accounts", {
+        method: "POST",
+        body: form,
+      });
       setCreated(data);
       setForm(EMPTY_ACCOUNT_FORM);
     } catch (err) {
@@ -54,11 +57,18 @@ function CreateAccountSection() {
         <div>
           <h3>Staff accounts</h3>
           <p className="muted">
-            Create accounts for barangay officials — residents register themselves.
+            Create accounts for barangay officials — residents register
+            themselves.
           </p>
         </div>
-        <button className="btn secondary" onClick={() => { setOpen(!open); setCreated(null); }}>
-          {open ? 'Close' : 'New staff account'}
+        <button
+          className="btn secondary"
+          onClick={() => {
+            setOpen(!open);
+            setCreated(null);
+          }}
+        >
+          {open ? "Close" : "New staff account"}
         </button>
       </div>
 
@@ -68,7 +78,9 @@ function CreateAccountSection() {
           <dl className="info-grid">
             <div>
               <dt>Username</dt>
-              <dd><code>{created.user.username}</code></dd>
+              <dd>
+                <code>{created.user.username}</code>
+              </dd>
             </div>
             <div>
               <dt>Role</dt>
@@ -76,7 +88,9 @@ function CreateAccountSection() {
             </div>
             <div className="span-2">
               <dt>Temporary password (shown only once)</dt>
-              <dd><code className="temp-pass">{created.temporary_password}</code></dd>
+              <dd>
+                <code className="temp-pass">{created.temporary_password}</code>
+              </dd>
             </div>
           </dl>
           <div className="actions">
@@ -93,32 +107,55 @@ function CreateAccountSection() {
           <div className="grid-2">
             <label>
               First name
-              <input name="first_name" value={form.first_name} onChange={handleChange} required />
+              <input
+                name="first_name"
+                value={form.first_name}
+                onChange={handleChange}
+                required
+              />
             </label>
             <label>
               Last name
-              <input name="last_name" value={form.last_name} onChange={handleChange} required />
+              <input
+                name="last_name"
+                value={form.last_name}
+                onChange={handleChange}
+                required
+              />
             </label>
             <label>
               Email
-              <input name="email" type="email" value={form.email} onChange={handleChange} required />
+              <input
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                required
+              />
             </label>
             <label>
               Username
-              <input name="username" value={form.username} onChange={handleChange} required />
+              <input
+                name="username"
+                value={form.username}
+                onChange={handleChange}
+                required
+              />
             </label>
           </div>
           <label>
             Role
             <select name="role" value={form.role} onChange={handleChange}>
               {STAFF_ROLES.map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r] || r}
+                </option>
               ))}
             </select>
           </label>
           <div className="actions">
             <button className="btn" type="submit" disabled={busy}>
-              {busy ? 'Creating…' : 'Create account'}
+              {busy ? "Creating…" : "Create account"}
             </button>
           </div>
         </form>
@@ -128,7 +165,9 @@ function CreateAccountSection() {
 }
 
 function fullName(p) {
-  const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
+  const name = [p.first_name, p.middle_name, p.last_name]
+    .filter(Boolean)
+    .join(" ");
   return p.suffix ? `${name}, ${p.suffix}` : name;
 }
 
@@ -143,15 +182,15 @@ function fullName(p) {
 // registration" happened to end in the word that pluralises, which is what
 // made the append look like it worked.
 const STATUS_NOUN = {
-  pending: { one: 'account awaiting review', many: 'accounts awaiting review' },
-  rejected: { one: 'rejected registration', many: 'rejected registrations' },
-  all: { one: 'account not yet active', many: 'accounts not yet active' },
+  pending: { one: "account awaiting review", many: "accounts awaiting review" },
+  rejected: { one: "rejected registration", many: "rejected registrations" },
+  all: { one: "account not yet active", many: "accounts not yet active" },
 };
 
 const EMPTY_TEXT = {
-  pending: 'No resident accounts are awaiting review.',
-  rejected: 'No registrations have been rejected.',
-  all: 'No resident accounts are waiting — every registration has been activated.',
+  pending: "No resident accounts are awaiting review.",
+  rejected: "No registrations have been rejected.",
+  all: "No resident accounts are waiting — every registration has been activated.",
 };
 
 // The masterlist registration date and how long ago it was, with an advisory
@@ -174,9 +213,12 @@ function ResidencyLine({ record }) {
   const elapsed = formatResidency(residency);
   return (
     <span className="muted">
-      registered {record.masterlist_registered_on} · {elapsed} ago{' '}
+      registered {record.masterlist_registered_on} · {elapsed} ago{" "}
       {!residency.meets_minimum && (
-        <span className={`badge ${RESIDENCY_BADGE.className}`} title={RESIDENCY_BADGE.title}>
+        <span
+          className={`badge ${RESIDENCY_BADGE.className}`}
+          title={RESIDENCY_BADGE.title}
+        >
           {RESIDENCY_BADGE.label}
         </span>
       )}
@@ -185,7 +227,7 @@ function ResidencyLine({ record }) {
 }
 
 function formatDateTime(value) {
-  if (!value) return '—';
+  if (!value) return "—";
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
@@ -194,8 +236,8 @@ function formatDateTime(value) {
 // archive and the fines void, but it needs more than a yes/no: the reason code
 // decides what the applicant is told at login, so the confirmation IS the form.
 function RejectPanel({ busy, onSubmit, onCancel }) {
-  const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
 
   const needsNote = rejectionReasonRequiresNote(reason);
   const trimmedNote = note.trim();
@@ -212,12 +254,16 @@ function RejectPanel({ busy, onSubmit, onCancel }) {
       }}
     >
       <p className="muted">
-        The applicant is shown this reason the next time they try to sign in, with what
-        to do next. Your note is internal and is never shown to them.
+        The applicant is shown this reason the next time they try to sign in,
+        with what to do next. Your note is internal and is never shown to them.
       </p>
       <label>
         Reason
-        <select value={reason} onChange={(e) => setReason(e.target.value)} required>
+        <select
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          required
+        >
           <option value="">Choose a reason…</option>
           {REJECTION_REASON_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -227,7 +273,12 @@ function RejectPanel({ busy, onSubmit, onCancel }) {
         </select>
       </label>
       <label>
-        Note {needsNote ? <span className="hint">(required)</span> : <span className="hint">(optional, internal)</span>}
+        Note{" "}
+        {needsNote ? (
+          <span className="hint">(required)</span>
+        ) : (
+          <span className="hint">(optional, internal)</span>
+        )}
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -237,9 +288,14 @@ function RejectPanel({ busy, onSubmit, onCancel }) {
       </label>
       <div className="actions">
         <button className="btn danger" type="submit" disabled={busy || !ready}>
-          {busy ? 'Rejecting…' : 'Reject this registration'}
+          {busy ? "Rejecting…" : "Reject this registration"}
         </button>
-        <button className="btn secondary" type="button" onClick={onCancel} disabled={busy}>
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+        >
           Cancel
         </button>
       </div>
@@ -251,12 +307,15 @@ function RejectPanel({ busy, onSubmit, onCancel }) {
 // deliberately no link/create/activate path here — a rejected registration is
 // not mid-review, and un-rejecting is the one way back to it.
 function RejectedPanel({ account, busy, onUnreject }) {
-  const by = account.rejected_by_username ? ` by @${account.rejected_by_username}` : '';
+  const by = account.rejected_by_username
+    ? ` by @${account.rejected_by_username}`
+    : "";
   return (
     <div className="created-panel">
       <div className="alert error">
-        This registration was rejected. The applicant is told the reason when they try to
-        sign in, and cannot be activated until the rejection is cleared.
+        This registration was rejected. The applicant is told the reason when
+        they try to sign in, and cannot be activated until the rejection is
+        cleared.
       </div>
       <dl className="info-grid">
         <div>
@@ -279,7 +338,7 @@ function RejectedPanel({ account, busy, onUnreject }) {
       </dl>
       <div className="actions">
         <button className="btn secondary" disabled={busy} onClick={onUnreject}>
-          {busy ? 'Working…' : 'Un-reject'}
+          {busy ? "Working…" : "Un-reject"}
         </button>
       </div>
     </div>
@@ -289,14 +348,14 @@ function RejectedPanel({ account, busy, onUnreject }) {
 function MatchSuggestions({ account, busy, onAction }) {
   const { authFetch } = useAuth();
   const [suggestions, setSuggestions] = useState(null); // null = loading
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await authFetch(
-          `/secretary/pending-residents/${account.user_id}/match-suggestions`
+          `/secretary/pending-residents/${account.user_id}/match-suggestions`,
         );
         if (!cancelled) setSuggestions(data.suggestions);
       } catch (err) {
@@ -327,23 +386,28 @@ function MatchSuggestions({ account, busy, onAction }) {
         <ul className="suggestions">
           {suggestions.map((s) => (
             <li key={s.resident_id} className="suggestion">
-              <span className="badge score">{Math.round(s.score * 100)}% match</span>
+              <span className="badge score">
+                {Math.round(s.score * 100)}% match
+              </span>
               <div className="suggestion-info">
                 <strong>
-                  {fullName(s)} <span className="muted">(record #{s.resident_id})</span>
+                  {fullName(s)}{" "}
+                  <span className="muted">(record #{s.resident_id})</span>
                 </strong>
                 <span className="muted">
-                  b. {s.birthdate || '—'} · {s.address || '—'}
+                  b. {s.birthdate || "—"} · {s.address || "—"}
                 </span>
                 <ResidencyLine record={s} />
               </div>
               {s.already_linked ? (
-                <span className="muted linked-note">already linked to another account</span>
+                <span className="muted linked-note">
+                  already linked to another account
+                </span>
               ) : (
                 <button
                   className="btn secondary"
                   disabled={busy}
-                  onClick={() => onAction(account, 'link', s.resident_id)}
+                  onClick={() => onAction(account, "link", s.resident_id)}
                 >
                   Link this record
                 </button>
@@ -357,7 +421,7 @@ function MatchSuggestions({ account, busy, onAction }) {
 }
 
 function PendingCard({ account, busy, message, onAction }) {
-  const [linkId, setLinkId] = useState('');
+  const [linkId, setLinkId] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const p = account.profile || {};
   const linked = p.resident_id != null;
@@ -366,12 +430,12 @@ function PendingCard({ account, busy, message, onAction }) {
   function handleUnreject() {
     if (
       !window.confirm(
-        `Clear the rejection on @${account.username}? The account goes back to awaiting review — it does NOT become active, and you can still activate or reject it afterwards.`
+        `Clear the rejection on @${account.username}? The account goes back to awaiting review — it does NOT become active, and you can still activate or reject it afterwards.`,
       )
     ) {
       return;
     }
-    onAction(account, 'unreject');
+    onAction(account, "unreject");
   }
 
   // The reject button, shown in BOTH review branches. The not-linked branch is
@@ -394,24 +458,28 @@ function PendingCard({ account, busy, message, onAction }) {
       <div className="pending-head">
         <div>
           <h3>{fullName(p) || account.username}</h3>
-          <p className="muted">@{account.username} · {account.email}</p>
+          <p className="muted">
+            @{account.username} · {account.email}
+          </p>
         </div>
         {rejected && <span className="badge status-rejected">Rejected</span>}
-        {linked && <span className="badge">Linked to record #{p.resident_id}</span>}
+        {linked && (
+          <span className="badge">Linked to record #{p.resident_id}</span>
+        )}
       </div>
 
       <dl className="info-grid">
         <div>
           <dt>Birthdate</dt>
-          <dd>{p.birthdate || '—'}</dd>
+          <dd>{p.birthdate || "—"}</dd>
         </div>
         <div>
           <dt>Contact number</dt>
-          <dd>{p.phone_number || '—'}</dd>
+          <dd>{p.phone_number || "—"}</dd>
         </div>
         <div className="span-2">
           <dt>Claimed address</dt>
-          <dd>{p.address || '—'}</dd>
+          <dd>{p.address || "—"}</dd>
         </div>
         {/* The LINKED branch used to fetch no resident record at all, so the
             masterlist date had nowhere to appear once an account was linked.
@@ -420,7 +488,10 @@ function PendingCard({ account, busy, message, onAction }) {
             left behind. */}
         {account.linked_record?.residency && (
           <div className="span-2">
-            <dt>Masterlist registration (record #{account.linked_record.resident_id})</dt>
+            <dt>
+              Masterlist registration (record #
+              {account.linked_record.resident_id})
+            </dt>
             <dd>
               <ResidencyLine record={account.linked_record} />
             </dd>
@@ -431,14 +502,18 @@ function PendingCard({ account, busy, message, onAction }) {
       {message && <div className={`alert ${message.type}`}>{message.text}</div>}
 
       {rejected ? (
-        <RejectedPanel account={account} busy={busy} onUnreject={handleUnreject} />
+        <RejectedPanel
+          account={account}
+          busy={busy}
+          onUnreject={handleUnreject}
+        />
       ) : rejecting ? (
         <RejectPanel
           busy={busy}
           onCancel={() => setRejecting(false)}
           onSubmit={(payload) => {
             setRejecting(false);
-            onAction(account, 'reject', payload);
+            onAction(account, "reject", payload);
           }}
         />
       ) : !linked ? (
@@ -448,7 +523,7 @@ function PendingCard({ account, busy, message, onAction }) {
             <button
               className="btn"
               disabled={busy}
-              onClick={() => onAction(account, 'create')}
+              onClick={() => onAction(account, "create")}
             >
               Create new resident record &amp; link
             </button>
@@ -456,7 +531,7 @@ function PendingCard({ account, busy, message, onAction }) {
               className="inline-form"
               onSubmit={(e) => {
                 e.preventDefault();
-                onAction(account, 'link', Number(linkId));
+                onAction(account, "link", Number(linkId));
               }}
             >
               <input
@@ -479,7 +554,7 @@ function PendingCard({ account, busy, message, onAction }) {
           <button
             className="btn"
             disabled={busy}
-            onClick={() => onAction(account, 'activate')}
+            onClick={() => onAction(account, "activate")}
           >
             Activate account
           </button>
@@ -494,24 +569,26 @@ export default function SecretaryReviewPage() {
   const { authFetch } = useAuth();
 
   const [pending, setPending] = useState(null); // null = loading
-  const [listError, setListError] = useState('');
+  const [listError, setListError] = useState("");
   const [flash, setFlash] = useState(null); // top banner for successful actions
   const [busyId, setBusyId] = useState(null);
   const [errors, setErrors] = useState({}); // user_id -> { type, text }
   // Drives ?status= on the server. 'pending' matches the route's default, so
   // the screen opens on exactly the list it always showed.
-  const [status, setStatus] = useState('pending');
+  const [status, setStatus] = useState("pending");
 
   const load = useCallback(async () => {
-    setListError('');
+    setListError("");
     try {
-      const data = await authFetch(`/secretary/pending-residents?status=${status}`);
+      const data = await authFetch(
+        `/secretary/pending-residents?status=${status}`,
+      );
       setPending(
         data.pending.map((u) => ({
           ...u,
           // profiles is one-to-one but normalize in case it arrives as an array
           profile: Array.isArray(u.profiles) ? u.profiles[0] : u.profiles,
-        }))
+        })),
       );
     } catch (err) {
       setListError(err.message);
@@ -532,48 +609,66 @@ export default function SecretaryReviewPage() {
     setErrors((m) => ({ ...m, [userId]: null }));
     try {
       let data;
-      if (kind === 'create') {
-        data = await authFetch(`/secretary/pending-residents/${userId}/create-resident`, {
-          method: 'POST',
-          body: {},
-        });
-      } else if (kind === 'link') {
+      if (kind === "create") {
+        data = await authFetch(
+          `/secretary/pending-residents/${userId}/create-resident`,
+          {
+            method: "POST",
+            body: {},
+          },
+        );
+      } else if (kind === "link") {
         data = await authFetch(`/secretary/pending-residents/${userId}/link`, {
-          method: 'POST',
+          method: "POST",
           body: { resident_id: payload },
         });
-      } else if (kind === 'reject') {
-        data = await authFetch(`/secretary/pending-residents/${userId}/reject`, {
-          method: 'POST',
-          body: payload,
-        });
-      } else if (kind === 'unreject') {
-        data = await authFetch(`/secretary/pending-residents/${userId}/unreject`, {
-          method: 'POST',
-        });
+      } else if (kind === "reject") {
+        data = await authFetch(
+          `/secretary/pending-residents/${userId}/reject`,
+          {
+            method: "POST",
+            body: payload,
+          },
+        );
+      } else if (kind === "unreject") {
+        data = await authFetch(
+          `/secretary/pending-residents/${userId}/unreject`,
+          {
+            method: "POST",
+          },
+        );
       } else {
-        data = await authFetch(`/secretary/pending-residents/${userId}/activate`, {
-          method: 'POST',
-        });
+        data = await authFetch(
+          `/secretary/pending-residents/${userId}/activate`,
+          {
+            method: "POST",
+          },
+        );
       }
-      setFlash({ type: 'success', text: `@${account.username}: ${data.message}` });
+      setFlash({
+        type: "success",
+        text: `@${account.username}: ${data.message}`,
+      });
       await load();
     } catch (err) {
-      setErrors((m) => ({ ...m, [userId]: { type: 'error', text: err.message } }));
+      setErrors((m) => ({
+        ...m,
+        [userId]: { type: "error", text: err.message },
+      }));
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <div className="dash">
-      <DashHeader
+    <>
+      {/* <DashHeader
         title="Resident review"
         subtitle="Manage accounts and review pending residents"
         nav={SECRETARY_NAV}
-      />
+      /> */}
 
-      <main className="dash-main capped-column">
+      <main className="capped-column">
         <CreateAccountSection />
 
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
@@ -585,9 +680,11 @@ export default function SecretaryReviewPage() {
         <div className="list-head">
           <h2>
             {pending === null
-              ? 'Resident accounts'
+              ? "Resident accounts"
               : `${pending.length} ${
-                  pending.length === 1 ? STATUS_NOUN[status].one : STATUS_NOUN[status].many
+                  pending.length === 1
+                    ? STATUS_NOUN[status].one
+                    : STATUS_NOUN[status].many
                 }`}
           </h2>
           <div className="head-actions">
@@ -624,6 +721,6 @@ export default function SecretaryReviewPage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   );
 }

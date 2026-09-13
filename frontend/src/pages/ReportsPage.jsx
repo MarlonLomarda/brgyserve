@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import DashHeader from '../components/DashHeader';
-import ErrorBoundary from '../components/ErrorBoundary';
-import { defaultRange, reportsForRole } from '../constants/reports';
-import { RENDERERS, isEmpty } from '../components/ReportRenderers';
-import { exportReportPdf } from '../utils/exportPdf';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import DashHeader from "../components/DashHeader";
+import ErrorBoundary from "../components/ErrorBoundary";
+import { defaultRange, reportsForRole } from "../constants/reports";
+import { RENDERERS, isEmpty } from "../components/ReportRenderers";
+import { exportReportPdf } from "../utils/exportPdf";
 // The CSV export below calls fetch directly rather than going through
 // authFetch, so it needs the base URL itself — imported, never redeclared.
-import { API_BASE_URL } from '../api/config';
+import { API_BASE_URL } from "../api/config";
 
 // Reporting: read-only aggregation. The Secretary sees administrative reports,
 // the Treasurer financial ones, and the Punong Barangay sees both (oversight).
@@ -24,7 +24,7 @@ export default function ReportsPage({ title, nav }) {
   // untagged payload would briefly hand one report's data to another's
   // renderer — each report has a different shape, so that throws.
   const [result, setResult] = useState(null); // { key, data } | null
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
   const printRef = useRef(null);
 
@@ -33,7 +33,7 @@ export default function ReportsPage({ title, nav }) {
   const load = useCallback(async () => {
     if (!selected) return;
     setResult(null);
-    setError('');
+    setError("");
     try {
       const params = new URLSearchParams({ from: range.from, to: range.to });
       const payload = await authFetch(`/reports/${selected}?${params}`);
@@ -63,14 +63,18 @@ export default function ReportsPage({ title, nav }) {
   async function exportCsv() {
     setExporting(true);
     try {
-      const params = new URLSearchParams({ from: range.from, to: range.to, format: 'csv' });
+      const params = new URLSearchParams({
+        from: range.from,
+        to: range.to,
+        format: "csv",
+      });
       const res = await fetch(`${API_BASE_URL}/reports/${selected}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `${selected}-${range.from}-to-${range.to}.csv`;
       document.body.appendChild(a);
@@ -108,94 +112,111 @@ export default function ReportsPage({ title, nav }) {
   const canExport = !!data && !empty && !exporting;
 
   return (
-    <div className="dash">
-      <DashHeader title={title} subtitle="Reports and statistics" nav={nav} />
+    <>
+      {/* <DashHeader title={title} subtitle="Reports and statistics" nav={nav} /> */}
 
-      <main className="dash-main">
-        {available.length === 0 ? (
-          <div className="empty">
-            <p>No reports are available for your role.</p>
+      {available.length === 0 ? (
+        <div className="empty">
+          <p>No reports are available for your role.</p>
+        </div>
+      ) : (
+        <>
+          <div className="list-head">
+            <h2>{report?.title ?? "Reports"}</h2>
+            <form className="head-actions" onSubmit={applyRange}>
+              <select
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+              >
+                {["Administrative", "Financial"].map((group) => {
+                  const inGroup = available.filter((r) => r.group === group);
+                  if (inGroup.length === 0) return null;
+                  return (
+                    <optgroup key={group} label={group}>
+                      {inGroup.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+              <label className="inline-label">
+                From
+                <input
+                  type="date"
+                  value={draft.from}
+                  max={draft.to}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, from: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="inline-label">
+                To
+                <input
+                  type="date"
+                  value={draft.to}
+                  min={draft.from}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, to: e.target.value }))
+                  }
+                />
+              </label>
+              <button className="btn secondary" type="submit">
+                Apply
+              </button>
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={!canExport}
+                onClick={exportCsv}
+              >
+                Export CSV
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={!canExport}
+                onClick={exportPdf}
+              >
+                {exporting ? "Exporting…" : "Export PDF"}
+              </button>
+            </form>
           </div>
-        ) : (
-          <>
-            <div className="list-head">
-              <h2>{report?.title ?? 'Reports'}</h2>
-              <form className="head-actions" onSubmit={applyRange}>
-                <select value={selected} onChange={(e) => setSelected(e.target.value)}>
-                  {['Administrative', 'Financial'].map((group) => {
-                    const inGroup = available.filter((r) => r.group === group);
-                    if (inGroup.length === 0) return null;
-                    return (
-                      <optgroup key={group} label={group}>
-                        {inGroup.map((r) => (
-                          <option key={r.key} value={r.key}>
-                            {r.title}
-                          </option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                </select>
-                <label className="inline-label">
-                  From
-                  <input
-                    type="date"
-                    value={draft.from}
-                    max={draft.to}
-                    onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
-                  />
-                </label>
-                <label className="inline-label">
-                  To
-                  <input
-                    type="date"
-                    value={draft.to}
-                    min={draft.from}
-                    onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
-                  />
-                </label>
-                <button className="btn secondary" type="submit">
-                  Apply
-                </button>
-                <button className="btn secondary" type="button" disabled={!canExport} onClick={exportCsv}>
-                  Export CSV
-                </button>
-                <button className="btn" type="button" disabled={!canExport} onClick={exportPdf}>
-                  {exporting ? 'Exporting…' : 'Export PDF'}
-                </button>
-              </form>
+
+          {report && <p className="muted">{report.description}</p>}
+          {error && <div className="alert error">{error}</div>}
+
+          {loading ? (
+            <p className="muted">Loading report…</p>
+          ) : !data ? null : empty ? (
+            <div className="empty">
+              <p>
+                No data for this period ({range.from} to {range.to}).
+              </p>
+              <p className="muted">Try widening the date range.</p>
             </div>
-
-            {report && <p className="muted">{report.description}</p>}
-            {error && <div className="alert error">{error}</div>}
-
-            {loading ? (
-              <p className="muted">Loading report…</p>
-            ) : !data ? null : empty ? (
-              <div className="empty">
-                <p>No data for this period ({range.from} to {range.to}).</p>
-                <p className="muted">Try widening the date range.</p>
-              </div>
-            ) : (
-              // A failing report must never blank the screen — an official
-              // needs to see WHY it did not render.
-              <ErrorBoundary resetKey={`${selected}-${range.from}-${range.to}`}>
-                <div className="report-sheet" ref={printRef}>
-                  {/* Visible only inside the exported PDF/print capture. */}
-                  <div className="report-print-head">
-                    <strong>Barangay Ubujan, Tagbilaran City</strong>
-                    <div>{report.title}</div>
-                    <div className="muted">
-                      {range.from} to {range.to}
-                    </div>
+          ) : (
+            // A failing report must never blank the screen — an official
+            // needs to see WHY it did not render.
+            <ErrorBoundary resetKey={`${selected}-${range.from}-${range.to}`}>
+              <div className="report-sheet" ref={printRef}>
+                {/* Visible only inside the exported PDF/print capture. */}
+                <div className="report-print-head">
+                  <strong>Barangay Ubujan, Tagbilaran City</strong>
+                  <div>{report.title}</div>
+                  <div className="muted">
+                    {range.from} to {range.to}
                   </div>
-                  {Renderer && <Renderer data={data} />}
                 </div>
-              </ErrorBoundary>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+                {Renderer && <Renderer data={data} />}
+              </div>
+            </ErrorBoundary>
+          )}
+        </>
+      )}
+    </>
   );
 }

@@ -504,191 +504,191 @@ export default function DisputesPage({ title, nav, canManage = false }) {
   const disputes = data?.disputes;
 
   return (
-    <div className="dash">
-      <DashHeader
+    <>
+      {/* <DashHeader
         title={title}
         subtitle="Barangay blotter / dispute records"
         nav={nav}
-      />
+      /> */}
 
-      <main className="dash-main">
-        {formTarget ? (
-          <CaseForm
-            dispute={formTarget === "new" ? null : formTarget}
-            onDone={(result, dispute) => {
-              setFormTarget(null);
-              if (!result) return;
-              setFlash(result);
-              if (dispute) setSelectedId(dispute.dispute_id);
-              load();
-            }}
-          />
-        ) : selectedId ? (
-          <CaseDetail
-            id={selectedId}
-            canManage={canManage}
-            onBack={() => setSelectedId(null)}
-            onEdit={(d) => setFormTarget(d)}
-            onChanged={(message) => {
-              setFlash({ type: "success", text: message });
-              load();
-            }}
-          />
-        ) : (
-          <>
-            {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-            {error && <div className="alert error">{error}</div>}
+      {formTarget ? (
+        <CaseForm
+          dispute={formTarget === "new" ? null : formTarget}
+          onDone={(result, dispute) => {
+            setFormTarget(null);
+            if (!result) return;
+            setFlash(result);
+            if (dispute) setSelectedId(dispute.dispute_id);
+            load();
+          }}
+        />
+      ) : selectedId ? (
+        <CaseDetail
+          id={selectedId}
+          canManage={canManage}
+          onBack={() => setSelectedId(null)}
+          onEdit={(d) => setFormTarget(d)}
+          onChanged={(message) => {
+            setFlash({ type: "success", text: message });
+            load();
+          }}
+        />
+      ) : (
+        <>
+          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {error && <div className="alert error">{error}</div>}
 
-            <div className="list-head">
-              <h2>
-                {data === null
-                  ? "Blotter cases"
-                  : `${data.total} case${data.total === 1 ? "" : "s"}`}
-              </h2>
-              <SearchBar
-                search={search}
-                onSearch={handleSearch}
-                searchInput={searchInput}
-                onSearchInput={(e) => setSearchInput(e.target.value)}
-                onClear={() => {
-                  setSearch("");
-                  setSearchInput("");
+          <div className="list-head">
+            <h2>
+              {data === null
+                ? "Blotter cases"
+                : `${data.total} case${data.total === 1 ? "" : "s"}`}
+            </h2>
+            <SearchBar
+              search={search}
+              onSearch={handleSearch}
+              searchInput={searchInput}
+              onSearchInput={(e) => setSearchInput(e.target.value)}
+              onClear={() => {
+                setSearch("");
+                setSearchInput("");
+                setPage(1);
+              }}
+              placeholder={"Search by case number, complaint, or party"}
+            />
+            <form className="head-actions" onSubmit={handleSearch}>
+              <select
+                value={settled}
+                onChange={(e) => {
+                  setSettled(e.target.value);
                   setPage(1);
                 }}
-                placeholder={"Search by case number, complaint, or party"}
-              />
-              <form className="head-actions" onSubmit={handleSearch}>
-                <select
-                  value={settled}
-                  onChange={(e) => {
-                    setSettled(e.target.value);
-                    setPage(1);
-                  }}
+              >
+                {SETTLED_FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={nature}
+                onChange={(e) => {
+                  setNature(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">All natures</option>
+                {NATURES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              {canManage && (
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setFormTarget("new")}
                 >
-                  {SETTLED_FILTERS.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={nature}
-                  onChange={(e) => {
-                    setNature(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="all">All natures</option>
-                  {NATURES.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                {canManage && (
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => setFormTarget("new")}
-                  >
-                    Record case
-                  </button>
-                )}
-              </form>
+                  Record case
+                </button>
+              )}
+            </form>
+          </div>
+
+          {disputes === undefined || data === null ? (
+            <p className="muted">Loading cases…</p>
+          ) : disputes.length === 0 ? (
+            <div className="empty">
+              <p>
+                No blotter cases
+                {search
+                  ? ` matching "${search}"`
+                  : settled === "open"
+                    ? " are open"
+                    : ""}
+                .
+              </p>
             </div>
-
-            {disputes === undefined || data === null ? (
-              <p className="muted">Loading cases…</p>
-            ) : disputes.length === 0 ? (
-              <div className="empty">
-                <p>
-                  No blotter cases
-                  {search
-                    ? ` matching "${search}"`
-                    : settled === "open"
-                      ? " are open"
-                      : ""}
-                  .
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="table-wrap">
-                  <table className="data-table stack-narrow">
-                    <thead>
-                      <tr>
-                        <th>Case no.</th>
-                        <th>Filed</th>
-                        <th>Filed for</th>
-                        <th>Nature</th>
-                        <th>Parties</th>
-                        <th>Status</th>
-                        <th></th>
+          ) : (
+            <>
+              <div className="table-wrap">
+                <table className="data-table stack-narrow">
+                  <thead>
+                    <tr>
+                      <th>Case no.</th>
+                      <th>Filed</th>
+                      <th>Filed for</th>
+                      <th>Nature</th>
+                      <th>Parties</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {disputes.map((d) => (
+                      <tr key={d.dispute_id}>
+                        <td>
+                          <strong>{d.barangay_case_no}</strong>
+                        </td>
+                        <td className="muted" data-label="Filed">
+                          {d.date_filed}
+                        </td>
+                        <td data-label="Filed for">{d.filed_for}</td>
+                        <td className="muted" data-label="Nature">
+                          {d.nature_of_case}
+                        </td>
+                        <td className="muted truncate" data-label="Parties">
+                          {d.party_summary}
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${d.is_settled ? "status-claimed" : "status-pending"}`}
+                          >
+                            {d.is_settled ? "Settled" : "Open"}
+                          </span>
+                        </td>
+                        <td className="row-actions">
+                          <button
+                            className="btn secondary"
+                            onClick={() => setSelectedId(d.dispute_id)}
+                          >
+                            View
+                          </button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {disputes.map((d) => (
-                        <tr key={d.dispute_id}>
-                          <td><strong>{d.barangay_case_no}</strong></td>
-                          <td className="muted" data-label="Filed">
-                            {d.date_filed}
-                          </td>
-                          <td data-label="Filed for">{d.filed_for}</td>
-                          <td className="muted" data-label="Nature">
-                            {d.nature_of_case}
-                          </td>
-                          <td className="muted truncate" data-label="Parties">
-                            {d.party_summary}
-                          </td>
-                          <td>
-                            <span
-                              className={`badge ${d.is_settled ? "status-claimed" : "status-pending"}`}
-                            >
-                              {d.is_settled ? "Settled" : "Open"}
-                            </span>
-                          </td>
-                          <td className="row-actions">
-                            <button
-                              className="btn secondary"
-                              onClick={() => setSelectedId(d.dispute_id)}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                {data.total_pages > 1 && (
-                  <div className="list-head">
-                    <span className="muted">
-                      Page {data.page} of {data.total_pages}
-                    </span>
-                    <div className="head-actions">
-                      <button
-                        className="btn secondary"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => p - 1)}
-                      >
-                        ← Previous
-                      </button>
-                      <button
-                        className="btn secondary"
-                        disabled={page >= data.total_pages}
-                        onClick={() => setPage((p) => p + 1)}
-                      >
-                        Next →
-                      </button>
-                    </div>
+              {data.total_pages > 1 && (
+                <div className="list-head">
+                  <span className="muted">
+                    Page {data.page} of {data.total_pages}
+                  </span>
+                  <div className="head-actions">
+                    <button
+                      className="btn secondary"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      className="btn secondary"
+                      disabled={page >= data.total_pages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next →
+                    </button>
                   </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
   );
 }
