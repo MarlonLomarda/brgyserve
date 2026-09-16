@@ -874,14 +874,37 @@ a {
    had no element to hang it on: the links were direct children of <aside>
    until DashHeader.jsx gained the <nav> wrapper alongside this rule.
 
-   overflow-x IS NOT TOUCHED and must not be. .dash-side sets both axes
-   explicitly via `overflow: hidden`, so overflow-y: auto here does not drag
-   overflow-x from visible to auto the way it would on a fresh element, and
-   the collapse keeps clipping rather than growing a horizontal scrollbar.
-   That clipping IS the collapse: .dash-side a is min-width: 230px and
-   cannot reflow, so the 57px rail works by cutting the label off.
+   BOTH AXES ARE SET HERE, AND overflow-x: hidden IS LOAD-BEARING. This
+   block used to argue the opposite — that overflow-x could be left alone
+   because ".dash-side sets both axes explicitly via `overflow: hidden`, so
+   overflow-y: auto here does not drag overflow-x from visible to auto".
+   That is true of .dash-side and IRRELEVANT: the rule is on .dash-side-nav,
+   which inherits none of it and set neither axis, so its overflow-x
+   computed to `auto` and it grew a horizontal scrollbar. The exemption was
+   real but described a different element from the one it was written under.
 
-   The cost is 15px of content width whenever the scrollbar is showing —
+   Measured before the fix, with `getComputedStyle(nav).overflowX` reading
+   'auto': expanded, scrollWidth 230 against clientWidth 229 — over by ONE
+   pixel; collapsed, 230 against 56 — over by 174. A scrollbar in both, and
+   in the 57px rail it is most of the rail.
+
+   THE 1px IS NOT A ROUNDING ERROR, and it predates this rule. .dash-side is
+   `width: 230px` with `box-sizing: border-box` and a 1px border-right, so
+   its content box is 229 — while `.dash-side a` carries `min-width: 230px`
+   and will not shrink. The links have always been 1px wider than the space
+   they sit in; .dash-side's `overflow: hidden` clipped that silently, and
+   making the nav its own scroll container is what exposed it.
+
+   hidden RATHER THAN widening the nav or shrinking the link, because THE
+   COLLAPSE WORKS BY CLIPPING: `.dash-side.close` only changes the width to
+   57px, and the label is cut off rather than reflowed — `.dash-side a` is
+   min-width: 230px and white-space: nowrap precisely so it cannot. An axis
+   that scrolls instead of clipping would let the collapsed rail be dragged
+   sideways to reveal the labels it is meant to hide. So the nav must clip
+   horizontally for the same reason .dash-side does, and touching either the
+   border or that min-width to chase the 1px would change the collapse.
+
+   The cost is 15px of content width whenever the vertical scrollbar is showing —
    229 to 214 expanded, and 56 to 41 in the collapsed rail. The icon needs
    37px of that (the link's 3px transparent border-left, its 16px padding,
    then the 18px glyph), so it still fits with 4px to spare, but the rail
@@ -890,6 +913,7 @@ a {
 .dash-side-nav {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
