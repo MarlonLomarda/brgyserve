@@ -121,12 +121,30 @@ export default function DashHeader({
             <span>Brgy</span>
             <span>Serve</span>
           </p>
-          <MdKeyboardDoubleArrowLeft
-            size={25}
+          {/* A real button, not the bare <svg onClick> this shipped as: an
+              <svg> takes no focus and carries no name, so the only control
+              that collapses the sidebar could not be reached or operated
+              from the keyboard at all. Follows .dash-drawer-arrow and
+              .pw-toggle — label names the ACTION, aria-expanded carries the
+              state, and the icon is hidden from the accessibility tree
+              because the button is already named. */}
+          <button
+            type="button"
+            className="dash-side-toggle"
             onClick={() => setSidebar((prev) => !prev)}
-          />
+            aria-label={sidebar ? "Collapse sidebar" : "Expand sidebar"}
+            aria-expanded={sidebar}
+          >
+            <MdKeyboardDoubleArrowLeft size={25} aria-hidden="true" />
+          </button>
         </section>
-        {navLinks(close)}
+        {/* The sidebar's counterpart to .dash-drawer-nav, and the reason it
+            exists: these links used to be a bare array of <aside> children,
+            so there was no element a scroll rule could attach to and the
+            footer was simply cut off on a short screen. NOT .dash-drawer-nav
+            itself — the drawer is the only navigation below 1045px and its
+            rules are left alone. */}
+        <nav className="dash-side-nav">{navLinks(close)}</nav>
         <div className="dash-drawer-foot">
           <p>{ROLE_LABELS[user.role]}</p>
           <span className="muted">@{user.username}</span>

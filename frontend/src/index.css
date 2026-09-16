@@ -807,14 +807,26 @@ a {
   white-space: nowrap;
 }
 
+/* flex: none is EXPLICIT here, not inherited behaviour. Without it the logo
+   row is 0 1 auto like every other child and shrinks alongside the nav; it
+   happens to hold its 63px anyway because its automatic minimum is its own
+   content height, so nothing moves today either way. It is written down
+   because that floor is the only thing holding it — give this row a smaller
+   min-height later, or content that can compress, and it would start giving
+   up pixels to the scroll container below it. .dash-drawer-head states the
+   same thing for the same reason. */
 .dash-side section {
   padding: 13px 16px 25px 16px;
   display: flex;
   align-items: center;
+  flex: none;
 
+  /* margin-left: auto MOVED OFF THIS RULE to .dash-side-toggle. The svg is no
+     longer the flex item of this row — the button wrapping it is — so an auto
+     margin here would push the icon around inside its own 44px box instead of
+     pushing the control to the right edge. */
   svg {
     cursor: pointer;
-    margin-left: auto;
     transition: rotate 150ms ease;
   }
 
@@ -833,6 +845,95 @@ a {
       color: #1d4ed8;
     }
   }
+}
+
+/* THE SIDEBAR'S SCROLL CONTAINER, and the reason it is a new class rather
+   than .dash-drawer-nav reused.
+
+   .dash-side is height: 100vh with overflow: hidden and nothing inside it
+   scrolling, so a nav taller than the screen had nowhere to go. The footer
+   carries margin-top: auto, which bottom-anchors it while there is free
+   space and resolves to 0 once there is not — at which point it sits
+   directly under the last link and overflow: hidden cuts whatever hangs
+   past the viewport. Measured as Secretary, whose 12 items are the longest
+   nav in the app: 63px logo row + 12 x 44px links + 64.59px footer =
+   655.59px, so below that height the footer starts disappearing and below
+   591px it is gone entirely. 44, not the links' resting 46, because they
+   are 0 1 auto and shrink to their own min-height first — that squeeze is
+   worth 24px on this nav and is the whole reason the threshold is not 679.
+   Those are the numbers FROM THE BUG: the logo row measures 82px now, not
+   63, because the collapse control below became a 44px tap target. The
+   threshold itself no longer exists — the nav scrolls instead.
+
+   The drawer has solved this since it was built (.dash-drawer-nav is
+   flex: 1 1 auto; overflow-y: auto with head and foot at flex: none) and
+   the fix is that same pattern — but it could not be the same RULE. The
+   drawer is the only navigation below 1045px, where .dash-side is
+   display: none, so anything added to its selector would land on phones to
+   fix a bug that only exists on a short desktop window. The sidebar also
+   had no element to hang it on: the links were direct children of <aside>
+   until DashHeader.jsx gained the <nav> wrapper alongside this rule.
+
+   overflow-x IS NOT TOUCHED and must not be. .dash-side sets both axes
+   explicitly via `overflow: hidden`, so overflow-y: auto here does not drag
+   overflow-x from visible to auto the way it would on a fresh element, and
+   the collapse keeps clipping rather than growing a horizontal scrollbar.
+   That clipping IS the collapse: .dash-side a is min-width: 230px and
+   cannot reflow, so the 57px rail works by cutting the label off.
+
+   The cost is 15px of content width whenever the scrollbar is showing —
+   229 to 214 expanded, and 56 to 41 in the collapsed rail. The icon needs
+   37px of that (the link's 3px transparent border-left, its 16px padding,
+   then the 18px glyph), so it still fits with 4px to spare, but the rail
+   visibly narrows. It only appears in the band where the footer was being
+   cut off anyway. */
+.dash-side-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The collapse control. It shipped as a bare <svg onClick> — unfocusable,
+   unnamed, and unreachable by keyboard — so DashHeader.jsx now wraps it in a
+   real <button> and this rule undoes what that costs.
+
+   THE BASE `button` RULE IS THE HAZARD: padding 11px, background #2563eb,
+   color #fff, border-radius 8px. Left alone the arrow renders as a solid
+   blue box, and `color: #fff` would paint the icon white on it — react-icons
+   draw in currentColor, so the colour here is not cosmetic, it is the only
+   reason the glyph is visible at all. This is the same tax .pw-toggle and
+   .dash-drawer-arrow already pay; the hover override mirrors
+   .dash-drawer-arrow's, though at (0,3,1) this selector already outranks
+   `button:hover:not(:disabled)` at (0,2,1) and the !important is belt and
+   braces rather than load-bearing.
+
+   margin-left: auto lives here now, moved off the nested svg rule above: the
+   button is the flex item of .dash-side section, so this is what pushes the
+   control to the right edge. 44px minimum matches .dash-drawer-arrow's tap
+   target. The 180deg flip in the collapsed state still reaches the icon
+   untouched — `.dash-side.close section svg` is a DESCENDANT selector, so
+   the button between it and the svg changes nothing (verified rendered, not
+   assumed). */
+.dash-side section .dash-side-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+}
+
+.dash-side section .dash-side-toggle:hover:not(:disabled) {
+  background: none !important;
+  color: #1d4ed8;
 }
 
 .dash-side.close .dash-drawer-foot {
