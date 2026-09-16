@@ -889,6 +889,21 @@ a {
   max-width: 1180px;
   margin: 0 auto;
   padding: 1rem;
+
+  /* As the 1fr item of the .dash grid this box would otherwise take
+     min-width: auto, and a grid item's automatic minimum is its min-content
+     width — the widest thing the screen holds. The payments table asks for
+     1084.5px with its column floors against the 1018px this column has at
+     1280, so the column grew to the table rather than the table scrolling
+     inside .table-wrap: the whole page scrolled sideways, sticky sidebar
+     included, at every width above the 1045px breakpoint and on a fresh
+     load. The wrapper's own overflow-x: auto does not excuse it — that
+     automatic minimum is skipped only when the grid ITEM is the scroll
+     container, never when a descendant is. Delete this line and the
+     page-wide scroll returns, and .table-wrap never gets to scroll at all,
+     because the column grows to the table instead of the wrapper ever
+     being the narrower box. */
+  min-width: 0;
 }
 
 /* Forms and read-only detail panels must NOT stretch to the full dashboard
