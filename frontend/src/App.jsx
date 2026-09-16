@@ -53,7 +53,7 @@ const ROLE_PAGES = {
   resident: (
     <PageLayout
       dashTitle={"My requests"}
-      dashSubtitle={"Track your barangay document request"}
+      dashSubtitle={"Track your barangay document requests"}
       navItems={RESIDENT_NAV}
     >
       <MyRequestsPage />
@@ -140,7 +140,7 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               dashTitle={"Resident records"}
-              dashSubtitle={"Resident masterlist"}
+              dashSubtitle={"Resident master list"}
               navItems={SECRETARY_NAV}
             >
               <ResidentRecordsPage canManage />
@@ -319,7 +319,7 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               dashTitle={"Blotter"}
-              dashSubtitle={"Baragnay's blotter list"}
+              dashSubtitle={"Barangay's blotter list"}
               navItems={SECRETARY_NAV}
             >
               <DisputesPage canManage />
@@ -505,7 +505,7 @@ export default function App() {
           <ProtectedRoute role="resident">
             <PageLayout
               dashTitle={"My household"}
-              dashSubtitle={"Your household QR"}
+              dashSubtitle={"Your household QR code"}
               navItems={RESIDENT_NAV}
             >
               <MyHouseholdPage />
