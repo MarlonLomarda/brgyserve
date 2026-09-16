@@ -225,6 +225,18 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 
 **`fdc82d4` was verified by mounting the real `LoginPage` in jsdom:** against `bd03c74` the harness failed 12 of its checks and then crashed, and against `fdc82d4` it passed all 38 — Escape, the Close button and the backdrop each closing the modal, focus moving in and returning to the link that opened it, and the listener and scroll lock released. Computed-style snapshots at 641, 1280 and 1920px showed the desktop layout unchanged.
 
+### The payments page scrolled sideways after PR #11, 16 Sep 2026 (`7a79aef`)
+
+**At 1280 the whole of `/secretary/payments` scrolled horizontally, sticky sidebar and all.** It happened on a fresh load rather than only after navigating, as the Treasurer as well as the Secretary, and at every width above the 1045px breakpoint. Nothing on that screen had changed: `PaymentsPage` still renders `div.table-wrap > table.data-table.stack-narrow`, the same wrapper and classes Rental bookings uses, and Rental bookings at the same width was fine.
+
+**What changed was the container.** PR #11 made `.dash` a grid of `auto 1fr`, with the sidebar in the first track and `.dash-main` as the `1fr` item. A grid item keeps `min-width: auto`, and a grid item's automatic minimum is its own min-content width, so the track can never be narrower than the widest thing the screen holds. The payments table's floors — `.col-resident` at 140px, `.col-declared` at 130px, the action cell the `.row-actions` comment records at 227.7px, and the non-wrapping Billed date — put it at the 1084.5px CLAUDE.md records for that table, against the 1018px the column has at 1280 once the 230px sidebar and the 1rem padding are taken. So the column grew to the table instead, the grid outgrew the viewport, and because `.dash-side` is sticky with `top: 0` and nothing horizontal, the sidebar scrolled away with everything else.
+
+**The obvious answer was already in place and does not work: `.table-wrap` has `overflow-x: auto`. That is the part worth remembering.** The automatic minimum is skipped only when the grid ITEM is itself a scroll container; a scrolling DESCENDANT does not excuse it. The wrapper's own min-content is still measured from the table inside it, and it still travels up to `.dash-main`. What the fix needed was one declaration on `.dash-main` — `min-width: 0` — which drops that automatic minimum and lets the column be narrower than its content.
+
+**What it restores is what the rest of the file already assumed.** With the column free to shrink, `.table-wrap` is the narrower box again and scrolls, which is exactly what CLAUDE.md's Decided Against entry on the payments table relies on: it accepts the table overflowing below about 1135px *because* the wrapper provides that scroll.
+
+**Verified in the browser:** Payments at 1280 as Secretary and as Treasurer — no page scroll, the scrollbar inside `.table-wrap`, the sidebar, page heading and Log out holding still while the table scrolls, both row actions reachable; 1024 in drawer mode; 390 with the rows stacked as cards; 1920, where `.dash-main` reaches its 1180px cap and the table fits without a scrollbar of its own; and the resident's My requests at 1280 with the GCash reference form open — the case the diagnosis had left uncertain — scrolling inside its own card.
+
 ## Document Requests
 
 ### Stage 4 (Payment + Release)
