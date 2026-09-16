@@ -123,50 +123,56 @@ export default function ReportsPage({ title, nav }) {
         <>
           <div className="list-head">
             <h2>{report?.title ?? "Reports"}</h2>
-            <form className="head-actions" onSubmit={applyRange}>
-              <select
-                value={selected}
-                onChange={(e) => setSelected(e.target.value)}
-              >
-                {["Administrative", "Financial"].map((group) => {
-                  const inGroup = available.filter((r) => r.group === group);
-                  if (inGroup.length === 0) return null;
-                  return (
-                    <optgroup key={group} label={group}>
-                      {inGroup.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.title}
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-              <label className="inline-label">
-                From
-                <input
-                  type="date"
-                  value={draft.from}
-                  max={draft.to}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, from: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="inline-label">
-                To
-                <input
-                  type="date"
-                  value={draft.to}
-                  min={draft.from}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, to: e.target.value }))
-                  }
-                />
-              </label>
-              <button className="btn secondary" type="submit">
-                Apply
-              </button>
+          </div>
+
+          <form
+            className="head-actions report-toolbar"
+            onSubmit={applyRange}
+          >
+            <select
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              {["Administrative", "Financial"].map((group) => {
+                const inGroup = available.filter((r) => r.group === group);
+                if (inGroup.length === 0) return null;
+                return (
+                  <optgroup key={group} label={group}>
+                    {inGroup.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+            </select>
+            <label className="inline-label">
+              From
+              <input
+                type="date"
+                value={draft.from}
+                max={draft.to}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, from: e.target.value }))
+                }
+              />
+            </label>
+            <label className="inline-label">
+              To
+              <input
+                type="date"
+                value={draft.to}
+                min={draft.from}
+                onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+              />
+            </label>
+            <button className="btn secondary" type="submit">
+              Apply
+            </button>
+            {/* The two exports travel together so a wrap never splits them,
+                and never separates Apply from the dates it submits. */}
+            <section>
               <button
                 className="btn secondary"
                 type="button"
@@ -183,8 +189,8 @@ export default function ReportsPage({ title, nav }) {
               >
                 {exporting ? "Exporting…" : "Export PDF"}
               </button>
-            </form>
-          </div>
+            </section>
+          </form>
 
           {report && <p className="muted">{report.description}</p>}
           {error && <div className="alert error">{error}</div>}

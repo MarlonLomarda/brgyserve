@@ -1490,6 +1490,58 @@ button.link-button:hover:not(:disabled) {
   width: 100%;
 }
 
+/* THE ONE .head-actions THAT IS NOT A HEADER ROW. Reports carries six
+   controls — the report picker, From, To, Apply, and the two exports — which
+   measure 934.25px of max-content. Every other .head-actions in the app is
+   under 400px, so all of them sit beside their <h2> with room to spare and
+   this one cannot: .dash-main caps its content box at 1148px, and the <h2>
+   asks for 224.27 of that, so the row is short at EVERY width — by 10.52px at
+   1920 and 140.52px at 1280. Flexbox hides that today by shrinking the selects
+   a few px, and below about 1202 it stops being able to: the row then spilled
+   past the column and, with no overflow-x between it and the viewport, scrolled
+   the whole document sideways. Two bands did it, 1046-1202 and 641-988, the
+   second one only because .dash-side is hidden under 1045 and hands the width
+   back in between.
+
+   So the toolbar is a ROW OF ITS OWN in the JSX, not a .list-head item, and
+   wraps. Because it never gets its max-content, wrapping it in place would
+   have orphaned Export PDF on a second line at 1920 as well.
+
+   flex-wrap lets it break instead of overflow. Measured on the shipped rule:
+   one line at 1202 and above, two through both old bands, three under about
+   500, and no document overflow at any width. 1000 comes back to one line
+   because .dash-side is hidden below 1045 and hands its 230px back, so the
+   line count is not monotonic across that breakpoint — expected, not a bug.
+
+   justify-content OVERRIDES .head-actions's space-between, which is inert
+   there only because a shrink-to-fit row has no slack to distribute. A wrapped
+   line has plenty: measured 95.3px of air between the date pickers at 1100
+   without this line.
+
+   The select's padding and font-size are here because `.list-head select`
+   was supplying them by source order — same specificity as
+   `.head-actions select`, declared later, so it won. Out of .list-head the
+   select falls back to the base rule, grows to 1rem, and takes the row from
+   934.25 to 959.25.
+
+   No row-gap: `.head-actions { gap: 0.5rem }` is the shorthand and already
+   sets row-gap to 8px. No media query: the wrap is correct at every width and
+   a breakpoint would only re-encode .dash-side's width and .dash-main's
+   padding, both of which have moved once already.
+
+   DELETE THIS RULE and the toolbar goes back to one nowrap line that is wider
+   than the column at every width, i.e. the sideways document scroll returns. */
+.report-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.report-toolbar select {
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
 .inline-label {
   display: inline-flex;
   align-items: center;
