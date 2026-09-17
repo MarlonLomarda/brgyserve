@@ -945,7 +945,7 @@ a {
   align-items: center;
   justify-content: center;
   flex: none;
-  min-width: 44px;
+  /* min-width: 44px; */
   min-height: 44px;
   margin-left: auto;
   padding: 0;
