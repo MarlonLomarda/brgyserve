@@ -935,8 +935,22 @@ a {
 
    margin-left: auto lives here now, moved off the nested svg rule above: the
    button is the flex item of .dash-side section, so this is what pushes the
-   control to the right edge. 44px minimum matches .dash-drawer-arrow's tap
-   target. The 180deg flip in the collapsed state still reaches the icon
+   control to the right edge.
+
+   THERE IS NO min-width, AND ITS ABSENCE IS DELIBERATE — do not add one back
+   to match .dash-drawer-arrow. This rule carried min-width: 44px to give the
+   button the same tap target that one has, and in the collapsed rail it did
+   not fit: .dash-side.close is 57px, .dash-side section takes 16px of padding
+   off each side, so the content box is about 24px. A 44px button overflowed
+   it by 20px, .dash-side's overflow: hidden clipped the excess, and the glyph
+   sat about 9.5px off the rail's centre. Dropping min-width lets the button
+   size to its 25px icon and the arrow centres exactly. min-height: 44px stays
+   and is untouched — the vertical target is not in the rail's way, so only
+   the axis that was is given up, and this control is desktop-only anyway
+   (.dash-side is display: none at 1045px and below, where .dash-drawer-arrow
+   is the control that gets a thumb).
+
+   The 180deg flip in the collapsed state still reaches the icon
    untouched — `.dash-side.close section svg` is a DESCENDANT selector, so
    the button between it and the svg changes nothing (verified rendered, not
    assumed). */
@@ -945,7 +959,6 @@ a {
   align-items: center;
   justify-content: center;
   flex: none;
-  /* min-width: 44px; */
   min-height: 44px;
   margin-left: auto;
   padding: 0;
