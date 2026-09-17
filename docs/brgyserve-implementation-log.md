@@ -289,6 +289,14 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 
 **Verified in the browser at 1280 wide:** Secretary at 620 and 650 tall with the footer showing both the role and `@username`, the nav scrolling, and the logo row and footer staying pinned; Secretary at 700 with all 12 links fitting and no scrollbar; **one Tab from a fresh reload landing the focus ring on the collapse button as the first stop**, Enter collapsing to the 57px rail and Enter again expanding, with tabbing on still reaching the links and Log out while collapsed; the collapsed rail with its icons legible and the active-page indicator still visible; Treasurer at 620 tall unchanged — 2 links, no scrollbar, footer visible; and the drawer below 1045 opening and closing exactly as before.
 
+### PR #12 — the collapse arrow centres in the rail, 17 Sep 2026 (`16b08ca`, `272fade`)
+
+**The tap target `dc5a84c` gave the collapse button did not fit the rail it sits in, and Francis caught it the next day.** `.dash-side section .dash-side-toggle` carried `min-width: 44px`, chosen to match `.dash-drawer-arrow`'s target. Collapsed, `.dash-side.close` is **57px** and `.dash-side section`'s padding takes 16px off each side, leaving a content box of about **24px** — so a 44px button **overflowed it by 20px**, `.dash-side`'s `overflow: hidden` clipped the excess, and the glyph ended up roughly **9.5px off the rail's centre**. PR #12 removed the minimum; the button then sizes to its **25px** icon and the arrow centres.
+
+**The cost is the click target, 44x44 down to 25x44, and it was accepted rather than overlooked.** `min-height: 44px` stays, so only the axis the rail actually constrains is given up. **This control is desktop-only** — `.dash-side` is `display: none` at 1045px and below, where `.dash-drawer-arrow` is the control a thumb reaches — so the 44px convention still holds everywhere it governs a touch target.
+
+**`272fade` is the follow-up, and it changes nothing on screen.** PR #12 disabled the declaration by **commenting it out** rather than deleting it, and left standing the comment above the rule that still justified the 44px minimum as matching `.dash-drawer-arrow`. The dead declaration is now gone and that paragraph rewritten to record why the absence is deliberate, so the next reader does not restore it as a tidy-up. A commented-out property and an absent one paint identically, so there is no render change to verify between the two.
+
 ## Document Requests
 
 ### Stage 4 (Payment + Release)
