@@ -43,10 +43,12 @@ const ALL_ROLES = ['secretary', 'punong_barangay', 'treasurer', 'staff', 'reside
 const VIEWERS = ['secretary', 'punong_barangay', 'staff'];
 const SECRETARY_ONLY = ['secretary'];
 
-// Routes whose access is scoped by OWNERSHIP (profiles.resident_id /
-// requested_by_user_id) rather than by role. They carry no requireRole by
-// design and are listed explicitly so "no guard" is a recorded decision here
-// rather than an omission that slipped through.
+// Routes whose access is scoped by OWNERSHIP — the caller's profiles.resident_id
+// matched against the row's resident_id — rather than by role. (They matched
+// requested_by_user_id until c07d19c rescoped all four /mine routes, so that a
+// walk-in the Secretary encoded shows up for the resident it is for.) They
+// carry no requireRole by design and are listed explicitly so "no guard" is a
+// recorded decision here rather than an omission that slipped through.
 const OWNERSHIP_SCOPED = ALL_ROLES;
 
 // The authority. method + path -> exactly which roles the chain admits.
@@ -61,8 +63,8 @@ const EXPECTED = {
     'POST /:id/unarchive': SECRETARY_ONLY,
   },
   'documentRequests.js': {
-    'POST /': OWNERSHIP_SCOPED,           // resident submits; scoped by profiles.resident_id
-    'GET /mine': OWNERSHIP_SCOPED,        // scoped by requested_by_user_id
+    'POST /': ['secretary', 'resident'],  // resident files their own; the Secretary encodes a walk-in (c07d19c)
+    'GET /mine': OWNERSHIP_SCOPED,        // scoped by resident_id, not requested_by_user_id (c07d19c)
     'GET /mine/:id': OWNERSHIP_SCOPED,
     'POST /mine/:id/cancel': OWNERSHIP_SCOPED,
     'POST /mine/:id/pay': OWNERSHIP_SCOPED,
