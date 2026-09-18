@@ -31,10 +31,14 @@ function fullName(p) {
 }
 
 function payerName(charge) {
-  // Document charges carry the verified resident record; rentals fall back to
-  // the payer account's profile name. A FINE is owed by a HOUSEHOLD and often
-  // has no account behind it at all, so it names the head — and if the
-  // household has no head on file, the household number, which always exists.
+  // Document charges carry the verified resident record. Rentals name their
+  // own borrower since migration 022 — a linked resident record, or a guest
+  // from another barangay typed in at the counter — and only fall back to the
+  // payer account's profile name when neither is present, because the payer
+  // link is null for a walk-in resident with no account and for every guest.
+  // A FINE is owed by a HOUSEHOLD and often has no account behind it at all,
+  // so it names the head — and if the household has no head on file, the
+  // household number, which always exists.
   if (charge.charge_type === "FINE") {
     return (
       charge.household_records?.head_name ||
@@ -43,6 +47,8 @@ function payerName(charge) {
   }
   const name =
     fullName(charge.document_requests?.resident_records) ||
+    fullName(charge.rental_requests?.resident_records) ||
+    charge.rental_requests?.outside_borrower_name ||
     fullName(charge.payer?.profiles);
   if (name) return name;
   return charge.payer?.username ? `@${charge.payer.username}` : "—";

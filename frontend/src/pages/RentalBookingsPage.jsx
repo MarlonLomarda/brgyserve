@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import DashHeader from "../components/DashHeader";
+import ResidentPicker from "../components/ResidentPicker";
 import { formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
@@ -37,15 +38,29 @@ const FILTER_LABELS = {
   all: "All bookings",
 };
 
+const fullName = (p) => {
+  if (!p) return null;
+  const name = [p.first_name, p.middle_name, p.last_name]
+    .filter(Boolean)
+    .join(" ");
+  if (!name) return null;
+  return p.suffix ? `${name}, ${p.suffix}` : name;
+};
+
+const isGuest = (booking) => Boolean(booking.outside_borrower_name);
+
+// WHO THE BOOKING IS FOR — the borrower, not the requester. Since migration
+// 022 a row names its borrower directly (resident_records for a resident,
+// outside_borrower_name for a guest) and the requester is only who FILED it;
+// for a walk-in that is the Secretary. The requester's profile is kept as a
+// last fallback for rows the server did not embed a borrower on.
 function residentName(booking) {
-  const p = booking.requester?.profiles;
-  if (p) {
-    const name = [p.first_name, p.middle_name, p.last_name]
-      .filter(Boolean)
-      .join(" ");
-    if (name) return p.suffix ? `${name}, ${p.suffix}` : name;
-  }
-  return booking.requester?.username ? `@${booking.requester.username}` : "—";
+  return (
+    fullName(booking.resident_records) ||
+    booking.outside_borrower_name ||
+    fullName(booking.requester?.profiles) ||
+    (booking.requester?.username ? `@${booking.requester.username}` : "—")
+  );
 }
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -272,6 +287,321 @@ function ReturnPanel({ booking, onDone }) {
   );
 }
 
+const EMPTY_WALK_IN = {
+  item_id: "",
+  date: "",
+  start_time: "",
+  end_time: "",
+  quantity: "1",
+  purpose: "",
+};
+
+// The Secretary encodes a booking for someone at the hall: a registered
+// resident picked from the master list, or a guest from another barangay
+// typed in by name and contact number — a real, current practice (outsiders
+// rent select items, mostly costumes). Exactly one of the two, matching the
+// CHECK constraint from migration 022; the server validates the same rule.
+//
+// Standalone rather than sharing BookRentalPage's fields: EditPanel above
+// already duplicates that grid the same way, and extracting it would refactor
+// a resident-facing page this feature does not otherwise touch. The fields
+// are the same ones that form collects; only who-it-is-for is new.
+//
+// THE CONFLICT CHECK IS THE SERVER'S. This posts to the same
+// POST /rental-requests handler BookRentalPage does, and that handler runs
+// findConflict() before and after the insert for every caller — there is no
+// second code path a walk-in could take around it. Refusals surface here in
+// `error` exactly as they do on the resident form.
+function WalkInBookingPanel({ onDone }) {
+  const { authFetch } = useAuth();
+  const [items, setItems] = useState(null); // null = loading
+  const [loadError, setLoadError] = useState("");
+  const [mode, setMode] = useState("resident"); // 'resident' | 'guest'
+  const [resident, setResident] = useState(null);
+  const [guest, setGuest] = useState({ name: "", contact: "" });
+  const [form, setForm] = useState({ ...EMPTY_WALK_IN });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await authFetch("/rental-items");
+        if (!cancelled) setItems(data.rental_items);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err.message);
+          setItems([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authFetch]);
+
+  const selectedItem = items?.find(
+    (i) => String(i.item_id) === String(form.item_id),
+  );
+  const isCountable = selectedItem && selectedItem.quantity_total > 1;
+  const quantity = isCountable ? Number(form.quantity) || 0 : 1;
+  const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => {
+      const next = { ...f, [name]: value };
+      if (name === "item_id") next.quantity = "1"; // reset when switching items
+      return next;
+    });
+  }
+
+  function switchMode(next) {
+    setMode(next);
+    setError("");
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (mode === "resident" && !resident) {
+      setError("Pick the resident this booking is for.");
+      return;
+    }
+    if (mode === "guest" && (!guest.name.trim() || !guest.contact.trim())) {
+      setError("A guest booking needs both a name and a contact number.");
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      const data = await authFetch("/rental-requests", {
+        method: "POST",
+        body: {
+          item_id: Number(form.item_id),
+          date: form.date,
+          start_time: form.start_time,
+          end_time: form.end_time,
+          quantity_requested: quantity,
+          purpose: form.purpose,
+          ...(mode === "guest"
+            ? {
+                outside_borrower_name: guest.name.trim(),
+                outside_borrower_contact: guest.contact.trim(),
+              }
+            : { resident_id: resident.resident_id }),
+        },
+      });
+      onDone({ type: "success", text: data.message });
+    } catch (err) {
+      setError(err.message); // conflict reasons surface here — pick another slot
+      setBusy(false);
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>Encode walk-in booking</h3>
+          <p className="muted">
+            For someone at the barangay hall. Filed under your account and
+            recorded for the borrower you name.
+          </p>
+        </div>
+        <button className="btn secondary" onClick={() => onDone(null)}>
+          ← Back to list
+        </button>
+      </div>
+
+      {loadError && <div className="alert error">{loadError}</div>}
+      {error && <div className="alert error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <div className="tab-container">
+          <button
+            type="button"
+            className={`tab ${mode === "resident" ? "active-tab" : ""}`}
+            onClick={() => switchMode("resident")}
+          >
+            Existing resident
+          </button>
+          <button
+            type="button"
+            className={`tab ${mode === "guest" ? "active-tab" : ""}`}
+            onClick={() => switchMode("guest")}
+          >
+            Guest from another barangay
+          </button>
+        </div>
+
+        {mode === "resident" ? (
+          <>
+            <label>Resident</label>
+            <ResidentPicker
+              value={resident}
+              onPick={(r) => {
+                setResident(r);
+                setError("");
+              }}
+              onClear={() => setResident(null)}
+              placeholder="Search the resident master list…"
+            />
+          </>
+        ) : (
+          <div className="grid-2">
+            <label>
+              Full name
+              <input
+                value={guest.name}
+                onChange={(e) =>
+                  setGuest((g) => ({ ...g, name: e.target.value }))
+                }
+                maxLength={200}
+                placeholder="As given at the counter"
+                required
+              />
+            </label>
+            <label>
+              Contact number
+              <input
+                value={guest.contact}
+                onChange={(e) =>
+                  setGuest((g) => ({ ...g, contact: e.target.value }))
+                }
+                maxLength={50}
+                placeholder="Where the booking notices go"
+                required
+              />
+            </label>
+          </div>
+        )}
+
+        {items === null ? (
+          <p className="muted">Loading rental items…</p>
+        ) : items.length === 0 ? (
+          <p className="muted">Nothing is currently available for rental.</p>
+        ) : (
+          <>
+            <label>
+              Facility / item
+              <select
+                name="item_id"
+                value={form.item_id}
+                onChange={handleChange}
+                required
+              >
+                <option value="" disabled>
+                  Select an item…
+                </option>
+                {items.map((i) => (
+                  <option key={i.item_id} value={i.item_id}>
+                    {i.name} ({ITEM_TYPE_LABELS[i.type] || i.type}) — ₱
+                    {Number(i.fee).toFixed(2)}
+                    {i.quantity_total > 1
+                      ? ` per unit · ${i.quantity_total} units`
+                      : " per booking"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedItem?.description && (
+              <p className="muted type-description">
+                {selectedItem.description}
+              </p>
+            )}
+
+            <div className="grid-2">
+              <label>
+                Date
+                <input
+                  name="date"
+                  type="date"
+                  min={today}
+                  value={form.date}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+              {isCountable && (
+                <label>
+                  Quantity{" "}
+                  <span className="hint">
+                    (up to {selectedItem.quantity_total})
+                  </span>
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    max={selectedItem.quantity_total}
+                    step="1"
+                    value={form.quantity}
+                    onChange={handleChange}
+                    required
+                  />
+                </label>
+              )}
+              <label>
+                Start time
+                <input
+                  name="start_time"
+                  type="time"
+                  value={form.start_time}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+              <label>
+                End time
+                <input
+                  name="end_time"
+                  type="time"
+                  value={form.end_time}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+            </div>
+
+            <label>
+              Purpose
+              <textarea
+                name="purpose"
+                value={form.purpose}
+                onChange={handleChange}
+                rows={3}
+                maxLength={1000}
+                placeholder="e.g. Birthday party, basketball league practice, family reunion…"
+                required
+              />
+            </label>
+
+            {selectedItem && (
+              <p className="muted">
+                Estimated fee: <strong>₱{estimatedFee.toFixed(2)}</strong>
+                {isCountable && quantity > 0 && (
+                  <>
+                    {" "}
+                    ({quantity} × ₱{Number(selectedItem.fee).toFixed(2)})
+                  </>
+                )}
+              </p>
+            )}
+
+            <div className="actions">
+              <button className="btn" type="submit" disabled={busy}>
+                {busy ? "Checking availability…" : "Record booking"}
+              </button>
+            </div>
+          </>
+        )}
+      </form>
+    </div>
+  );
+}
+
 export default function RentalBookingsPage({
   title,
   nav,
@@ -286,6 +616,7 @@ export default function RentalBookingsPage({
   const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
+  const [encoding, setEncoding] = useState(false); // walk-in panel open
 
   const load = useCallback(async () => {
     setListError("");
@@ -337,7 +668,17 @@ export default function RentalBookingsPage({
     <>
       {/* <DashHeader title={title} subtitle={subtitle} nav={nav} /> */}
 
-      {editing ? (
+      {encoding ? (
+        <WalkInBookingPanel
+          onDone={(result) => {
+            setEncoding(false);
+            if (result) {
+              setFlash(result);
+              load();
+            }
+          }}
+        />
+      ) : editing ? (
         <EditPanel
           booking={editing}
           onDone={(result) => {
@@ -384,6 +725,21 @@ export default function RentalBookingsPage({
               <button className="btn secondary" onClick={load}>
                 Refresh
               </button>
+              {/* Secretary only. canManage is passed by App.jsx on the
+                  /secretary route alone — Staff get canReturn, the Punong
+                  Barangay neither — so this is the role gate, in the same
+                  prop Edit and Cancel already key on. */}
+              {canManage && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setFlash(null);
+                    setEncoding(true);
+                  }}
+                >
+                  Encode walk-in
+                </button>
+              )}
             </div>
           </div>
 
@@ -404,7 +760,7 @@ export default function RentalBookingsPage({
               <table className="data-table stack-narrow">
                 <thead>
                   <tr>
-                    <th>Resident</th>
+                    <th>Booked for</th>
                     <th>Item</th>
                     <th>Schedule</th>
                     <th className="num">Qty</th>
@@ -422,10 +778,16 @@ export default function RentalBookingsPage({
                       <tr key={r.request_id}>
                         <td>
                           <strong>{residentName(r)}</strong>
-                          {r.requester?.username && (
+                          {isGuest(r) ? (
                             <div className="muted small-note">
-                              @{r.requester.username}
+                              Guest · {r.outside_borrower_contact}
                             </div>
+                          ) : (
+                            r.requester?.username && (
+                              <div className="muted small-note">
+                                @{r.requester.username}
+                              </div>
+                            )
                           )}
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>

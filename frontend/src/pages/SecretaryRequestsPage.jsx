@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import DashHeader from "../components/DashHeader";
+import ResidentPicker from "../components/ResidentPicker";
 import {
   statusMeta,
   chargeMeta,
@@ -341,6 +342,161 @@ function RequestDetail({ id, canManage, onBack }) {
   );
 }
 
+// The Secretary encodes a request for a resident standing at the hall. It is
+// filed under the Secretary's account (requested_by_user_id) and recorded FOR
+// the picked resident (resident_id) — the server keeps the two apart.
+//
+// Built standalone rather than sharing RequestDocumentPage's fields: those
+// are inline JSX coupled to that page's own state, and EditPanel in
+// RentalBookingsPage already duplicates BookRentalPage's grid the same way.
+// Extracting them would be a refactor of a resident-facing page this feature
+// does not otherwise touch. The two fields are the same ones that form
+// collects; only the resident picker is new. Residents only — Chapter 1
+// restricts documents to registered residents, so there is no guest path
+// here, unlike bookings.
+function WalkInRequestPanel({ onDone }) {
+  const { authFetch } = useAuth();
+  const [types, setTypes] = useState(null); // null = loading
+  const [loadError, setLoadError] = useState("");
+  const [resident, setResident] = useState(null);
+  const [form, setForm] = useState({ document_type_id: "", purpose: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await authFetch("/document-types");
+        if (!cancelled) setTypes(data.document_types);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err.message);
+          setTypes([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authFetch]);
+
+  const selectedType = types?.find(
+    (t) => String(t.document_type_id) === String(form.document_type_id),
+  );
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!resident) {
+      setError("Pick the resident this request is for.");
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      const data = await authFetch("/document-requests", {
+        method: "POST",
+        body: {
+          resident_id: resident.resident_id,
+          document_type_id: Number(form.document_type_id),
+          purpose: form.purpose,
+        },
+      });
+      onDone({ type: "success", text: data.message });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>Encode walk-in request</h3>
+          <p className="muted">
+            For a resident at the barangay hall. Filed under your account and
+            recorded for the resident you pick.
+          </p>
+        </div>
+        <button className="btn secondary" onClick={() => onDone(null)}>
+          ← Back to list
+        </button>
+      </div>
+
+      {loadError && <div className="alert error">{loadError}</div>}
+      {error && <div className="alert error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <label>Resident</label>
+        <ResidentPicker
+          value={resident}
+          onPick={(r) => {
+            setResident(r);
+            setError("");
+          }}
+          onClear={() => setResident(null)}
+          placeholder="Search the resident master list…"
+        />
+
+        {types === null ? (
+          <p className="muted">Loading document types…</p>
+        ) : types.length === 0 ? (
+          <p className="muted">No document types are currently offered.</p>
+        ) : (
+          <>
+            <label>
+              Document type
+              <select
+                name="document_type_id"
+                value={form.document_type_id}
+                onChange={handleChange}
+                required
+              >
+                <option value="" disabled>
+                  Select a document…
+                </option>
+                {types.map((t) => (
+                  <option key={t.document_type_id} value={t.document_type_id}>
+                    {t.name} — ₱{Number(t.fee).toFixed(2)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedType?.description && (
+              <p className="muted type-description">
+                {selectedType.description}
+              </p>
+            )}
+            <label>
+              Purpose
+              <textarea
+                name="purpose"
+                value={form.purpose}
+                onChange={handleChange}
+                rows={3}
+                maxLength={1000}
+                placeholder="e.g. Employment requirement, scholarship application…"
+                required
+              />
+            </label>
+            <div className="actions">
+              <button className="btn" type="submit" disabled={busy}>
+                {busy ? "Recording…" : "Record request"}
+              </button>
+            </div>
+          </>
+        )}
+      </form>
+    </div>
+  );
+}
+
 export default function SecretaryRequestsPage({
   title,
   nav,
@@ -351,6 +507,8 @@ export default function SecretaryRequestsPage({
   const [requests, setRequests] = useState(null); // null = loading
   const [listError, setListError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [encoding, setEncoding] = useState(false); // walk-in panel open
+  const [flash, setFlash] = useState(null);
 
   const load = useCallback(async () => {
     setListError("");
@@ -376,7 +534,17 @@ export default function SecretaryRequestsPage({
     // />
 
     <>
-      {selectedId ? (
+      {encoding ? (
+        <WalkInRequestPanel
+          onDone={(result) => {
+            setEncoding(false);
+            if (result) {
+              setFlash(result);
+              load();
+            }
+          }}
+        />
+      ) : selectedId ? (
         <RequestDetail
           id={selectedId}
           canManage={canManage}
@@ -387,6 +555,7 @@ export default function SecretaryRequestsPage({
         />
       ) : (
         <>
+          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
           {listError && <div className="alert error">{listError}</div>}
 
           <div className="list-head">
@@ -409,6 +578,21 @@ export default function SecretaryRequestsPage({
               <button className="btn secondary" onClick={load}>
                 Refresh
               </button>
+              {/* Secretary only. canManage is passed by App.jsx on the
+                  /secretary route alone — Staff and the Punong Barangay share
+                  this component without it — so this is the role gate, in
+                  the same prop the four workflow actions already key on. */}
+              {canManage && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setFlash(null);
+                    setEncoding(true);
+                  }}
+                >
+                  Encode walk-in
+                </button>
+              )}
             </div>
           </div>
 
