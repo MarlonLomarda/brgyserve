@@ -23,16 +23,199 @@ const RENTAL_FIELDS =
 // item's capacity numbers (the edit form needs them), and the return record.
 // rental_requests has three FKs to users, so each user embed names its
 // constraint.
+//
+// WHO A BOOKING IS FOR is no longer the requester. Since migration 022 a row
+// names its borrower directly — resident_id for a registered resident, or the
+// outside_borrower_* pair for a guest from another barangay — and the
+// requester is only WHO FILED IT. For a self-service booking those are the
+// same person; for a walk-in the requester is the Secretary. The list must
+// show the borrower, so both are returned and the screen prefers the
+// borrower. rental_requests has exactly one FK to resident_records, so that
+// embed needs no constraint name.
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   return_note, returned_at,
+  resident_id, outside_borrower_name, outside_borrower_contact,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
+  resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   returned_by:users!rental_requests_returned_by_user_id_fkey ( user_id, username,
     profiles ( first_name, last_name ) ),
   charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )
 `;
+
+// Roles that may CREATE a booking. A resident books for themselves; the
+// Secretary may additionally encode a WALK-IN — for a registered resident, or
+// for a guest from another barangay who has no resident record at all (a real,
+// current practice: outsiders rent select items, mostly costumes). Before this
+// gate the route carried NO role check, so this is a real narrowing; verified
+// that the only caller is BookRentalPage.jsx behind <ProtectedRoute
+// role="resident">, so nothing Staff, Treasurer or the Punong Barangay does
+// today touches it.
+const CREATE_ROLES = ['resident', 'secretary'];
+
+const GUEST_NAME_MAX = 200;
+const GUEST_CONTACT_MAX = 50;
+
+// The caller's own linked resident record, or null when their account has none.
+async function ownResidentId(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('resident_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load profile: ${error.message}`);
+  }
+  return data?.resident_id ?? null;
+}
+
+// The account belonging to a resident, or null when they never registered
+// online. profiles.resident_id is UNIQUE (migration 002), so at most one row.
+// Null is a real answer: charges.user_id and notifications.user_id are both
+// nullable for exactly this, and a guest can NEVER have one — registration
+// requires matching an existing resident record, which a guest lacks.
+async function accountOfResident(residentId) {
+  if (!residentId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('resident_id', residentId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to resolve the resident's account: ${error.message}`);
+  }
+  return data?.user_id ?? null;
+}
+
+// Everything the booking flow needs about a RESIDENT borrower, in one place:
+// the record (existence and archive status), their contact number, and their
+// own account if any. `requireActive` is the walk-in check — a resident
+// booking for themselves is already active by virtue of being logged in.
+async function residentBorrower(residentId, { requireActive = false, walkIn = false } = {}) {
+  const { data: record, error } = await supabase
+    .from('resident_records')
+    .select('resident_id, contact_number, is_archived')
+    .eq('resident_id', residentId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load resident record: ${error.message}`);
+  }
+  if (requireActive) {
+    if (!record) {
+      return { status: 400, error: `No resident record #${residentId} exists` };
+    }
+    if (record.is_archived) {
+      return {
+        status: 400,
+        error: `Resident record #${residentId} is archived — archived residents cannot be given new bookings`,
+      };
+    }
+  }
+  return {
+    kind: 'resident',
+    walkIn,
+    residentId,
+    contactNumber: record?.contact_number ?? null,
+    accountId: await accountOfResident(residentId),
+  };
+}
+
+// WHO THE BOOKING IS FOR. Three shapes, mirroring the CHECK constraint
+// migration 022 put on rental_requests, validated HERE so a bad body is a
+// clear 400 naming the rule rather than a raw constraint violation:
+//
+//   resident (self-service)          -> their own linked record; any identity
+//                                       fields in the body are IGNORED, the
+//                                       subject comes from the session
+//   secretary + resident_id          -> walk-in for a registered resident
+//   secretary + outside_borrower_*   -> guest walk-in, both fields required,
+//                                       no resident_id
+//   secretary + neither              -> the Secretary's own record, so one
+//                                       who is also a resident can still book
+//                                       for themselves as before
+//   secretary + both                 -> 400
+//
+// Returns { kind: 'resident', ... } | { kind: 'guest', ... } | { status, error }.
+async function resolveBorrower(req) {
+  const body = req.body ?? {};
+
+  if (req.user.role === 'resident') {
+    const residentId = await ownResidentId(req.user.user_id);
+    if (!residentId) {
+      return {
+        status: 409,
+        error:
+          'Your account is not linked to a resident record yet. Facility booking becomes available once the Barangay Secretary approves your registration.',
+      };
+    }
+    return residentBorrower(residentId);
+  }
+
+  const rawResident = body.resident_id;
+  const hasResident = rawResident !== undefined && rawResident !== null && rawResident !== '';
+  const guestName = String(body.outside_borrower_name ?? '').trim();
+  const guestContact = String(body.outside_borrower_contact ?? '').trim();
+  const hasGuest = Boolean(guestName || guestContact);
+
+  if (hasResident && hasGuest) {
+    return {
+      status: 400,
+      error: 'A booking is for EITHER a registered resident (resident_id) OR an outside borrower (outside_borrower_name + outside_borrower_contact) — not both',
+    };
+  }
+
+  if (hasGuest) {
+    if (!guestName || !guestContact) {
+      return {
+        status: 400,
+        error: 'A guest booking needs BOTH outside_borrower_name and outside_borrower_contact',
+      };
+    }
+    if (guestName.length > GUEST_NAME_MAX) {
+      return { status: 400, error: `outside_borrower_name must be ${GUEST_NAME_MAX} characters or fewer` };
+    }
+    if (guestContact.length > GUEST_CONTACT_MAX) {
+      return { status: 400, error: `outside_borrower_contact must be ${GUEST_CONTACT_MAX} characters or fewer` };
+    }
+    return { kind: 'guest', walkIn: true, name: guestName, contact: guestContact };
+  }
+
+  if (hasResident) {
+    const residentId = Number(rawResident);
+    if (!Number.isInteger(residentId)) {
+      return { status: 400, error: 'resident_id must be a whole number' };
+    }
+    return residentBorrower(residentId, { requireActive: true, walkIn: true });
+  }
+
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return {
+      status: 409,
+      error:
+        'Your account is not linked to a resident record, so this booking needs either a resident_id or the outside borrower fields — say who it is for.',
+    };
+  }
+  return residentBorrower(residentId);
+}
+
+// Where a notification about an EXISTING booking goes, and which account it
+// is recorded against. Reads the columns migration 022 added, so the booking
+// must have been loaded with resident_id, outside_borrower_name,
+// outside_borrower_contact and resident_records ( contact_number ).
+async function borrowerNotifyTarget(booking) {
+  if (booking.outside_borrower_name) {
+    // A guest: the number typed at the counter, and no account to record it
+    // against, because a guest cannot have one.
+    return { userId: null, destination: booking.outside_borrower_contact };
+  }
+  return {
+    userId: await accountOfResident(booking.resident_id),
+    destination: booking.resident_records?.contact_number,
+  };
+}
 
 // Rental fee = item fee (per unit per booking) x quantity — the SAME formula
 // the booking screen shows as "estimated fee", so the charge always matches
@@ -165,10 +348,16 @@ function itemQuantityError(item, quantity) {
   return null;
 }
 
-// POST /api/rental-requests — the resident books an item. SELF-SERVICE: the
-// conflict check runs here at submission, and a passing request is confirmed
-// instantly (no Secretary approval step).
-router.post('/', async (req, res) => {
+// POST /api/rental-requests — a resident books for themselves, or the
+// Secretary encodes a WALK-IN. SELF-SERVICE either way: the conflict check
+// runs here at submission and a passing request is confirmed instantly, and
+// because both paths go through this ONE handler a walk-in is checked against
+// exactly the availability rules a resident's own booking is — there is no
+// second code path that could skip them.
+//
+// requested_by_user_id records WHO FILED IT; who it is FOR is resident_id or
+// the outside_borrower_* pair — see resolveBorrower().
+router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   const itemId = Number(req.body?.item_id);
   if (!Number.isInteger(itemId)) {
     return res.status(400).json({ error: 'An item_id is required' });
@@ -179,21 +368,11 @@ router.post('/', async (req, res) => {
   }
   const { start, end, startIso, endIso, purpose, quantity } = parsed;
 
-  // Bookings are for verified residents — same rule as document requests.
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('resident_id, resident_records ( contact_number )')
-    .eq('user_id', req.user.user_id)
-    .maybeSingle();
-  if (profileError) {
-    throw new Error(`Failed to load profile: ${profileError.message}`);
+  const borrower = await resolveBorrower(req);
+  if (borrower.error) {
+    return res.status(borrower.status).json({ error: borrower.error });
   }
-  if (!profile?.resident_id) {
-    return res.status(409).json({
-      error:
-        'Your account is not linked to a resident record yet. Facility booking becomes available once the Barangay Secretary approves your registration.',
-    });
-  }
+  const isGuest = borrower.kind === 'guest';
 
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
@@ -228,6 +407,12 @@ router.post('/', async (req, res) => {
     .insert({
       item_id: itemId,
       requested_by_user_id: req.user.user_id,
+      // Exactly one of the two borrower shapes, matching the CHECK from
+      // migration 022. The nulls are written explicitly rather than omitted
+      // so the row states which path it took.
+      resident_id: isGuest ? null : borrower.residentId,
+      outside_borrower_name: isGuest ? borrower.name : null,
+      outside_borrower_contact: isGuest ? borrower.contact : null,
       quantity_requested: quantity,
       start_datetime: startIso,
       end_datetime: endIso,
@@ -257,12 +442,16 @@ router.post('/', async (req, res) => {
   // charge auto-marked PAID, matching the document rule. No transactions in
   // supabase-js, so compensate: if the charge can't be created, delete the
   // booking rather than leave a confirmed booking with nothing to collect.
+  // The charge belongs to the BORROWER's account, never the submitter's: for a
+  // walk-in the submitter is the Secretary, and keying the charge to
+  // req.user.user_id would bill barangay staff. A resident with no account,
+  // and every guest, gets null — a hall-only charge the Treasurer settles.
   const amount = rentalAmount(item, quantity);
   const { error: chargeError } = await supabase.from('charges').insert({
     charge_type: CHARGE_TYPE.RENTAL,
     amount,
     status: amount > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
-    user_id: req.user.user_id,
+    user_id: isGuest ? null : borrower.accountId,
     rental_request_id: created.request_id,
     created_at: new Date().toISOString(),
   });
@@ -282,16 +471,21 @@ router.post('/', async (req, res) => {
 
   // Recorded, not sent. "-" and "x" instead of an em dash and a multiplication
   // sign: both are outside the GSM alphabet and would double the message cost.
+  // To the BORROWER, not the submitter. A guest's number is the one typed at
+  // the counter, used directly — there is no resident record to join through.
   await notify({
-    userId: req.user.user_id,
-    destination: profile.resident_records?.contact_number,
+    userId: isGuest ? null : borrower.accountId,
+    destination: isGuest ? borrower.contact : borrower.contactNumber,
     relatedType: RELATED_TYPE.RENTAL_REQUEST,
     relatedTo: created.request_id,
     message: `BrgyServe: your booking is CONFIRMED - ${quantity > 1 ? `${quantity}x ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`,
   });
 
+  const when = `${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}`;
   res.status(201).json({
-    message: `Booking confirmed: ${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}.`,
+    message: borrower.walkIn
+      ? `Walk-in booking recorded for ${isGuest ? borrower.name : `resident #${borrower.residentId}`}: ${when}.`
+      : `Booking confirmed: ${when}.`,
     request: withDerived(withCharge || created),
   });
 });
@@ -318,11 +512,22 @@ router.post('/mine/:id/pay', async (req, res) => {
     return res.status(400).json({ error: 'Reference number must be 100 characters or fewer' });
   }
 
+  // Scoped by resident_id like GET /mine: the charge on a walk-in is the
+  // resident's to settle, and filtering on the submitter would 404 them out of
+  // a booking their own list shows. Additive for self-service bookings — same
+  // reasoning as the document routes. A GUEST booking carries resident_id null
+  // and so matches nothing here, which is correct: a guest has no account to
+  // call this route from, and settles at the hall with the Treasurer.
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
     .select('request_id, status, charges ( charge_id, amount, status )')
     .eq('request_id', id)
-    .eq('requested_by_user_id', req.user.user_id) // own bookings only
+    .eq('resident_id', residentId) // own bookings only
     .maybeSingle();
   if (loadError) {
     throw new Error(`Failed to load booking: ${loadError.message}`);
@@ -366,15 +571,27 @@ router.post('/mine/:id/pay', async (req, res) => {
   });
 });
 
-// GET /api/rental-requests/mine — only the logged-in user's own bookings,
-// newest first (the requested_by_user_id filter keeps residents from seeing
-// each other's bookings). rental_requests has no created-at column, so
-// request_id order stands in for insertion order.
+// GET /api/rental-requests/mine — the bookings FOR the logged-in resident,
+// newest first. Filtered by resident_id, not requested_by_user_id, so a
+// walk-in the Secretary encoded for this resident shows up in their own list;
+// for a self-service booking the two columns name the same person, so nothing
+// a resident already saw here changes. A guest booking can never appear
+// anywhere here — a guest has no account to view it from, by construction.
+// rental_requests has no created-at column, so request_id order stands in
+// for insertion order.
+//
+// A caller with no linked record gets an empty list, not an error — "you have
+// no bookings" is true of an account with no resident behind it.
 router.get('/mine', async (req, res) => {
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.json({ requests: [] });
+  }
+
   const { data, error } = await supabase
     .from('rental_requests')
     .select(RENTAL_FIELDS)
-    .eq('requested_by_user_id', req.user.user_id)
+    .eq('resident_id', residentId)
     .order('request_id', { ascending: false });
   if (error) {
     throw new Error(`Failed to load bookings: ${error.message}`);
@@ -575,7 +792,9 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
 
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
-    .select('request_id, status, requested_by_user_id, start_datetime, rental_items ( name )')
+    .select(
+      'request_id, status, resident_id, outside_borrower_name, outside_borrower_contact, start_datetime, rental_items ( name ), resident_records ( contact_number )'
+    )
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -623,14 +842,13 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     .eq('request_id', id)
     .maybeSingle();
 
-  const { data: requesterProfile } = await supabase
-    .from('profiles')
-    .select('resident_records ( contact_number )')
-    .eq('user_id', booking.requested_by_user_id)
-    .maybeSingle();
+  // To the BORROWER — previously looked up through requested_by_user_id, which
+  // for a walk-in is the Secretary who filed it, not the person whose slot
+  // was just cancelled.
+  const target = await borrowerNotifyTarget(booking);
   await notify({
-    userId: booking.requested_by_user_id,
-    destination: requesterProfile?.resident_records?.contact_number,
+    userId: target.userId,
+    destination: target.destination,
     relatedType: RELATED_TYPE.RENTAL_REQUEST,
     relatedTo: id,
     message: `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`,
@@ -665,7 +883,9 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
 
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
-    .select('request_id, status, requested_by_user_id, rental_items ( name, type )')
+    .select(
+      'request_id, status, resident_id, outside_borrower_name, outside_borrower_contact, rental_items ( name, type ), resident_records ( contact_number )'
+    )
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -705,19 +925,16 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
     return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
   }
 
-  const { data: requesterProfile } = await supabase
-    .from('profiles')
-    .select('resident_records ( contact_number )')
-    .eq('user_id', booking.requested_by_user_id)
-    .maybeSingle();
+  // To the BORROWER — see the cancel route.
+  const target = await borrowerNotifyTarget(booking);
   const spoken = {
     [RENTAL_STATUS.RETURNED]: 'returned',
     [RENTAL_STATUS.RETURNED_LATE]: 'returned (late)',
     [RENTAL_STATUS.RETURNED_WITH_ISSUE]: 'returned with an issue noted',
   }[outcome];
   await notify({
-    userId: booking.requested_by_user_id,
-    destination: requesterProfile?.resident_records?.contact_number,
+    userId: target.userId,
+    destination: target.destination,
     relatedType: RELATED_TYPE.RENTAL_REQUEST,
     relatedTo: id,
     message: `BrgyServe: your rental of ${booking.rental_items?.name || 'an item'} has been recorded as ${spoken}. Thank you.`,

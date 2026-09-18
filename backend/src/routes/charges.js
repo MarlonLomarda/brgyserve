@@ -14,8 +14,18 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // Charges link to their source per type: DOCUMENT via document_requests,
 // RENTAL via rental_requests (stage 4 of Facility Rentals), FINE via
 // event_id + household_id (Events stage 3b) — whichever is null for a given
-// row simply embeds as null. The payer's profile name covers rentals (no
-// resident_records link on rental_requests).
+// row simply embeds as null.
+//
+// RENTALS NAME THEIR OWN BORROWER since migration 022, and this comment used
+// to say the opposite ("no resident_records link on rental_requests", so the
+// payer's profile name covers them). A booking now carries EITHER a
+// resident_id — a registered resident, whether they booked it themselves or
+// the Secretary encoded a walk-in — OR an outside_borrower_name/contact pair
+// for a guest from another barangay. Both are embedded here because the payer
+// link no longer covers either case: a walk-in resident may never have
+// registered online, and a guest CANNOT have an account at all, so
+// charges.user_id is null on both and the payer embed comes back null with
+// it.
 //
 // A FINE may have NO payer account at all: it is owed by a household, and
 // most households have no linked account (charges.user_id is nullable for
@@ -31,7 +41,9 @@ const CHARGE_FIELDS = `
     document_types ( name ),
     resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
   rental_requests ( request_id, quantity_requested, start_datetime, end_datetime, status,
-    rental_items ( name ) ),
+    resident_id, outside_borrower_name, outside_borrower_contact,
+    rental_items ( name ),
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
   events ( event_id, title, start_datetime, end_datetime ),
   household_records ( household_id, address )
 `;
@@ -111,7 +123,8 @@ router.post('/:id/verify', async (req, res) => {
     .from('charges')
     .select(`charge_id, charge_type, amount, status, declared_method, declared_reference, household_id,
       document_requests ( request_id, document_types ( name ), resident_records ( contact_number ) ),
-      rental_requests ( request_id, rental_items ( name ) ),
+      rental_requests ( request_id, resident_id, outside_borrower_name, outside_borrower_contact,
+        rental_items ( name ), resident_records ( contact_number ) ),
       events ( event_id, title ),
       payer:users ( profiles ( resident_records ( contact_number ) ) )`)
     .eq('charge_id', id)
@@ -175,8 +188,15 @@ router.post('/:id/verify', async (req, res) => {
   // the PAID status are both committed; notify() never throws.
   // "PHP" not the peso sign — see services/notifications.js on GSM encoding.
   const peso = `PHP ${Number(charge.amount).toFixed(2)}`;
+  // Same order as payerName() on the Payments screen: the source record's own
+  // resident first, then a guest's typed contact, and only then the payer
+  // account. The payer link is last because it is the one that goes null on
+  // exactly the rows the earlier branches exist to cover — a walk-in resident
+  // who never registered online, and a guest, who cannot have an account.
   let contact =
     charge.document_requests?.resident_records?.contact_number ||
+    charge.rental_requests?.resident_records?.contact_number ||
+    charge.rental_requests?.outside_borrower_contact ||
     charge.payer?.profiles?.resident_records?.contact_number;
   let message;
   if (charge.charge_type === CHARGE_TYPE.FINE) {

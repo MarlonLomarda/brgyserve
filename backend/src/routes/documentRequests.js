@@ -16,6 +16,106 @@ router.use(authenticate);
 // and must never be widened to this list.
 const VIEW_ROLES = ['secretary', 'punong_barangay', 'staff'];
 
+// Roles that may CREATE a request. A resident files their own; the Secretary
+// may additionally encode a WALK-IN for a resident standing at the hall.
+// Before this gate the route carried NO role check at all — any authenticated
+// role could reach it — so this is a real narrowing. Verified before landing
+// it: the only callers are RequestDocumentPage.jsx and BookRentalPage.jsx,
+// both behind <ProtectedRoute role="resident">, so nothing Staff, Treasurer or
+// the Punong Barangay does today touches this endpoint.
+//
+// Documents are RESIDENTS-ONLY and there is deliberately no guest path here —
+// Chapter 1 restricts document requests to registered residents. Only rentals
+// take an outside borrower (see routes/rentalRequests.js).
+const CREATE_ROLES = ['resident', 'secretary'];
+
+// The caller's own linked resident record, or null when their account has none.
+async function ownResidentId(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('resident_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load profile: ${error.message}`);
+  }
+  return data?.resident_id ?? null;
+}
+
+// The account belonging to a resident, or null when they never registered
+// online. profiles.resident_id is UNIQUE (migration 002), so this is at most
+// one row.
+//
+// NULL IS A REAL ANSWER, NOT A FAILURE. A walk-in is filed for whoever is at
+// the counter, and most residents have no account — charges.user_id and
+// notifications.user_id are both nullable precisely for this, and
+// routes/charges.js already says so of the household fines it lists.
+async function accountOfResident(residentId) {
+  if (!residentId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('resident_id', residentId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to resolve the resident's account: ${error.message}`);
+  }
+  return data?.user_id ?? null;
+}
+
+// WHO THE REQUEST IS FOR. A resident always files for themselves and any
+// resident_id in their body is ignored — the subject comes from the session,
+// never from the request. The Secretary may name another resident, which is
+// the walk-in path, and falls back to their own linked record when they don't,
+// so a Secretary who is also a resident can still file for themselves exactly
+// as before.
+//
+// Returns { residentId } on success, or { status, error } for the caller to
+// return unchanged.
+async function resolveSubjectResident(req) {
+  const raw = req.body?.resident_id;
+  const namesAnother =
+    req.user.role === 'secretary' && raw !== undefined && raw !== null && raw !== '';
+
+  if (namesAnother) {
+    const residentId = Number(raw);
+    if (!Number.isInteger(residentId)) {
+      return { status: 400, error: 'resident_id must be a whole number' };
+    }
+
+    const { data: resident, error } = await supabase
+      .from('resident_records')
+      .select('resident_id, is_archived')
+      .eq('resident_id', residentId)
+      .maybeSingle();
+    if (error) {
+      throw new Error(`Failed to load resident record: ${error.message}`);
+    }
+    if (!resident) {
+      return { status: 400, error: `No resident record #${residentId} exists` };
+    }
+    if (resident.is_archived) {
+      return {
+        status: 400,
+        error: `Resident record #${residentId} is archived — archived residents cannot be given new document requests`,
+      };
+    }
+    return { residentId, walkIn: true };
+  }
+
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return {
+      status: 409,
+      error:
+        req.user.role === 'secretary'
+          ? 'Your account is not linked to a resident record, so this request needs a resident_id — pick the resident it is for.'
+          : 'Your account is not linked to a resident record yet. Document requests become available once the Barangay Secretary approves your registration.',
+    };
+  }
+  return { residentId, walkIn: false };
+}
+
 const REQUEST_FIELDS =
   'request_id, purpose, status, requested_at, claimed_at, rejection_reason, document_types ( document_type_id, name, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
@@ -89,10 +189,14 @@ const STAFF_DETAIL_FIELDS = `
 
 const detailFieldsFor = (role) => (role === 'staff' ? STAFF_DETAIL_FIELDS : SECRETARY_DETAIL_FIELDS);
 
-// POST /api/document-requests — the logged-in resident submits a request.
-// resident_id comes from the account's profiles.resident_id link, so only
-// accounts the Secretary has approved and linked can file requests.
-router.post('/', async (req, res) => {
+// POST /api/document-requests — a resident submits their own request, or the
+// Secretary encodes a walk-in for a resident at the hall.
+//
+// requested_by_user_id records WHO FILED IT and resident_id WHO IT IS FOR.
+// For a self-service request those are the same person; for a walk-in the
+// first is the Secretary and the second is the resident, which is the whole
+// point of keeping both columns.
+router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   const documentTypeId = Number(req.body?.document_type_id);
   const purpose = String(req.body?.purpose ?? '').trim();
 
@@ -106,19 +210,9 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'purpose must be 1000 characters or fewer' });
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('resident_id')
-    .eq('user_id', req.user.user_id)
-    .maybeSingle();
-  if (profileError) {
-    throw new Error(`Failed to load profile: ${profileError.message}`);
-  }
-  if (!profile?.resident_id) {
-    return res.status(409).json({
-      error:
-        'Your account is not linked to a resident record yet. Document requests become available once the Barangay Secretary approves your registration.',
-    });
+  const subject = await resolveSubjectResident(req);
+  if (subject.error) {
+    return res.status(subject.status).json({ error: subject.error });
   }
 
   const { data: docType, error: typeError } = await supabase
@@ -141,7 +235,7 @@ router.post('/', async (req, res) => {
     .insert({
       document_type_id: documentTypeId,
       requested_by_user_id: req.user.user_id,
-      resident_id: profile.resident_id,
+      resident_id: subject.residentId,
       purpose,
       status: REQUEST_STATUS.PENDING,
     })
@@ -152,19 +246,32 @@ router.post('/', async (req, res) => {
   }
 
   res.status(201).json({
-    message: 'Request submitted. You can track its status under My Requests.',
+    message: subject.walkIn
+      ? `Walk-in request recorded for resident #${subject.residentId}. It is now pending your review.`
+      : 'Request submitted. You can track its status under My Requests.',
     request,
   });
 });
 
-// GET /api/document-requests/mine — only the logged-in user's own requests,
-// newest first. The requested_by_user_id filter is what keeps residents from
-// ever seeing each other's requests.
+// GET /api/document-requests/mine — the requests FOR the logged-in resident,
+// newest first. Filtered by resident_id, not requested_by_user_id, so a
+// walk-in the Secretary encoded for this resident shows up in their own list.
+// For a self-submitted request the two columns name the same person, so
+// nothing a resident already saw here changes.
+//
+// A caller with no linked record gets an empty list, not an error: "you have
+// no requests" is a true statement about an account with no resident behind
+// it, and a GET should not refuse where there is simply nothing to show.
 router.get('/mine', async (req, res) => {
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.json({ requests: [] });
+  }
+
   const { data, error } = await supabase
     .from('document_requests')
     .select(REQUEST_FIELDS)
-    .eq('requested_by_user_id', req.user.user_id)
+    .eq('resident_id', residentId)
     .order('requested_at', { ascending: false });
   if (error) {
     throw new Error(`Failed to load requests: ${error.message}`);
@@ -172,19 +279,25 @@ router.get('/mine', async (req, res) => {
   res.json({ requests: data });
 });
 
-// GET /api/document-requests/mine/:id — one of the logged-in user's requests;
-// 404 for anything that exists but belongs to someone else.
+// GET /api/document-requests/mine/:id — one of the logged-in resident's
+// requests, by resident_id like the list above; 404 for anything that exists
+// but is for someone else.
 router.get('/mine/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid request id' });
   }
 
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
   const { data, error } = await supabase
     .from('document_requests')
     .select(REQUEST_FIELDS)
     .eq('request_id', id)
-    .eq('requested_by_user_id', req.user.user_id)
+    .eq('resident_id', residentId)
     .maybeSingle();
   if (error) {
     throw new Error(`Failed to load request: ${error.message}`);
@@ -195,20 +308,36 @@ router.get('/mine/:id', async (req, res) => {
   res.json({ request: data });
 });
 
-// POST /api/document-requests/mine/:id/cancel — the resident withdraws their
-// OWN request while it is still pending. Any other status (or anyone else's
-// request, which 404s via the ownership filter) is refused.
+// POST /api/document-requests/mine/:id/cancel — the resident withdraws a
+// request that is FOR them while it is still pending. Any other status (or
+// anyone else's request, which 404s via the ownership filter) is refused.
+//
+// Scoped by resident_id, not requested_by_user_id, to match GET /mine: a
+// walk-in the Secretary encoded is the resident's request to withdraw, and
+// filtering on the submitter would 404 them out of the row their own list
+// shows. Additive for self-submitted requests — POST / sets resident_id from
+// the submitter's own profile on that path, so the two columns already name
+// the same person, and profiles.resident_id is UNIQUE (migration 002) so no
+// second account can match this filter.
+//
+// The PENDING-only rule below is unchanged: a charge is created on APPROVAL,
+// never at pending, so a cancellable request can never have one to void.
 router.post('/mine/:id/cancel', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid request id' });
   }
 
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
   const { data: existing, error: loadError } = await supabase
     .from('document_requests')
     .select('request_id, status')
     .eq('request_id', id)
-    .eq('requested_by_user_id', req.user.user_id)
+    .eq('resident_id', residentId)
     .maybeSingle();
   if (loadError) {
     throw new Error(`Failed to load request: ${loadError.message}`);
@@ -226,7 +355,7 @@ router.post('/mine/:id/cancel', async (req, res) => {
     .from('document_requests')
     .update({ status: REQUEST_STATUS.CANCELLED })
     .eq('request_id', id)
-    .eq('requested_by_user_id', req.user.user_id)
+    .eq('resident_id', residentId)
     .eq('status', REQUEST_STATUS.PENDING) // guard: don't cancel a just-decided request
     .select(REQUEST_FIELDS)
     .maybeSingle();
@@ -264,11 +393,20 @@ router.post('/mine/:id/pay', async (req, res) => {
     return res.status(400).json({ error: 'Reference number must be 100 characters or fewer' });
   }
 
+  // Scoped by resident_id like GET /mine and the cancel route: the charge on a
+  // walk-in is the resident's to settle, and filtering on the submitter would
+  // 404 them out of a request their own list shows. Additive for
+  // self-submitted requests — same reasoning as the cancel route above.
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
   const { data: request, error: loadError } = await supabase
     .from('document_requests')
     .select('request_id, status, charges ( charge_id, amount, status )')
     .eq('request_id', id)
-    .eq('requested_by_user_id', req.user.user_id) // own requests only
+    .eq('resident_id', residentId) // own requests only
     .maybeSingle();
   if (loadError) {
     throw new Error(`Failed to load request: ${loadError.message}`);
@@ -389,7 +527,7 @@ async function decideRequest(req, res, decision) {
 
   const { data: existing, error: loadError } = await supabase
     .from('document_requests')
-    .select('request_id, status, requested_by_user_id, document_types ( name, fee ), resident_records ( contact_number )')
+    .select('request_id, status, resident_id, document_types ( name, fee ), resident_records ( contact_number )')
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -403,6 +541,12 @@ async function decideRequest(req, res, decision) {
       error: `Only pending requests can be ${decision === 'approve' ? 'approved' : 'rejected'} — this request is already '${existing.status}'`,
     });
   }
+
+  // The RESIDENT's own account — not the submitter's. For a walk-in the
+  // submitter is the Secretary, and a charge or notification keyed to
+  // requested_by_user_id would land on barangay staff instead of the person
+  // the document is for. Null when the resident never registered online.
+  const subjectAccountId = await accountOfResident(existing.resident_id);
 
   const update = {
     status: decision === 'approve' ? REQUEST_STATUS.APPROVED : REQUEST_STATUS.REJECTED,
@@ -440,7 +584,7 @@ async function decideRequest(req, res, decision) {
       charge_type: CHARGE_TYPE.DOCUMENT,
       amount: fee,
       status: fee > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
-      user_id: existing.requested_by_user_id,
+      user_id: subjectAccountId,
       document_request_id: id,
       created_at: new Date().toISOString(),
     });
@@ -470,7 +614,7 @@ async function decideRequest(req, res, decision) {
   // the decision above. "PHP" rather than the peso sign keeps the message
   // inside the GSM alphabet and therefore inside one SMS segment.
   await notify({
-    userId: existing.requested_by_user_id,
+    userId: subjectAccountId,
     destination: existing.resident_records?.contact_number,
     relatedType: RELATED_TYPE.DOCUMENT_REQUEST,
     relatedTo: id,
@@ -509,7 +653,7 @@ router.post('/:id/ready-for-release', requireRole('secretary'), async (req, res)
   const { data: existing, error: loadError } = await supabase
     .from('document_requests')
     .select(
-      'request_id, status, charges ( charge_id, status ), document_types ( name ), resident_records ( contact_number )'
+      'request_id, status, resident_id, charges ( charge_id, status ), document_types ( name ), resident_records ( contact_number )'
     )
     .eq('request_id', id)
     .maybeSingle();
@@ -551,8 +695,13 @@ router.post('/:id/ready-for-release', requireRole('secretary'), async (req, res)
     return res.status(409).json({ error: 'Request status just changed — refresh and try again' });
   }
 
+  // The resident's own account, or null — see decideRequest. Before this the
+  // line read existing.requested_by_user_id, which the select above never
+  // fetched: it was always undefined, so every READY TO CLAIM notification
+  // ever recorded here carried a null user_id. Resolving it properly fixes
+  // that as well as the walk-in case.
   await notify({
-    userId: existing.requested_by_user_id,
+    userId: await accountOfResident(existing.resident_id),
     destination: existing.resident_records?.contact_number,
     relatedType: RELATED_TYPE.DOCUMENT_REQUEST,
     relatedTo: id,
