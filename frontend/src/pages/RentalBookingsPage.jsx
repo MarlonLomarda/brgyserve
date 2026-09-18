@@ -49,6 +49,11 @@ const fullName = (p) => {
 
 const isGuest = (booking) => Boolean(booking.outside_borrower_name);
 
+// Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
+// this copy only lets the Secretary see the problem without a round trip.
+// Three forms and nothing else: 09XXXXXXXXX, 639XXXXXXXXX, +639XXXXXXXXX.
+const PH_MOBILE_RE = /^(09\d{9}|\+?639\d{9})$/;
+
 // WHO THE BOOKING IS FOR — the borrower, not the requester. Since migration
 // 022 a row names its borrower directly (resident_records for a resident,
 // outside_borrower_name for a guest) and the requester is only who FILED it;
@@ -60,6 +65,24 @@ function residentName(booking) {
     booking.outside_borrower_name ||
     fullName(booking.requester?.profiles) ||
     (booking.requester?.username ? `@${booking.requester.username}` : "—")
+  );
+}
+
+// The handle beneath the borrower's name is the BORROWER'S account, never the
+// requester's — on a walk-in the requester is the Secretary, and printing
+// requester.username put "@secretary1" under the resident's name. `account`
+// arrives inside resident_records when the server sends it; this tests the
+// key, not the viewer's role. Null means the resident has no online account,
+// said plainly rather than left blank. Guests never reach this: they have no
+// resident record, and their row says "Guest" instead.
+function AccountNote({ record }) {
+  if (!record || !("account" in record)) return null;
+  return (
+    <div className="muted small-note">
+      {record.account?.username
+        ? `@${record.account.username}`
+        : "No online account"}
+    </div>
   );
 }
 
@@ -372,6 +395,12 @@ function WalkInBookingPanel({ onDone }) {
       setError("A guest booking needs both a name and a contact number.");
       return;
     }
+    if (mode === "guest" && !PH_MOBILE_RE.test(guest.contact.trim())) {
+      setError(
+        "Enter the guest's mobile number as 09XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX — digits only, no spaces.",
+      );
+      return;
+    }
     setError("");
     setBusy(true);
     try {
@@ -465,14 +494,16 @@ function WalkInBookingPanel({ onDone }) {
               />
             </label>
             <label>
-              Contact number
+              Contact number{" "}
+              <span className="hint">(mobile — booking notices go here)</span>
               <input
                 value={guest.contact}
                 onChange={(e) =>
                   setGuest((g) => ({ ...g, contact: e.target.value }))
                 }
                 maxLength={50}
-                placeholder="Where the booking notices go"
+                inputMode="tel"
+                placeholder="09XXXXXXXXX"
                 required
               />
             </label>
@@ -783,11 +814,7 @@ export default function RentalBookingsPage({
                               Guest · {r.outside_borrower_contact}
                             </div>
                           ) : (
-                            r.requester?.username && (
-                              <div className="muted small-note">
-                                @{r.requester.username}
-                              </div>
-                            )
+                            <AccountNote record={r.resident_records} />
                           )}
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>

@@ -43,6 +43,25 @@ function personName(p) {
   return p.suffix ? `${name}, ${p.suffix}` : name;
 }
 
+// The handle beneath the name is the SUBJECT'S account — the resident the
+// request is for — never the requester's. They are the same person on a
+// self-service row and different on a walk-in, where the requester is the
+// Secretary; printing requester.username put "@secretary1" under the
+// resident's name on every walk-in. `account` arrives inside resident_records
+// only when the server sends it (the Staff projection withholds it), so this
+// tests the KEY, never the viewer's role: absent renders nothing; null means
+// the resident has no online account, said plainly rather than left blank.
+function AccountNote({ record }) {
+  if (!record || !("account" in record)) return null;
+  return (
+    <div className="muted small-note">
+      {record.account?.username
+        ? `@${record.account.username}`
+        : "No online account"}
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   const meta = statusMeta(status);
   return <span className={`badge ${meta.className}`}>{meta.label}</span>;
@@ -629,9 +648,7 @@ export default function SecretaryRequestsPage({
                           {personName(r.resident_records) ||
                             `@${r.requester?.username}`}
                         </strong>
-                        <div className="muted small-note">
-                          @{r.requester?.username}
-                        </div>
+                        <AccountNote record={r.resident_records} />
                       </td>
                       <td data-label="Document">{r.document_types?.name}</td>
                       <td className="muted truncate" data-label="Purpose">

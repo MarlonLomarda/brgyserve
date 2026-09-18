@@ -121,10 +121,23 @@ const REQUEST_FIELDS =
 
 // Secretary views. document_requests has two FKs to users, so the requester
 // embed must name its FK constraint explicitly.
+//
+// THE RESIDENT EMBED CARRIES THE SUBJECT'S OWN ACCOUNT as `account`, and on a
+// walk-in that is a different person from the requester. The list's sub-line
+// used to print requester.username under the resident's name — right on every
+// self-service row, where the two columns name the same person, and wrong on
+// every walk-in, where it named the Secretary who typed it ("Grace Tanfelix /
+// @secretary1"). resident_records -> profiles -> users is the hop the resident
+// list already makes for its Account column; profiles.resident_id is UNIQUE
+// (migration 002), so PostgREST returns one object, and the spread flattens
+// users into it: `account: { username }`, or `account: null` for a resident
+// who never registered online. That null is a real answer, not a withheld
+// one — the withheld case is STAFF_LIST_FIELDS below, where the key is absent.
 const SECRETARY_LIST_FIELDS = `
   request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
   document_types ( document_type_id, name, fee ),
-  resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
+  resident_records ( resident_id, first_name, middle_name, last_name, suffix,
+    account:profiles ( ...users ( username ) ) ),
   requester:users!document_requests_requested_by_user_id_fkey ( user_id, username, email ),
   charges ( charge_id, amount, status, declared_method, declared_reference )
 `;
@@ -138,6 +151,15 @@ const SECRETARY_LIST_FIELDS = `
 // the permitted eight. It is restated in full rather than shared with the
 // Secretary constant so that adding a restricted column to one projection
 // cannot silently widen the other.
+//
+// It also does NOT carry the `account` embed the Secretary's list gained. The
+// resident's linked account is one of the things the resident list withholds
+// from Staff (routes/residentRecords.js never even runs the lookup for them),
+// and the account behind a walk-in's subject is exactly that datum. The key
+// is ABSENT rather than null, so the screen — which tests `'account' in
+// resident_records` and never the viewer's role — renders no sub-line for
+// Staff instead of claiming the resident has no account. Staff keep the
+// requester's username, the filer's identity, exactly as before.
 const STAFF_LIST_FIELDS = `
   request_id, purpose, status, requested_at, claimed_at, rejection_reason, processed_at,
   document_types ( document_type_id, name, fee ),

@@ -3,6 +3,7 @@ const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
   NOTIFICATION_STATUSES,
+  RELATED_TYPE,
   RELATED_TYPES,
   NOTIFICATION_STATUS,
   NOTIFICATION_TYPE,
@@ -41,6 +42,88 @@ const personName = (p) => {
   const name = [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ');
   return p.suffix ? `${name}, ${p.suffix}` : name || null;
 };
+
+// A row addressed to someone with NO ACCOUNT — user_id null — gets no name
+// from the users embed above, so the screen showed only the number. Since
+// migration 022 that is every notice to a GUEST from another barangay (a
+// guest cannot have an account) and every notice to a walk-in RESIDENT who
+// never registered online. The name exists on the record the row points at:
+// rental_requests.outside_borrower_name for a guest, the linked resident
+// record for a resident. related_to is a polymorphic pointer PostgREST cannot
+// embed, so it is resolved here — at most one query per pointer type over the
+// page's account-less rows — and merged below in payerName()'s order
+// (PaymentsPage): the record's resident first, the guest's typed name second,
+// the account's profile last. Rows with an account never reach the lookup,
+// so nothing they showed before changes.
+//
+// TWO pointer types are resolved, and they are one hop apart:
+//   RENTAL_REQUEST -> related_to IS a rental_requests.request_id.
+//   CHARGE         -> related_to is a charges.charge_id, and the charge stems
+//                     from EITHER a document request OR a rental request
+//                     (charges.document_request_id / rental_request_id are
+//                     mutually exclusive by design), so the lookup embeds
+//                     both and keeps whichever side is present. A FINE charge
+//                     has neither — it is owed by a household — and resolves
+//                     to nothing here, exactly as before.
+// The two lookups are kept in SEPARATE maps keyed by the row's own type:
+// related_to is a bare integer, and a charge id can equal a booking id.
+//
+// DOCUMENT_REQUEST rows with no account — a walk-in resident's approval or
+// rejection notice — have the same gap and are NOT resolved here.
+const BORROWER_TYPES = [RELATED_TYPE.RENTAL_REQUEST, RELATED_TYPE.CHARGE];
+const needsBorrower = (n) =>
+  n.user_id === null && n.related_to !== null && BORROWER_TYPES.includes(n.related_type);
+
+const idsOf = (rows, type) =>
+  [...new Set(rows.filter((n) => needsBorrower(n) && n.related_type === type).map((n) => n.related_to))];
+
+const RECORD_NAME = 'first_name, middle_name, last_name, suffix';
+
+// { bookings: Map<request_id, source>, charges: Map<charge_id, source> }.
+// A source is whatever names the person — a rental_requests row
+// ({ outside_borrower_name, resident_records }) or, for a document charge,
+// its document_requests row ({ resident_records }) — so both shapes feed the
+// same fallback chain below.
+async function borrowersFor(rows) {
+  const lookups = { bookings: new Map(), charges: new Map() };
+
+  const bookingIds = idsOf(rows, RELATED_TYPE.RENTAL_REQUEST);
+  if (bookingIds.length) {
+    const { data, error } = await supabase
+      .from('rental_requests')
+      .select(`request_id, outside_borrower_name, resident_records ( ${RECORD_NAME} )`)
+      .in('request_id', bookingIds);
+    if (error) throw new Error(`Failed to load booking borrowers: ${error.message}`);
+    for (const b of data || []) lookups.bookings.set(b.request_id, b);
+  }
+
+  const chargeIds = idsOf(rows, RELATED_TYPE.CHARGE);
+  if (chargeIds.length) {
+    const { data, error } = await supabase
+      .from('charges')
+      .select(`charge_id,
+        document_requests ( resident_records ( ${RECORD_NAME} ) ),
+        rental_requests ( outside_borrower_name, resident_records ( ${RECORD_NAME} ) )`)
+      .in('charge_id', chargeIds);
+    if (error) throw new Error(`Failed to load charge payers: ${error.message}`);
+    for (const c of data || []) {
+      const source = embedded(c.rental_requests) || embedded(c.document_requests);
+      if (source) lookups.charges.set(c.charge_id, source);
+    }
+  }
+
+  return lookups;
+}
+
+// The record that names an account-less recipient, or null. Picks the map by
+// the row's own type, so a CHARGE row can only ever hit the charge lookup and
+// a RENTAL_REQUEST row only the booking lookup; every other row — including
+// every row with an account — gets null and resolves exactly as before.
+function borrowerOf(n, lookups) {
+  if (!needsBorrower(n)) return null;
+  const map = n.related_type === RELATED_TYPE.CHARGE ? lookups.charges : lookups.bookings;
+  return map.get(n.related_to) || null;
+}
 
 // GET /api/notifications?status=&type=&search=&page=&per_page=
 router.get('/', async (req, res) => {
@@ -89,9 +172,11 @@ router.get('/', async (req, res) => {
     throw new Error(`Failed to load notifications: ${error.message}`);
   }
 
+  const lookups = await borrowersFor(data || []);
   const rows = (data || []).map((n) => {
     const user = embedded(n.users);
     const household = embedded(n.household_records);
+    const borrower = borrowerOf(n, lookups);
     return {
       notification_id: n.notification_id,
       type: n.type,
@@ -106,8 +191,15 @@ router.get('/', async (req, res) => {
       related_to: n.related_to,
       created_at: n.created_at,
       sent_at: n.sent_at,
-      // Who it was addressed to, in the form the screen shows it.
-      recipient_name: personName(embedded(user?.profiles)) || null,
+      // Who it was addressed to, in the form the screen shows it. The
+      // related record's person first — resident record, then a guest's
+      // typed name — and the account's profile after; `borrower` is null for
+      // any row with an account, so those resolve exactly as they did before.
+      recipient_name:
+        personName(embedded(borrower?.resident_records)) ||
+        borrower?.outside_borrower_name ||
+        personName(embedded(user?.profiles)) ||
+        null,
       recipient_username: user?.username || null,
       household_id: household?.household_id ?? n.household_id ?? null,
       household_address: household?.address || null,

@@ -32,12 +32,23 @@ const RENTAL_FIELDS =
 // show the borrower, so both are returned and the screen prefers the
 // borrower. rental_requests has exactly one FK to resident_records, so that
 // embed needs no constraint name.
+//
+// The resident embed also carries the BORROWER'S OWN ACCOUNT as `account`
+// (resident_records -> profiles -> users; profiles.resident_id is UNIQUE, so
+// PostgREST returns one object and the spread flattens it to `{ username }`,
+// or null for a resident with no online account). The sub-line under the
+// borrower's name used to print requester.username, which on a walk-in is the
+// Secretary who typed it. Same hop as documentRequests.js's Secretary list;
+// unlike that file, this list has ONE projection for all three roles, so
+// Staff receive it here — they already receive the requester's username,
+// email and profile name from this same constant.
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   return_note, returned_at,
   resident_id, outside_borrower_name, outside_borrower_contact,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
-  resident_records ( resident_id, first_name, middle_name, last_name, suffix ),
+  resident_records ( resident_id, first_name, middle_name, last_name, suffix,
+    account:profiles ( ...users ( username ) ) ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   returned_by:users!rental_requests_returned_by_user_id_fkey ( user_id, username,
@@ -57,6 +68,19 @@ const CREATE_ROLES = ['resident', 'secretary'];
 
 const GUEST_NAME_MAX = 200;
 const GUEST_CONTACT_MAX = 50;
+
+// A guest's contact must be a Philippine MOBILE number in one of three forms
+// and nothing else: 09XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX — digits only,
+// no spaces or dashes, the plus allowed only before 63. It is the destination
+// every notice about the booking goes to, and unlike a resident's number it
+// cannot be corrected from a record later, because a guest has none. The
+// first guest row through the form stored "09123456789213213ssdd", which the
+// presence and length checks accepted; this is the rule that refuses it.
+// FORMAT ONLY: the presence, both-or-neither and length checks that mirror
+// the migration 022 CHECK stay exactly as they are, and this runs after them.
+// The booking form applies the same pattern before posting, but THIS is the
+// guard — the form can be bypassed with a direct call, this cannot.
+const PH_MOBILE_RE = /^(09\d{9}|\+?639\d{9})$/;
 
 // The caller's own linked resident record, or null when their account has none.
 async function ownResidentId(userId) {
@@ -178,6 +202,12 @@ async function resolveBorrower(req) {
     }
     if (guestContact.length > GUEST_CONTACT_MAX) {
       return { status: 400, error: `outside_borrower_contact must be ${GUEST_CONTACT_MAX} characters or fewer` };
+    }
+    if (!PH_MOBILE_RE.test(guestContact)) {
+      return {
+        status: 400,
+        error: 'outside_borrower_contact must be a Philippine mobile number: 09XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX, digits only',
+      };
     }
     return { kind: 'guest', walkIn: true, name: guestName, contact: guestContact };
   }
