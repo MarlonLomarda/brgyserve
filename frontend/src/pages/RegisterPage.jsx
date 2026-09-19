@@ -79,17 +79,19 @@ export default function RegisterPage() {
   if (success) {
     return (
       <div className="auth-page">
-        <div className="card">
-          <h1>Registration received</h1>
-          <div className="alert success">{success}</div>
-          <p>
-            The Barangay Secretary will verify your information against the
-            barangay&apos;s resident records. You can sign in once your account
-            has been approved.
-          </p>
-          <Link className="button-link" to="/login">
-            Back to sign in
-          </Link>
+        <div className="register-form-wrapper">
+          <div className="card">
+            <h1>Registration received</h1>
+            <div className="alert success">{success}</div>
+            <p>
+              The Barangay Secretary will verify your information against the
+              barangay&apos;s resident records. You can sign in once your
+              account has been approved.
+            </p>
+            <Link className="button-link" to="/login">
+              Back to sign in
+            </Link>
+          </div>
         </div>
       </div>
     );
