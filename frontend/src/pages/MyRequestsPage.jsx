@@ -169,9 +169,7 @@ export default function MyRequestsPage() {
             <h2>
               {requests.length} request{requests.length === 1 ? "" : "s"}
             </h2>
-            <button className="btn secondary" onClick={load}>
-              Refresh
-            </button>
+            <select name="" id=""></select>
           </div>
           <div className="table-wrap">
             <table className="data-table stack-narrow">
