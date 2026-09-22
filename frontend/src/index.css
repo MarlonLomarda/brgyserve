@@ -816,7 +816,7 @@ a {
    up pixels to the scroll container below it. .dash-drawer-head states the
    same thing for the same reason. */
 .dash-side section {
-  padding: 13px 16px 25px 16px;
+  padding: 13px 16px 16px 16px;
   display: flex;
   align-items: center;
   flex: none;
