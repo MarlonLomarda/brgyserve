@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import DashHeader from "../components/DashHeader";
 import { RESIDENT_NAV } from "../constants/nav";
 import {
+  STATUS_META,
   statusMeta,
   chargeMeta,
   chargeOf,
@@ -13,6 +14,7 @@ import {
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
   const [requests, setRequests] = useState(null); // null = loading
+  const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -20,13 +22,15 @@ export default function MyRequestsPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const data = await authFetch("/document-requests/mine");
+      const data = await authFetch(
+        `/document-requests/mine?status=${statusFilter}`,
+      );
       setRequests(data.requests);
     } catch (err) {
       setError(err.message);
       setRequests([]);
     }
-  }, [authFetch]);
+  }, [authFetch, statusFilter]);
 
   useEffect(() => {
     load();
@@ -169,7 +173,18 @@ export default function MyRequestsPage() {
             <h2>
               {requests.length} request{requests.length === 1 ? "" : "s"}
             </h2>
-            <select name="" id=""></select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Requests</option>
+
+              {Object.entries(STATUS_META).map(([status, meta]) => (
+                <option key={status} value={status}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="table-wrap">
             <table className="data-table stack-narrow">
