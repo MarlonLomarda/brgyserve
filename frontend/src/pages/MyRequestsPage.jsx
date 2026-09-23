@@ -10,10 +10,12 @@ import {
   chargeOf,
   formatDate,
 } from "../constants/requestStatus";
+import TableSkeleton from "../components/TableSkeleton";
 
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
   const [requests, setRequests] = useState(null); // null = loading
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [flash, setFlash] = useState(null);
@@ -21,6 +23,8 @@ export default function MyRequestsPage() {
 
   const load = useCallback(async () => {
     setError("");
+    setLoading(true);
+
     try {
       const data = await authFetch(
         `/document-requests/mine?status=${statusFilter}`,
@@ -29,6 +33,8 @@ export default function MyRequestsPage() {
     } catch (err) {
       setError(err.message);
       setRequests([]);
+    } finally {
+      setLoading(false);
     }
   }, [authFetch, statusFilter]);
 
@@ -158,34 +164,42 @@ export default function MyRequestsPage() {
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
       {error && <div className="alert error">{error}</div>}
 
-      {requests === null ? (
-        <p className="muted">Loading your requests…</p>
-      ) : requests.length === 0 ? (
-        <div className="empty">
-          <p>You haven&apos;t requested any documents yet.</p>
-          <Link className="button-link inline" to="/resident/request">
-            Request a document
-          </Link>
-        </div>
-      ) : (
-        <>
-          <div className="list-head">
-            <h2>
-              {requests.length} request{requests.length === 1 ? "" : "s"}
-            </h2>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Requests</option>
+      <>
+        <div className="list-head">
+          {requests === null ? (
+            <>
+              <h2 className="skeleton skeleton-h2"></h2>
+              <div className="skeleton skeleton-select"></div>
+            </>
+          ) : (
+            <>
+              <h2>
+                {requests.length} request{requests.length === 1 ? "" : "s"}
+              </h2>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">All Requests</option>
 
-              {Object.entries(STATUS_META).map(([status, meta]) => (
-                <option key={status} value={status}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
+                {Object.entries(STATUS_META).map(([status, meta]) => (
+                  <option key={status} value={status}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+        </div>
+
+        {requests?.length === 0 ? (
+          <div className="empty">
+            <p>No document requests to display.</p>
+            <Link className="button-link inline" to="/resident/request">
+              Request a document
+            </Link>
           </div>
+        ) : (
           <div className="table-wrap">
             <table className="data-table stack-narrow">
               <thead>
@@ -199,152 +213,158 @@ export default function MyRequestsPage() {
                 </tr>
               </thead>
               <tbody>
-                {requests.map((r) => {
-                  const meta = statusMeta(r.status);
-                  const charge = chargeOf(r);
-                  return (
-                    <tr key={r.request_id}>
-                      <td>
-                        <strong>{r.document_types?.name || "—"}</strong>
-                      </td>
-                      <td className="muted col-purpose" data-label="Purpose">
-                        <span className="cell-clamp">{r.purpose}</span>
-                      </td>
-                      <td className="num">
-                        ₱{Number(r.document_types?.fee ?? 0).toFixed(2)}
-                      </td>
-                      <td>
-                        <span className={`badge ${meta.className}`}>
-                          {meta.label}
-                        </span>
-                        {r.status === "rejected" && r.rejection_reason && (
-                          <div className="muted reason-note">
-                            Reason: {r.rejection_reason}
-                          </div>
-                        )}
-                        {r.status === "ready_for_release" && (
-                          <div className="muted reason-note">
-                            Ready to claim — pick it up at the barangay hall
-                            during office hours.
-                          </div>
-                        )}
-                        {r.status === "claimed" && r.claimed_at && (
-                          <div className="muted reason-note">
-                            Claimed on {formatDate(r.claimed_at)}.
-                          </div>
-                        )}
-                        {charge && (
-                          <div className="muted reason-note">
-                            Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
-                            <strong
-                              className={`charge-word ${chargeMeta(charge.status).className}`}
+                {loading ? (
+                  <TableSkeleton col={6} row={8} />
+                ) : (
+                  requests.map((r) => {
+                    const meta = statusMeta(r.status);
+                    const charge = chargeOf(r);
+                    return (
+                      <tr key={r.request_id}>
+                        <td>
+                          <strong>{r.document_types?.name || "—"}</strong>
+                        </td>
+                        <td className="muted col-purpose" data-label="Purpose">
+                          <span className="cell-clamp">{r.purpose}</span>
+                        </td>
+                        <td className="num">
+                          ₱{Number(r.document_types?.fee ?? 0).toFixed(2)}
+                        </td>
+                        <td>
+                          <span className={`badge ${meta.className}`}>
+                            {meta.label}
+                          </span>
+                          {r.status === "rejected" && r.rejection_reason && (
+                            <div className="muted reason-note">
+                              Reason: {r.rejection_reason}
+                            </div>
+                          )}
+                          {r.status === "ready_for_release" && (
+                            <div className="muted reason-note">
+                              Ready to claim — pick it up at the barangay hall
+                              during office hours.
+                            </div>
+                          )}
+                          {r.status === "claimed" && r.claimed_at && (
+                            <div className="muted reason-note">
+                              Claimed on {formatDate(r.claimed_at)}.
+                            </div>
+                          )}
+                          {charge && (
+                            <div className="muted reason-note">
+                              Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
+                              <strong
+                                className={`charge-word ${chargeMeta(charge.status).className}`}
+                              >
+                                {chargeMeta(charge.status).label}
+                              </strong>
+                              {charge.status === "UNPAID" &&
+                                charge.declared_method === "gcash" && (
+                                  <>
+                                    {" "}
+                                    · GCash ref {charge.declared_reference}{" "}
+                                    submitted, awaiting verification
+                                  </>
+                                )}
+                              {charge.status === "UNPAID" &&
+                                charge.declared_method === "onsite" && (
+                                  <>
+                                    {" "}
+                                    · pay in cash at the barangay hall
+                                    treasurer&apos;s desk
+                                  </>
+                                )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="muted" data-label="Submitted">
+                          {formatDate(r.requested_at)}
+                        </td>
+                        <td className="row-actions">
+                          {r.status === "pending" && (
+                            <button
+                              className="btn secondary danger"
+                              disabled={busyId === r.request_id}
+                              onClick={() => handleCancel(r)}
                             >
-                              {chargeMeta(charge.status).label}
-                            </strong>
-                            {charge.status === "UNPAID" &&
-                              charge.declared_method === "gcash" && (
-                                <>
-                                  {" "}
-                                  · GCash ref {charge.declared_reference}{" "}
-                                  submitted, awaiting verification
-                                </>
-                              )}
-                            {charge.status === "UNPAID" &&
-                              charge.declared_method === "onsite" && (
-                                <>
-                                  {" "}
-                                  · pay in cash at the barangay hall
-                                  treasurer&apos;s desk
-                                </>
-                              )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="muted" data-label="Submitted">
-                        {formatDate(r.requested_at)}
-                      </td>
-                      <td className="row-actions">
-                        {r.status === "pending" && (
-                          <button
-                            className="btn secondary danger"
-                            disabled={busyId === r.request_id}
-                            onClick={() => handleCancel(r)}
-                          >
-                            {busyId === r.request_id ? "Cancelling…" : "Cancel"}
-                          </button>
-                        )}
-                        {r.status === "approved" &&
-                          charge?.status === "UNPAID" &&
-                          (payTarget === r.request_id ? (
-                            <form
-                              className="inline-form"
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                handleDeclare(r, "gcash", gcashRef.trim());
-                              }}
-                            >
-                              <input
-                                value={gcashRef}
-                                onChange={(e) => setGcashRef(e.target.value)}
-                                placeholder="GCash reference no."
-                                maxLength={100}
-                                required
-                                autoFocus
-                              />
-                              <button
-                                className="btn secondary"
-                                type="submit"
-                                disabled={busyId === r.request_id}
-                              >
-                                Submit
-                              </button>
-                              <button
-                                className="btn secondary"
-                                type="button"
-                                onClick={() => setPayTarget(null)}
-                              >
-                                Cancel
-                              </button>
-                            </form>
-                          ) : (
-                            <>
-                              <button
-                                className="btn"
-                                disabled={busyId === r.request_id}
-                                onClick={() => handlePayOnline(r, charge)}
-                              >
-                                {busyId === r.request_id
-                                  ? "Opening GCash…"
-                                  : "Pay online via GCash"}
-                              </button>
-                              <button
-                                className="btn secondary"
-                                disabled={busyId === r.request_id}
-                                onClick={() => handleDeclare(r, "onsite")}
-                              >
-                                Pay onsite
-                              </button>
-                              <button
-                                className="btn secondary"
-                                disabled={busyId === r.request_id}
-                                onClick={() => {
-                                  setPayTarget(r.request_id);
-                                  setGcashRef("");
+                              {busyId === r.request_id
+                                ? "Cancelling…"
+                                : "Cancel"}
+                            </button>
+                          )}
+                          {r.status === "approved" &&
+                            charge?.status === "UNPAID" &&
+                            (payTarget === r.request_id ? (
+                              <form
+                                className="inline-form"
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  handleDeclare(r, "gcash", gcashRef.trim());
                                 }}
                               >
-                                I already paid via GCash
-                              </button>
-                            </>
-                          ))}
-                      </td>
-                    </tr>
-                  );
-                })}
+                                <input
+                                  value={gcashRef}
+                                  onChange={(e) => setGcashRef(e.target.value)}
+                                  placeholder="GCash reference no."
+                                  maxLength={100}
+                                  required
+                                  autoFocus
+                                />
+                                <button
+                                  className="btn secondary"
+                                  type="submit"
+                                  disabled={busyId === r.request_id}
+                                >
+                                  Submit
+                                </button>
+                                <button
+                                  className="btn secondary"
+                                  type="button"
+                                  onClick={() => setPayTarget(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </form>
+                            ) : (
+                              <>
+                                <button
+                                  className="btn"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handlePayOnline(r, charge)}
+                                >
+                                  {busyId === r.request_id
+                                    ? "Opening GCash…"
+                                    : "Pay online via GCash"}
+                                </button>
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => handleDeclare(r, "onsite")}
+                                >
+                                  Pay onsite
+                                </button>
+                                <button
+                                  className="btn secondary"
+                                  disabled={busyId === r.request_id}
+                                  onClick={() => {
+                                    setPayTarget(r.request_id);
+                                    setGcashRef("");
+                                  }}
+                                >
+                                  I already paid via GCash
+                                </button>
+                              </>
+                            ))}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        )}
+      </>
     </>
   );
 }
