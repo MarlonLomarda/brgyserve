@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
   return (
     <>
       <h2 id="legal-modal-title">Privacy Policy</h2>
-      <p className="legal-effective">Effective: 10 September 2026</p>
+      <p className="legal-effective">Effective: 24 September 2026</p>
 
       <h3>Who we are, and what this system is</h3>
       <p>
@@ -113,9 +113,11 @@ export default function PrivacyPolicy() {
       </h4>
       <ul>
         <li>
-          <strong>No uploaded files of any kind.</strong> BrgyServe has no
-          upload feature. There are no ID photographs, no scanned documents, no
-          profile pictures, no attachments.
+          <strong>No uploaded files of any kind.</strong> Residents cannot
+          upload anything. The one file the Barangay Secretary can load, a
+          masterlist spreadsheet, is read into resident records and the file
+          itself is not kept. There are no ID photographs, no scanned
+          documents, no profile pictures, no attachments.
         </li>
         <li>
           <strong>No card or e-wallet credentials.</strong> These never touch

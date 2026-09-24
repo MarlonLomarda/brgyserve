@@ -12,7 +12,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 10 September 2026*
+*Effective: 24 September 2026*
 
 ### Who we are, and what this system is
 
@@ -72,8 +72,10 @@ addressed to, and whether it was delivered.
 
 #### What we do **not** hold
 
-- **No uploaded files of any kind.** BrgyServe has no upload feature. There are
-  no ID photographs, no scanned documents, no profile pictures, no attachments.
+- **No uploaded files of any kind.** Residents cannot upload anything. The one
+  file the Barangay Secretary can load, a masterlist spreadsheet, is read into
+  resident records and the file itself is not kept. There are no ID
+  photographs, no scanned documents, no profile pictures, no attachments.
 - **No card or e-wallet credentials.** These never touch BrgyServe. See §3.
 - **No biometrics and no location data.**
 - **No login history.** We do not record when you sign in, from where, or from
