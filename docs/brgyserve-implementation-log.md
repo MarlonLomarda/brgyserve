@@ -610,3 +610,58 @@ The rest of this section is kept as the record of how webhook delivery worked du
 **A FOURTH BUG WAS FOUND WHILE FIXING THE THIRD. IT IS NOT FIXED, AND IT IS A DATA BUG RATHER THAN A DISPLAY ONE.** `routes/charges.js`'s payment-verify handler writes `userId: charge.user_id ?? null` from a query whose `select` **never lists `user_id`** — so the value is always `undefined`, and **every payment-received notification ever recorded carries a null `user_id`**, including those for a resident with a perfectly good account. This is the **same shape as the `ready-for-release` bug `c07d19c` fixed** in the entry above: a handler reading a column its own query did not ask for, which JavaScript reports as `undefined` rather than as an error. It surfaced only because the notifications work made those rows worth looking at. **Today's fix makes the DISPLAY correct regardless** — the name now resolves through the related charge and its document or rental request, not through the account — **but the stored column is still wrong on every such row**, so anything that later reads `notifications.user_id` to answer "whose notice was this" will get null and be wrong. Fixing it means adding `user_id` to that select; the historical rows would need a separate backfill, and neither was done here.
 
 **`npm run roles:test` had been red since `c07d19c`, and nothing was watching it** (`63ff343`). Its expectation table still declared documents `POST /` as admitting all five roles, which was true right up until that commit gave the route `requireRole('resident', 'secretary')` three weeks earlier as part of the walk-in work. **The route was correct and the test was stale** — the one direction this harness exists to catch and the one direction it cannot catch for itself, since an undeclared route fails but a *wrongly* declared one simply reports a mismatch nobody was reading. Provenance was confirmed from git before the edit rather than assumed: `blame` puts the guard line on `c07d19c`, `log -S` on the guard string returns only that commit, the line before it carried no guard at all, and `c07d19c` touched three route files and nothing under `scripts/`. Two comments describing the pre-`c07d19c` scoping went with it — both still named `requested_by_user_id` where all four `/mine` routes now scope on `resident_id`. The run is **ALL PASSED** again.
+
+## Masterlist CSV import and export
+
+### Import and export, 24 Sep 2026 (`a54e4a9`)
+
+**The Secretary can now download the master list as CSV and bulk-import new residents from one.** Three Secretary-only routes on `routes/residentRecords.js`: `GET /export`, `POST /import/preview` and `POST /import/commit`. The import **only adds residents** — it never updates a record, and it reuses the single-add route's own pieces rather than a parallel set: `validateBody` on every row, `findMatches` with `DEFAULTS` against the master list, `asSuggestion` for the match shape. The duplicate check stays **soft**, as it is for one record.
+
+**Two requests over the same file text, and the server keeps nothing in between.** Preview parses (`csv-parse`, added as a dependency), validates and matches every row and writes nothing; each row comes back `clean`, `flagged` or `invalid`. Commit re-derives all of it from the same text rather than trusting the preview. **Every flagged row needs an explicit decision** — `confirm_rows` to import it, `skip_rows` to leave it out, both in the query string because the body is the file — and an undecided row refuses the commit with a 409, like `confirm_duplicate` on the single-add route. A decision naming a row that is no longer flagged is also a 409: the master list changed after the preview. Once every row is decided, the rows go in with **one `.insert([...])`**, so it is all or nothing. On screen the decision is a select (Decide… / Import anyway / Leave out), because a checkbox cannot tell "not looked at yet" from "decided no".
+
+**Matching runs two ways.** Against the master list, `findMatches` runs once per row, eight at a time. Against the other rows of the same file, the check runs pairwise, with Stage 2's own Jaro-Winkler, normalisation and `DEFAULTS.scoreThreshold`. That second check is needed because rows not yet inserted are invisible to the matcher. `normalize` was exported from `nameMatching.js` for it. The pairwise check has no trigram blocking in front of it, so it can flag a pair Stage 1 would have dropped — acceptable for a check that only asks the Secretary to look.
+
+**A whole file is refused** when it is empty, cannot be parsed, is not UTF-8, has a missing, unknown, blank or repeated header, or has more than 1,000 rows. A file over 2 MB gets a 413. The UTF-8 check exists because Excel's plain "CSV" format stores ñ as garbage. **A single row is invalid**, and blocks the commit until the file is fixed, when:
+
+- it fails `validateBody`;
+- a cell contains a line break;
+- its `resident_id` cell is filled in. The export's three trailing reference columns are accepted as headers so an exported file can be read back, but ignoring a filled `resident_id` would re-add an exported **archived** resident as a new active person, because the matcher skips archived records.
+
+**Two constraints shaped where the body parser lives.** `express.text` is called from **inside** the two import handlers, after `requireRole`, for two reasons: `roles:test` runs every function in a route's middleware list as a role guard, and a body parser there crashes it; and only the Secretary's requests get read. Its 413 is answered in the route, because `server.js`'s error handler turns every body-parser error except bad JSON into a 500. The global `express.json()` and its 100 KB limit were left untouched, because it ignores `text/csv`.
+
+**The export** takes `?archived=false|true|all`, through one helper `GET /` now shares. It pages until it has the full count, because Supabase caps a response at 1,000 rows. It writes a BOM, as the reports do. The report CSV writer moved to `utils/csv.js` so both use one escaper, and the report output was compared byte for byte against the old writer before and after the move.
+
+**This supersedes "No upload feature exists anywhere"** in "The /login legal modals" entry above. The import is the first path that accepts a file. It stores the rows as records and never keeps the file, and the Privacy Policy's wording was corrected to say so.
+
+**Verified by a scratch harness against the real handlers** — no server, matcher calls read-only, the insert intercepted — 53 checks passing, plus `roles:test` with the three routes declared Secretary-only. A 48-row preview took 1.5 s from a development machine, so a 1,000-row file is about 30 s at that rate; it has not been measured from Render.
+
+### Formula guard, registration phone check, walk-in archive warning, 24 Sep 2026 (`f08de6d`)
+
+**CSV exports no longer hand Excel a formula.** A text cell beginning with `=`, `+`, `-` or `@` now gets a leading `'`. The rule is **opt-in per column**: each caller passes `guard(column)`, because `utils/csv.js` cannot know which columns legitimately begin with `+`.
+
+- The reports guard every column.
+- The masterlist export guards every column except `contact_number`.
+- Numbers are never touched, so a real `-5` stays a number.
+- Bare `\r` is now quoted like `\n`.
+
+All four report CSVs were byte-identical to the previous writer on live data.
+
+**The reason it mattered is registration.** Create-and-link copies a registrant's claimed name into `resident_records`, so anyone who registers could have planted `=HYPERLINK(...)` in the Secretary's export. **Registration now validates the claimed contact number** against `PH_MOBILE_RE`, moved from `rentalRequests.js` into `constants/phoneNumber.js` so guest bookings and registration share one pattern. The number stays optional, and the trimmed value is what gets stored. **Every number already on file passed** — 7 of 7 in `resident_records`, 8 of 8 in `profiles` — and none was changed. **Still unvalidated:** `contact_number` written by the Secretary, through the add and edit form, the CSV import and the create-and-link override.
+
+**Archiving now warns about walk-in bookings.** `collectDependencies` found bookings only through the linked account's `requested_by_user_id`, and the Secretary is the requester on a walk-in. So a resident with an upcoming walk-in could be archived without warning, and a resident with no account had no bookings checked at all. It now matches `resident_id` (migration 022, backfilled) **OR** the account. The account half was kept at the developer's request, though today it finds nothing extra: all 28 bookings carry `resident_id` or guest details, and no staff account is linked to a record. Verified against the previous handler: accounts, documents and outcomes were identical for all 48 active residents. Of the two real walk-in bookings, #52 and #55, the old query found neither and the new one finds both.
+
+Two stale comments in `residentRecords.js` went with it: one said `profiles.resident_id` had no UNIQUE constraint, and one said `rental_requests` had no `resident_id`.
+
+### Rejected accounts re-checked after an import, 24 Sep 2026 (`08ebcf9`)
+
+**An applicant rejected as not on the masterlist is now flagged when a matching row is imported.** A rejected card shows no match suggestions, so before this such an account stayed rejected unless the Secretary remembered it. After the insert, `/import/commit` runs `findMatches` on the claimed name of every account rejected as `NOT_IN_MASTERLIST`. It keeps only matches among the rows just imported, and returns them as `rejected_matches` in the `asSuggestion` shape.
+
+**It decides nothing.** It reads those accounts and never writes to them. Resident records shows an informational notice pointing to Un-reject on the Rejected filter in Resident review, with no button.
+
+**`[]` and absence mean different things, as CLAUDE.md requires:**
+
+- `rejected_matches: []` means the check ran and found none.
+- If the check itself fails, the key is **absent** and `rejected_matches_error` explains why.
+- A failed check never becomes a 500 — the rows are already in, and "import failed" would invite a retry into duplicates.
+
+**Verified by a scratch harness,** 18 checks, with rejected accounts injected in memory and writes intercepted. The accounts that surfaced were exactly the right ones. The two real rejected accounts (users 142 and 145), whose only match is old record #61, were correctly excluded. A normal commit changed only by gaining `rejected_matches: []`.

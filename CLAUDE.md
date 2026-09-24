@@ -34,7 +34,7 @@ brgyserve/
 │   │   ├── middleware/        # auth.js (JWT authentication + role guard), rateLimit.js
 │   │   ├── constants/         # canonical vocabularies and policy modules (requestStatus, charges,
 │   │   │                      #   rentals, registration, notifications, passwordReset,
-│   │   │                      #   passwordPolicy, usernamePolicy)
+│   │   │                      #   passwordPolicy, usernamePolicy, phoneNumber)
 │   │   ├── services/          # nameMatching.js (research component), notifications.js, resend.js, paymongo.js
 │   │   ├── utils/             # frontendOrigin.js, listQuery.js (shared pagination + search),
 │   │   │                      #   userEmail.js (case-insensitive email lookup + 23505 branching)
@@ -229,6 +229,14 @@ Implementation status:
 | **021** | `UNIQUE INDEX users_email_lower_unique ON users (lower(email))` | not re-measured | **owed** | **owed** |
 
 Migration 021 is the awkward one for the manuscript: it adds **no column**, so a Chapter 3 table that lists only columns has nothing to show. The constraint is the change, and a reader of Chapter 3 would otherwise never learn that two accounts cannot share an address.
+
+**A new writable `resident_records` column also has to be added to FOUR lists, and nothing keeps them in step.** None is derived from another, and every omission but one fails silently:
+
+1. **`validateBody`'s lists in `routes/residentRecords.js`** — `REQUIRED_FIELDS`, `OPTIONAL_TEXT_FIELDS`, or the two-date list inside the function. This is what makes the column writable at all.
+2. **`TEMPLATE_COLUMNS`, in the same file** — the CSV import's accepted headers and the export's columns. Missing here, the **export silently leaves the column out**, and the import refuses it as an unknown header — the one loud failure in this list. The reverse is silent: a column listed here but not in `validateBody` is accepted as a header and its **values are dropped on insert**.
+3. **`EMPTY_FORM` in `frontend/src/pages/ResidentRecordsPage.jsx`** — the edit form prefills from it. Missing here, **editing a record blanks the column**, because `validateBody` turns an absent optional field into `null`.
+4. **`docs/legal-copy.md` §1** — the list of what a masterlist record contains, which the privacy policy states field by field.
+
 ## Standing Rules
 
 How work is done in this repository, as distinct from how code is written (see Conventions).
