@@ -6,6 +6,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { findMatches, DEFAULTS, normalize } = require('../services/nameMatching');
 const { REQUEST_STATUS } = require('../constants/requestStatus');
 const { RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
+const { REJECTION_REASON } = require('../constants/registration');
 const { DEFAULT_PER_PAGE, MAX_PER_PAGE, sanitizeTerm } = require('../utils/listQuery');
 const { toCsvTable } = require('../utils/csv');
 
@@ -540,6 +541,60 @@ function parseRowList(raw, name) {
 
 const rowWord = (n) => (n === 1 ? 'Row' : 'Rows');
 
+// AFTER A COMMIT: which accounts rejected as NOT_IN_MASTERLIST may be one of
+// the people this import just added.
+//
+// A pending account needs no such check — the review screen re-runs the
+// matcher every time its card renders. A REJECTED card shows no suggestions
+// at all, so an applicant turned away for not being on the masterlist would
+// stay rejected after their row is imported, unless the Secretary happened to
+// remember them. This finds them; it DECIDES NOTHING. It reads those accounts
+// and never writes to them — no link, no un-reject, no status change. The
+// Secretary follows up through the existing Un-reject flow, which then shows
+// live suggestions on the card.
+//
+// Same matching as the review screen's match-suggestions route: findMatches
+// with DEFAULTS on the profile's claimed first and last name, results in the
+// asSuggestion shape — kept only where the match is a record this commit
+// inserted, since a match to an older record is one the Secretary already had
+// in front of them when they rejected.
+async function rejectedAccountsMatching(importedIds) {
+  const { data: accounts, error } = await supabase
+    .from('users')
+    .select('user_id, username, profiles ( first_name, middle_name, last_name, suffix )')
+    .eq('role', 'resident')
+    .eq('is_rejected', true)
+    .eq('rejection_reason', REJECTION_REASON.NOT_IN_MASTERLIST)
+    .order('user_id', { ascending: true });
+  if (error) {
+    throw new Error(`Failed to load rejected accounts: ${error.message}`);
+  }
+
+  const imported = new Set(importedIds);
+  // profiles is one-to-one (PK+FK); normalised in case it arrives as an
+  // array, as secretary.js does. An account with no claimed first and last
+  // name has nothing to match on — the review route answers it with a 409.
+  const named = (accounts || [])
+    .map((a) => ({ ...a, claimed: Array.isArray(a.profiles) ? a.profiles[0] : a.profiles }))
+    .filter((a) => String(a.claimed?.first_name ?? '').trim() && String(a.claimed?.last_name ?? '').trim());
+
+  const found = await mapLimit(named, MATCH_CONCURRENCY, (a) =>
+    findMatches(a.claimed.first_name, a.claimed.last_name));
+
+  return named
+    .map((a, i) => {
+      const c = a.claimed;
+      const name = [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(' ');
+      return {
+        user_id: a.user_id,
+        username: a.username,
+        claimed_name: c.suffix ? `${name}, ${c.suffix}` : name,
+        matches: found[i].filter((m) => imported.has(m.resident_id)).map(asSuggestion),
+      };
+    })
+    .filter((a) => a.matches.length > 0);
+}
+
 // Which export columns get the formula guard in utils/csv.js: all of them but
 // contact_number. Names and addresses come from what registrants typed (see
 // the guard's comment there); a contact number is exported exactly as stored,
@@ -621,7 +676,12 @@ router.post('/import/preview', requireRole('secretary'), async (req, res) => {
 // single-add route refuses a match without confirm_duplicate — so "not yet
 // looked at" can never turn into "imported" or "dropped" by default.
 //
-//   201 { message, imported_count, resident_ids }
+//   201 { message, imported_count, resident_ids, rejected_matches }
+//       rejected_matches: [{ user_id, username, claimed_name, matches }] for
+//       accounts rejected as NOT_IN_MASTERLIST that now match an imported
+//       row — [] when the check ran and found none. If the check itself fails
+//       the key is ABSENT and rejected_matches_error says so: [] would claim
+//       "we looked and there are none", which a failed check cannot support.
 //   400 file errors, or any invalid row (named, with the preview shape)
 //   409 the decisions do not cover the fresh analysis's flagged rows exactly,
 //       with the preview shape so the screen can re-render it
@@ -698,11 +758,25 @@ router.post('/import/commit', requireRole('secretary'), async (req, res) => {
   }
 
   const ids = inserted.map((r) => r.resident_id).sort((a, b) => a - b);
-  res.status(201).json({
+  const result = {
     message: `${ids.length} resident record${ids.length === 1 ? '' : 's'} imported`,
     imported_count: ids.length,
     resident_ids: ids,
-  });
+  };
+
+  // The rows are already in. A failure from here on must not turn into a 500,
+  // or the Secretary is told an import failed that did not — and a retry
+  // would only meet its own rows as duplicates.
+  try {
+    result.rejected_matches = await rejectedAccountsMatching(ids);
+  } catch (err) {
+    console.error(`[resident-records/import/commit] rejected-account check failed: ${err.message}`);
+    result.rejected_matches_error =
+      'The import succeeded, but checking previously rejected accounts against it failed. ' +
+      'Look through the Rejected filter in Resident review instead.';
+  }
+
+  res.status(201).json(result);
 });
 
 // GET /api/resident-records/:id — one record's full detail, including any

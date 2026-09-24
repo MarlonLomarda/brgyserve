@@ -825,6 +825,42 @@ function FileMatches({ matches }) {
   );
 }
 
+// After a commit: accounts rejected as "not in the masterlist" whose claimed
+// name matches a record this import added. INFORMATIONAL ONLY, and there is
+// deliberately no button here — the Secretary looks into each one through the
+// existing Un-reject flow on Resident review, where the card then shows live
+// match suggestions. Nothing about these accounts has been changed.
+function RejectedMatchesNotice({ accounts }) {
+  const n = accounts.length;
+  return (
+    <div className="alert info">
+      <p>
+        <strong>
+          {n} previously rejected account{n === 1 ? "" : "s"} may now match
+          records you just imported.
+        </strong>{" "}
+        {n === 1 ? "It was" : "They were"} rejected as not in the masterlist.
+        To look into {n === 1 ? "it" : "them"}, open Resident review, set the
+        filter to Rejected, and use Un-reject. Nothing has been changed on{" "}
+        {n === 1 ? "this account" : "these accounts"}.
+      </p>
+      <ul>
+        {accounts.map((a) => (
+          <li key={a.user_id}>
+            @{a.username} (claimed name: {a.claimed_name}) →{" "}
+            {a.matches
+              .map(
+                (m) =>
+                  `${fullName(m)}, record #${m.resident_id}, ${Math.round(m.score * 100)}%`,
+              )
+              .join("; ")}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // Why Commit is disabled, when it is.
 function blockedReason({ invalid, undecided, importing }) {
   if (invalid > 0) {
@@ -1114,7 +1150,15 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
           onCancel={() => setImportFile(null)}
           onDone={(result) => {
             setImportFile(null);
-            setFlash({ type: "success", text: `${result.message}.` });
+            // The two rejected-account fields ride on the success flash, so
+            // the notice lives and dies with it: the next action that sets a
+            // flash replaces both.
+            setFlash({
+              type: "success",
+              text: `${result.message}.`,
+              rejectedMatches: result.rejected_matches,
+              rejectedCheckError: result.rejected_matches_error,
+            });
             setSelectedId(null);
             load();
           }}
@@ -1133,6 +1177,12 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
       ) : (
         <>
           {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {flash?.rejectedMatches?.length > 0 && (
+            <RejectedMatchesNotice accounts={flash.rejectedMatches} />
+          )}
+          {flash?.rejectedCheckError && (
+            <div className="alert error">{flash.rejectedCheckError}</div>
+          )}
           {error && <div className="alert error">{error}</div>}
 
           <div className="list-head">
