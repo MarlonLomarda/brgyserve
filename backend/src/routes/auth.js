@@ -14,6 +14,7 @@ const {
 } = require('../middleware/rateLimit');
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
+const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
 const {
   findUserByEmail,
   uniqueViolationField,
@@ -82,6 +83,18 @@ router.post('/register', registerLimiter, async (req, res) => {
   if (birthdate && !DATE_RE.test(birthdate)) {
     return res.status(400).json({ error: 'birthdate must be in YYYY-MM-DD format' });
   }
+  // The contact number stays OPTIONAL, but one that is given must be a
+  // Philippine mobile number. It used to be stored as typed, any 20
+  // characters, and create-and-link copies it into
+  // resident_records.contact_number — the one column the masterlist export
+  // leaves out of its formula guard (constants/phoneNumber.js says why).
+  // Checked, like the password above, before any database round trip.
+  const phone = String(contact_number ?? '').trim();
+  if (phone && !PH_MOBILE_RE.test(phone)) {
+    return res.status(400).json({
+      error: `Contact number must be a Philippine mobile number: ${PH_MOBILE_FORMS}.`,
+    });
+  }
 
   const { data: existing, error: lookupError } = await supabase
     .from('users')
@@ -145,7 +158,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     middle_name: middle_name || null,
     last_name,
     suffix: suffix || null,
-    phone_number: contact_number || null,
+    phone_number: phone || null, // the value that was validated: trimmed
     birthdate: birthdate || null,
     address,
     resident_id: null, // linked later by the Secretary

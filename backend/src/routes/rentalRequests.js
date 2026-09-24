@@ -11,6 +11,7 @@ const {
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
+const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
 
 const router = express.Router();
 
@@ -69,18 +70,16 @@ const CREATE_ROLES = ['resident', 'secretary'];
 const GUEST_NAME_MAX = 200;
 const GUEST_CONTACT_MAX = 50;
 
-// A guest's contact must be a Philippine MOBILE number in one of three forms
-// and nothing else: 09XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX — digits only,
-// no spaces or dashes, the plus allowed only before 63. It is the destination
-// every notice about the booking goes to, and unlike a resident's number it
-// cannot be corrected from a record later, because a guest has none. The
-// first guest row through the form stored "09123456789213213ssdd", which the
-// presence and length checks accepted; this is the rule that refuses it.
+// A guest's contact must be a Philippine MOBILE number (PH_MOBILE_RE, shared
+// with registration in constants/phoneNumber.js). It is the destination every
+// notice about the booking goes to, and unlike a resident's number it cannot
+// be corrected from a record later, because a guest has none. The first guest
+// row through the form stored "09123456789213213ssdd", which the presence and
+// length checks accepted; this is the rule that refuses it.
 // FORMAT ONLY: the presence, both-or-neither and length checks that mirror
 // the migration 022 CHECK stay exactly as they are, and this runs after them.
 // The booking form applies the same pattern before posting, but THIS is the
 // guard — the form can be bypassed with a direct call, this cannot.
-const PH_MOBILE_RE = /^(09\d{9}|\+?639\d{9})$/;
 
 // The caller's own linked resident record, or null when their account has none.
 async function ownResidentId(userId) {
@@ -206,7 +205,7 @@ async function resolveBorrower(req) {
     if (!PH_MOBILE_RE.test(guestContact)) {
       return {
         status: 400,
-        error: 'outside_borrower_contact must be a Philippine mobile number: 09XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX, digits only',
+        error: `outside_borrower_contact must be a Philippine mobile number: ${PH_MOBILE_FORMS}`,
       };
     }
     return { kind: 'guest', walkIn: true, name: guestName, contact: guestContact };

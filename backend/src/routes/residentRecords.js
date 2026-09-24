@@ -540,6 +540,13 @@ function parseRowList(raw, name) {
 
 const rowWord = (n) => (n === 1 ? 'Row' : 'Rows');
 
+// Which export columns get the formula guard in utils/csv.js: all of them but
+// contact_number. Names and addresses come from what registrants typed (see
+// the guard's comment there); a contact number is exported exactly as stored,
+// because an international number begins with + and must not come back from
+// Excel with a stray quote in front of it.
+const guardExportColumn = (column) => column !== 'contact_number';
+
 // GET /api/resident-records/export?archived=false|true|all — the master list
 // as a CSV download, in the import template's columns plus three reference
 // columns. Secretary-only: it is the whole list with every contact detail.
@@ -581,7 +588,11 @@ router.get('/export', requireRole('secretary'), async (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="resident-masterlist-${scope}-${today}.csv"`);
   // BOM so Excel reads ñ and other accents correctly, as the reports do.
-  res.send('﻿' + toCsvTable(EXPORT_COLUMNS, records.map((r) => EXPORT_COLUMNS.map((c) => r[c]))));
+  res.send('﻿' + toCsvTable(
+    EXPORT_COLUMNS,
+    records.map((r) => EXPORT_COLUMNS.map((c) => r[c])),
+    { guard: guardExportColumn },
+  ));
 });
 
 // POST /api/resident-records/import/preview — body: the CSV file, as
@@ -733,8 +744,9 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
     return res.json({ record });
   }
 
-  // profiles.resident_id has no UNIQUE constraint, so tolerate (and surface)
-  // more than one linked account rather than assuming exactly one.
+  // profiles.resident_id is UNIQUE (migration 002), so this is at most one
+  // account. It is still read and returned as a list, the same way
+  // collectDependencies reads it below.
   const { data: links, error: linkError } = await supabase
     .from('profiles')
     .select('user_id, users ( user_id, username, email, role, is_active )')
@@ -887,9 +899,13 @@ const OPEN_DOCUMENT_STATUSES = [
  * archiving: the linked account, in-flight document requests, and rental
  * bookings that are upcoming or still out.
  *
- * Note on rentals: rental_requests has no resident_id — bookings belong to the
- * USER, so they are reached through the linked account (no account => no
- * bookings to check).
+ * Note on rentals: a booking is this resident's if EITHER column says so —
+ * rental_requests.resident_id (the borrower, added and backfilled by migration
+ * 022) or requested_by_user_id matching the linked account. The account check
+ * alone used to be the whole rule, and it missed every walk-in the Secretary
+ * files for a resident, because the Secretary is that booking's requester; a
+ * resident with an upcoming walk-in could be archived with no warning. Only
+ * the rentals half changed — accounts and documents are read as before.
  */
 async function collectDependencies(residentId) {
   const { data: links, error: linkError } = await supabase
@@ -912,25 +928,33 @@ async function collectDependencies(residentId) {
     throw new Error(`Failed to load document requests: ${docError.message}`);
   }
 
-  let rentals = [];
-  if (accounts.length > 0) {
-    const { data: bookings, error: rentalError } = await supabase
-      .from('rental_requests')
-      .select('request_id, start_datetime, end_datetime, status, rental_items ( name, type )')
-      .in('requested_by_user_id', accounts.map((a) => a.user_id))
-      .eq('status', RENTAL_STATUS.CONFIRMED);
-    if (rentalError) {
-      throw new Error(`Failed to load rental bookings: ${rentalError.message}`);
-    }
-    const now = new Date();
-    // Upcoming bookings, plus physical items past their end that were never
-    // returned (still out — see the stage 5 derived statuses). A facility past
-    // its end has auto-completed and is not open work.
-    rentals = (bookings || []).filter((b) => {
-      if (new Date(b.end_datetime) >= now) return true;
-      return RETURNABLE_TYPES.includes(b.rental_items?.type);
-    });
+  // One query, one OR, so a booking matched by both columns comes back once.
+  // The requested_by_user_id half is kept alongside resident_id rather than
+  // replaced by it. Measured on 24 Sep 2026, every one of the 28 bookings
+  // carries resident_id or guest fields, so today that half finds nothing the
+  // first does not. Its one side effect would be a linked account that files
+  // walk-ins for OTHER people, which only a Secretary can do, and no staff
+  // account is linked to a resident record.
+  const accountIds = accounts.map((a) => a.user_id);
+  let rentalQuery = supabase
+    .from('rental_requests')
+    .select('request_id, start_datetime, end_datetime, status, rental_items ( name, type )')
+    .eq('status', RENTAL_STATUS.CONFIRMED);
+  rentalQuery = accountIds.length > 0
+    ? rentalQuery.or(`resident_id.eq.${residentId},requested_by_user_id.in.(${accountIds.join(',')})`)
+    : rentalQuery.eq('resident_id', residentId);
+  const { data: bookings, error: rentalError } = await rentalQuery;
+  if (rentalError) {
+    throw new Error(`Failed to load rental bookings: ${rentalError.message}`);
   }
+  const now = new Date();
+  // Upcoming bookings, plus physical items past their end that were never
+  // returned (still out — see the stage 5 derived statuses). A facility past
+  // its end has auto-completed and is not open work.
+  const rentals = (bookings || []).filter((b) => {
+    if (new Date(b.end_datetime) >= now) return true;
+    return RETURNABLE_TYPES.includes(b.rental_items?.type);
+  });
 
   return { accounts, documents: documents || [], rentals };
 }

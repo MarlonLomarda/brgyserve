@@ -97,6 +97,14 @@ const money = (n) => Math.round(Number(n || 0) * 100) / 100;
 // One convention across every report: ?format=csv on the same endpoint, so the
 // role checks and the date range apply identically to JSON and CSV. The writer
 // itself is utils/csv.js, shared with the resident masterlist export.
+//
+// Every report column is formula-guarded. The text cells are names typed into
+// the system — document types, rental items, and residents' sex and civil
+// status, which the masterlist import accepts as free text — and none of them
+// legitimately begins with =, +, - or @. Counts and amounts are numbers, which
+// the guard never touches.
+const GUARD_EVERY_COLUMN = () => true;
+
 function sendCsv(res, filenameBase, range, sections) {
   const csv = toCsv([
     {
@@ -105,7 +113,7 @@ function sendCsv(res, filenameBase, range, sections) {
       rows: [[range.from, range.to, new Date().toISOString()]],
     },
     ...sections,
-  ]);
+  ], { guard: GUARD_EVERY_COLUMN });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}-${range.from}-to-${range.to}.csv"`);
   res.send('﻿' + csv); // BOM so Excel reads the peso sign and accents correctly
