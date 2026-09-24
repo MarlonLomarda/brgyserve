@@ -55,6 +55,9 @@ const OWNERSHIP_SCOPED = ALL_ROLES;
 const EXPECTED = {
   'residentRecords.js': {
     'GET /': VIEWERS,
+    'GET /export': SECRETARY_ONLY,           // the whole list with every contact detail
+    'POST /import/preview': SECRETARY_ONLY,  // writes nothing, but it is the import's first step
+    'POST /import/commit': SECRETARY_ONLY,
     'GET /:id': VIEWERS,
     'POST /check-duplicates': SECRETARY_ONLY,
     'POST /': SECRETARY_ONLY,

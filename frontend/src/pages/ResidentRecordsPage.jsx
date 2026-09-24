@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { API_BASE_URL } from "../api/config";
+import { ApiError } from "../api/client";
 import DashHeader from "../components/DashHeader";
 import { formatDate } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
@@ -7,12 +9,14 @@ import SearchBar from "../components/SearchBar";
 
 // Resident Records Management: browse + search the master list (stage 1),
 // add with the fuzzy duplicate check + edit (stage 2), archive/unarchive with
-// the linked-account cascade (stage 3).
+// the linked-account cascade (stage 3), and the masterlist as CSV — export and
+// a previewed bulk import (stage 4).
 //
 // Shared by three roles, like RentalBookingsPage/DisputesPage/HouseholdsPage:
 // the Secretary passes canManage, Staff and the Punong Barangay do not. Every
 // write control is ABSENT rather than disabled, and the server refuses the
-// writes regardless (all five write routes are requireRole('secretary')).
+// writes regardless (every write route, and the export, is
+// requireRole('secretary')).
 //
 // SEPARATELY from canManage, the SERVER decides which COLUMNS come back: a
 // Staff response omits birthplace, sex, civil_status, religion,
@@ -628,6 +632,404 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Stage 4 — the masterlist as CSV (Secretary only; rendered under canManage).
+//
+// All three calls use a raw fetch rather than authFetch, as ReportsPage's CSV
+// export does: apiFetch always sends and expects JSON (api/client.js), and
+// these send or receive the file itself.
+// ---------------------------------------------------------------------------
+
+// The file name's scope word for each ?archived= value.
+const EXPORT_SCOPE_WORD = { false: "active", true: "archived", all: "all" };
+
+const manilaDate = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(
+    new Date(),
+  );
+
+// POST the CSV text itself as the body. A failure throws ApiError carrying the
+// parsed body, like apiFetch's, so a 400/409 that includes a fresh preview can
+// re-render it.
+async function postCsv(path, text, token) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv", Authorization: `Bearer ${token}` },
+      body: text,
+    });
+  } catch {
+    throw new ApiError("Cannot reach the server. Is the backend running?", 0);
+  }
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // no JSON body
+  }
+  if (!res.ok) {
+    throw new ApiError(
+      data?.error || `Request failed (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+  return data;
+}
+
+// Export button, its scope select, and the file picker that starts an import.
+function MasterlistTools({ onPreview, onMessage }) {
+  const { token } = useAuth();
+  const [scope, setScope] = useState("false");
+  const [busy, setBusy] = useState(""); // "" | "export" | "import"
+  const fileInput = useRef(null);
+
+  async function exportCsv() {
+    onMessage(null);
+    setBusy("export");
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/resident-records/export?archived=${scope}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        let message = `Export failed (${res.status})`;
+        try {
+          message = (await res.json()).error || message;
+        } catch {
+          // no JSON body
+        }
+        throw new Error(message);
+      }
+      // Named here rather than from Content-Disposition: the API is another
+      // origin, and the browser hides that header from a cross-origin fetch.
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `resident-masterlist-${EXPORT_SCOPE_WORD[scope]}-${manilaDate()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      onMessage({ type: "error", text: err.message });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    // Cleared so that choosing the same file again (after fixing it) still
+    // fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    onMessage(null);
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      onMessage({ type: "error", text: "Choose a .csv file." });
+      return;
+    }
+    setBusy("import");
+    try {
+      // The text is kept and sent again, unchanged, on commit: the server
+      // re-derives every row from it, so the row numbers the Secretary
+      // decided on must refer to the same file.
+      const text = await file.text();
+      const preview = await postCsv(
+        "/resident-records/import/preview",
+        text,
+        token,
+      );
+      onPreview({ fileName: file.name, text, preview });
+    } catch (err) {
+      onMessage({ type: "error", text: err.message });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div className="list-head">
+      <span className="muted">Masterlist CSV</span>
+      <div className="head-actions">
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          aria-label="Records to export"
+        >
+          {ARCHIVED_FILTERS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={!!busy}
+          onClick={exportCsv}
+        >
+          {busy === "export" ? "Exporting…" : "Export masterlist"}
+        </button>
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={!!busy}
+          onClick={() => fileInput.current?.click()}
+        >
+          {busy === "import" ? "Checking file…" : "Import masterlist"}
+        </button>
+        {/* display: none inline, not the hidden attribute: index.css gives
+            every input display: block, which outranks the browser's own
+            [hidden] rule. The button above opens it. */}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={handleFile}
+        />
+      </div>
+    </div>
+  );
+}
+
+// In-file matches: other rows of the same file, identified by row number.
+function FileMatches({ matches }) {
+  return (
+    <>
+      <p className="muted">
+        {matches.length} other row{matches.length === 1 ? "" : "s"} in this
+        file may be the same person:
+      </p>
+      <ul className="suggestions">
+        {matches.map((m) => (
+          <li key={m.index} className="suggestion">
+            <span className="badge score">
+              {Math.round(m.score * 100)}% match
+            </span>
+            <div className="suggestion-info">
+              <strong>
+                {fullName(m)} <span className="muted">(row {m.index})</span>
+              </strong>
+              <span className="muted">
+                b. {m.birthdate || "—"} · {m.address || "—"}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+// Why Commit is disabled, when it is.
+function blockedReason({ invalid, undecided, importing }) {
+  if (invalid > 0) {
+    return `${invalid} row${invalid === 1 ? " has" : "s have"} errors. Fix the file and choose it again. The import runs only when every row is valid.`;
+  }
+  if (undecided > 0) {
+    return `Decide the ${undecided} flagged row${undecided === 1 ? "" : "s"} above first.`;
+  }
+  if (importing === 0) return "Every row is left out, so there is nothing to import.";
+  return null;
+}
+
+// The preview of one file. Clean rows collapse to a count, flagged rows each
+// need an explicit decision, and invalid rows are shown with their error and
+// cannot be imported.
+function ImportPreview({ file, onDone, onCancel }) {
+  const { token } = useAuth();
+  const [preview, setPreview] = useState(file.preview);
+  // index -> "import" | "skip". A flagged row with no entry is UNDECIDED, and
+  // Commit stays disabled until there are none — a <select> with a blank first
+  // option rather than a checkbox, because a checkbox cannot tell "not looked
+  // at yet" apart from "decided to leave out".
+  const [decisions, setDecisions] = useState({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const rows = preview.rows;
+  const clean = rows.filter((r) => r.status === "clean");
+  const flagged = rows.filter((r) => r.status === "flagged");
+  const invalid = rows.filter((r) => r.status === "invalid");
+  const undecided = flagged.filter((r) => !decisions[r.index]).length;
+  const importing =
+    clean.length + flagged.filter((r) => decisions[r.index] === "import").length;
+  const blocked = blockedReason({
+    invalid: invalid.length,
+    undecided,
+    importing,
+  });
+
+  async function commit() {
+    setError("");
+    setBusy(true);
+    const decided = (d) =>
+      flagged
+        .filter((r) => decisions[r.index] === d)
+        .map((r) => r.index)
+        .join(",");
+    const params = new URLSearchParams();
+    if (decided("import")) params.set("confirm_rows", decided("import"));
+    if (decided("skip")) params.set("skip_rows", decided("skip"));
+    try {
+      const data = await postCsv(
+        `/resident-records/import/commit?${params}`,
+        file.text,
+        token,
+      );
+      onDone(data);
+    } catch (err) {
+      // A 400 or 409 carrying rows is the server's fresh analysis. Show it and
+      // start the decisions over: an answer given to the old preview is not an
+      // answer to the new one.
+      if (err.data?.rows) {
+        setPreview({ rows: err.data.rows, summary: err.data.summary });
+        setDecisions({});
+      }
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-card">
+      <div className="pending-head">
+        <div>
+          <h3>Import preview</h3>
+          <p className="muted">
+            {file.fileName} · {rows.length} row{rows.length === 1 ? "" : "s"}.
+            Nothing has been imported yet.
+          </p>
+        </div>
+        <button className="btn secondary" disabled={busy} onClick={onCancel}>
+          ← Back to list
+        </button>
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+
+      <p>
+        <strong>{preview.summary.clean}</strong> ready to import ·{" "}
+        <strong>{preview.summary.flagged}</strong> possible duplicate
+        {preview.summary.flagged === 1 ? "" : "s"} ·{" "}
+        <strong>{preview.summary.invalid}</strong> with errors
+      </p>
+
+      {clean.length > 0 && (
+        <details>
+          <summary>
+            Show the {clean.length} row{clean.length === 1 ? "" : "s"} ready to
+            import
+          </summary>
+          <ul>
+            {clean.map((r) => (
+              <li key={r.index}>
+                Row {r.index}: {fullName(r.data)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {invalid.length > 0 && (
+        <div className="suggest-section">
+          <h4>Rows with errors (these cannot be imported)</h4>
+          <div className="table-wrap">
+            <table className="data-table stack-narrow">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Name</th>
+                  <th>Problem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invalid.map((r) => (
+                  <tr key={r.index}>
+                    <td data-label="Row">{r.index}</td>
+                    <td data-label="Name">{fullName(r.data) || "—"}</td>
+                    <td data-label="Problem">{r.errors.join("; ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {flagged.length > 0 && (
+        <div className="suggest-section">
+          <h4>Possible duplicates: decide each row</h4>
+          <p className="muted">
+            Same-name residents are real, so nothing here is refused. Import a
+            row only if it is a different person from every match shown.
+          </p>
+          {flagged.map((r) => (
+            <div key={r.index} className="suggest-section">
+              <div className="head-actions">
+                <label className="inline-label" htmlFor={`decide-${r.index}`}>
+                  <strong>
+                    Row {r.index}: {fullName(r.data)}
+                  </strong>
+                </label>
+                <select
+                  id={`decide-${r.index}`}
+                  value={decisions[r.index] || ""}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setDecisions((d) => ({ ...d, [r.index]: e.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Decide…
+                  </option>
+                  <option value="import">Import anyway (a different person)</option>
+                  <option value="skip">Leave out</option>
+                </select>
+              </div>
+              <p className="muted">
+                b. {r.data.birthdate || "—"} · {r.data.address}
+              </p>
+              {r.db_matches.length > 0 && (
+                <DuplicateMatches matches={r.db_matches} />
+              )}
+              {r.file_matches.length > 0 && (
+                <FileMatches matches={r.file_matches} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="actions">
+        <button
+          className="btn"
+          type="button"
+          disabled={busy || !!blocked}
+          onClick={commit}
+        >
+          {busy
+            ? "Importing…"
+            : `Commit import (${importing} record${importing === 1 ? "" : "s"})`}
+        </button>
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+      {blocked && <p className="muted">{blocked}</p>}
+    </div>
+  );
+}
+
 export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState("");
@@ -639,6 +1041,8 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const [selectedId, setSelectedId] = useState(null);
   const [formTarget, setFormTarget] = useState(null); // 'new' | record object
   const [archived, setArchived] = useState("false");
+  // { fileName, text, preview } while an import is being reviewed
+  const [importFile, setImportFile] = useState(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -704,6 +1108,17 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
             load();
           }}
         />
+      ) : canManage && importFile ? (
+        <ImportPreview
+          file={importFile}
+          onCancel={() => setImportFile(null)}
+          onDone={(result) => {
+            setImportFile(null);
+            setFlash({ type: "success", text: `${result.message}.` });
+            setSelectedId(null);
+            load();
+          }}
+        />
       ) : selectedId ? (
         <RecordDetail
           id={selectedId}
@@ -759,6 +1174,10 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
               )}
             </form>
           </div>
+
+          {canManage && (
+            <MasterlistTools onPreview={setImportFile} onMessage={setFlash} />
+          )}
 
           {records === undefined || data === null ? (
             <p className="muted">Loading resident records…</p>

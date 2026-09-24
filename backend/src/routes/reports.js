@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { REQUEST_STATUSES } = require('../constants/requestStatus');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { RENTAL_STATUS } = require('../constants/rentals');
+const { toCsv } = require('../utils/csv');
 
 const router = express.Router();
 
@@ -94,22 +95,8 @@ const money = (n) => Math.round(Number(n || 0) * 100) / 100;
 
 // --- CSV ------------------------------------------------------------------
 // One convention across every report: ?format=csv on the same endpoint, so the
-// role checks and the date range apply identically to JSON and CSV.
-function toCsv(sections) {
-  const esc = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = [];
-  for (const { title, columns, rows } of sections) {
-    lines.push(esc(title));
-    lines.push(columns.map(esc).join(','));
-    for (const row of rows) lines.push(row.map(esc).join(','));
-    lines.push('');
-  }
-  return lines.join('\r\n');
-}
-
+// role checks and the date range apply identically to JSON and CSV. The writer
+// itself is utils/csv.js, shared with the resident masterlist export.
 function sendCsv(res, filenameBase, range, sections) {
   const csv = toCsv([
     {

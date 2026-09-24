@@ -92,4 +92,8 @@ async function findMatches(firstName, lastName, options = {}) {
     .sort((a, b) => b.score - a.score);
 }
 
-module.exports = { findMatches, DEFAULTS };
+// normalize is exported for the masterlist import's in-file duplicate check,
+// which scores rows of one CSV against each other with the same Jaro-Winkler
+// and the same normalisation Stage 2 uses here — so "these two rows look alike"
+// means what a Stage 2 score means.
+module.exports = { findMatches, DEFAULTS, normalize };
