@@ -665,3 +665,38 @@ Two stale comments in `residentRecords.js` went with it: one said `profiles.resi
 - A failed check never becomes a 500 — the rows are already in, and "import failed" would invite a retry into duplicates.
 
 **Verified by a scratch harness,** 18 checks, with rejected accounts injected in memory and writes intercepted. The accounts that surfaced were exactly the right ones. The two real rejected accounts (users 142 and 145), whose only match is old record #61, were correctly excluded. A normal commit changed only by gaining `rejected_matches: []`.
+
+### Contact numbers validated on the Secretary's paths, 25 Sep 2026 (`693b072`)
+
+**This closes the gap the `f08de6d` entry left open.** Registration checked a claimed contact number, but four Secretary paths still accepted any string up to 20 characters:
+
+- the add form;
+- the edit form;
+- every CSV import row, through `validateBody`;
+- the create-and-link `contact_number` override in `secretary.js`.
+
+All four now use the same `PH_MOBILE_RE` as registration. The message moved into `constants/phoneNumber.js` as `CONTACT_NUMBER_ERROR`, so registration, the Secretary's forms and the import preview word it identically. The number stays optional everywhere: only a non-blank value is checked.
+
+**Nothing on file needed correcting.** A read-only check before any code found every stored number already matching: 7 of 7 in `resident_records`, 8 of 8 in `profiles`. That matters for edits, because `validateBody` re-checks every field on every save — the same way it already treats a bad birthdate. An unchanged record can therefore only be refused if its stored number fails, and none does.
+
+**One deliberate exception.** When the Secretary sends no override, create-and-link falls back to the applicant's claimed `profiles.phone_number`, and that fallback is **not** re-checked. Registration already validates it. The review screen sends no override, so refusing a bad fallback would leave the Secretary no way past it. A blank override now stores `null` rather than an empty string.
+
+**Still out of scope:** staff account creation (`secretary.js:217`). It writes `profiles.phone_number` for staff-type accounts only, which never reaches `resident_records` or the export.
+
+**Verified by a scratch harness, 32 of 32 checks, with every write intercepted.** It covered all four paths: malformed numbers refused with the shared message, valid ones stored trimmed, and all 48 active records re-saved unchanged without a refusal. `roles:test`, `match:test` and the existing import/export, phone/archive and rejected-match harnesses all still pass.
+
+### Refresh reloads match suggestions on Resident review, 25 Sep 2026 (`241d659`)
+
+**Refresh never re-fetched a card's match suggestions.** `MatchSuggestions` fetched in an effect depending on `[account.user_id, authFetch]`, and neither changes on a reload: each card is keyed by `user_id` and stays mounted, and `authFetch` is a stable `useCallback`. Refresh re-read the list, while every panel kept what it fetched when the card first appeared.
+
+**The fix keys only the suggestions panel on a counter.** `refreshToken` is bumped on each successful `load()` and passed down as `MatchSuggestions`' key, so each reload remounts that panel and its effect fetches again. The card itself keeps its `user_id` key on purpose: re-keying it would also wipe the link-by-id input and any open reject panel on cards the Secretary is not touching.
+
+**A deliberate side effect:** `load()` also runs after every action, so acting on one card refreshes the other cards' suggestions too. Without that, a record just linked to one account would keep appearing on other cards as a live "Link this record", which would then fail as already linked.
+
+**Verified by a scratch harness that bundled the real page and mounted it in jsdom**, with a stub `authFetch` answering differently on each call.
+
+- **Against the pre-fix code** it reproduced the bug: after Refresh the fetch count stayed at 1 and the stale response was still on screen.
+- **Against the fix,** the count went to 2 and the fresh response showed.
+- **Both runs,** the link-by-id input and another card's open reject panel survived the refresh. The frontend build passes.
+
+**A two-tab browser walkthrough against a local backend confirmed it,** matching the harness exactly. Tab 1 was left untouched while Tab 2 linked one throwaway account to a new resident record, and Tab 1 stayed stale. Clicking Refresh in Tab 1 then updated the match-suggestion panels correctly and produced a new `match-suggestions` request in DevTools for every card still unlinked.
