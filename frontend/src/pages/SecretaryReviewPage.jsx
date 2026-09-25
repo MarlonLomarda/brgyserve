@@ -420,7 +420,7 @@ function MatchSuggestions({ account, busy, onAction }) {
   );
 }
 
-function PendingCard({ account, busy, message, onAction }) {
+function PendingCard({ account, busy, message, onAction, refreshToken }) {
   const [linkId, setLinkId] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const p = account.profile || {};
@@ -518,7 +518,16 @@ function PendingCard({ account, busy, message, onAction }) {
         />
       ) : !linked ? (
         <>
-          <MatchSuggestions account={account} busy={busy} onAction={onAction} />
+          {/* Keyed on the page's refresh token, and ONLY this component: a new
+              token remounts the suggestions, so their fetch effect runs again,
+              while the card around it keeps its link-by-id input and any open
+              reject panel. The card itself is already keyed by user_id. */}
+          <MatchSuggestions
+            key={refreshToken}
+            account={account}
+            busy={busy}
+            onAction={onAction}
+          />
           <div className="actions">
             <button
               className="btn"
@@ -576,6 +585,15 @@ export default function SecretaryReviewPage() {
   // Drives ?status= on the server. 'pending' matches the route's default, so
   // the screen opens on exactly the list it always showed.
   const [status, setStatus] = useState("pending");
+  // Bumped by every successful load(), and MatchSuggestions is keyed on it.
+  // Without it, Refresh re-read the list but never the suggestions: each card
+  // is keyed by user_id and stays mounted, and the suggestions' fetch effect
+  // depends only on user_id and authFetch — neither changes on a reload — so
+  // the panels kept showing whatever they fetched when the card first appeared.
+  // load() is also what runs after every action, so an action on one card now
+  // refreshes the others' suggestions too (a record just linked shows as
+  // already linked everywhere else, instead of offering a Link that would 409).
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const load = useCallback(async () => {
     setListError("");
@@ -590,6 +608,7 @@ export default function SecretaryReviewPage() {
           profile: Array.isArray(u.profiles) ? u.profiles[0] : u.profiles,
         })),
       );
+      setRefreshToken((t) => t + 1);
     } catch (err) {
       setListError(err.message);
       setPending([]);
@@ -716,6 +735,7 @@ export default function SecretaryReviewPage() {
                 busy={busyId === a.user_id}
                 message={errors[a.user_id]}
                 onAction={handleAction}
+                refreshToken={refreshToken}
               />
             ))}
           </div>
