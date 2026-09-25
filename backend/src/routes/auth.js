@@ -14,7 +14,7 @@ const {
 } = require('../middleware/rateLimit');
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
-const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
+const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
 const {
   findUserByEmail,
   uniqueViolationField,
@@ -91,9 +91,7 @@ router.post('/register', registerLimiter, async (req, res) => {
   // Checked, like the password above, before any database round trip.
   const phone = String(contact_number ?? '').trim();
   if (phone && !PH_MOBILE_RE.test(phone)) {
-    return res.status(400).json({
-      error: `Contact number must be a Philippine mobile number: ${PH_MOBILE_FORMS}.`,
-    });
+    return res.status(400).json({ error: CONTACT_NUMBER_ERROR });
   }
 
   const { data: existing, error: lookupError } = await supabase

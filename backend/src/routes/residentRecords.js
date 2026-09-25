@@ -7,6 +7,7 @@ const { findMatches, DEFAULTS, normalize } = require('../services/nameMatching')
 const { REQUEST_STATUS } = require('../constants/requestStatus');
 const { RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
 const { REJECTION_REASON } = require('../constants/registration');
+const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
 const { DEFAULT_PER_PAGE, MAX_PER_PAGE, sanitizeTerm } = require('../utils/listQuery');
 const { toCsvTable } = require('../utils/csv');
 
@@ -142,6 +143,17 @@ function validateBody(body) {
       return { error: `${field.replace('_', ' ')} must be ${MAX_LENGTH[field]} characters or fewer` };
     }
     value[field] = v || null;
+  }
+
+  // contact_number stays optional, but a given number must be a Philippine
+  // mobile number — the same pattern and wording as registration
+  // (constants/phoneNumber.js). Like every other rule here it is applied on
+  // EVERY save, edits included, because a save is a full replacement of the
+  // writable columns. That is safe for unrelated edits only because every
+  // number already on file matches: measured on 25 Sep 2026 before this check
+  // was added, 7 of 7 set values in resident_records passed.
+  if (value.contact_number && !PH_MOBILE_RE.test(value.contact_number)) {
+    return { error: CONTACT_NUMBER_ERROR };
   }
 
   for (const [field, label] of [

@@ -7,6 +7,7 @@ const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { generateTemporaryPassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
+const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
 const {
   findUserByEmail,
   uniqueViolationField,
@@ -468,6 +469,20 @@ router.post('/pending-residents/:userId/create-resident', async (req, res) => {
 
   const p = account.profile || {};
   const body = req.body || {};
+
+  // A contact_number OVERRIDE is checked like every other contact number
+  // (constants/phoneNumber.js) — optional, validated only when non-blank, and
+  // stored trimmed; a blank override stores null rather than an empty string.
+  // The fallback, the applicant's claimed profiles.phone_number, is NOT
+  // re-checked here: registration validates it, and the review screen sends no
+  // override, so refusing a bad fallback would leave the Secretary no way past
+  // it. Every claimed number on file matched on 25 Sep 2026 (8 of 8).
+  const hasContactOverride = body.contact_number !== undefined && body.contact_number !== null;
+  const contactOverride = hasContactOverride ? String(body.contact_number).trim() : '';
+  if (contactOverride && !PH_MOBILE_RE.test(contactOverride)) {
+    return res.status(400).json({ error: CONTACT_NUMBER_ERROR });
+  }
+
   const record = {
     first_name: body.first_name ?? p.first_name,
     middle_name: body.middle_name ?? p.middle_name,
@@ -480,7 +495,7 @@ router.post('/pending-residents/:userId/create-resident', async (req, res) => {
     civil_status: body.civil_status ?? null,
     religion: body.religion ?? null,
     educational_attainment: body.educational_attainment ?? null,
-    contact_number: body.contact_number ?? p.phone_number,
+    contact_number: hasContactOverride ? contactOverride || null : p.phone_number,
     date_registered: new Date().toISOString(),
     is_archived: false,
   };
