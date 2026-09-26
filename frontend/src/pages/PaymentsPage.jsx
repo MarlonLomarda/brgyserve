@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import {
   chargeMeta,
   CHARGE_TYPE_LABELS,
@@ -201,7 +200,7 @@ function VerifyPanel({ charge, onDone }) {
   );
 }
 
-export default function PaymentsPage({ title, nav }) {
+export default function PaymentsPage() {
   const { authFetch } = useAuth();
   const [filter, setFilter] = useState("UNPAID");
   const [charges, setCharges] = useState(null); // null = loading
@@ -251,8 +250,6 @@ export default function PaymentsPage({ title, nav }) {
 
   return (
     <>
-      {/* <DashHeader title={title} subtitle="Record and verify payments" nav={nav} /> */}
-      
       {selected ? (
         <VerifyPanel
           charge={selected}

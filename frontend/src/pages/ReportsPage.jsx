@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { defaultRange, reportsForRole } from "../constants/reports";
 import { RENDERERS, isEmpty } from "../components/ReportRenderers";
@@ -13,7 +12,7 @@ import { API_BASE_URL } from "../api/config";
 // the Treasurer financial ones, and the Punong Barangay sees both (oversight).
 // The API enforces the same split — this page only decides what is offered.
 
-export default function ReportsPage({ title, nav }) {
+export default function ReportsPage() {
   const { authFetch, token, user } = useAuth();
   const available = reportsForRole(user?.role);
   const [selected, setSelected] = useState(available[0]?.key ?? null);
@@ -113,8 +112,6 @@ export default function ReportsPage({ title, nav }) {
 
   return (
     <>
-      {/* <DashHeader title={title} subtitle="Reports and statistics" nav={nav} /> */}
-
       {available.length === 0 ? (
         <div className="empty">
           <p>No reports are available for your role.</p>

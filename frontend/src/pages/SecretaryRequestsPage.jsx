@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import ResidentPicker from "../components/ResidentPicker";
 import {
   statusMeta,
@@ -517,8 +516,6 @@ function WalkInRequestPanel({ onDone }) {
 }
 
 export default function SecretaryRequestsPage({
-  title,
-  nav,
   canManage = false,
 }) {
   const { authFetch } = useAuth();
@@ -546,12 +543,6 @@ export default function SecretaryRequestsPage({
   }, [load]);
 
   return (
-    // <DashHeader
-    //   title={title}
-    //   subtitle={canManage ? 'Process document requests' : 'Document requests across residents'}
-    //   nav={nav}
-    // />
-
     <>
       {encoding ? (
         <WalkInRequestPanel

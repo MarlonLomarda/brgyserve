@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import ResidentPicker from "../components/ResidentPicker";
 import { formatDate } from "../constants/requestStatus";
 import {
@@ -634,8 +633,6 @@ function WalkInBookingPanel({ onDone }) {
 }
 
 export default function RentalBookingsPage({
-  title,
-  nav,
   canManage = false,
   canReturn = false,
 }) {
@@ -689,16 +686,8 @@ export default function RentalBookingsPage({
     }
   }
 
-  // const subtitle = canManage
-  //   ? "Manage facility and item bookings"
-  //   : canReturn
-  //     ? "Track what is out and record returns"
-  //     : "Facility and item bookings (view only)";
-
   return (
     <>
-      {/* <DashHeader title={title} subtitle={subtitle} nav={nav} /> */}
-
       {encoding ? (
         <WalkInBookingPanel
           onDone={(result) => {

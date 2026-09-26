@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 import { chargeMeta } from "../constants/requestStatus";
 
 // Where PayMongo sends the resident back to after the hosted checkout.
@@ -119,12 +117,6 @@ export default function PaymentResultPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="GCash payment"
-        subtitle="Your online payment for a barangay charge"
-        nav={RESIDENT_NAV}
-      /> */}
-
       {error && <div className="alert error">{error}</div>}
 
       {result === "cancelled" && !paid && (

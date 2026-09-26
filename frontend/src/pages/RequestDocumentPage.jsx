@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 import { statusMeta, formatDate } from "../constants/requestStatus";
 
 export default function RequestDocumentPage() {
@@ -63,12 +61,6 @@ export default function RequestDocumentPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="Request a document"
-        subtitle="Request an official barangay document"
-        nav={RESIDENT_NAV}
-      /> */}
-
       {submitted ? (
         <div className="pending-card section-card">
           <h3>Request submitted</h3>

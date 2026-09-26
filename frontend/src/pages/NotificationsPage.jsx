@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { SECRETARY_NAV } from "../constants/nav";
 import { formatDate } from "../constants/requestStatus";
 import {
   NOTIFICATION_STATUS_FILTERS,
@@ -58,12 +56,6 @@ export default function NotificationsPage() {
       {/* The card used to repeat the page name in an <h3> with this same
           description under it. The h1 carries the name now, so the card head
           is gone and the description has moved up to the subtitle. */}
-      {/* <DashHeader
-        title="Notifications"
-        subtitle="Every message the system generated, who it was for, and what happened to it."
-        nav={SECRETARY_NAV}
-      /> */}
-
       <div className="pending-card">
         {/* Stated plainly and permanently — not a dismissible notice. It is
               shown in EVERY mode, including when both providers are live: a

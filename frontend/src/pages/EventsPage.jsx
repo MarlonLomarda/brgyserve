@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AttendanceScanner from "../components/AttendanceScanner";
-import DashHeader from "../components/DashHeader";
 import { chargeMeta, formatDate } from "../constants/requestStatus";
 import {
   EVENT_TYPE_LABELS,
@@ -984,7 +983,7 @@ function AttendanceRoster({ eventId, onBack }) {
 }
 
 // --- page ------------------------------------------------------------------
-export default function EventsPage({ title, nav }) {
+export default function EventsPage() {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -1088,12 +1087,6 @@ export default function EventsPage({ title, nav }) {
 
   return (
     <>
-      {/* <DashHeader
-        title={title}
-        subtitle="Barangay events and announcements"
-        nav={nav}
-      /> */}
-
       {attendanceId ? (
         <AttendanceRoster
           eventId={attendanceId}

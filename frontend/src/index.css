@@ -3323,18 +3323,27 @@ button.tab:hover:not(:disabled) {
    vertically and NOT horizontally — that is why the header slid sideways with
    the content rather than staying put.
 
-   MEASURED, headless Chrome against this file over file://. Widest row
-   min-content is 496.38px (.list-head on Resident records; its <h2> supplies
-   only 64.04px of that — an <h2> wraps, so it contributes its longest WORD —
-   and .head-actions the other 432.34px). .dash-main adds 48px of padding, so
-   the document begins to overflow below 544.38px of viewport.
+   HISTORICAL MEASUREMENT — accurate when this block was written (fb81fb9,
+   8 Sep 2026), NOT a description of the current layout. Measured then with
+   headless Chrome against this file over file://: the widest row's
+   min-content was 496.38px (.list-head on Resident records; its <h2>
+   supplied 64.04px, since an <h2> wraps and contributes only its longest
+   WORD, and .head-actions the other 432.34px). .dash-main then had 48px of
+   padding, so the document overflowed below 544.38px of viewport, and 640px
+   cleared that by 95.62px. The search input was already unusable at 640:
+   61.09px wide there, against 237.98px at 1280 and 26px at 390.
 
-   640px is REUSED from ISSUE 6 above rather than adding a fourth breakpoint to
-   this file, and the measurement backs it twice over: it clears the 544.38px
-   threshold by 95.62px, and the search input is ALREADY unusable at 640 —
-   measured 61.09px wide there against 237.98px at 1280, and 26px at 390 — so
-   wrapping at that width repairs a broken row rather than disturbing a working
-   one.
+   TWO LATER COMMITS MADE THOSE NUMBERS STALE:
+   - c9b60a8 moved the search input out of .head-actions into
+     components/SearchBar.jsx, so the row measured above no longer exists;
+   - 922b5ce changed .dash-main's padding from 24px to 1rem.
+   The current widest row has NOT been re-measured, so no replacement figure
+   is given here. See CLAUDE.md → "The 640px mobile treatment" for the
+   re-derived arithmetic and the no-overflow measurement taken since.
+
+   640px was REUSED from ISSUE 6 above rather than adding a fourth breakpoint
+   to this file. Wrapping at that width repaired a broken row rather than
+   disturbing a working one.
 
    The input rule is the idiom .notif-filters already uses, for the same
    reason: the base `input { width: 100% }` makes the input demand the entire

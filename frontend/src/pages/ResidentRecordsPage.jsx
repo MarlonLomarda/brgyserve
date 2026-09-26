@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { API_BASE_URL } from "../api/config";
 import { ApiError } from "../api/client";
-import DashHeader from "../components/DashHeader";
 import { formatDate } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
 import SearchBar from "../components/SearchBar";
@@ -1066,7 +1065,7 @@ function ImportPreview({ file, onDone, onCancel }) {
   );
 }
 
-export default function ResidentRecordsPage({ title, nav, canManage = false }) {
+export default function ResidentRecordsPage({ canManage = false }) {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState(""); // the applied search
@@ -1122,8 +1121,6 @@ export default function ResidentRecordsPage({ title, nav, canManage = false }) {
   const showAccount = !!records?.some((r) => "account" in r);
 
   return (
-    // <DashHeader title={title} subtitle="Resident master list" nav={nav} />
-
     <>
       {canManage && formTarget ? (
         <RecordForm

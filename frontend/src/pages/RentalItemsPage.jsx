@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { SECRETARY_NAV } from "../constants/nav";
 import { ITEM_TYPE_LABELS as TYPE_LABELS } from "../constants/rentals";
 
 // Facilities are whole venues booked as one unit, so quantity locks to 1.
@@ -113,12 +111,6 @@ export default function RentalItemsPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="Rental items"
-        subtitle="Manage the facilities and items residents can rent"
-        nav={SECRETARY_NAV}
-      /> */}
-
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
       {listError && <div className="alert error">{listError}</div>}
 

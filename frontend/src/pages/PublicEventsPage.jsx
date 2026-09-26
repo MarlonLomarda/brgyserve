@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import { formatDate } from "../constants/requestStatus";
 import {
   EVENT_TYPE_LABELS,
@@ -95,7 +94,7 @@ function EventDetail({ id, onBack }) {
   );
 }
 
-export default function PublicEventsPage({ title, nav }) {
+export default function PublicEventsPage() {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -192,12 +191,6 @@ export default function PublicEventsPage({ title, nav }) {
 
   return (
     <>
-      {/* <DashHeader
-        title={title}
-        subtitle="Barangay events and announcements"
-        nav={nav}
-      /> */}
-
       {selectedId ? (
         <EventDetail id={selectedId} onBack={() => setSelectedId(null)} />
       ) : (

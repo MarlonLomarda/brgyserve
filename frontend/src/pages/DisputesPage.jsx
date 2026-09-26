@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import ResidentPicker, { residentName } from "../components/ResidentPicker";
 import SearchBar from "../components/SearchBar";
 
@@ -462,7 +461,7 @@ function CaseDetail({ id, canManage, onBack, onEdit, onChanged }) {
 }
 
 // --- page ------------------------------------------------------------------
-export default function DisputesPage({ title, nav, canManage = false }) {
+export default function DisputesPage({ canManage = false }) {
   const { authFetch } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -505,12 +504,6 @@ export default function DisputesPage({ title, nav, canManage = false }) {
 
   return (
     <>
-      {/* <DashHeader
-        title={title}
-        subtitle="Barangay blotter / dispute records"
-        nav={nav}
-      /> */}
-
       {formTarget ? (
         <CaseForm
           dispute={formTarget === "new" ? null : formTarget}

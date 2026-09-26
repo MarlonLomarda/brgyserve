@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 
 // Events stage 3c — the household QR code a resident presents at an assembly.
 //
@@ -49,12 +47,6 @@ export default function MyHouseholdPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="My household"
-        subtitle="Your household QR code"
-        nav={RESIDENT_NAV}
-      /> */}
-
       <div className="pending-card">
         <div className="pending-head">
           <h3>My household</h3>

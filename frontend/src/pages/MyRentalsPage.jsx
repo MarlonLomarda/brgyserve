@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 import { chargeMeta, chargeOf } from "../constants/requestStatus";
 import {
   displayStatus,
@@ -116,12 +114,6 @@ export default function MyRentalsPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="My rentals"
-        subtitle="Your facility and item bookings"
-        nav={RESIDENT_NAV}
-      /> */}
-
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
       {error && <div className="alert error">{error}</div>}
 

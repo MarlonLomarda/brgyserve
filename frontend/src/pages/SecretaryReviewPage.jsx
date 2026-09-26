@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS, STAFF_ROLES } from "../auth/roles";
-import DashHeader from "../components/DashHeader";
-import { SECRETARY_NAV } from "../constants/nav";
 import {
   PENDING_STATUS_FILTERS,
   REJECTION_REASON_OPTIONS,
@@ -681,13 +679,10 @@ export default function SecretaryReviewPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="Resident review"
-        subtitle="Manage accounts and review pending residents"
-        nav={SECRETARY_NAV}
-      /> */}
-
-      <main className="capped-column">
+      {/* A div, not a <main>: PageLayout already renders the page's one
+          <main className="dash-main"> around this, and a document should
+          have only one. No CSS selects main by tag; capped-column is a class. */}
+      <div className="capped-column">
         <CreateAccountSection />
 
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
@@ -740,7 +735,7 @@ export default function SecretaryReviewPage() {
             ))}
           </div>
         )}
-      </main>
+      </div>
     </>
   );
 }

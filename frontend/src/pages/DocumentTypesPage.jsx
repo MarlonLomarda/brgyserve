@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { SECRETARY_NAV } from "../constants/nav";
 
 const EMPTY_FORM = {
   document_type_id: null,
@@ -101,12 +99,6 @@ export default function DocumentTypesPage() {
   }
 
   return (
-    // <DashHeader
-    //   title="Document types"
-    //   subtitle="Manage the document types residents can request"
-    //   nav={SECRETARY_NAV}
-    // />
-
     <>
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
       {listError && <div className="alert error">{listError}</div>}

@@ -71,7 +71,7 @@ const ROLE_PAGES = {
   staff: (
     <PageLayout
       dashTitle={"Rental bookings"}
-      dashSubtitle={"Barangay's facility and item bookings"}
+      dashSubtitle={"Track what is out and record returns"}
       navItems={STAFF_NAV}
     >
       <RentalBookingsPage canReturn />
@@ -80,7 +80,7 @@ const ROLE_PAGES = {
   punong_barangay: (
     <PageLayout
       dashTitle={"Rental bookings"}
-      dashSubtitle={"Barangay's facility and item bookings"}
+      dashSubtitle={"Facility and item bookings (view only)"}
       navItems={PUNONG_BARANGAY_NAV}
     >
       <RentalBookingsPage />
@@ -204,7 +204,7 @@ export default function App() {
               dashSubtitle={"Household records"}
               navItems={STAFF_NAV}
             >
-              <HouseholdsPage title="Households" nav={STAFF_NAV} />
+              <HouseholdsPage />
             </PageLayout>
           </ProtectedRoute>
         }
@@ -305,7 +305,7 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               dashTitle={"Rental bookings"}
-              dashSubtitle={"Barangay's facility and item bookings"}
+              dashSubtitle={"Manage facility and item bookings"}
               navItems={SECRETARY_NAV}
             >
               <RentalBookingsPage canManage />
@@ -319,7 +319,7 @@ export default function App() {
           <ProtectedRoute role="secretary">
             <PageLayout
               dashTitle={"Blotter"}
-              dashSubtitle={"Barangay's blotter list"}
+              dashSubtitle={"Barangay blotter records"}
               navItems={SECRETARY_NAV}
             >
               <DisputesPage canManage />

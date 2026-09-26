@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 import {
   ITEM_TYPE_LABELS,
   formatSchedule,
@@ -88,12 +86,6 @@ export default function BookRentalPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="Book a facility"
-        subtitle="Book a barangay facility or item"
-        nav={RESIDENT_NAV}
-      /> */}
-
       {booked ? (
         <div className="pending-card section-card">
           <h3>Booking confirmed</h3>

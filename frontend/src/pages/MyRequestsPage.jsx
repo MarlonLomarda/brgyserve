@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
-import { RESIDENT_NAV } from "../constants/nav";
 import {
   statusMeta,
   chargeMeta,
@@ -145,12 +143,6 @@ export default function MyRequestsPage() {
 
   return (
     <>
-      {/* <DashHeader
-        title="My requests"
-        subtitle="Track your barangay document requests"
-        nav={RESIDENT_NAV}
-      /> */}
-
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
       {error && <div className="alert error">{error}</div>}
 

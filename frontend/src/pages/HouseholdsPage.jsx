@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import DashHeader from "../components/DashHeader";
 import ResidentPicker from "../components/ResidentPicker";
 import { ASSIGNABLE_ROLES, HOUSEHOLD_ROLE } from "../constants/households";
 import { formatDate } from "../constants/requestStatus";
@@ -852,7 +851,7 @@ function UnassignedResidents({ unassignedData }) {
 }
 
 // --- page -----------------------------------------------------------------
-export default function HouseholdsPage({ title, nav, canManage = false }) {
+export default function HouseholdsPage({ canManage = false }) {
   const { authFetch } = useAuth();
   const [view, setView] = useState("households"); // 'households' | 'unassigned'
   const [page, setPage] = useState(1);
@@ -920,8 +919,6 @@ export default function HouseholdsPage({ title, nav, canManage = false }) {
 
   return (
     <>
-      {/* <DashHeader title={title} subtitle="Household records" nav={nav} /> */}
-
       {selectedId ? (
         <HouseholdDetail
           householdId={selectedId}
