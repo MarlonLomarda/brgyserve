@@ -1404,7 +1404,7 @@ button.link-button:hover:not(:disabled) {
   border-bottom: none;
 }
 
-.data-table td.num {
+.data-table .num {
   text-align: right;
   white-space: nowrap;
 }
@@ -1429,7 +1429,7 @@ button.link-button:hover:not(:disabled) {
      Document types: 282.9px surplus, actions still stacked). This floor asks
      for enough to keep two ordinary buttons on one line. Cells that already
      need more than this — the payments queue at 227.7 — are unaffected. */
-  /* min-width: 200px; */
+  min-width: 200px;
 }
 
 /* Labels stay on one line; the cell wraps between buttons rather than inside
