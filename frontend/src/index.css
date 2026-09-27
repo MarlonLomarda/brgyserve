@@ -816,7 +816,7 @@ a {
    up pixels to the scroll container below it. .dash-drawer-head states the
    same thing for the same reason. */
 .dash-side section {
-  padding: 13px 16px 25px 16px;
+  padding: 13px 16px 16px 16px;
   display: flex;
   align-items: center;
   flex: none;
@@ -1404,7 +1404,7 @@ button.link-button:hover:not(:disabled) {
   border-bottom: none;
 }
 
-.data-table .num {
+.data-table td.num {
   text-align: right;
   white-space: nowrap;
 }
@@ -1429,7 +1429,7 @@ button.link-button:hover:not(:disabled) {
      Document types: 282.9px surplus, actions still stacked). This floor asks
      for enough to keep two ordinary buttons on one line. Cells that already
      need more than this — the payments queue at 227.7 — are unaffected. */
-  min-width: 200px;
+  /* min-width: 200px; */
 }
 
 /* Labels stay on one line; the cell wraps between buttons rather than inside
@@ -1527,6 +1527,7 @@ button.link-button:hover:not(:disabled) {
   margin-top: 0;
   padding: 8px 10px;
   font-size: 0.9rem;
+  height: 40px;
 }
 
 .reject-form {
@@ -2438,6 +2439,43 @@ button.link-button:hover:not(:disabled) {
 .landing-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
+}
+
+.skeleton {
+  background-color: #e2e8f0;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+.skeleton-select {
+  width: 149px;
+  height: 40px;
+  border-radius: 8px;
+}
+
+.skeleton-h2 {
+  width: 100px;
+  height: 20px;
+  border-radius: 8px;
+}
+
+.skeleton-cell {
+  width: 100%;
+  height: 17px;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
 
 /* Anyone who has asked for reduced motion gets the deeper shadow but no
