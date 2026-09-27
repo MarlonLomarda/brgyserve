@@ -113,6 +113,17 @@ const root = () => dom.window.document.getElementById('root');
           map: null,
         };
       },
+    }, {
+      // LoginPage and LandingPage import images, which Vite turns into URLs.
+      // Left alone, rolldown reads the bytes as source and the build dies with
+      // UNLOADABLE_DEPENDENCY before a single check runs. Each image becomes
+      // its file name instead: nothing here asserts on an image, and no image
+      // file is emitted next to the bundle.
+      name: 'image-as-filename',
+      load(id) {
+        if (!/\.(jpe?g|png|gif|webp|svg)$/i.test(id)) return null;
+        return { code: `export default ${JSON.stringify(path.basename(id))};`, moduleType: 'js' };
+      },
     }],
     onwarn: () => {},
   });
@@ -160,8 +171,11 @@ const root = () => dom.window.document.getElementById('root');
   seedSession(VALID);
   resetNet(200);
   const validHtml = await globalThis.mountApp(root(), '/secretary');
+  // "Log out" is on the dashboard header and nowhere on the login screen. This
+  // used to assert the ABSENCE of "Sign in to BrgyServe", a string the app has
+  // never rendered, so it passed whatever this mount showed.
   check('CONTROL: a valid token still renders the logged-in view',
-    !/Sign in to BrgyServe/i.test(validHtml) && validHtml.length > 0,
+    /Log out/.test(validHtml) && !/Log out/.test(expiredHtml),
     `${validHtml.length} chars`);
   check('CONTROL: the valid session was left in localStorage', store.data.has(STORAGE_KEY) === true);
   check('CONTROL: a valid session sends its request with the token',
