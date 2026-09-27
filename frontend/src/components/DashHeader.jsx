@@ -186,7 +186,7 @@ export default function DashHeader({
 
       {open && (
         <>
-          <div className="dash-backdrop" onClick={close} aria-hidden="true" />
+          <div className="dash-backdrop" onClick={closeAndRefocus} aria-hidden="true" />
           <div
             id="dash-drawer"
             className="dash-drawer"

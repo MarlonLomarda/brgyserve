@@ -608,8 +608,12 @@ export default function SecretaryReviewPage() {
       );
       setRefreshToken((t) => t + 1);
     } catch (err) {
+      // null, never []: an empty array is the claim "we looked and there are
+      // none", which put "0 accounts awaiting review" and the empty-state line
+      // beside the error. null always travels with listError here, and the
+      // render below checks the error before anything reads pending.
       setListError(err.message);
-      setPending([]);
+      setPending(null);
     }
   }, [authFetch, status]);
 
@@ -686,7 +690,6 @@ export default function SecretaryReviewPage() {
         <CreateAccountSection />
 
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-        {listError && <div className="alert error">{listError}</div>}
 
         {/* The filter sits OUTSIDE the empty check on purpose: switching to
             Rejected and finding it empty must not remove the control that
@@ -715,7 +718,12 @@ export default function SecretaryReviewPage() {
           </div>
         </div>
 
-        {pending === null ? (
+        {/* Error first, then loading, then empty — the order HouseholdsPage
+            uses — so a failed request can never reach the empty-state line.
+            The filter and Refresh above stay, and either loads again. */}
+        {listError ? (
+          <div className="alert error">{listError}</div>
+        ) : pending === null ? (
           <p className="muted">Loading resident accounts…</p>
         ) : pending.length === 0 ? (
           <div className="empty">
