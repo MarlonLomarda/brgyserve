@@ -297,6 +297,39 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 
 **`272fade` is the follow-up, and it changes nothing on screen.** PR #12 disabled the declaration by **commenting it out** rather than deleting it, and left standing the comment above the rule that still justified the 44px minimum as matching `.dash-drawer-arrow`. The dead declaration is now gone and that paragraph rewritten to record why the absence is deliberate, so the next reader does not restore it as a tidy-up. A commented-out property and an absent one paint identically, so there is no render change to verify between the two.
 
+### PageLayout leftovers removed, 26 Sep 2026 (`d3bb344`)
+
+**PR #11 moved every screen's header into `PageLayout`, and each page kept what it no longer used.** Nineteen pages still imported `DashHeader` and carried a commented-out `<DashHeader>` call. Most also kept the `*_NAV` import and the `title`/`nav` parameters that only that dead call read. All of it is gone, and `PageLayout` renders the one live `DashHeader`. `App.jsx` stopped passing the two dropped props to the Staff `HouseholdsPage`.
+
+**Three visible corrections came with it:**
+
+- **Rental bookings has one subtitle per role again.** `PageLayout` had given all three roles "Barangay's facility and item bookings". The distinct wording was still sitting in `RentalBookingsPage` as a dead computation, and is now back in `App.jsx`:
+  - Secretary: "Manage facility and item bookings";
+  - Staff: "Track what is out and record returns";
+  - Punong Barangay: "Facility and item bookings (view only)".
+- **Both Blotter routes say "Barangay blotter records".** One of them said "Barangay's blotter list".
+- **`SecretaryReviewPage`'s inner `<main>` became a `<div>`**, so `PageLayout`'s `<main className="dash-main">` is the page's only one. No CSS selects `main` by tag, so nothing moved.
+
+**The ISSUE 7 comment in `index.css` is now labelled historical.** Its figures were measured at `fb81fb9` on 8 Sep. `c9b60a8` (the `SearchBar` extraction) and `922b5ce` (`.dash-main` padding) have since made them stale. The comment says so and names both commits. It gives no replacement figure, because none has been measured.
+
+**Verified by the frontend build and `oxlint`,** whose unused-import warnings for these pages went with the change. The removal was scripted so that every edit asserted an exact match count before any file was written.
+
+### Resident review's load error and the drawer backdrop's focus, 27 Sep 2026 (`b6ec693`)
+
+**Two small fixes, both found in the 26 Sep diagnose.**
+
+**A failed Resident review load no longer claims there are zero accounts.** `load()` used to call `setPending([])` on failure. So the error alert sat beside "0 accounts awaiting review" and the empty-state line — the "we looked and there are none" claim CLAUDE.md forbids for a list that failed to load. `pending` is now `null` on failure. The list area checks the error first, then loading, then empty, the order `HouseholdsPage` (`32ec107`) uses. With `pending` null, the heading falls back to "Resident accounts". The status filter and Refresh stay in the header row and load again. The error alert moved from above that row into the list area, where `HouseholdsPage` shows its own.
+
+**Clicking the drawer backdrop now returns focus to the hamburger.** It called `close`, which dropped focus to `<body>`. It now calls `closeAndRefocus`, as Escape and the drawer's X button already did.
+
+**Verified by two jsdom harnesses mounting the real components with stubbed data, each run against the pre-fix code first:**
+
+- **The list harness** failed 3 of 18 checks before the fix, reproducing the false count and empty text after a failed load and after a failed Refresh. It passes all 18 after. The checks include a genuinely empty successful load still showing the real empty text and "0 accounts awaiting review", and the filter still sending a new request after a failure.
+- **The focus harness** failed only the backdrop route before the fix. After it, all three close routes land focus on `.dash-menu-btn` and release the scroll lock, 9 of 9.
+- **The `241d659` Refresh harness** still passes 7 of 7, and the frontend builds.
+
+**A browser walkthrough against the local site confirmed both fixes.** With the `pending-residents` request blocked in DevTools, the page showed one error alert with no empty-state text and no "0 accounts" count, and the status filter and Refresh still worked; unblocking and retrying brought the real list back. On a narrow viewport, closing the drawer by its backdrop left `document.activeElement` on the hamburger button.
+
 ## Document Requests
 
 ### Stage 4 (Payment + Release)
@@ -311,6 +344,35 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 - **4b implemented:** payment declaration vs verification are modeled separately. The resident declares via `POST /api/document-requests/mine/:id/pay` (`method: onsite|gcash`, GCash requires `reference_no`) — stored as `declared_*` on the charge (migration 008), charge stays UNPAID, re-declarable while unpaid. Verification (`/api/charges`: `GET ?status=` queue + `POST /:id/verify`, roles `treasurer` + `secretary`) creates the `payments` row (verifier in `received_by_user_id`; method/reference default from the declaration, overridable) and flips the charge to PAID with a status-guarded claim → insert → revert-on-failure sequence. The payments table only ever holds verified payments. UI: Pay onsite / Pay via GCash on approved unpaid rows in My Requests; `PaymentsPage` (verification queue) is the Treasurer's landing page and the Secretary's Payments tab. `notify()` writes a `notifications` row on verification, with wording that varies by charge type.
 - **4c implemented (module complete):** release flow. `POST /api/document-requests/:id/ready-for-release` (Secretary-only; only from `approved` and only when the charge is `PAID` — zero-fee auto-PAID charges qualify immediately) and `POST /:id/claim` (Secretary-only; only from `ready_for_release`, sets `claimed_at`). Both use status-guarded updates like approve/reject; invalid transitions get 409s with the current status. `notify()` writes a `notifications` row on ready_for_release ("READY TO CLAIM"), not on claim (the resident is present). No migration — `claimed_at` has existed since migration 001. UI: Secretary request detail shows "Mark ready for release" on approved+PAID (an awaiting-payment note otherwise) and a confirm-guarded "Mark as claimed" on ready_for_release; resident My Requests shows a pickup note on ready_for_release and the claim date on claimed. Every request status is now reachable end to end. (Charge status `VOID` had no path into it until Facility Rentals stage 4 — rental cancellation voids the unpaid charge; document charges still have no voiding flow.)
 - Notifications are recorded, not sent — see the **Notifications** section below. The old `services/smsNotification.js` console-log stub is gone; `services/notifications.js` now writes a real `notifications` row at every trigger point (document approve/reject and ready-for-release, payment verification, the GCash gateway settle, rental booking-confirmation, Secretary-cancel and return-recorded, fine generation, and **registration rejection** — see Auth & Account Approval).
+
+### PR #13 — the My Requests status filter, 27 Sep 2026 (`3b26f07`, `9c7d49d`)
+
+**Francis's PR #13 (branch `feat/my-doc-req-filter`) lets a resident filter My Requests by status.** It was merged through GitHub as `3b26f07`:
+
+- **The status select replaces the Refresh button.** It lists "All Requests" plus the six request statuses from `STATUS_META`.
+- **Skeleton loading:** a new `components/TableSkeleton.jsx` shows placeholder rows, with `.skeleton*` rules added to `index.css`.
+- **The backend:** `GET /api/document-requests/mine` takes an optional `?status=`. It is checked against `REQUEST_STATUSES` and answers an unknown value with a 400. The route list is unchanged.
+- **Prettier reformat:** `documentRequests.js` was reformatted throughout (quote style, line wrapping), which is why its diff is about 490 lines for a change of about fifteen.
+
+**A local check before the merge found no text conflict and two shared-CSS changes.** `git merge-tree` against `main` merged cleanly, with no conflict markers. The merge GitHub produced has the same tree. The PR's lines in `MyRequestsPage.jsx` did not touch the imports `d3bb344` had removed. **But the PR also changed two shared rules that reach well beyond My Requests:**
+
+- **`.row-actions { min-width: 200px }` was commented out.** This is one of the six protected desktop rules. It covers 14 action cells on 13 pages, where two buttons would stack again.
+- **`.data-table .num` was narrowed to `.data-table td.num`.** The 12 numeric headers (`th.num`) across 10 files then fell to `.data-table th { text-align: left }`, sitting left-aligned over right-aligned numbers.
+
+**`9c7d49d` restored both, exactly as they were at the merge-base `0274d6d`, and touched nothing else.** Francis's feature is untouched: the filter, the skeleton and the `?status=` support stay exactly as merged. So do his two other CSS edits:
+
+- `.list-head select` gains `height: 40px`, and that rule reaches every list-header select;
+- `.dash-side section`'s bottom padding goes from 25px to 16px.
+
+Neither has been measured against the other screens it reaches.
+
+**Verified:**
+
+- a comment-stripped grep showing an active `min-width: 200px` and `.data-table .num` in both the source and the built CSS;
+- `roles:test` giving 93 PASS, 0 FAIL, identical line for line to its output on `d3bb344`;
+- the frontend build.
+
+**A browser walkthrough against the local site confirmed both halves.** The filter was tried on all six statuses and "All Requests": each sent its own `?status=` request and showed the right rows, and the skeleton rows appeared under a throttled network. The restored rules held on screen: Edit and Deactivate on Document types sat side by side, and the Fee header was right-aligned over its values.
 
 ## Facility Rentals
 
