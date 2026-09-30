@@ -133,7 +133,7 @@ Stores records of disputes filed within the barangay, including case number, fil
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
 | dispute_id | bigint | PK | No | Uniquely identifies each dispute record. |
-| barangay_case_no | varchar(50) | | No | Official case number assigned by the barangay. Enforced unique in the Blotter module (application-level; optional UNIQUE index in migration 012). |
+| barangay_case_no | varchar(50) | | No | Official case number assigned by the barangay. Unique: the UNIQUE constraint `dispute_records_barangay_case_no_unique` (migration 012) is applied, and the Blotter module also checks it in application code for a friendly 409. |
 | time_filed | time | | No | Time the dispute was filed. |
 | date_filed | date | | No | Date the dispute was filed. |
 | filed_for | varchar(255) | | No | Specific complaint or case type (Unjust Vexation, Theft, Physical Injury). |
