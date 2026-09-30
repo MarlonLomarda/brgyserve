@@ -50,6 +50,7 @@ export const RESIDENT_NAV = [
   },
   { to: "/resident/events", label: "Events", icon: FaPeopleCarry },
   { to: "/resident/household", label: "My household", icon: BsHousesFill },
+  { to: "/resident/disputes", label: "My disputes", icon: FaAddressBook },
 ];
 
 export const TREASURER_NAV = [

@@ -1,7 +1,12 @@
 // ===========================================================================
-// ROUTE ROLE GUARDS — resident records + document requests.
+// ROUTE ROLE GUARDS — resident records + document requests + disputes.
 //
 //   cd backend && npm run roles:test
+//
+// disputes.js joined when residents gained GET /mine, the first route in that
+// file a resident may call. Its scoping — own cases only — is tested by
+// disputes:test; this file checks who may reach each route, and that /mine is
+// declared before /:id.
 //
 // WHY THIS EXISTS. Both files used to be Secretary-only: residentRecords.js
 // opened with `router.use(authenticate, requireRole('secretary'))`, so every
@@ -30,6 +35,7 @@ beRequire('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: tr
 
 const residentRecords = require(path.join(__dirname, '..', 'src', 'routes', 'residentRecords.js'));
 const documentRequests = require(path.join(__dirname, '..', 'src', 'routes', 'documentRequests.js'));
+const disputes = require(path.join(__dirname, '..', 'src', 'routes', 'disputes.js'));
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 
 let failures = 0;
@@ -42,6 +48,10 @@ const section = (t) => console.log(`\n--- ${t} ${'-'.repeat(Math.max(0, 66 - t.l
 const ALL_ROLES = ['secretary', 'punong_barangay', 'treasurer', 'staff', 'resident'];
 const VIEWERS = ['secretary', 'punong_barangay', 'staff'];
 const SECRETARY_ONLY = ['secretary'];
+// Blotter records: the Secretary manages, the Punong Barangay views. Staff and
+// the Treasurer are refused everywhere in disputes.js.
+const BLOTTER_VIEWERS = ['secretary', 'punong_barangay'];
+const RESIDENT_ONLY = ['resident'];
 
 // Routes whose access is scoped by OWNERSHIP — the caller's profiles.resident_id
 // matched against the row's resident_id — rather than by role. (They matched
@@ -77,6 +87,14 @@ const EXPECTED = {
     'POST /:id/reject': SECRETARY_ONLY,
     'POST /:id/ready-for-release': SECRETARY_ONLY,
     'POST /:id/claim': SECRETARY_ONLY,
+  },
+  'disputes.js': {
+    'GET /': BLOTTER_VIEWERS,
+    'GET /mine': RESIDENT_ONLY,             // own party entries only; scoping is disputes:test's job
+    'GET /:id': BLOTTER_VIEWERS,
+    'POST /': SECRETARY_ONLY,
+    'PUT /:id': SECRETARY_ONLY,
+    'PATCH /:id/settle': SECRETARY_ONLY,     // settle AND reopen: one route, is_settled true/false
   },
 };
 
@@ -179,18 +197,33 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
 const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
 
 (async () => {
-  console.log('Route role guards — resident records + document requests');
+  console.log('Route role guards — resident records + document requests + disputes');
   console.log('No server started. No writes.');
 
   auditRouter('residentRecords.js', residentRecords);
   auditRouter('documentRequests.js', documentRequests);
+  auditRouter('disputes.js', disputes);
 
   // -- every route carries authenticate at the router level -----------------
   section('router-level authenticate');
-  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests]]) {
+  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes]]) {
     const hasAuth = router.stack.some((l) => !l.route && l.handle?.name === 'authenticate');
     check(`${label} mounts authenticate at the router level`, hasAuth);
   }
+
+  // -- route ORDER, which admits() cannot see ---------------------------------
+  // admits() runs each route's own guards and never matches a URL, so it would
+  // pass with /mine declared after /:id — where /:id catches every request for
+  // /mine: a resident gets 403 from its VIEW_ROLES guard and the Secretary 400
+  // "Invalid case id". Express matches in declaration order, so the index in
+  // the stack is the whole question.
+  section('route order');
+  const indexOf = (router, method, routePath) =>
+    router.stack.findIndex((l) => l.route?.path === routePath && l.route.methods[method]);
+  const mineAt = indexOf(disputes, 'get', '/mine');
+  const byIdAt = indexOf(disputes, 'get', '/:id');
+  check('disputes.js registers GET /mine before GET /:id', mineAt !== -1 && byIdAt !== -1 && mineAt < byIdAt,
+    `GET /mine at stack index ${mineAt}, GET /:id at ${byIdAt}`);
 
   // -- data minimization, against the real handlers --------------------------
   section('GET /resident-records — staff projection');

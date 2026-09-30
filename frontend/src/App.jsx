@@ -11,6 +11,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HouseholdsPage from "./pages/HouseholdsPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import MyDisputesPage from "./pages/MyDisputesPage";
 import MyHouseholdPage from "./pages/MyHouseholdPage";
 import MyRentalsPage from "./pages/MyRentalsPage";
 import NotificationsPage from "./pages/NotificationsPage";
@@ -509,6 +510,22 @@ export default function App() {
               navItems={RESIDENT_NAV}
             >
               <MyHouseholdPage />
+            </PageLayout>
+          </ProtectedRoute>
+        }
+      />
+      {/* The resident's own blotter cases, read-only. The server returns only
+          cases where their own record is a party (GET /api/disputes/mine). */}
+      <Route
+        path="/resident/disputes"
+        element={
+          <ProtectedRoute role="resident">
+            <PageLayout
+              dashTitle={"My disputes"}
+              dashSubtitle={"Blotter cases recorded under your resident record"}
+              navItems={RESIDENT_NAV}
+            >
+              <MyDisputesPage />
             </PageLayout>
           </ProtectedRoute>
         }

@@ -5,10 +5,16 @@ const { NATURES, PARTY_ROLE, PARTY_ROLES } = require('../constants/disputes');
 
 const router = express.Router();
 
-// Blotter records are sensitive: only the Secretary (manage) and the Punong
-// Barangay (view) may touch this module. Staff, Treasurer and residents get
-// 403 — residents must never see blotter cases, not even their own party
-// entries. GET is Secretary + PB; all writes are Secretary-only (per-route).
+// Blotter records are sensitive: the Secretary manages and the Punong Barangay
+// views. GET / and GET /:id are Secretary + PB; all writes are Secretary-only
+// (per-route). Staff and the Treasurer get 403 on every route.
+//
+// RESIDENTS: A DELIBERATE REVERSAL. This comment used to say residents must
+// never see blotter cases, not even their own party entries. They now get ONE
+// read-only route, GET /mine, returning only the cases where a dispute_parties
+// row carries THEIR OWN linked resident_id — resolved from the session, never
+// from anything the client sends — with a minimal field list and no other
+// party's name or details. Every other route still refuses them with 403.
 router.use(authenticate);
 const VIEW_ROLES = ['secretary', 'punong_barangay'];
 
@@ -145,6 +151,21 @@ async function caseNoTaken(caseNo, excludeId = null) {
   return data.length > 0;
 }
 
+// The caller's own linked resident record, or null when their account has none.
+// Copied from routes/documentRequests.js (rentalRequests.js holds the same
+// copy); deliberately not shared, so this change touches no other route file.
+async function ownResidentId(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('resident_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load profile: ${error.message}`);
+  }
+  return data?.resident_id ?? null;
+}
+
 async function loadDetail(id) {
   const { data, error } = await supabase
     .from('dispute_records')
@@ -229,6 +250,74 @@ router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   }));
 
   res.json({ disputes, total: count, page, per_page: perPage, total_pages: Math.ceil((count || 0) / perPage) });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/disputes/mine — a RESIDENT's own cases, read-only.
+//
+// MUST STAY DECLARED BEFORE GET /:id. Express matches in declaration order, so
+// below it "/mine" would be caught by /:id: its VIEW_ROLES guard answers a
+// resident with 403 and the Secretary with 400 "Invalid case id". roles:test
+// asserts the order, because its guard probe cannot see route order at all.
+//
+// Scoped by the caller's own resident_id and nothing else. The handler never
+// reads req.params, req.query or req.body — there is no id a resident could
+// pass to see a case that is not theirs.
+//
+// The response is an ALLOW-LIST, not the party embed above: the case's own
+// label fields plus the caller's role(s). It shows a resident their own
+// involvement, not a roster of the case — so no other party's name or details,
+// and no birthdate, contact_number, time_filed or dispute_id. A person
+// recorded only as a typed name is never linked, so the empty state must not
+// read as "you are in no cases".
+// ---------------------------------------------------------------------------
+const MY_CASE_FIELDS = 'dispute_id, role, dispute_records ( barangay_case_no, date_filed, filed_for, nature_of_case, is_settled )';
+
+// Every "nothing to list" outcome that is not simply zero cases. Answered with
+// a 200 and a reason, like routes/myHousehold.js, never a bare [] — [] is the
+// claim "we looked and there are none".
+const MY_CASES_REASON = {
+  NO_RECORD: 'no_resident_record',
+};
+
+router.get('/mine', requireRole('resident'), async (req, res) => {
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.json({ reason: MY_CASES_REASON.NO_RECORD, cases: [] });
+  }
+
+  const { data, error } = await supabase
+    .from('dispute_parties')
+    .select(MY_CASE_FIELDS)
+    .eq('resident_id', residentId);
+  if (error) throw new Error(`Failed to load your cases: ${error.message}`);
+
+  // One entry per case. validateParties allows the same resident twice in a
+  // case, even as both Complainant and Respondent, so roles are collected and
+  // de-duplicated rather than taken from a single row.
+  const byCase = new Map();
+  for (const row of data) {
+    const c = row.dispute_records;
+    if (!c) continue;
+    if (!byCase.has(row.dispute_id)) byCase.set(row.dispute_id, { id: row.dispute_id, c, roles: new Set() });
+    byCase.get(row.dispute_id).roles.add(row.role);
+  }
+
+  const cases = [...byCase.values()]
+    // Newest filed first; the internal id breaks a same-day tie, newest first.
+    .sort((a, b) => b.c.date_filed.localeCompare(a.c.date_filed) || b.id - a.id)
+    .map(({ c, roles }) => ({
+      barangay_case_no: c.barangay_case_no,
+      date_filed: c.date_filed,
+      filed_for: c.filed_for,
+      nature_of_case: c.nature_of_case,
+      is_settled: c.is_settled,
+      // Canonical order; a stored role outside PARTY_ROLES (the column has no
+      // CHECK) is kept after them rather than silently dropped.
+      my_roles: [...PARTY_ROLES.filter((r) => roles.has(r)), ...[...roles].filter((r) => !PARTY_ROLES.includes(r))],
+    }));
+
+  res.json({ cases });
 });
 
 // GET /api/disputes/:id — full case detail with all parties (Secretary + PB).

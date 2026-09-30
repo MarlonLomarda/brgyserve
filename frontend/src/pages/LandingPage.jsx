@@ -121,7 +121,7 @@ const FAQS = [
   },
   {
     q: "Who can see blotter and dispute records?",
-    a: "Only the Barangay Secretary and the Punong Barangay. Blotter and dispute records are not visible to residents.",
+    a: "The Barangay Secretary and the Punong Barangay can view blotter and dispute records. A resident can view only the cases in which he or she is recorded as a party, and only for reading. Only the Barangay Secretary can add or update cases.",
   },
   {
     q: "Who uses the system?",

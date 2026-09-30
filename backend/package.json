@@ -15,7 +15,8 @@
     "scan:test": "node scripts/test-attendance-scan.js",
     "notif:test": "node scripts/test-notifications.js",
     "reset:test": "node scripts/test-password-reset.js",
-    "roles:test": "node scripts/test-route-roles.js"
+    "roles:test": "node scripts/test-route-roles.js",
+    "disputes:test": "node scripts/test-disputes-mine.js"
   },
   "keywords": [
     "barangay",
