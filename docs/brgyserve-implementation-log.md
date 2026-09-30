@@ -765,3 +765,50 @@ All four now use the same `PH_MOBILE_RE` as registration. The message moved into
 - **Both runs,** the link-by-id input and another card's open reject panel survived the refresh. The frontend build passes.
 
 **A two-tab browser walkthrough against a local backend confirmed it,** matching the harness exactly. Tab 1 was left untouched while Tab 2 linked one throwaway account to a new resident record, and Tab 1 stayed stale. Clicking Refresh in Tab 1 then updated the match-suggestion panels correctly and produced a new `match-suggestions` request in DevTools for every card still unlinked.
+
+## Dispute / Blotter Records
+
+### My disputes — residents read their own cases, 30 Sep 2026
+
+**Residents can now see the blotter cases they are a party to, read-only, on `/resident/disputes`.** This reverses a rule that was written down on purpose. CLAUDE.md and the header of `routes/disputes.js` both said residents *"must never see blotter cases, not even their own party entries"*, and every disputes route answered a resident with 403. Both now record the reversal instead of the old rule. The Secretary and Punong Barangay routes, `VIEW_ROLES` and the party embed are unchanged.
+
+**One route, `GET /api/disputes/mine`, resident-only.** It resolves the caller's `resident_id` from the session through `ownResidentId`, copied from `documentRequests.js` rather than shared, so no other route file changed. It then reads `dispute_parties` for that one `resident_id` and nothing else. **The handler never reads `req.params`, `req.query` or `req.body`**, so there is no value a resident could send to see someone else's case.
+
+**The response is an allow-list, not the party embed the Secretary's routes use:**
+
+- per case: `barangay_case_no`, `date_filed`, `filed_for`, `nature_of_case`, `is_settled`, and `my_roles`;
+- newest filed first.
+
+**Other parties are left out because the page shows a resident their own involvement, not a roster of the case.** So there is no other party's name, and nothing from a resident record: no `birthdate` and no `contact_number`. `time_filed` and `dispute_id` are left out too; the page needs neither. Reading the route while planning this found that the Secretary's party embed sends `birthdate` and `contact_number` for every linked party, which the Blotter screen never displays. That over-sending is on the backlog and was not touched here.
+
+**`my_roles` is a list because one resident can be listed twice in the same case.** `validateParties` allows it, even as both Complainant and Respondent. Rows are grouped by case, and the roles are de-duplicated into canonical order.
+
+**Two empty states, kept apart:**
+
+- An account with no linked record gets **200 `{ reason: 'no_resident_record', cases: [] }`**, the shape `routes/myHousehold.js` uses. A bare `[]` would claim "we looked and there are none" about an account nobody could look up.
+- A linked resident with no cases gets `{ cases: [] }` with no reason key. The page says "No cases are linked to your resident record" — **never "you are in no cases"**, because a person the Secretary recorded only as a typed name is never linked, and their cases cannot be found from their account.
+
+**`GET /mine` has to be declared before `GET /:id`.** Express matches in declaration order, so below it `/:id` catches the request: a resident gets 403 from the view guard and the Secretary gets 400 "Invalid case id". `roles:test` could not see this. Its guard probe runs each route's own guards and never matches a URL, so it now asserts the order directly. Its disputes table adds six routes, and it rose from 93 checks to 101.
+
+**`filed_for` is now seen by the residents it describes.** It is free text the Secretary types, 255 characters. CLAUDE.md now says to keep it a short label, never a narrative.
+
+**The page, `MyDisputesPage`, follows `MyHouseholdPage`:**
+
+- it stores `null` on a failed load and renders the error, then loading, then the reason, then the list;
+- it has no buttons;
+- it imports nothing from `DisputesPage`.
+
+"My disputes" joins `RESIDENT_NAV`. "My requests" keeps `end: true`, so only one link is active at a time. The landing page FAQ that said blotter records "are not visible to residents" now says what a resident can see. **The legal modals and `docs/legal-copy.md` did not change.** None of them says residents cannot see blotter records, and the Privacy Policy already lists "blotter or dispute records in which you are named as a party" among what is held.
+
+**Verified without writing to the database:**
+
+- **The real handler, read-only against the live data:** each account saw exactly its own test case in its own role, and an account with no cases got an empty list with no reason.
+- **`disputes:test`, 33 checks, depends on no live rows.** `supabase.from` is replaced by an in-memory fake that honours the select string, embeds included, and requests are dispatched through the real router.
+- **Mutation-checked on scratch copies of the backend, never the real files.** Six mutations each made it fail:
+  - removing the scoping filter;
+  - declaring `/mine` after `/:id` — which `roles:test` also caught, through its new order assertion alone;
+  - widening the select to every case column;
+  - honouring a client-supplied `resident_id`;
+  - swallowing a database error into an empty list;
+  - answering "not linked" with a bare `[]`.
+- **The page, mounted in jsdom:** every state rendered as specified, and exactly one nav link was active on each of `/resident/disputes`, `/resident` and `/resident/household`. `test:auth` still passes 30 of 30, and the frontend builds and lints clean.
