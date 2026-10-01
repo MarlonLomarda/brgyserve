@@ -12,6 +12,8 @@ const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/cha
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
+const { logActivity, diffFields } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -510,6 +512,25 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     message: `BrgyServe: your booking is CONFIRMED - ${quantity > 1 ? `${quantity}x ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`,
   });
 
+  // A guest is recorded as a guest, never by name or contact number; the
+  // purpose is free text and is left out too.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'rental_requests',
+    recordId: created.request_id,
+    after: {
+      item_id: itemId,
+      resident_id: isGuest ? null : borrower.residentId,
+      guest: isGuest,
+      walk_in: !!borrower.walkIn,
+      quantity_requested: quantity,
+      start_datetime: startIso,
+      end_datetime: endIso,
+      status: RENTAL_STATUS.CONFIRMED,
+    },
+  });
+
   const when = `${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}`;
   res.status(201).json({
     message: borrower.walkIn
@@ -590,6 +611,15 @@ router.post('/mine/:id/pay', async (req, res) => {
   if (!updated) {
     return res.status(409).json({ error: 'This charge was just processed — refresh to see its status' });
   }
+
+  // The method only — never the GCash reference number.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.DECLARE_PAYMENT,
+    table: 'charges',
+    recordId: charge.charge_id,
+    after: { method },
+  });
 
   res.json({
     message:
@@ -807,6 +837,18 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     if (fresh) response = fresh;
   }
 
+  // Compared on the columns the edit can touch (the pre-read selects only
+  // those), so a guest's name and contact can never appear in this diff.
+  const diff = diffFields(booking, updated);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'rental_requests',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
+
   res.json({ message: 'Booking updated', request: withDerived(response) });
 });
 
@@ -881,6 +923,15 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     relatedType: RELATED_TYPE.RENTAL_REQUEST,
     relatedTo: id,
     message: `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`,
+  });
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CANCEL,
+    table: 'rental_requests',
+    recordId: id,
+    before: { status: RENTAL_STATUS.CONFIRMED },
+    after: { status: RENTAL_STATUS.CANCELLED },
   });
 
   res.json({ message: 'Booking cancelled — the slot has been freed', request: withDerived(fresh) });
@@ -967,6 +1018,16 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
     relatedType: RELATED_TYPE.RENTAL_REQUEST,
     relatedTo: id,
     message: `BrgyServe: your rental of ${booking.rental_items?.name || 'an item'} has been recorded as ${spoken}. Thank you.`,
+  });
+
+  // The outcome only; the return note is free text and stays on the booking.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.RETURN,
+    table: 'rental_requests',
+    recordId: id,
+    before: { status: RENTAL_STATUS.CONFIRMED },
+    after: { status: outcome },
   });
 
   res.json({ message: 'Return recorded', request: withDerived(updated) });

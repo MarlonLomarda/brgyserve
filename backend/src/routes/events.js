@@ -7,6 +7,8 @@ const { CHARGE_STATUS, CHARGE_TYPE } = require('../constants/charges');
 const { notifyMany } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { searchWords, parsePaging, pageResponse } = require('../utils/listQuery');
+const { logActivity, diffFields } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -253,6 +255,14 @@ router.post('/', async (req, res) => {
     .single();
   if (error) throw new Error(`Failed to create event: ${error.message}`);
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'events',
+    recordId: data.event_id,
+    after: data,
+  });
+
   res.status(201).json({
     message: value.type === EVENT_TYPE.ANNOUNCEMENT ? 'Announcement posted' : 'Activity created',
     event: withStatus(data),
@@ -266,6 +276,15 @@ router.put('/:id', async (req, res) => {
 
   const { error: validationError, value } = validateBody(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
+
+  // The row as it was, so the activity log can record what changed.
+  const { data: before, error: beforeError } = await supabase
+    .from('events')
+    .select(EVENT_FIELDS)
+    .eq('event_id', id)
+    .maybeSingle();
+  if (beforeError) throw new Error(`Failed to load event: ${beforeError.message}`);
+  if (!before) return res.status(404).json({ error: 'Event not found' });
 
   // Turning attendance off KEEPS whatever was already recorded — the roster is
   // evidence, and stage 3b may still need it. Count it so the caller can warn
@@ -288,6 +307,16 @@ router.put('/:id', async (req, res) => {
     .maybeSingle();
   if (error) throw new Error(`Failed to update event: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Event not found' });
+
+  const diff = diffFields(before, data);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'events',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
 
   res.json({
     message:
@@ -325,6 +354,15 @@ async function setArchived(req, res, isArchived) {
     .maybeSingle();
   if (error) throw new Error(`Failed to update event: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Event not found' });
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: isArchived ? ACTIONS.ARCHIVE : ACTIONS.UNARCHIVE,
+    table: 'events',
+    recordId: id,
+    before: { is_archived: !isArchived },
+    after: { is_archived: isArchived },
+  });
 
   res.json({ message: isArchived ? 'Event archived' : 'Event restored', event: withStatus(data) });
 }
@@ -668,6 +706,17 @@ router.post('/:id/attendance', async (req, res) => {
   // roster (see GET /:id/fines) for the Secretary to resolve deliberately —
   // voiding is manual, and permanent for the event once done.
   const by = (Array.isArray(inserted.recorded_by) ? inserted.recorded_by[0] : inserted.recorded_by)?.username;
+
+  // How it was recorded, but NEVER the QR token itself: the token is the
+  // household's credential at every future assembly.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.RECORD_ATTENDANCE,
+    table: 'event_attendees',
+    recordId: inserted.event_attendee_id,
+    after: { event_id: event.event_id, household_id: householdId, via: hasToken ? 'qr_scan' : 'manual' },
+  });
+
   res.status(201).json({
     message: `${label} recorded present.`,
     already_recorded: false,
@@ -706,6 +755,16 @@ router.delete('/:id/attendance/:householdId', async (req, res) => {
   if (!removed || removed.length === 0) {
     return res.status(404).json({ error: 'That household is not recorded present at this event' });
   }
+
+  // A hard delete, so the log row is the only trace the household was ever
+  // marked present.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.REMOVE_ATTENDANCE,
+    table: 'event_attendees',
+    recordId: removed[0].event_attendee_id,
+    before: { event_id: event.event_id, household_id: householdId },
+  });
 
   res.json({
     message: `Household #${householdId} is no longer marked present.`,
@@ -988,6 +1047,20 @@ router.post('/:id/fines', requireRole('secretary'), async (req, res) => {
     })
   );
 
+  // ONE summary row for the whole run, not one per household.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.GENERATE_FINES,
+    table: 'charges',
+    after: {
+      event_id: event.event_id,
+      created_count: created.length,
+      already_fined_count: collided.length,
+      amount_each: amount,
+      total_amount: Number((created.length * amount).toFixed(2)),
+    },
+  });
+
   const after = await collectFineTargets(event);
   res.status(201).json({
     message:
@@ -1056,6 +1129,15 @@ router.post('/:id/fines/:householdId/void', requireRole('secretary'), async (req
   if (!voided) {
     return res.status(409).json({ error: 'That fine was just changed by someone else — reload and try again.' });
   }
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.VOID_FINE,
+    table: 'charges',
+    recordId: charge.charge_id,
+    before: { status: CHARGE_STATUS.UNPAID },
+    after: { status: CHARGE_STATUS.VOID, event_id: event.event_id, household_id: householdId },
+  });
 
   res.json({
     message: `Fine of ₱${Number(charge.amount).toFixed(2)} for household #${householdId} is now void.`,

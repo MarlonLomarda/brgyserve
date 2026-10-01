@@ -12,6 +12,8 @@ const {
 } = require("../constants/charges");
 const { notify } = require("../services/notifications");
 const { RELATED_TYPE } = require("../constants/notifications");
+const { logActivity } = require("../services/activityLog");
+const { ACTIONS } = require("../constants/activityLog");
 
 const router = express.Router();
 
@@ -285,6 +287,20 @@ router.post("/", requireRole(...CREATE_ROLES), async (req, res) => {
     throw new Error(`Failed to submit request: ${error.message}`);
   }
 
+  // Not the purpose: it is free text the resident typed.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: "document_requests",
+    recordId: request.request_id,
+    after: {
+      document_type_id: documentTypeId,
+      resident_id: subject.residentId,
+      status: REQUEST_STATUS.PENDING,
+      walk_in: subject.walkIn,
+    },
+  });
+
   res.status(201).json({
     message: subject.walkIn
       ? `Walk-in request recorded for resident #${subject.residentId}. It is now pending your review.`
@@ -424,6 +440,15 @@ router.post("/mine/:id/cancel", async (req, res) => {
     });
   }
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CANCEL,
+    table: "document_requests",
+    recordId: id,
+    before: { status: REQUEST_STATUS.PENDING },
+    after: { status: REQUEST_STATUS.CANCELLED },
+  });
+
   res.json({ message: "Request cancelled", request });
 });
 
@@ -514,6 +539,15 @@ router.post("/mine/:id/pay", async (req, res) => {
       error: "This charge was just processed — refresh to see its status",
     });
   }
+
+  // The method only — never the GCash reference number.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.DECLARE_PAYMENT,
+    table: "charges",
+    recordId: charge.charge_id,
+    after: { method },
+  });
 
   res.json({
     message:
@@ -715,6 +749,17 @@ async function decideRequest(req, res, decision) {
         : `BrgyServe: your ${docName} request has been REJECTED. Reason: ${reason}`,
   });
 
+  // Status only. A document rejection reason is free text, not a code, so it
+  // is not copied into the log; the request row keeps it.
+  await logActivity({
+    userId: req.user.user_id,
+    action: decision === "approve" ? ACTIONS.APPROVE : ACTIONS.REJECT,
+    table: "document_requests",
+    recordId: id,
+    before: { status: REQUEST_STATUS.PENDING },
+    after: { status: update.status },
+  });
+
   res.json({
     message: `Request ${decision === "approve" ? "approved" : "rejected"}`,
     request: finalRequest,
@@ -810,6 +855,15 @@ router.post(
       message: `BrgyServe: your ${existing.document_types?.name || "document"} is READY TO CLAIM. Please pick it up at the barangay hall during office hours.`,
     });
 
+    await logActivity({
+      userId: req.user.user_id,
+      action: ACTIONS.RELEASE,
+      table: "document_requests",
+      recordId: id,
+      before: { status: REQUEST_STATUS.APPROVED },
+      after: { status: REQUEST_STATUS.READY_FOR_RELEASE },
+    });
+
     // Wording changed deliberately: sending is simulated, so the old
     // "the resident has been notified" was a claim the system cannot make.
     res.json({ message: "Request marked ready for release", request });
@@ -858,6 +912,15 @@ router.post("/:id/claim", requireRole("secretary"), async (req, res) => {
       .status(409)
       .json({ error: "Request status just changed — refresh and try again" });
   }
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CLAIM,
+    table: "document_requests",
+    recordId: id,
+    before: { status: REQUEST_STATUS.READY_FOR_RELEASE },
+    after: { status: REQUEST_STATUS.CLAIMED },
+  });
 
   res.json({
     message: "Document released — request marked as claimed",

@@ -508,8 +508,18 @@ let skipReason = '';
     for (const id of created.users) {
       await supabase.from('password_resets').delete().eq('user_id', id);
       await supabase.from('notifications').delete().eq('user_id', id);
+      // The activity log rows the instrumented routes wrote about this account,
+      // as the actor (the reset) or as the record. They must go BEFORE the
+      // user: activity_logs.user_id references users, with no ON DELETE.
+      await supabase.from('activity_logs').delete().eq('user_id', id);
+      await supabase.from('activity_logs').delete().eq('table_name', 'users').eq('record_id', id);
       await supabase.from('profiles').delete().eq('user_id', id);
       await supabase.from('users').delete().eq('user_id', id);
+    }
+    if (created.users.length) {
+      const { data: leftLogs, error: logErr } = await supabase
+        .from('activity_logs').select('log_id').in('user_id', created.users);
+      if (!logErr) check('every activity log row was removed', (leftLogs || []).length === 0, `${(leftLogs || []).length} left`);
     }
     const { count: leftUsers } = await supabase
       .from('users').select('*', { count: 'exact', head: true }).ilike('username', `${STAMP}%`);

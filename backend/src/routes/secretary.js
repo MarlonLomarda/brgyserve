@@ -8,6 +8,8 @@ const { RELATED_TYPE } = require('../constants/notifications');
 const { generateTemporaryPassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
 const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
+const { logActivity, pick } = require('../services/activityLog');
+const { ACTIONS, RESIDENT_LOG_FIELDS } = require('../constants/activityLog');
 const {
   findUserByEmail,
   uniqueViolationField,
@@ -221,6 +223,16 @@ router.post('/accounts', async (req, res) => {
     await supabase.from('users').delete().eq('user_id', user.user_id);
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
+
+  // Username and role only — never the temporary password, its hash, or the
+  // new official's email and phone.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'users',
+    recordId: user.user_id,
+    after: { username: user.username, role: user.role },
+  });
 
   res.status(201).json({
     message: 'Account created. Share the temporary password securely; the user must change it on first login.',
@@ -442,6 +454,17 @@ router.post('/pending-residents/:userId/link', async (req, res) => {
     }
   }
 
+  // profiles is keyed by user_id, so that is the record. Whether a number was
+  // backfilled is noted; the number itself is not.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.LINK,
+    table: 'profiles',
+    recordId: userId,
+    before: { resident_id: account.profile?.resident_id ?? null },
+    after: { resident_id: residentId, contact_backfilled: contactBackfilled },
+  });
+
   res.json({
     message: 'Profile linked to resident record',
     user_id: userId,
@@ -526,6 +549,16 @@ router.post('/pending-residents/:userId/create-resident', async (req, res) => {
     throw new Error(`Failed to link new resident record: ${linkError.message}`);
   }
 
+  // Same identifying fields as the master list's add route, plus the account
+  // it was linked to in the same step.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'resident_records',
+    recordId: resident.resident_id,
+    after: { ...pick(resident, RESIDENT_LOG_FIELDS), linked_user_id: userId },
+  });
+
   res.status(201).json({ message: 'Resident record created and linked', user_id: userId, resident });
 });
 
@@ -575,6 +608,15 @@ router.post('/pending-residents/:userId/activate', async (req, res) => {
   if (!activated) {
     return res.status(409).json({ error: 'Account state just changed — refresh and try again' });
   }
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.ACTIVATE,
+    table: 'users',
+    recordId: userId,
+    before: { is_active: false },
+    after: { is_active: true },
+  });
 
   res.json({ message: 'Account activated. The resident can now log in.', user_id: userId });
 });
@@ -683,6 +725,17 @@ router.post('/pending-residents/:userId/reject', async (req, res) => {
     message: `BrgyServe: ${rejectionMessage(reason)}`,
   });
 
+  // The reason CODE only. The Secretary's note is internal free text and
+  // stays on the users row.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.REJECT,
+    table: 'users',
+    recordId: userId,
+    before: { is_rejected: false },
+    after: { is_rejected: true, rejection_reason: reason },
+  });
+
   res.json({
     message: `Registration rejected. @${rejected.username} is told the reason when they try to sign in.`,
     user_id: userId,
@@ -735,6 +788,15 @@ router.post('/pending-residents/:userId/unreject', async (req, res) => {
   // would announce a non-event, and the applicant would still not be able to
   // log in. They are told when the account is ACTIVATED, which is the point at
   // which something actually changed for them.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UNREJECT,
+    table: 'users',
+    recordId: userId,
+    before: { is_rejected: true, rejection_reason: account.rejection_reason ?? null },
+    after: { is_rejected: false },
+  });
+
   res.json({
     message: `Rejection cleared. @${restored.username} is awaiting review again.`,
     user_id: userId,

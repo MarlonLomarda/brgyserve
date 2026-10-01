@@ -5,6 +5,8 @@ const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/cha
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { frontendOrigin } = require('../utils/frontendOrigin');
+const { logActivity } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 const {
   createCheckoutSession,
   retrieveCheckoutSession,
@@ -534,6 +536,19 @@ router.post('/gcash/recheck/:chargeId', async (req, res) => {
   const result = await settlePaidCharge(charge, payment, {
     source: `resident recheck by ${req.user.username}`,
   });
+  // Logged here and in reconcile — the two settle triggers a PERSON starts —
+  // and only when THIS call turned the charge PAID. Never inside
+  // settlePaidCharge, which the webhook also calls with no user behind it.
+  if (result.outcome === SETTLE_OUTCOME.RECORDED) {
+    await logActivity({
+      userId: req.user.user_id,
+      action: ACTIONS.SETTLE_PAYMENT,
+      table: 'charges',
+      recordId: chargeId,
+      before: { status: CHARGE_STATUS.UNPAID },
+      after: { status: CHARGE_STATUS.PAID, payment_id: result.payment?.payment_id ?? null, via: 'recheck' },
+    });
+  }
   res.json({
     settled: result.outcome === SETTLE_OUTCOME.RECORDED,
     outcome: result.outcome,
@@ -577,6 +592,16 @@ router.post('/gcash/reconcile/:chargeId', requireRole('treasurer', 'secretary'),
   }
 
   const result = await settlePaidCharge(charge, payment, { source: `reconcile by ${req.user.username}` });
+  if (result.outcome === SETTLE_OUTCOME.RECORDED) {
+    await logActivity({
+      userId: req.user.user_id,
+      action: ACTIONS.SETTLE_PAYMENT,
+      table: 'charges',
+      recordId: chargeId,
+      before: { status: CHARGE_STATUS.UNPAID },
+      after: { status: CHARGE_STATUS.PAID, payment_id: result.payment?.payment_id ?? null, via: 'reconcile' },
+    });
+  }
   res.json({
     settled: result.outcome === SETTLE_OUTCOME.RECORDED,
     outcome: result.outcome,

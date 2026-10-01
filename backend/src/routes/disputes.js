@@ -2,6 +2,8 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { NATURES, PARTY_ROLE, PARTY_ROLES } = require('../constants/disputes');
+const { logActivity, diffFields, pick } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -31,6 +33,14 @@ const PARTY_EMBED = `
     resident_records ( resident_id, first_name, middle_name, last_name, suffix, birthdate, address, contact_number ) )
 `;
 const CASE_FIELDS = 'dispute_id, barangay_case_no, date_filed, time_filed, filed_for, nature_of_case, is_settled';
+const CASE_KEYS = CASE_FIELDS.split(',').map((k) => k.trim());
+
+// Parties as the activity log records them: role and resident_id only, sorted
+// so the same set always compares equal. Never a name — a non-resident party
+// is just { role, resident_id: null }.
+const partyShape = (parties) => (parties || [])
+  .map((p) => ({ role: p.role, resident_id: p.resident_id ?? null }))
+  .sort((a, b) => a.role.localeCompare(b.role) || (a.resident_id ?? 0) - (b.resident_id ?? 0));
 const DETAIL_FIELDS = `${CASE_FIELDS}, ${PARTY_EMBED}`;
 
 // Strip PostgREST .or() syntax chars and LIKE wildcards from a search term.
@@ -367,6 +377,14 @@ router.post('/', requireRole('secretary'), async (req, res) => {
     throw new Error(`Case reverted — failed to add parties: ${partyInsertError.message}`);
   }
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'dispute_records',
+    recordId: dispute.dispute_id,
+    after: { ...caseValue, is_settled: false, parties: partyShape(parties) },
+  });
+
   res.status(201).json({ message: 'Dispute case recorded', dispute: await loadDetail(dispute.dispute_id) });
 });
 
@@ -436,9 +454,26 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
       throw new Error(`Update reverted — failed to replace parties: ${deleteError.message}`);
     }
   }
-  void oldParties; // captured for reference; ids drive the restore path above
+  // The ids drive the restore path above; oldParties feeds the activity log.
+  const detail = await loadDetail(id);
 
-  res.json({ message: 'Dispute case updated', dispute: await loadDetail(id) });
+  // Case fields re-read from the database on both sides, so a time stored as
+  // 14:26:00 does not read as changed from the 14:26 that was sent. Parties
+  // compare by role and resident_id — a swapped typed name does not show.
+  const diff = diffFields(
+    { ...pick(existing, CASE_KEYS), parties: partyShape(oldParties) },
+    { ...pick(detail, CASE_KEYS), parties: partyShape(parties) },
+  );
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'dispute_records',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
+
+  res.json({ message: 'Dispute case updated', dispute: detail });
 });
 
 // PATCH /api/disputes/:id/settle — set is_settled true/false (Secretary).
@@ -457,6 +492,16 @@ router.patch('/:id/settle', requireRole('secretary'), async (req, res) => {
     .maybeSingle();
   if (error) throw new Error(`Failed to update case: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Case not found' });
+
+  // The new state only: the update is not guarded on the old one, so this
+  // route cannot say what it was before.
+  await logActivity({
+    userId: req.user.user_id,
+    action: req.body.is_settled ? ACTIONS.SETTLE : ACTIONS.REOPEN,
+    table: 'dispute_records',
+    recordId: id,
+    after: { is_settled: req.body.is_settled },
+  });
 
   res.json({
     message: req.body.is_settled ? 'Case marked settled' : 'Case reopened',

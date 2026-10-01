@@ -4,6 +4,8 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
+const { logActivity } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -226,6 +228,16 @@ router.post('/:id/verify', async (req, res) => {
     relatedType: RELATED_TYPE.CHARGE,
     relatedTo: id,
     message,
+  });
+
+  // The new payment row and its method, never the GCash reference number.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.VERIFY_PAYMENT,
+    table: 'charges',
+    recordId: id,
+    before: { status: CHARGE_STATUS.UNPAID },
+    after: { status: CHARGE_STATUS.PAID, payment_id: payment.payment_id, payment_method: method },
   });
 
   res.json({ message: 'Payment recorded — charge marked PAID', payment });

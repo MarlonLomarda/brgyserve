@@ -10,6 +10,8 @@ const { REJECTION_REASON } = require('../constants/registration');
 const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
 const { DEFAULT_PER_PAGE, MAX_PER_PAGE, sanitizeTerm } = require('../utils/listQuery');
 const { toCsvTable } = require('../utils/csv');
+const { logActivity, diffFields, pick } = require('../services/activityLog');
+const { ACTIONS, RESIDENT_LOG_FIELDS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -770,6 +772,14 @@ router.post('/import/commit', requireRole('secretary'), async (req, res) => {
   }
 
   const ids = inserted.map((r) => r.resident_id).sort((a, b) => a - b);
+  // ONE summary row for the whole file — counts only, no per-record rows and
+  // no personal data.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.IMPORT,
+    table: 'resident_records',
+    after: { inserted_count: ids.length, skipped_count: rows.length - toInsert.length },
+  });
   const result = {
     message: `${ids.length} resident record${ids.length === 1 ? '' : 's'} imported`,
     imported_count: ids.length,
@@ -907,6 +917,16 @@ router.post('/', requireRole('secretary'), async (req, res) => {
     throw new Error(`Failed to create resident record: ${error.message}`);
   }
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'resident_records',
+    recordId: record.resident_id,
+    // How many possible duplicates the Secretary confirmed past, if any — the
+    // soft check's override is the decision worth being able to trace.
+    after: { ...pick(record, RESIDENT_LOG_FIELDS), duplicate_matches_confirmed: matches.length },
+  });
+
   res.status(201).json({ message: 'Resident record created', record, matches });
 });
 
@@ -925,9 +945,11 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
+  // The whole row, not just the two columns the checks below need: the
+  // activity log diffs it against the updated row, field by field.
   const { data: existing, error: loadError } = await supabase
     .from('resident_records')
-    .select('resident_id, is_archived')
+    .select('*')
     .eq('resident_id', id)
     .maybeSingle();
   if (loadError) {
@@ -953,6 +975,19 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   if (!record) {
     return res.status(404).json({ error: 'Resident record not found' });
   }
+
+  // Only the fields that changed — which CAN include contact_number,
+  // birthdate, address and the other personal fields, when those are what the
+  // Secretary corrected.
+  const diff = diffFields(existing, record);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'resident_records',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
 
   res.json({ message: 'Resident record updated', record });
 });
@@ -1128,6 +1163,17 @@ router.post('/:id/archive', requireRole('secretary'), async (req, res) => {
     }
   }
 
+  // The cascade is part of the same action, so it goes in the same row rather
+  // than a separate DEACTIVATE per account.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.ARCHIVE,
+    table: 'resident_records',
+    recordId: id,
+    before: { is_archived: false },
+    after: { is_archived: true, deactivated_user_ids: accountIds },
+  });
+
   res.json({
     message: accountIds.length
       ? `Resident record archived; account${accountIds.length === 1 ? '' : 's'} ${dependencies.accounts.map((a) => `@${a.username}`).join(', ')} deactivated`
@@ -1191,6 +1237,15 @@ router.post('/:id/unarchive', requireRole('secretary'), async (req, res) => {
       throw new Error(`Restore reverted — failed to reactivate the linked account: ${cascadeError.message}`);
     }
   }
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UNARCHIVE,
+    table: 'resident_records',
+    recordId: id,
+    before: { is_archived: true },
+    after: { is_archived: false, reactivated_user_ids: accounts.map((a) => a.user_id) },
+  });
 
   res.json({
     message: accounts.length

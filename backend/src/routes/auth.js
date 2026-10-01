@@ -15,6 +15,8 @@ const {
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
 const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
+const { logActivity } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 const {
   findUserByEmail,
   uniqueViolationField,
@@ -167,6 +169,18 @@ router.post('/register', registerLimiter, async (req, res) => {
     await supabase.from('users').delete().eq('user_id', user.user_id);
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
+
+  // Unauthenticated, so the actor is the account just created: the applicant
+  // registering themselves. Logged only after the profile insert succeeded —
+  // the failure path above deletes the user, which a log row referencing it
+  // would block. Username and role only, never the claimed personal details.
+  await logActivity({
+    userId: user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'users',
+    recordId: user.user_id,
+    after: { username: user.username, role: user.role },
+  });
 
   res.status(201).json({
     message: 'Registration received. Your account is pending approval by the Barangay Secretary.',
@@ -355,6 +369,14 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   if (updateError) {
     throw new Error(`Failed to update password: ${updateError.message}`);
   }
+
+  // That it happened, and nothing else.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.PASSWORD_CHANGE,
+    table: 'users',
+    recordId: req.user.user_id,
+  });
 
   res.json({ message: 'Password changed successfully' });
 });
@@ -696,6 +718,16 @@ router.post('/reset-password', async (req, res) => {
   // serves residents, and residents are never created with that flag — only
   // Secretary-created staff accounts are. Clearing a flag this flow does not
   // own would be reaching outside it.
+  //
+  // Unauthenticated: the actor is the account the token belonged to. That it
+  // happened, and nothing else — no token, no hash, no values.
+  await logActivity({
+    userId: user.user_id,
+    action: ACTIONS.PASSWORD_RESET,
+    table: 'users',
+    recordId: user.user_id,
+  });
+
   res.json({ message: RESET_SUCCESS_MESSAGE });
 });
 

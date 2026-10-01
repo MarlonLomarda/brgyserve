@@ -1,8 +1,12 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { logActivity, diffFields } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
+
+const TYPE_FIELDS = 'document_type_id, name, description, fee, is_active';
 
 const MAX_FEE = 99999999.99; // numeric(10,2) ceiling
 
@@ -69,9 +73,17 @@ router.post('/', async (req, res) => {
   const { data, error } = await supabase
     .from('document_types')
     .insert(value)
-    .select('document_type_id, name, description, fee, is_active')
+    .select(TYPE_FIELDS)
     .single();
   if (error) throw new Error(`Failed to create document type: ${error.message}`);
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'document_types',
+    recordId: data.document_type_id,
+    after: data,
+  });
 
   res.status(201).json({ message: 'Document type created', document_type: data });
 });
@@ -87,14 +99,33 @@ router.put('/:id', async (req, res) => {
     return res.status(409).json({ error: 'A document type with that name already exists' });
   }
 
+  // The row as it was, so the activity log can record what changed.
+  const { data: before, error: beforeError } = await supabase
+    .from('document_types')
+    .select(TYPE_FIELDS)
+    .eq('document_type_id', id)
+    .maybeSingle();
+  if (beforeError) throw new Error(`Failed to load document type: ${beforeError.message}`);
+  if (!before) return res.status(404).json({ error: 'Document type not found' });
+
   const { data, error } = await supabase
     .from('document_types')
     .update(value)
     .eq('document_type_id', id)
-    .select('document_type_id, name, description, fee, is_active')
+    .select(TYPE_FIELDS)
     .maybeSingle();
   if (error) throw new Error(`Failed to update document type: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Document type not found' });
+
+  const diff = diffFields(before, data);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'document_types',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
 
   res.json({ message: 'Document type updated', document_type: data });
 });
@@ -115,6 +146,16 @@ async function setActive(req, res, isActive) {
     .maybeSingle();
   if (error) throw new Error(`Failed to update document type: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Document type not found' });
+
+  // The new state only: the update is not guarded on the old one, so this
+  // route cannot say what it was before.
+  await logActivity({
+    userId: req.user.user_id,
+    action: isActive ? ACTIONS.ACTIVATE : ACTIONS.DEACTIVATE,
+    table: 'document_types',
+    recordId: id,
+    after: { is_active: isActive },
+  });
 
   res.json({
     message: `"${data.name}" ${isActive ? 'reactivated' : 'deactivated'}`,

@@ -60,6 +60,9 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
   const created = { events: [], households: [] };
   const cleanup = async () => {
     for (const id of created.events) {
+      // The RECORD_ATTENDANCE rows the instrumented route logged for the test
+      // event — found by the event id the route writes into new_value.
+      await db.from('activity_logs').delete().eq('table_name', 'event_attendees').eq('new_value->>event_id', String(id));
       await db.from('event_attendees').delete().eq('event_id', id);
       await db.from('events').delete().eq('event_id', id);
     }
@@ -250,6 +253,12 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
       .ilike('address', 'TEST 3d%');
     check('every test event was removed', leftoverEvents === 0, `${leftoverEvents} left`);
     check('every test household was removed', leftoverHouseholds === 0, `${leftoverHouseholds} left`);
+    for (const id of created.events) {
+      const { count: leftLogs } = await db
+        .from('activity_logs').select('*', { count: 'exact', head: true })
+        .eq('table_name', 'event_attendees').eq('new_value->>event_id', String(id));
+      check(`every activity log row for test event ${id} was removed`, leftLogs === 0, `${leftLogs} left`);
+    }
   }
 
   console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`);

@@ -2,6 +2,8 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { ITEM_TYPE, ITEM_TYPES } = require('../constants/rentals');
+const { logActivity, diffFields } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -100,6 +102,14 @@ router.post('/', async (req, res) => {
     .single();
   if (error) throw new Error(`Failed to create rental item: ${error.message}`);
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'rental_items',
+    recordId: data.item_id,
+    after: data,
+  });
+
   res.status(201).json({ message: 'Rental item created', rental_item: data });
 });
 
@@ -114,6 +124,15 @@ router.put('/:id', async (req, res) => {
     return res.status(409).json({ error: 'A rental item with that name already exists' });
   }
 
+  // The row as it was, so the activity log can record what changed.
+  const { data: before, error: beforeError } = await supabase
+    .from('rental_items')
+    .select(ITEM_FIELDS)
+    .eq('item_id', id)
+    .maybeSingle();
+  if (beforeError) throw new Error(`Failed to load rental item: ${beforeError.message}`);
+  if (!before) return res.status(404).json({ error: 'Rental item not found' });
+
   const { data, error } = await supabase
     .from('rental_items')
     .update(value)
@@ -122,6 +141,16 @@ router.put('/:id', async (req, res) => {
     .maybeSingle();
   if (error) throw new Error(`Failed to update rental item: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Rental item not found' });
+
+  const diff = diffFields(before, data);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'rental_items',
+    recordId: id,
+    before: diff.before,
+    after: diff.after,
+  });
 
   res.json({ message: 'Rental item updated', rental_item: data });
 });
@@ -143,6 +172,16 @@ async function setActive(req, res, isActive) {
     .maybeSingle();
   if (error) throw new Error(`Failed to update rental item: ${error.message}`);
   if (!data) return res.status(404).json({ error: 'Rental item not found' });
+
+  // The new state only: the update is not guarded on the old one, so this
+  // route cannot say what it was before.
+  await logActivity({
+    userId: req.user.user_id,
+    action: isActive ? ACTIONS.ACTIVATE : ACTIONS.DEACTIVATE,
+    table: 'rental_items',
+    recordId: id,
+    after: { is_active: isActive },
+  });
 
   res.json({
     message: `"${data.name}" ${isActive ? 'reactivated' : 'deactivated'}`,

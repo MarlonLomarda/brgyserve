@@ -4,6 +4,8 @@ const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { HOUSEHOLD_ROLE, HOUSEHOLD_ROLES, ROLE_ORDER } = require('../constants/households');
 const { searchWords, parsePaging, isRangeError, pageResponse } = require('../utils/listQuery');
+const { logActivity, diffFields } = require('../services/activityLog');
+const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
 
@@ -519,6 +521,16 @@ router.post('/', requireRole('secretary'), async (req, res) => {
     throw new Error(`Household not created — failed to issue its QR code: ${qrErr.message}`);
   }
 
+  // Not the address — the log names the household by its head, like the
+  // module does. The QR token is never logged.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'household_records',
+    recordId: created.household_id,
+    after: { head_resident_id: headResidentId, head_membership_id: membership.membership_id, is_active: true },
+  });
+
   res.status(201).json({
     message: `Household #${created.household_id} created with ${residentName(head)} as head.`,
     household: {
@@ -613,6 +625,22 @@ router.post('/:id/members', requireRole('secretary'), async (req, res) => {
     throw new Error(`Failed to add the member: ${insertErr.message}`);
   }
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.CREATE,
+    table: 'household_members',
+    recordId: inserted.membership_id,
+    after: {
+      household_id: id,
+      resident_id: residentId,
+      role: roleCheck.value,
+      date_started: today,
+      // A transfer also ENDED the resident's old membership, in the same action.
+      ended_membership_id: existing ? existing.membership_id : null,
+      transferred_from_household_id: existing ? existing.household_id : null,
+    },
+  });
+
   res.status(201).json({
     message: existing
       ? `${residentName(resident)} moved from household #${existing.household_id} and added as ${roleCheck.value}.`
@@ -657,6 +685,15 @@ router.patch('/:id/members/:membershipId', requireRole('secretary'), async (req,
     .single();
   if (error) throw new Error(`Failed to change the role: ${error.message}`);
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'household_members',
+    recordId: membershipId,
+    before: { role: membership.role },
+    after: { role: updated.role },
+  });
+
   res.json({
     message: `${residentName(embedded(membership.resident_records))} is now ${roleCheck.value}.`,
     member: shapeMember(updated),
@@ -691,6 +728,16 @@ router.delete('/:id/members/:membershipId', requireRole('secretary'), async (req
 
   const today = todayInManila();
   await endMembership(membershipId, today);
+
+  // An UPDATE, not a delete: the membership row stays and only ends.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'household_members',
+    recordId: membershipId,
+    before: { date_ended: null },
+    after: { date_ended: today },
+  });
 
   res.json({
     message: `${residentName(embedded(membership.resident_records))} is no longer a member of household #${id}.`,
@@ -773,6 +820,24 @@ router.post('/:id/head', requireRole('secretary'), async (req, res) => {
     throw new Error(`Head unchanged — failed to promote the new head: ${promoteErr.message}`);
   }
 
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'household_members',
+    recordId: membershipId,
+    before: {
+      head_membership_id: currentHead ? currentHead.membership_id : null,
+      head_resident_id: currentHead ? currentHead.resident_id : null,
+      role: membership.role,
+    },
+    after: {
+      head_membership_id: membershipId,
+      head_resident_id: membership.resident_id,
+      role: HOUSEHOLD_ROLE.HEAD,
+      previous_head_role: demoteRole,
+    },
+  });
+
   res.json({
     message: currentHead
       ? `${residentName(newHeadResident)} is now the head of household #${id}; ` +
@@ -848,6 +913,17 @@ router.patch('/:id', requireRole('secretary'), async (req, res) => {
     }
     endedCount = (ended || []).length;
   }
+
+  // The diff CAN include the address, when the address is what changed.
+  const diff = diffFields(household, updated);
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.UPDATE,
+    table: 'household_records',
+    recordId: id,
+    before: diff.before,
+    after: deactivating ? { ...diff.after, memberships_ended: endedCount } : diff.after,
+  });
 
   const notice = hasAddress ? await sameAddressNotice(address, id) : null;
   const parts = [];

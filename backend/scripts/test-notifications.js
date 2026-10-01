@@ -59,6 +59,8 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
 
   const cleanup = async () => {
     for (const id of created.requests) {
+      // The APPROVE rows the instrumented route logged for this test request.
+      await supabase.from('activity_logs').delete().eq('table_name', 'document_requests').eq('record_id', id);
       await supabase.from('notifications').delete().eq('related_type', RELATED_TYPE.DOCUMENT_REQUEST).eq('related_to', id);
       await supabase.from('charges').delete().eq('document_request_id', id);
       await supabase.from('document_requests').delete().eq('request_id', id);
@@ -279,6 +281,12 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
     const { count: leftReqs } = await supabase
       .from('document_requests').select('*', { count: 'exact', head: true }).ilike('purpose', 'NOTIF TEST%');
     check('every test document request was removed', leftReqs === 0, `${leftReqs} left`);
+    if (created.requests.length) {
+      const { count: leftLogs } = await supabase
+        .from('activity_logs').select('*', { count: 'exact', head: true })
+        .eq('table_name', 'document_requests').in('record_id', created.requests);
+      check('every activity log row for the test requests was removed', leftLogs === 0, `${leftLogs} left`);
+    }
   }
 
   console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`);
