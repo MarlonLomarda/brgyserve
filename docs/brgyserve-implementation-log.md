@@ -951,3 +951,33 @@ The `diffFields` comment, which called an empty result "an honest compared, no d
   - removing the marker: 3.
 - **The page, in a throwaway jsdom harness:** all 61 `summarize()` cases render, including the three new marker cases.
 - **No database rows written:** `activity_logs` still holds 18 rows, highest id 52.
+
+### The walkthrough test data was removed, 1 Oct 2026
+
+**The activity-log walkthroughs left test rows in the live database, and they were removed before the defense.** A guarded `BEGIN … COMMIT` script was run in the Supabase SQL Editor. It is not a migration and is not in the repo. It removed:
+
+- resident record 69 ("Activity Testcase") and its walk-in document request 89;
+- that request's charge 160 and its cash payment 76;
+- events 71 ("ACTIVITY LOG TEST EVENT"), 86 and 87;
+- blotter case 10 (TEST-ACT-001), with its parties 30 and 31;
+- the two simulated notifications 173 and 174;
+- all 20 `activity_logs` rows, ids 14–27 and 49–54.
+
+**Checked before and after by hashes, and unchanged:** the 15 protected resident records (1, 5, 7–18 and 40), users 6 and 48, and every user, profile and household membership.
+
+**Counts after:**
+
+| table | rows |
+|---|---|
+| resident_records | 50 |
+| events | 15 |
+| dispute_records | 0 |
+| payments | 66 |
+| users | 24 |
+| activity_logs | 0 |
+
+**What follows from it:**
+
+- **`activity_logs` ids do not restart.** The next real action is logged as id 55, and ids 14–54 will never appear again. The gap is expected, not a bug.
+- **Two pages are empty until someone acts.** The Blotter and the Activity log stay empty until real or demo actions are performed.
+- **The ids above now name nothing.** Records 69, 89, 160, 76, 71, 86, 87 and case 10 no longer exist, and identity columns never hand out a used id again, so none of them will reappear.

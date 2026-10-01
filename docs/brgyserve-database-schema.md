@@ -340,6 +340,7 @@ Stores system audit logs of user actions, including what was changed, where, and
 **Notes:**
 - **Sensitive keys are removed before a row is stored** — removed entirely, not masked, at every depth of `old_value` and `new_value`: passwords and password hashes, tokens and reset links, QR tokens, secrets and API keys, notification message text, provider responses, PayMongo ids and checkout URLs, and any key containing `password`, `token` or `secret`. A string value carrying a `?token=` / `&token=` link is dropped too. The list is `SENSITIVE_KEYS` and its neighbours in `backend/src/constants/activityLog.js`.
 - A CREATE of a resident record stores the name fields only (`RESIDENT_LOG_FIELDS`), not the rest of the row, so the log does not hold a second copy of birthdates, addresses and contact numbers.
+- An edit that changed nothing writes no row: an UPDATE whose old and new values are both empty objects is skipped (`73b6fe6`).
 - Written by `backend/src/services/activityLog.js`, after the action's own write has succeeded; a failure to log is reported to the server console and never undoes or fails the action.
 
 ---
