@@ -72,6 +72,32 @@ function isSensitiveKey(key) {
     || SENSITIVE_SUBSTRINGS.some((s) => k.includes(s));
 }
 
+// Keys STORED in old_value / new_value but never DISPLAYED: the Activity Log
+// page says "Contact number changed" and sends no value. The log keeps values
+// the record no longer shows — an old phone number or address survives only
+// here — so showing them would make the page a lookup for data the barangay
+// has since replaced. Matched case-insensitively on the exact key name, at
+// every depth. Different from SENSITIVE_KEYS, which are never stored at all.
+// guest_name / guest_contact are listed defensively; the columns that hold a
+// guest's particulars are outside_borrower_name / outside_borrower_contact.
+const PERSONAL_FIELDS = [
+  'contact_number', 'birthdate', 'birthplace', 'address', 'sex', 'civil_status', 'religion',
+  'educational_attainment', 'purpose', 'guest_name', 'guest_contact',
+  'outside_borrower_name', 'outside_borrower_contact',
+];
+
+const isPersonalKey = (key) => PERSONAL_FIELDS.includes(String(key).toLowerCase());
+
+// Every table a call site logs to — the Activity Log page's record-type filter.
+// activity:test fails if a call site logs a table missing here, or if one
+// listed here is no longer logged anywhere.
+const LOGGED_TABLES = [
+  'users', 'profiles', 'resident_records', 'household_records', 'household_members',
+  'document_types', 'document_requests', 'charges', 'rental_items', 'rental_requests',
+  'events', 'event_attendees', 'dispute_records',
+];
+
 module.exports = {
   ACTIONS, SENSITIVE_KEYS, SENSITIVE_PREFIXES, SENSITIVE_SUBSTRINGS, RESIDENT_LOG_FIELDS, isSensitiveKey,
+  PERSONAL_FIELDS, isPersonalKey, LOGGED_TABLES,
 };

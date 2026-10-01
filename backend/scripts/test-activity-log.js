@@ -23,7 +23,7 @@ process.env.JWT_SECRET = 'activity-test-signing-key';
 
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { logActivity, logActivityMany, diffFields, scrub } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
-const { ACTIONS, isSensitiveKey } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
+const { ACTIONS, isSensitiveKey, LOGGED_TABLES } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -250,6 +250,21 @@ const fakeFrom = (table) => {
   });
   check('every table_name is a literal naming a table a migration creates', badTable.length === 0,
     badTable.map((c) => `${c.file}:${c.line}`).join(', ') || `${realTables.size} tables known`);
+
+  // The Activity Log page filters by record type from LOGGED_TABLES and labels
+  // every action and table from its own copy of the vocabulary, so all three
+  // must cover exactly what the call sites write.
+  const tablesLogged = [...new Set(calls.map((c) => (c.body.match(/table:\s*(['"])([a-z_]+)\1/) || [])[2]).filter(Boolean))].sort();
+  check('LOGGED_TABLES (the page\'s record-type filter) lists exactly the tables call sites log',
+    JSON.stringify(tablesLogged) === JSON.stringify([...LOGGED_TABLES].sort()),
+    `logged: ${tablesLogged.join(', ')}`);
+  const frontendVocab = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8');
+  const unlabelled = [
+    ...Object.keys(ACTIONS).filter((a) => !new RegExp(`^\\s*${a}:\\s*\\{\\s*label:`, 'm').test(frontendVocab)),
+    ...LOGGED_TABLES.filter((t) => !new RegExp(`^\\s*${t}:\\s*'`, 'm').test(frontendVocab)),
+  ];
+  check('the frontend labels every action and every logged table', unlabelled.length === 0,
+    unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables`);
 
   const badUser = calls.filter((c) => !/userId:\s*(req\.user\.user_id|user\.user_id)\b/.test(c.body));
   check('every userId is the session user, or the account the route just resolved (register, reset)',

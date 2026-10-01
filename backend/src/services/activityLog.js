@@ -1,5 +1,5 @@
 const supabase = require('../config/supabase');
-const { isSensitiveKey } = require('../constants/activityLog');
+const { isSensitiveKey, isPersonalKey } = require('../constants/activityLog');
 
 // ===========================================================================
 // ACTIVITY LOG — who changed what, and when (activity_logs, Table 18).
@@ -117,4 +117,31 @@ function pick(row, fields) {
   return out;
 }
 
-module.exports = { logActivity, logActivityMany, diffFields, pick, scrub };
+// READ side, for the Activity Log page: removes every PERSONAL_FIELDS key, at
+// every depth, the same walk scrub() makes. The value is dropped — the key is
+// ABSENT from what comes back, never null — and the key's name is reported in
+// `withheld` (lowercase, first-seen order, no repeats) so the page can say
+// "Contact number changed" without ever receiving the number. Returns
+// { value, withheld }; the caller's object is never modified.
+function withholdPersonal(value) {
+  const withheld = [];
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object' && !(v instanceof Date)) {
+      const out = {};
+      for (const [key, x] of Object.entries(v)) {
+        if (isPersonalKey(key)) {
+          const name = String(key).toLowerCase();
+          if (!withheld.includes(name)) withheld.push(name);
+          continue;
+        }
+        out[key] = walk(x);
+      }
+      return out;
+    }
+    return v;
+  };
+  return { value: walk(value), withheld };
+}
+
+module.exports = { logActivity, logActivityMany, diffFields, pick, scrub, withholdPersonal };

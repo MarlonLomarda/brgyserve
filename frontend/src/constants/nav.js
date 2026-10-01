@@ -10,6 +10,7 @@ import { FaAddressBook } from "react-icons/fa";
 import { FaPeopleCarry } from "react-icons/fa";
 import { MdNotificationsActive } from "react-icons/md";
 import { IoMdAnalytics } from "react-icons/io";
+import { MdHistory } from "react-icons/md";
 
 // Dashboard nav tabs per role, shared by every page of that role's area.
 export const SECRETARY_NAV = [
@@ -37,6 +38,7 @@ export const SECRETARY_NAV = [
     icon: MdNotificationsActive,
   },
   { to: "/secretary/reports", label: "Reports", icon: IoMdAnalytics },
+  { to: "/secretary/activity-log", label: "Activity log", icon: MdHistory },
 ];
 
 export const RESIDENT_NAV = [
@@ -81,4 +83,5 @@ export const PUNONG_BARANGAY_NAV = [
   },
   { to: "/punong-barangay/events", label: "Events", icon: FaPeopleCarry },
   { to: "/punong-barangay/reports", label: "Reports", icon: IoMdAnalytics },
+  { to: "/punong-barangay/activity-log", label: "Activity log", icon: MdHistory },
 ];

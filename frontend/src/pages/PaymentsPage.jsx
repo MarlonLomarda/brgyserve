@@ -166,7 +166,7 @@ function VerifyPanel({ charge, onDone }) {
           <label>
             Payment method
             <select value={method} onChange={(e) => setMethod(e.target.value)}>
-              <option value="onsite">Onsite (cash)</option>
+              <option value="onsite">Cash (on-site)</option>
               <option value="gcash">GCash</option>
             </select>
           </label>

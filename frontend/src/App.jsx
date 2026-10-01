@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { ROLE_HOME, roleHome } from "./auth/roles";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ActivityLogPage from "./pages/ActivityLogPage";
 import BookRentalPage from "./pages/BookRentalPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DisputesPage from "./pages/DisputesPage";
@@ -410,6 +411,36 @@ export default function App() {
               navItems={PUNONG_BARANGAY_NAV}
             >
               <ReportsPage />
+            </PageLayout>
+          </ProtectedRoute>
+        }
+      />
+      {/* One read-only page on two routes, the Blotter layout: ProtectedRoute
+          takes a single role. The server admits only these two roles too. */}
+      <Route
+        path="/secretary/activity-log"
+        element={
+          <ProtectedRoute role="secretary">
+            <PageLayout
+              dashTitle={"Activity log"}
+              dashSubtitle={"Who changed what, and when. Read-only."}
+              navItems={SECRETARY_NAV}
+            >
+              <ActivityLogPage />
+            </PageLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/punong-barangay/activity-log"
+        element={
+          <ProtectedRoute role="punong_barangay">
+            <PageLayout
+              dashTitle={"Activity log"}
+              dashSubtitle={"Who changed what, and when. Read-only."}
+              navItems={PUNONG_BARANGAY_NAV}
+            >
+              <ActivityLogPage />
             </PageLayout>
           </ProtectedRoute>
         }

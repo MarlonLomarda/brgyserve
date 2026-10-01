@@ -2917,6 +2917,38 @@ button.link-button:hover:not(:disabled) {
   min-height: 0;
 }
 
+/* Activity log (ActivityLogPage). Its own selectors rather than .notif-filters,
+   so neither screen's filter row can move the other. Five controls wrap at
+   every width; the From / To labels reuse .inline-label, and the Change column
+   reuses .col-message and .notif-more above. */
+.log-filters {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+/* Smaller padding, as .list-head select uses: with the base 10px inside the
+   40px height .head-actions sets, descenders were clipped ("tvpes"). */
+.log-filters select,
+.log-filters input {
+  height: 40px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+/* A button centres its text by default; these name a record or a person and
+   read as part of a left-aligned cell. */
+.log-table button.link-button {
+  text-align: left;
+}
+
+.log-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 /* ==========================================================================
    Navigation drawer — THE ONLY NAVIGATION, AT EVERY WIDTH
 

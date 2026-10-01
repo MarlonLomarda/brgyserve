@@ -37,7 +37,7 @@ export function chargeOf(request) {
 }
 
 export const METHOD_LABELS = {
-  onsite: 'Onsite (cash)',
+  onsite: 'Cash (on-site)',
   gcash: 'GCash',
 };
 
