@@ -1,5 +1,5 @@
 const supabase = require('../config/supabase');
-const { isSensitiveKey, isPersonalKey } = require('../constants/activityLog');
+const { ACTIONS, isSensitiveKey, isPersonalKey } = require('../constants/activityLog');
 
 // ===========================================================================
 // ACTIVITY LOG — who changed what, and when (activity_logs, Table 18).
@@ -42,8 +42,12 @@ function scrub(value) {
 
 const isPositiveInteger = (n) => Number.isInteger(Number(n)) && Number(n) > 0;
 const isLabel = (s) => typeof s === 'string' && s.length > 0 && s.length <= 100;
+const isEmptyPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+  && [Object.prototype, null].includes(Object.getPrototypeOf(v)) && Object.keys(v).length === 0;
 
-// One row, or null with a warning when it cannot be written honestly.
+// One row, or null when there is nothing to write: with a warning when it
+// cannot be written honestly, silently when there is simply nothing to say.
+// Shared by logActivity and logActivityMany, so both skip the same rows.
 function buildRow({ userId, action, table, recordId = null, before = null, after = null } = {}) {
   if (userId === undefined || userId === null || userId === '') {
     console.warn(`[activity_logs] skipped ${action || '?'} on ${table || '?'}: no user_id`);
@@ -54,6 +58,12 @@ function buildRow({ userId, action, table, recordId = null, before = null, after
     console.warn(`[activity_logs] skipped ${action || '?'} on ${table || '?'}: invalid user_id, action, table or record_id`);
     return null;
   }
+  // An edit that changed nothing: a Save on an unchanged form would otherwise
+  // write a row that says "nothing changed". Decided on the caller's own
+  // values, BEFORE scrub, and only for UPDATE with BOTH sides empty objects —
+  // null means no values were recorded (PASSWORD_CHANGE) and is never a reason
+  // to skip. Not a fault, so no warning.
+  if (action === ACTIONS.UPDATE && isEmptyPlainObject(before) && isEmptyPlainObject(after)) return null;
   return {
     user_id: Number(userId),
     action,
@@ -93,8 +103,10 @@ const sameValue = (a, b) => (a === b) || JSON.stringify(a) === JSON.stringify(b)
 // For UPDATE calls: only the keys whose values changed. A key present on only
 // one side is IGNORED — a column one query did not select is not a change —
 // so pass two rows read the same way (both from the database, ideally).
-// Returns { before: {}, after: {} } when nothing changed: an honest "compared,
-// no difference", which is not the same claim as no values at all.
+// Returns { before: {}, after: {} } when nothing changed, and an UPDATE given
+// that pair is NOT logged (buildRow): a save that changed nothing is not an
+// action worth recording. Empty is still a different claim from null, which
+// means no values were recorded at all and never suppresses a row.
 function diffFields(before, after) {
   const out = { before: {}, after: {} };
   if (!before || !after || typeof before !== 'object' || typeof after !== 'object') return out;

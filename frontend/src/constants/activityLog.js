@@ -142,6 +142,9 @@ const FIELD_LABELS = {
   contact_number: 'Contact number',
   outside_borrower_name: "Guest's name",
   outside_borrower_contact: "Guest's contact number",
+  // A blotter edit's count of corrected walk-in names — the log keeps the
+  // count, never the names (typedNamesCorrected in routes/disputes.js).
+  parties_renamed: 'Party names corrected',
 };
 
 function humanize(key) {
@@ -284,6 +287,10 @@ function updateSummary(table, before, after, withheld) {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => k !== 'memberships_ended');
   const changes = keys.map((key) => {
     if (key === 'parties') return 'Parties changed';
+    if (key === 'parties_renamed') {
+      const n = Number(after.parties_renamed) || 0;
+      return n === 1 ? 'Party name corrected (1)' : `Party names corrected (${n})`;
+    }
     const was = formatValue(table, key, before[key]);
     const now = formatValue(table, key, after[key]);
     return was === null || now === null ? `${fieldLabel(key)} changed` : `${fieldLabel(key)} ${was} to ${now}`;

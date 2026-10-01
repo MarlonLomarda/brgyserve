@@ -23,7 +23,7 @@ process.env.JWT_SECRET = 'activity-test-signing-key';
 
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { logActivity, logActivityMany, diffFields, scrub } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
-const { ACTIONS, isSensitiveKey, LOGGED_TABLES } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
+const { ACTIONS, isSensitiveKey, isPersonalKey, LOGGED_TABLES } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -185,6 +185,52 @@ const fakeFrom = (table) => {
   check('  an empty or bad list inserts nothing and does not throw', inserts.length === before4);
 
   // -------------------------------------------------------------------------
+  section('an UPDATE that changed nothing writes nothing');
+  {
+    const n0 = inserts.length;
+    quietConsole();
+    const skipped = await logActivity({ userId: 7, action: ACTIONS.UPDATE, table: 'events', recordId: 86, before: {}, after: {} });
+    loudConsole();
+    check('UPDATE with {} / {} inserts nothing', inserts.length === n0 && skipped === undefined);
+    check('  silently: an unchanged save is not a fault', captured.warn.length === 0 && captured.error.length === 0,
+      [...captured.warn, ...captured.error].join(' | '));
+
+    // The row just inserted, or null when nothing was.
+    const written = async (entry) => {
+      const n = inserts.length;
+      await logActivity(entry);
+      return inserts.length === n + 1 ? inserts.at(-1) : null;
+    };
+    const edit = { userId: 7, action: ACTIONS.UPDATE, table: 'events', recordId: 86 };
+    const one = await written({ ...edit, before: { title: 'A' }, after: { title: 'B' } });
+    check('UPDATE with one changed field is logged', one?.new_value?.title === 'B', JSON.stringify(one?.new_value));
+    check('UPDATE with only the before side empty is logged', !!await written({ ...edit, before: {}, after: { title: 'B' } }));
+    check('UPDATE with only the after side empty is logged', !!await written({ ...edit, before: { title: 'A' }, after: {} }));
+    check('UPDATE with null / null is logged — null means no values, never a reason to skip',
+      !!await written({ ...edit, before: null, after: null }));
+    check('UPDATE with {} / null is logged', !!await written({ ...edit, before: {}, after: null }));
+    check('PASSWORD_CHANGE with null / null is logged',
+      !!await written({ userId: 7, action: ACTIONS.PASSWORD_CHANGE, table: 'users', recordId: 7, before: null, after: null }));
+    check('CREATE with {} / {} is still logged — the rule is for edits only',
+      !!await written({ userId: 7, action: ACTIONS.CREATE, table: 'events', recordId: 90, before: {}, after: {} }));
+    check('IMPORT with {} / {} is still logged',
+      !!await written({ userId: 7, action: ACTIONS.IMPORT, table: 'resident_records', before: {}, after: {} }));
+    const credential = await written({ ...edit, table: 'users', recordId: 7, before: { password_hash: 'a' }, after: { password_hash: 'b' } });
+    check('the rule reads the caller\'s values BEFORE scrub: a change only to a credential is logged, its values removed',
+      !!credential && JSON.stringify(credential.old_value) === '{}' && JSON.stringify(credential.new_value) === '{}');
+
+    const nb = inserts.length;
+    await logActivityMany([
+      { ...edit, recordId: 1, before: {}, after: {} },
+      { ...edit, recordId: 2, before: { title: 'A' }, after: { title: 'B' } },
+    ]);
+    const kept = inserts.at(-1);
+    check('logActivityMany drops the unchanged UPDATE and keeps the real one',
+      inserts.length === nb + 1 && Array.isArray(kept) && kept.length === 1 && kept[0].record_id === 2,
+      Array.isArray(kept) ? kept.map((k) => k.record_id).join(', ') : String(kept));
+  }
+
+  // -------------------------------------------------------------------------
   section('every call site in routes/');
   const ROUTES = path.join(__dirname, '..', 'src', 'routes');
   const MIGRATIONS = path.join(__dirname, '..', 'migrations');
@@ -265,6 +311,14 @@ const fakeFrom = (table) => {
   ];
   check('the frontend labels every action and every logged table', unlabelled.length === 0,
     unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables`);
+  // Keys a route invents for the log rather than copying from a column. The
+  // frontend would fall back to "Parties renamed 0 to 1" without its own
+  // wording, so each must be named there.
+  const LOG_MARKERS = ['parties_renamed'];
+  const markersMissing = LOG_MARKERS.filter((m) => !new RegExp(`^\\s*${m}:\\s*'`, 'm').test(frontendVocab)
+    || !fs.readdirSync(ROUTES).some((f) => fs.readFileSync(path.join(ROUTES, f), 'utf8').includes(m)));
+  check('every log marker a route writes is labelled in the frontend', markersMissing.length === 0,
+    markersMissing.join(', ') || LOG_MARKERS.join(', '));
 
   const badUser = calls.filter((c) => !/userId:\s*(req\.user\.user_id|user\.user_id)\b/.test(c.body));
   check('every userId is the session user, or the account the route just resolved (register, reset)',
@@ -351,6 +405,81 @@ const fakeFrom = (table) => {
   answers.dispute_records = null; // the case does not exist
   const missing = await invoke(handlerFor(disputes, 'patch', '/:id/settle'), { user: secretary, params: { id: '77' }, body: { is_settled: true } });
   check('a 404 path logs nothing', missing.status === 404 && logged.length === 3, `${logged.length} row(s)`);
+
+  // -------------------------------------------------------------------------
+  section('blotter edit: a corrected walk-in name is counted, never named');
+  {
+    // The real PUT handler against a scripted fake: dispute_records answers
+    // the case (and "no other case" to the case-number check), dispute_parties
+    // answers the parties as they were, and activity_logs inserts are kept.
+    const put = handlerFor(disputes, 'put', '/:id');
+    const CASE = {
+      dispute_id: 12, barangay_case_no: 'BC-2026-012', date_filed: '2026-09-30', time_filed: '09:31:00',
+      filed_for: 'Unjust vexation', nature_of_case: 'Civil', is_settled: false,
+    };
+    const edit = async (oldParties, newParties) => {
+      const rows = [];
+      supabase.from = (table) => {
+        const op = { kind: 'select', sel: '', neq: false };
+        const b = {
+          select(s) { op.sel = String(s || ''); return b; },
+          eq() { return b; }, in() { return b; }, not() { return b; }, maybeSingle() { return b; },
+          neq() { op.neq = true; return b; },
+          update() { op.kind = 'update'; return b; },
+          delete() { op.kind = 'delete'; return b; },
+          insert(r) { op.kind = 'insert'; if (table === 'activity_logs') rows.push(r); return b; },
+          then(res, rej) {
+            let data = null;
+            if (op.kind === 'select') {
+              if (table === 'dispute_records') data = op.neq ? [] : CASE;
+              else if (table === 'dispute_parties') {
+                data = op.sel.includes('first_name') ? oldParties : oldParties.map((_, i) => ({ dispute_party_id: i + 1 }));
+              } else if (table === 'resident_records') data = [{ resident_id: 69 }];
+            }
+            return Promise.resolve({ data, error: null }).then(res, rej);
+          },
+        };
+        return b;
+      };
+      const r = await invoke(put, {
+        user: secretary, params: { id: '12' },
+        body: { ...CASE, time_filed: '09:31', parties: newParties },
+      });
+      return { status: r.status, rows, error: r.body?.error };
+    };
+    const linked = { role: 'Complainant', resident_id: 69, first_name: null, last_name: null };
+    const typo = { role: 'Respondent', resident_id: null, first_name: 'Juan', last_name: 'Dlea Cruz' };
+    const fixed = { role: 'Respondent', resident_id: null, first_name: 'Juan', last_name: 'Dela Cruz' };
+    const pedroTypo = { role: 'Respondent', resident_id: null, first_name: 'Pedro', last_name: 'Santoss' };
+    const pedro = { role: 'Respondent', resident_id: null, first_name: 'Pedro', last_name: 'Santos' };
+    const asInput = (p) => (p.resident_id ? { role: p.role, resident_id: p.resident_id } : { role: p.role, first_name: p.first_name, last_name: p.last_name });
+    const NAMES = /Juan|Dela|Dlea|Pedro|Santos/;
+    const keysOf = (row) => [...Object.keys(row?.old_value || {}), ...Object.keys(row?.new_value || {})];
+
+    const renamed = await edit([linked, typo], [linked, fixed].map(asInput));
+    const r1 = renamed.rows[0];
+    check('correcting one walk-in name logs ONE row', renamed.status === 200 && renamed.rows.length === 1,
+      `${renamed.status} ${renamed.error || ''} — ${renamed.rows.length} row(s)`);
+    check('  holding only a count: { parties_renamed: 0 } → { parties_renamed: 1 }',
+      JSON.stringify(r1?.old_value) === '{"parties_renamed":0}' && JSON.stringify(r1?.new_value) === '{"parties_renamed":1}',
+      `${JSON.stringify(r1?.old_value)} → ${JSON.stringify(r1?.new_value)}`);
+    check('  no name anywhere in the row', !NAMES.test(JSON.stringify(r1 || {})));
+    check('  no key that is a credential or a personal field', keysOf(r1).every((k) => !isSensitiveKey(k) && !isPersonalKey(k)));
+
+    const unchanged = await edit([linked, fixed], [linked, fixed].map(asInput));
+    check('saving the same parties again logs NOTHING (the empty-edit rule)', unchanged.status === 200 && unchanged.rows.length === 0,
+      `${unchanged.rows.length} row(s): ${JSON.stringify(unchanged.rows[0]?.new_value)}`);
+
+    const added = await edit([linked, fixed], [linked, fixed, pedro].map(asInput));
+    const r3 = added.rows[0];
+    check('adding a walk-in shows in parties, and is NOT counted as a rename',
+      added.rows.length === 1 && 'parties' in (r3?.new_value || {}) && !keysOf(r3).includes('parties_renamed'),
+      JSON.stringify(r3?.new_value));
+
+    const two = await edit([linked, typo, pedroTypo], [linked, fixed, pedro].map(asInput));
+    check('two corrected names count as 2', JSON.stringify(two.rows[0]?.new_value) === '{"parties_renamed":2}',
+      JSON.stringify(two.rows[0]?.new_value));
+  }
 
   console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`);
   process.exit(failures ? 1 : 0);

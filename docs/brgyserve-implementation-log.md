@@ -909,3 +909,45 @@ All four now use the same `PH_MOBILE_RE` as registration. The message moved into
   - Manila times with the process clock set to UTC;
   - Staff sent away before any log request.
 - **Headless Chrome at 1280 and 390** on the real App DOM and `index.css`: no page overflow, the table inside its wrapper at 1280, labelled cards at 390. It caught two layout faults first — centred link buttons and clipped select text — both fixed with rules scoped to `.log-filters` / `.log-table`.
+
+### An edit that changed nothing is no longer logged, 1 Oct 2026
+
+**A Save on an unchanged form used to write an UPDATE row reading `{}` → `{}`.** Live row 52 is one: event 86 saved with nothing changed. The Activity Log page showed it as "No fields changed", an entry recording that nothing happened.
+
+**The rule, in `buildRow` in `services/activityLog.js`:** an `UPDATE` whose before and after are both empty plain objects returns no row. `buildRow` is shared by `logActivity` and `logActivityMany`, so every call site is covered, the batch path included, and so is the next one written. The details are deliberate:
+
+- **Decided before `scrub()`, on the caller's own values.** A diff that changed only a deny-listed key is still logged, with its values removed.
+- **`null` is never a reason to skip.** It means no values were recorded, which is how PASSWORD_CHANGE and PASSWORD_RESET are logged. An UPDATE with `{}` on one side and `null` on the other is logged too.
+- **Only UPDATE.** A CREATE or IMPORT with empty values is still logged.
+- **Silent.** The other skips warn because they mean a call site is wrong. An unchanged save is not a fault.
+
+The `diffFields` comment, which called an empty result "an honest compared, no difference", now says such a pair is not logged, and why.
+
+**The blotter had to change first, or the rule would have lost real edits.** `partyShape` records parties as role and resident id only, deliberately with no names. So correcting a walk-in party's typed name diffed to `{}` → `{}` — under the new rule, the edit would have left no trace at all.
+
+- **`PUT /api/disputes/:id` now adds a count.** `parties_renamed` is the number of typed names corrected. The logged row reads `{ parties_renamed: 0 }` → `{ parties_renamed: n }`, and there is never a name in it.
+- **How the count is made:** `typedNamesCorrected()` compares names per role. Names present before and after cancel out, and what is left over on both sides pairs up as corrections. A party added or removed is not counted, because it already shows in `parties`.
+- **When it appears:** `diffFields` drops the marker when it is 0, so it shows up only when a name changed.
+- **On the page:** it reads "Party name corrected (1)" or "Party names corrected (2)".
+- **The rule it leaves in CLAUDE.md:** a diff that leaves a field out on purpose must count it instead. A new marker goes in `LOG_MARKERS` in `activity:test`, which fails until the frontend labels it.
+
+**No existing test relied on an empty UPDATE row,** so none needed adjusting. The one UPDATE in `activity:test` carries real values, and the UPDATE row in `roles:test` is a crafted read-side fixture.
+
+**Verified:**
+
+- **`activity:test` 55 → 75.** The new checks cover:
+  - `{}` / `{}` skipped, and silently;
+  - one changed field, either side empty, `null` / `null` and `{}` / `null` all logged;
+  - PASSWORD_CHANGE `null` / `null`, CREATE `{}` / `{}` and IMPORT `{}` / `{}` all logged;
+  - a credential-only change logged;
+  - the batch dropping only the unchanged row;
+  - the marker label in the frontend.
+  The real blotter PUT handler runs against a scripted fake: one corrected name logs `{ parties_renamed: 1 }` with no name anywhere; two log 2; an unchanged save logs nothing; an added walk-in shows in `parties` and is not counted.
+- **Run before the fix,** five of the new checks failed, including the bug itself: a corrected name logged `{}` → `{}`.
+- **Four mutations, each run on a scratch copy and each caught:**
+  - removing the rule: 3 checks failed;
+  - letting it skip `null` values too: 2;
+  - letting it skip every action: 2;
+  - removing the marker: 3.
+- **The page, in a throwaway jsdom harness:** all 61 `summarize()` cases render, including the three new marker cases.
+- **No database rows written:** `activity_logs` still holds 18 rows, highest id 52.

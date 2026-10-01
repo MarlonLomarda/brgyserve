@@ -41,6 +41,39 @@ const CASE_KEYS = CASE_FIELDS.split(',').map((k) => k.trim());
 const partyShape = (parties) => (parties || [])
   .map((p) => ({ role: p.role, resident_id: p.resident_id ?? null }))
   .sort((a, b) => a.role.localeCompare(b.role) || (a.resident_id ?? 0) - (b.resident_id ?? 0));
+
+// How many typed (non-resident) party names an edit corrected — the log's
+// only trace of one, since partyShape keeps no names and a corrected name
+// would otherwise diff to nothing. Per role, names that match before and
+// after cancel out; what is left over on BOTH sides pairs up as corrections.
+// A party added or removed leaves one side longer and is not counted: it
+// already shows in partyShape. Returns a number, never a name.
+function typedNamesCorrected(oldParties, newParties) {
+  const typedByRole = (parties) => {
+    const byRole = new Map();
+    for (const p of parties || []) {
+      if (p.resident_id !== null && p.resident_id !== undefined) continue;
+      const names = byRole.get(p.role) || [];
+      names.push(`${p.first_name ?? ''}\u0000${p.last_name ?? ''}`);
+      byRole.set(p.role, names);
+    }
+    return byRole;
+  };
+  const before = typedByRole(oldParties);
+  const after = typedByRole(newParties);
+  let corrected = 0;
+  for (const role of new Set([...before.keys(), ...after.keys()])) {
+    const unmatched = [...(before.get(role) || [])];
+    let added = 0;
+    for (const name of after.get(role) || []) {
+      const i = unmatched.indexOf(name);
+      if (i === -1) added += 1;
+      else unmatched.splice(i, 1);
+    }
+    corrected += Math.min(unmatched.length, added);
+  }
+  return corrected;
+}
 const DETAIL_FIELDS = `${CASE_FIELDS}, ${PARTY_EMBED}`;
 
 // Strip PostgREST .or() syntax chars and LIKE wildcards from a search term.
@@ -459,10 +492,15 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
 
   // Case fields re-read from the database on both sides, so a time stored as
   // 14:26:00 does not read as changed from the 14:26 that was sent. Parties
-  // compare by role and resident_id — a swapped typed name does not show.
+  // compare by role and resident_id; a corrected typed name shows only as the
+  // count parties_renamed, which diffFields drops again when it is 0.
   const diff = diffFields(
-    { ...pick(existing, CASE_KEYS), parties: partyShape(oldParties) },
-    { ...pick(detail, CASE_KEYS), parties: partyShape(parties) },
+    { ...pick(existing, CASE_KEYS), parties: partyShape(oldParties), parties_renamed: 0 },
+    {
+      ...pick(detail, CASE_KEYS),
+      parties: partyShape(parties),
+      parties_renamed: typedNamesCorrected(oldParties, parties),
+    },
   );
   await logActivity({
     userId: req.user.user_id,
