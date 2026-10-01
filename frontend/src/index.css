@@ -2942,11 +2942,21 @@ button.link-button:hover:not(:disabled) {
   text-align: left;
 }
 
+/* The entry count, then any filter chips, on one line. */
 .log-chips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+/* The protected form cap, .pending-card:not(:has(.table-wrap)), narrows any
+   card without a table to 720px — this one whenever it is empty, loading or
+   showing an error, so the page jumped between states. Exempted here, the
+   protected rule untouched: (0,3,0) beats its (0,2,0) wherever either sits. */
+.dash-main .pending-card.log-card {
+  max-width: none;
 }
 
 /* ==========================================================================

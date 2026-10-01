@@ -79,14 +79,19 @@ export default function ActivityLogPage() {
 
   const filtered =
     action !== "all" || table !== "all" || role !== "all" || from || to || actor || record;
+  // The TRUE total from the server, also on a page past the end, where the
+  // rows are empty but the total is not.
+  const showTotal = !error && data && data.total > 0;
 
   const change = (setter) => (e) => {
     setter(e.target.value);
     setPage(1);
   };
 
+  // log-card: index.css keeps this card the same width in every state —
+  // without it the form cap narrows it whenever no table is showing.
   return (
-    <div className="pending-card">
+    <div className="pending-card log-card">
       <div className="head-actions log-filters">
         <select value={action} onChange={change(setAction)} aria-label="Action">
           {ACTION_FILTERS.map((f) => (
@@ -127,8 +132,13 @@ export default function ActivityLogPage() {
         </label>
       </div>
 
-      {(actor || record) && (
+      {(showTotal || actor || record) && (
         <div className="log-chips">
+          {showTotal && (
+            <span className="muted">
+              {data.total === 1 ? "1 entry" : `${data.total.toLocaleString("en-PH")} entries`}
+            </span>
+          )}
           {actor && (
             <button
               type="button"
@@ -274,7 +284,7 @@ export default function ActivityLogPage() {
       {!error && data && data.total_pages > 1 && (
         <div className="list-head">
           <span className="muted">
-            Page {data.page} of {data.total_pages} · {data.total} entries
+            Page {data.page} of {data.total_pages}
           </span>
           <div className="head-actions">
             <button
