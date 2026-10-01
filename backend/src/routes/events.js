@@ -84,8 +84,13 @@ function validateBody(body) {
 
   // Attendance is opt-in and applies to activities only: an announcement has
   // no schedule, so "who attended" is meaningless for one. Migration 016 has a
-  // CHECK backstop for the same rule.
-  const attendanceRequired = body?.attendance_required === true;
+  // CHECK backstop for the same rule. Absent means false; any other
+  // non-boolean is refused, never quietly read as false.
+  const rawAttendance = body?.attendance_required;
+  if (rawAttendance !== undefined && typeof rawAttendance !== 'boolean') {
+    return { error: 'attendance_required must be true or false' };
+  }
+  const attendanceRequired = rawAttendance === true;
   if (attendanceRequired && type !== EVENT_TYPE.ACTIVITY) {
     return { error: 'only an activity can require attendance — an announcement has no schedule to attend' };
   }
@@ -104,6 +109,13 @@ function validateBody(body) {
     }
     if (amount > 99999999.99) return { error: 'fine_amount is too large' };
     fineAmount = amount;
+  }
+
+  // A fine is charged for missing an activity that takes attendance, so it
+  // means nothing without it. Refused rather than stored: a fine left hidden
+  // in the form once saved an activity with a fine and attendance off.
+  if (fineAmount !== null && !attendanceRequired) {
+    return { error: 'fine_amount can only be set when attendance_required is true — leave it blank for an event that takes no attendance' };
   }
 
   return {

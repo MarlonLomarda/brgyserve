@@ -1818,11 +1818,14 @@ button.link-button:hover:not(:disabled) {
 /* ---- Events stage 3a: household attendance roster --------------------------
    Used on a phone at an assembly, so the counts are large and the tap targets
    are generous. Stage 3d adds a camera scanner to the same screen. */
+/* fit-content: only the box and its text toggle it. At full width the label
+   spanned the form, so a click on the blank space beside the text toggled it. */
 .check-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   margin-top: 14px;
+  width: fit-content;
 }
 
 .check-row input[type="checkbox"] {

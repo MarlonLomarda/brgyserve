@@ -59,6 +59,12 @@ function EventForm({ event, onDone }) {
         next.attendance_required = false;
         next.fine_amount = "";
       }
+      // Unticking attendance hides the fine field, so clear the fine as well:
+      // a hidden value would still be sent, and the server refuses a fine on
+      // an event that takes no attendance.
+      if (name === "attendance_required" && !checked) {
+        next.fine_amount = "";
+      }
       return next;
     });
   };

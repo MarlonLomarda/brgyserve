@@ -10,6 +10,10 @@
 // It creates its own test event and its own throwaway households, and deletes
 // everything it wrote. Real households are only ever READ — their QR tokens
 // are used to scan against the TEST event, so no real attendance is touched.
+//
+// Section I also runs the real create and edit handlers to pin the rule that a
+// fine needs attendance. The events it creates are deleted the same way, with
+// the activity log rows those handlers wrote.
 // ===========================================================================
 const { createRequire } = require('module');
 const beRequire = createRequire(require('path').join(__dirname, '..', 'package.json'));
@@ -63,6 +67,8 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
       // The RECORD_ATTENDANCE rows the instrumented route logged for the test
       // event — found by the event id the route writes into new_value.
       await db.from('activity_logs').delete().eq('table_name', 'event_attendees').eq('new_value->>event_id', String(id));
+      // The CREATE / UPDATE rows the create and edit handlers logged (section I).
+      await db.from('activity_logs').delete().eq('table_name', 'events').eq('record_id', id);
       await db.from('event_attendees').delete().eq('event_id', id);
       await db.from('events').delete().eq('event_id', id);
     }
@@ -237,6 +243,74 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
     check('two households recorded in total', rows?.length === 2, `${rows?.length}`);
     check('  every row carries the same fields whichever path wrote it',
       (rows || []).every((r) => r.event_id === event.event_id && r.recorded_by_user_id === staff.user_id && !!r.recorded_at));
+
+    // =================================================================== I
+    section('a fine needs attendance — create and edit refuse it otherwise');
+    // validateBody is shared by POST / and PUT /:id. Every refusal is decided
+    // before the handler touches the database; the two accepted creates write
+    // real events, titled so the leftover check below finds them.
+    const createEvent = handlerFor('post', '/');
+    const updateEvent = handlerFor('put', '/:id');
+    const GATE_TITLE = 'TEST 3d attendance-fine gate';
+    const activity = (extra) => ({
+      type: 'activity',
+      title: GATE_TITLE,
+      start_datetime: iso(Date.now() + 24 * 3600e3),
+      end_datetime: iso(Date.now() + 26 * 3600e3),
+      ...extra,
+    });
+    // Whatever a broken gate lets through is still cleaned up.
+    const create = async (body) => {
+      const r = await invoke(createEvent, { user: staff, body });
+      if (r.body?.event?.event_id) created.events.push(r.body.event.event_id);
+      return r;
+    };
+    const stored = async (id) => (await db.from('events')
+      .select('attendance_required, fine_amount').eq('event_id', id).maybeSingle()).data;
+
+    const offWithFine = await create(activity({ attendance_required: false, fine_amount: '100' }));
+    check('create: a fine with attendance OFF is refused', offWithFine.status === 400, offWithFine.body?.error);
+    check('  the error names both fields',
+      /fine_amount/.test(offWithFine.body?.error || '') && /attendance_required/.test(offWithFine.body?.error || ''));
+    const absentWithFine = await create(activity({ fine_amount: '100' }));
+    check('create: a fine with attendance ABSENT is refused too', absentWithFine.status === 400, absentWithFine.body?.error);
+
+    for (const [label, value] of [['the string "true"', 'true'], ['the number 1', 1], ['null', null]]) {
+      const bad = await create(activity({ attendance_required: value }));
+      check(`create: attendance_required as ${label} is a 400, not read as false`, bad.status === 400, bad.body?.error);
+    }
+    const { count: afterGateRefusals } = await db
+      .from('events')
+      .select('*', { count: 'exact', head: true })
+      .eq('title', GATE_TITLE);
+    check('  none of the refusals wrote an event', afterGateRefusals === 0, `${afterGateRefusals} written`);
+
+    const onWithFine = await create(activity({ attendance_required: true, fine_amount: '100' }));
+    check('create: attendance ON with a fine is accepted', onWithFine.status === 201, onWithFine.body?.error);
+    const onRow = onWithFine.status === 201 ? await stored(onWithFine.body.event.event_id) : null;
+    check('  stored with attendance_required true and the fine',
+      onRow?.attendance_required === true && Number(onRow?.fine_amount) === 100, JSON.stringify(onRow));
+
+    const offNoFine = await create(activity({ attendance_required: false }));
+    check('create: attendance OFF with no fine is accepted', offNoFine.status === 201, offNoFine.body?.error);
+
+    if (onWithFine.status === 201 && offNoFine.status === 201) {
+      const onId = onWithFine.body.event.event_id;
+      const offId = offNoFine.body.event.event_id;
+      const editBad = await invoke(updateEvent, {
+        user: staff, params: { id: String(onId) }, body: activity({ attendance_required: false, fine_amount: '100' }),
+      });
+      check('edit: a fine with attendance OFF is refused', editBad.status === 400, editBad.body?.error);
+      const unchanged = await stored(onId);
+      check('  the event is unchanged', unchanged?.attendance_required === true, JSON.stringify(unchanged));
+      const editOk = await invoke(updateEvent, {
+        user: staff, params: { id: String(offId) }, body: activity({ attendance_required: true, fine_amount: '50' }),
+      });
+      check('edit: turning attendance on with a fine still saves', editOk.status === 200, editOk.body?.error);
+      const edited = await stored(offId);
+      check('  stored with attendance_required true and the fine',
+        edited?.attendance_required === true && Number(edited?.fine_amount) === 50, JSON.stringify(edited));
+    }
   } catch (err) {
     console.error('\nERROR:', err.stack || err.message);
     failures++;
@@ -257,7 +331,11 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
       const { count: leftLogs } = await db
         .from('activity_logs').select('*', { count: 'exact', head: true })
         .eq('table_name', 'event_attendees').eq('new_value->>event_id', String(id));
-      check(`every activity log row for test event ${id} was removed`, leftLogs === 0, `${leftLogs} left`);
+      const { count: leftEventLogs } = await db
+        .from('activity_logs').select('*', { count: 'exact', head: true })
+        .eq('table_name', 'events').eq('record_id', id);
+      check(`every activity log row for test event ${id} was removed`, leftLogs === 0 && leftEventLogs === 0,
+        `${leftLogs} attendance + ${leftEventLogs} event row(s) left`);
     }
   }
 

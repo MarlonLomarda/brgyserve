@@ -608,7 +608,30 @@ Attendance applies to `activity` records only, never announcements; Secretary + 
 - **UI:** a Secretary-only **Fines panel** inside the existing attendance roster — it states who would be charged and how much *before* the button is pressed, explains itself when generation is blocked instead of hiding, lists the raised fines with their status and a Void action, and shows the mismatch warning described above. Mismatched households are also badged "Fine outstanding" on their roster row, so the clash is visible where the attendance edit was made and not only in the panel. Every void is confirm-guarded and states that it cannot be undone. Staff see the roster exactly as before with no fines panel at all. `PaymentsPage` renders FINE charges by naming the household head (falling back to the household number) and "Missed <activity>" with the household address, since a fine has no document or rental behind it and often no payer account either; `routes/charges.js` embeds `events` + `household_records` and resolves the head's name in one extra query (it sits two joins away and cannot be embedded with a "current head only" filter).
 - **Test: `cd backend && npm run fines:test`** (backend must be running) — 64 assertions covering the role matrix on all three routes, the read-only preview, every generation guard, generation itself, re-run safety plus a direct DB-level duplicate attempt, voiding (including the PAID refusal), the manual-void policy (late attendance leaves the fine **UNTOUCHED** and raises a mismatch that only a deliberate void clears, with the PAID-and-present case asserted separately), and the fine arriving on the Treasurer's queue and being paid end to end. It creates its own test event and households and **deletes everything it wrote**, asserting the cleanup; the barangay's real event and attendance are only ever read.
 
+### A fine could be saved with attendance off, 1 Oct 2026
+
+**The events form could save an activity with a fine and attendance off.** Found in the activity-logging walkthrough: event 71 was created with "Attendance required" ticked and saved as `attendance_required = false` with `fine_amount = 100`. The create path was not losing the value — the real form sends a boolean, and the real handler stores what it is sent. Two things combined:
+
+- **Unticking the box hid the fine field but kept its value**, so the hidden fine was still sent. Only a switch to Announcement cleared it.
+- **The server accepted a fine on an event that takes no attendance.** `validateBody` checked the fine's format but never against `attendance_required`.
+
+How the box got unticked on event 71 is not proven. One way was measured: the `.check-row` label spanned the full form width (678px, against about 432px of box and text at desktop widths), so a click on the blank space beside the text toggled the box.
+
+**What changed:**
+
+- **The form clears the fine when the box is unticked**, the same way a type change already did. **This changes edit too:** unticking attendance on an event that has a fine now saves it with no fine, and re-ticking shows an empty field.
+- **`.check-row` is `width: fit-content`**, so only the box and its text toggle it. Measured in headless Chrome at 1920, 1280, 641 and 390: every other position on the form is unchanged. At 390 the text already wraps across the full row, so nothing differs there.
+- **`validateBody` refuses a fine without attendance** — *"fine_amount can only be set when attendance_required is true — leave it blank for an event that takes no attendance"* — on create and edit alike.
+- **It refuses a non-boolean `attendance_required`** — *"attendance_required must be true or false"* — instead of reading it as false. Leaving the key out still means false.
+
+**Verified:**
+
+- **`scan:test` gained 14 checks** in a new section that calls the real create and edit handlers: a fine with attendance off or absent is a 400; `"true"`, `1` and `null` are 400s; none of the refusals writes an event; attendance on with a fine is stored as sent; attendance off with no fine saves; an edit adding a fine with attendance off is a 400 and leaves the row unchanged; an edit turning attendance on with a fine saves. The events it creates are deleted along with their activity log rows, and it now passes 50 of 50.
+- **Mutation-checked on a scratch copy of the backend.** Without the fine rule, the six checks for it failed, and the refused edit stored exactly event 71's state. Without the boolean rule, its four checks failed.
+- **The form, mounted in jsdom from the real component:** before the fix, re-ticking showed the old fine and an unticked submit sent `false` with `"100"`; after it, the field is empty and the submit sends no fine.
+
 ## GCash Payment Gateway (PayMongo) — implemented
+
 
 ### Dev tunnel (webhook reachability) — HISTORICAL, DO NOT RUN
 
