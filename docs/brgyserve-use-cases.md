@@ -68,6 +68,7 @@ The Secretary generates administrative reports (document request summaries, resi
 - Manage facility rental schedules; endorse bookings for final approval.
 - Create and schedule events; publish upon approval.
 - Generate administrative reports.
+- View activity log (read-only: who changed which record, and when; personal values shown as field names only).
 
 **Punong Barangay**
 - Log in securely; manage own credentials and profile.
@@ -76,6 +77,7 @@ The Secretary generates administrative reports (document request summaries, resi
 - Give final approval on endorsed rental requests.
 - Approve or decline proposed events before publication.
 - View system-generated reports and dashboards.
+- View activity log (read-only: who changed which record, and when; personal values shown as field names only).
 
 **Barangay Treasurer**
 - Log in securely; manage own credentials and profile.

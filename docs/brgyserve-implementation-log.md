@@ -874,3 +874,38 @@ All four now use the same `PH_MOBILE_RE` as registration. The message moved into
 - **The full backend suite passed** at commit time: `roles:test` 101, `disputes:test` 33, `activity:test` 53, `gateway:test` 24, `notif:test` 38, `scan:test` 34, `reset:test` 70. `fines:test` was not run; it needs the server.
 - **A probe row** was inserted against the live table, read back and deleted.
 - **A browser walkthrough** against a local backend passed, producing log rows 14–26. Its test data — resident record 69, document request 89, charge 160, payment 76, event 71 and blotter case 10 — had not been cleaned up when this entry was written.
+
+### The Activity Log page, 1 Oct 2026
+
+**The Secretary and the Punong Barangay can now read `activity_logs`, read-only.** One page, `ActivityLogPage`, on `/secretary/activity-log` and `/punong-barangay/activity-log`, fed by `GET /api/activity-logs` in a new `routes/activityLogs.js`. Staff, the Treasurer and residents get 403: a row's values can hold contact numbers and birthdates. No migration: at 18 rows an index would buy nothing, and the decision was to revisit at about 100,000 rows.
+
+**What leaves the server, per row:** `log_id`, `timestamp`, `actor` as exactly `{ user_id, name, username, role }`, `action`, `table_name`, `record_id`, `old_value`, `new_value`, and `withheld_fields` when anything was withheld. The response is `{ logs, total, page, per_page, total_pages }`.
+
+- **Personal values are withheld on the server, not hidden on screen.** `withholdPersonal()` in `services/activityLog.js` walks old and new values the way `scrub()` does and removes every `PERSONAL_FIELDS` key — contact number, birthdate, birthplace, address, sex, civil status, religion, educational attainment, a booking's purpose, a guest's name and contact. Their names go into `withheld_fields`, so the page says "Contact number changed". The reason is the log's own: it keeps values the record no longer shows. Live row 15, the walkthrough's contact-number edit, comes back as two empty objects and `withheld_fields: ["contact_number"]`.
+- **`scrub()` runs again on read**, before withholding, for rows that never went through `buildRow`.
+- **No search over values.** It would be an oracle for the withheld ones.
+- **The actor is named from the profile**, the same `personName` as the notifications route, falling back to `@username`. The users embed names its columns; it never selects `*`.
+- **Filters:** action (the 26 codes), record type (the 13 tables, `LOGGED_TABLES`), the actor's role, a user id, a record id together with its table, and Manila from/to days. An unknown value is a 400, never ignored. The role filter switches the embed to `users!inner`, the only way a filter on the embedded row can remove a log row. Dates follow `parseRange`'s convention in `reports.js`, with no default window and either end optional, so the code is copied rather than shared.
+- **A page past the end returns the true total.** supabase-js reports `count: null` on PGRST103, so the route asks for a head-only count with the same filters, and the page steps back to the last page.
+
+**The page:**
+
+- **Columns:** Action | Record | By | Change | When, on `.data-table.stack-narrow`. The action badge is the card heading on a phone, and every other cell carries a `data-label`.
+- **States:** error, then loading, then empty, then rows. An error never sits above a "Loading…" — the bug NotificationsPage still has.
+- **Clicking:** a name filters by that person, and a record label shows that record's history, each with a chip to clear it.
+- **Times:** in Asia/Manila, set explicitly.
+- **Labels and summaries:** in `frontend/src/constants/activityLog.js`. `summarize()` reuses the existing status, charge, rental, method, rejection-reason and event-type labels, and falls back to field names, never raw JSON.
+- **Payment method label:** `METHOD_LABELS.onsite` and the Payments screen's hand-typed option now both read "Cash (on-site)", one label app-wide.
+
+**Verified:**
+
+- **`roles:test` 101 → 158.** It covers the guard table entry, GET only, `withholdPersonal` unit checks, filter validation and the past-the-end total. A crafted row goes through the real handler against a fake table, carrying credentials, personal values at every depth and an actor embed with an email and a hash. A live read-only sweep runs as each viewer.
+- **Four mutations, each run on a scratch copy and each caught:** removing the withholding (5 checks failed), removing `requireRole` (1), removing the second `scrub()` (2), selecting `users(*)` (2).
+- **`activity:test` 53 → 55:** `LOGGED_TABLES` matches the call sites, and the frontend labels every action and table. Deleting one label makes the second check name exactly that label.
+- **A scratch jsdom harness on the real page, now deleted:**
+  - 58 `summarize()` cases, covering every call-site shape plus an unknown action, and the record labels;
+  - each state, including an error with no "Loading…";
+  - both click-to-filter chips, and the step back from a page past the end;
+  - Manila times with the process clock set to UTC;
+  - Staff sent away before any log request.
+- **Headless Chrome at 1280 and 390** on the real App DOM and `index.css`: no page overflow, the table inside its wrapper at 1280, labelled cards at 390. It caught two layout faults first — centred link buttons and clipped select text — both fixed with rules scoped to `.log-filters` / `.log-table`.
