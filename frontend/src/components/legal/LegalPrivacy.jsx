@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
   return (
     <>
       <h2 id="legal-modal-title">Privacy Policy</h2>
-      <p className="legal-effective">Effective: 24 September 2026</p>
+      <p className="legal-effective">Effective: 1 October 2026</p>
 
       <h3>Who we are, and what this system is</h3>
       <p>
@@ -108,6 +108,33 @@ export default function PrivacyPolicy() {
         addressed to, and whether it was delivered.
       </p>
 
+      <h4>A log of changes to records</h4>
+      <p>
+        BrgyServe keeps a log of the actions Barangay officials and staff take
+        on records: adding, editing, archiving and approving them, recording
+        payments, recording event attendance, and recording blotter cases.
+        Actions of yours that change a record are logged too: registering,
+        submitting or cancelling a request, booking a facility, declaring a
+        payment, having a GCash payment confirmed, and changing or resetting
+        your password.
+      </p>
+      <p>
+        Each entry holds who took the action, what the action was, which record
+        it was taken on, the time, and the values of the changed fields before
+        and after the change. When a resident record is added, the entry holds
+        the person&apos;s name only, not the rest of the record.{' '}
+        <strong>
+          Passwords, password reset links, household QR codes and payment
+          credentials are never written to it.
+        </strong>{' '}
+        Viewing a page or a record is not logged, and neither is signing in.
+      </p>
+      <p>
+        Access to this log is limited to authorised Barangay officials and to
+        the development team that operates BrgyServe on the Barangay&apos;s
+        behalf.
+      </p>
+
       <h4>
         What we do <strong>not</strong> hold
       </h4>
@@ -155,6 +182,10 @@ export default function PrivacyPolicy() {
           recorded twice
         </li>
         <li>To let you recover your account if you forget your password</li>
+        <li>
+          To keep an auditable record of changes made to records, so that who
+          changed what, and when, can be checked
+        </li>
       </ul>
 
       <h3>3. Who else receives it</h3>
@@ -305,6 +336,10 @@ export default function PrivacyPolicy() {
         archived; it does not remove it. Requests, bookings, charges, payments,
         and notification records are retained so that the Barangay&apos;s
         records remain complete and auditable.
+      </p>
+      <p>
+        The log of changes to records described in §1 is kept indefinitely
+        too, like the records it describes.
       </p>
       <p>
         If you want a record corrected or removed, ask at the Barangay Office.

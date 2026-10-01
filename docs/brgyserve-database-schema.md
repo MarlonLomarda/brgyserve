@@ -329,13 +329,18 @@ Stores system audit logs of user actions, including what was changed, where, and
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
 | log_id | bigint | PK | No | Uniquely identifies each activity log entry. |
-| user_id | bigint | FK → users | No | User who performed the action. |
-| action | varchar(100) | | No | Type of action (CREATE, UPDATE, DELETE, LOGIN, APPROVE). |
-| table_name | varchar(100) | | No | Name of the database table affected. |
-| record_id | bigint | | Yes | ID of the specific record affected (polymorphic — not an enforced FK). |
-| old_value | jsonb | | Yes | Previous state of the record; null for CREATE actions. |
-| new_value | jsonb | | Yes | New state of the record; null for DELETE actions. |
-| timestamp | timestamptz | | No | When the action was performed. |
+| user_id | bigint | FK → users | No | User who performed the action. NOT NULL with **no ON DELETE rule**, so a user who has any log row cannot be deleted until those rows are. |
+| action | varchar(100) | | No | Type of action. The codes are fixed in `backend/src/constants/activityLog.js` (`ACTIONS`): CREATE, UPDATE, ARCHIVE, UNARCHIVE, APPROVE, REJECT, UNREJECT, LINK, ACTIVATE, DEACTIVATE, RELEASE, CLAIM, CANCEL, RETURN, VERIFY_PAYMENT, SETTLE_PAYMENT, DECLARE_PAYMENT, RECORD_ATTENDANCE, REMOVE_ATTENDANCE, GENERATE_FINES, VOID_FINE, SETTLE, REOPEN, PASSWORD_CHANGE, PASSWORD_RESET, IMPORT. There is no LOGIN: signing in is deliberately not logged. No CHECK, so a new code is a constants-only change. |
+| table_name | varchar(100) | | No | The REAL name of the database table affected (`household_records`, not "households"), so a row can be joined back by hand. |
+| record_id | bigint | | Yes | ID of the specific record affected (polymorphic — not an enforced FK). Null only for an action that covers many records at once — a masterlist import (IMPORT) and fine generation (GENERATE_FINES), each logged as one summary row. |
+| old_value | jsonb | | Yes | Values before the action — for an edit, only the fields that changed. Null when the action records no prior values — always on CREATE, and on some status toggles that record only the new state. |
+| new_value | jsonb | | Yes | Values after the action — for an edit, only the fields that changed. Null when the action records no new values — on REMOVE_ATTENDANCE, whose attendance row is hard-deleted. PASSWORD_CHANGE and PASSWORD_RESET leave both value columns null: the row records that the change happened and nothing else. |
+| timestamp | timestamptz | | No | When the action was performed. **Set by the application; the column has no database default.** |
+
+**Notes:**
+- **Sensitive keys are removed before a row is stored** — removed entirely, not masked, at every depth of `old_value` and `new_value`: passwords and password hashes, tokens and reset links, QR tokens, secrets and API keys, notification message text, provider responses, PayMongo ids and checkout URLs, and any key containing `password`, `token` or `secret`. A string value carrying a `?token=` / `&token=` link is dropped too. The list is `SENSITIVE_KEYS` and its neighbours in `backend/src/constants/activityLog.js`.
+- A CREATE of a resident record stores the name fields only (`RESIDENT_LOG_FIELDS`), not the rest of the row, so the log does not hold a second copy of birthdates, addresses and contact numbers.
+- Written by `backend/src/services/activityLog.js`, after the action's own write has succeeded; a failure to log is reported to the server console and never undoes or fails the action.
 
 ---
 

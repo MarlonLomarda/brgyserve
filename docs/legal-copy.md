@@ -1,9 +1,13 @@
 # BrgyServe — Help Center, Terms of Use, Privacy Policy
 
 Source copy for the three `/login` modals, and the source of truth for their
-wording. Every factual claim below was checked against the codebase on
-10 September 2026. If the system changes, change this file and re-render the
-modals from it — do not edit the JSX copy directly.
+wording. The Privacy Policy's activity-log text — "A log of changes to records"
+in §1, the audit-trail purpose in §2 and the log's retention in §6 — was checked
+against the logging code and its tests (`activity:test`) on 1 October 2026. The
+"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Every
+other factual claim below was checked against the codebase on 10 September
+2026. If the system changes, change this file and re-render the modals from it
+— do not edit the JSX copy directly.
 
 Heading levels are the intended render: the modal title is `h2`, numbered
 sections are `h3`, sub-points are `h4`.
@@ -12,7 +16,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 24 September 2026*
+*Effective: 1 October 2026*
 
 ### Who we are, and what this system is
 
@@ -70,6 +74,25 @@ membership, and blotter or dispute records in which you are named as a party.
 The text of each notification, the email address or mobile number it was
 addressed to, and whether it was delivered.
 
+#### A log of changes to records
+
+BrgyServe keeps a log of the actions Barangay officials and staff take on
+records: adding, editing, archiving and approving them, recording payments,
+recording event attendance, and recording blotter cases. Actions of yours that
+change a record are logged too: registering, submitting or cancelling a
+request, booking a facility, declaring a payment, having a GCash payment
+confirmed, and changing or resetting your password.
+
+Each entry holds who took the action, what the action was, which record it was
+taken on, the time, and the values of the changed fields before and after the
+change. When a resident record is added, the entry holds the person's name
+only, not the rest of the record. **Passwords, password reset links, household
+QR codes and payment credentials are never written to it.** Viewing a page or a
+record is not logged, and neither is signing in.
+
+Access to this log is limited to authorised Barangay officials and to the
+development team that operates BrgyServe on the Barangay's behalf.
+
 #### What we do **not** hold
 
 - **No uploaded files of any kind.** Residents cannot upload anything. The one
@@ -90,6 +113,8 @@ addressed to, and whether it was delivered.
 - To let Barangay officials answer questions about the status of your request
 - To detect duplicate resident records so that one person is not recorded twice
 - To let you recover your account if you forget your password
+- To keep an auditable record of changes made to records, so that who changed
+  what, and when, can be checked
 
 ### 3. Who else receives it
 
@@ -146,6 +171,9 @@ are not encrypted either.
 Archiving a resident record or an event marks it as archived; it does not
 remove it. Requests, bookings, charges, payments, and notification records are
 retained so that the Barangay's records remain complete and auditable.
+
+The log of changes to records described in §1 is kept indefinitely too, like
+the records it describes.
 
 If you want a record corrected or removed, ask at the Barangay Office. See §7.
 

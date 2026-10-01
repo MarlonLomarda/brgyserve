@@ -812,3 +812,42 @@ All four now use the same `PH_MOBILE_RE` as registration. The message moved into
   - swallowing a database error into an empty list;
   - answering "not linked" with a bare `[]`.
 - **The page, mounted in jsdom:** every state rendered as specified, and exactly one nav link was active on each of `/resident/disputes`, `/resident` and `/resident/household`. `test:auth` still passes 30 of 30, and the frontend builds and lints clean.
+
+## Activity logging
+
+### Activity logging — every module writes `activity_logs`, 1 Oct 2026 (`1ca938a`)
+
+**`activity_logs` (Table 18) had existed since migration 001 and nothing wrote it.** The Households module had said so on purpose: no module wrote the table, so it would not invent the pattern alone. `1ca938a` invented it for every module at once — 50 call sites across 12 route files, covering 54 routes. No migration: the table already had every column needed.
+
+**One helper, modelled on `notify()`.** `services/activityLog.js` exports `logActivity()` and `logActivityMany()`, plus `diffFields()`, `pick()` and `scrub()`. The vocabulary and the deny-list live in `constants/activityLog.js`. Three rules shape it:
+
+- **It runs after the business write and never throws.** An insert error or a thrown error becomes one `console.error` line ("[activity_logs] suppressed failure…"), and the action it describes still returns success. A broken audit trail must not take an approval or a payment down with it.
+- **It refuses a malformed row instead of writing one.** A missing or invalid actor, an action or table name that is not a 1–100 character string, or a record id that is not a positive integer is skipped with a `console.warn`.
+- **The timestamp is set by the application.** The column has no database default.
+
+**What is logged.** Each row holds the actor, an `ACTIONS` code, the real table name, the record id, and the values before and after:
+
+- **Officials and staff:** adding and editing resident records, households and members, document types, rental items and events; archiving and unarchiving; approving, rejecting and releasing requests; linking, activating, rejecting and un-rejecting registrations; verifying and settling payments; recording and removing attendance; generating and voiding fines; recording, editing, settling and reopening blotter cases; returns; the masterlist import (one summary row with counts).
+- **Residents:** registering, submitting a document request, booking a facility, cancelling a request, declaring a payment, the GCash re-check when it records a payment, and changing or resetting a password.
+- **Edits log a diff** of the fields that changed, read from the database on both sides — so an edit to a resident record can include personal fields, which the Privacy Policy now states.
+- **Password changes and resets log that they happened and nothing else** — both value columns null.
+
+**What is deliberately NOT logged:**
+
+- **`/login`.** The Privacy Policy promises "No login history", and that promise is the reason, not an afterthought. The policy was updated alongside this entry and the sentence was kept unchanged.
+- **`/forgot-password`.** It is unauthenticated and its response must not vary with whether an account exists.
+- **The PayMongo webhook, `settlePaidCharge()` and `/gcash/checkout`.** The webhook has no user to name as the actor. A settlement is logged only where a person triggered it — the Treasurer's reconcile or the resident's re-check — and only when the outcome is `RECORDED`.
+- **Every GET**, plus the import preview and the duplicate check, which read and write nothing.
+
+**What is never written into a row.** `scrub()` removes sensitive keys entirely, at every depth, before the insert: exact names (passwords and hashes, tokens and reset links, `qr_token`, secrets, API keys, notification `message`, `provider_response`, `checkout_url`, `signature`, `authorization`), anything starting `paymongo_`, and anything containing `password`, `token` or `secret` — so the next credential somebody names is caught without an edit. That also drops `must_change_password`, a plain flag; the cost was judged smaller than a list that has to be remembered. A string value containing `?token=` or `&token=` is dropped too, the same backstop `notify()` has.
+
+**Resident CREATE logs name fields only.** A new resident record holds birthdate, address, contact number, religion and civil status; copying those into the log would hold them twice. Both creation paths — the master list and the review screen's create-and-link — log `RESIDENT_LOG_FIELDS` (first, middle and last name, suffix). Free text is kept out the same way: a rejection logs its reason code, never the typed reason, and a booking logs no guest name, contact or purpose.
+
+**A user with log rows cannot be deleted.** `activity_logs.user_id` is NOT NULL with no ON DELETE rule. Registration logs with the new account as its own actor, so every throwaway account has a row from the moment it exists. `reset:test`, `notif:test` and `scan:test` gained cleanup for the rows their runs create, and a check that the rows are gone.
+
+**Verified:**
+
+- **`activity:test`, 53 checks, no network and no live rows** — the helper's deny-list, `diffFields`, never-throws, the skip on a missing actor, batch inserts, then a static sweep of every call site, and two real handlers run end to end.
+- **The full backend suite passed** at commit time: `roles:test` 101, `disputes:test` 33, `activity:test` 53, `gateway:test` 24, `notif:test` 38, `scan:test` 34, `reset:test` 70. `fines:test` was not run; it needs the server.
+- **A probe row** was inserted against the live table, read back and deleted.
+- **A browser walkthrough** against a local backend passed, producing log rows 14–26. Its test data — resident record 69, document request 89, charge 160, payment 76, event 71 and blotter case 10 — had not been cleaned up when this entry was written.
