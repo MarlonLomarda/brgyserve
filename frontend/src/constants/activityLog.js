@@ -46,6 +46,10 @@ export const ACTION_META = {
   REOPEN: { label: 'Reopened', className: 'status-ready' },
   PASSWORD_CHANGE: { label: 'Password changed', className: 'status-pending' },
   PASSWORD_RESET: { label: 'Password reset', className: 'status-pending' },
+  // A noun, not "sent": the summary says whether the email went, and a
+  // failed send must not be labelled as sent.
+  SEND_SET_PASSWORD_LINK: { label: 'Set-password link', className: 'status-pending' },
+  PASSWORD_SET: { label: 'Password set', className: 'status-pending' },
   IMPORT: { label: 'Imported', className: 'status-ready' },
 };
 
@@ -196,6 +200,14 @@ function personName(v) {
   return v.suffix ? `${name}, ${v.suffix}` : name;
 }
 
+// What became of a set-password email, from the status the server recorded
+// (email_status). SIMULATED is not "emailed": nothing left the server.
+function linkEmailPhrase(status) {
+  if (status === 'SENT') return 'set-password link emailed';
+  if (status === 'SIMULATED') return 'set-password link not emailed (email is simulated on this server)';
+  return 'set-password email could not be sent';
+}
+
 function partyCounts(parties) {
   if (!Array.isArray(parties)) return null;
   const c = parties.filter((p) => p.role === 'Complainant').length;
@@ -206,7 +218,13 @@ function partyCounts(parties) {
 function createSummary(table, v) {
   switch (table) {
     case 'users':
-      return `${ROLE_LABELS[v.role] || humanize(v.role || 'unknown')} account @${v.username}`;
+      // delivery is present only on staff accounts the Secretary created;
+      // a resident's registration has none.
+      return [
+        `${ROLE_LABELS[v.role] || humanize(v.role || 'unknown')} account @${v.username}`,
+        v.delivery === 'email' && linkEmailPhrase(v.email_status),
+        v.delivery === 'temporary_password' && 'one-time temporary password shown instead of an email',
+      ];
     case 'resident_records':
       return [
         `Added ${personName(v) || 'a resident record'}`,
@@ -307,6 +325,12 @@ function actionSummary(row, before, after, withheld) {
       return 'Changed their password';
     case 'PASSWORD_RESET':
       return 'Reset their password with an emailed link';
+    case 'PASSWORD_SET':
+      return 'Set their password with an emailed set-password link';
+    case 'SEND_SET_PASSWORD_LINK': {
+      const phrase = linkEmailPhrase(after.email_status);
+      return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+    }
     case 'IMPORT':
       return `${plural(after.inserted_count ?? 0, 'record')} imported, ${after.skipped_count ?? 0} skipped`;
     case 'GENERATE_FINES': {

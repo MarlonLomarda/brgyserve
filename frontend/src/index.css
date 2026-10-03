@@ -338,6 +338,18 @@ body {
   background-color: #fff;
 }
 
+/* A card that is a DIRECT child of .auth-page: /set-password,
+   /reset-password and /change-password, which render no wrapper. .auth-page
+   is a two-column grid built for /login's slider and form, so a lone card
+   landed in the first column, against the left edge. Register and Forgot
+   password avoid that with a wrapper spanning both columns; this does the
+   same for the bare card. Every page that wraps its card (Login, Register,
+   Forgot password) has no direct-child card and is untouched. */
+.auth-page > .card {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
 /* The auth pages' own look, SCOPED. These values were originally written onto
    the shared `.card`, `label`, `input` and `button` rules, which reach far
    beyond the auth pages: `button` alone matches 174 elements across 27 files,
@@ -1298,6 +1310,42 @@ button.link-button:hover:not(:disabled) {
   white-space: nowrap;
   font-size: 0.85rem;
   font-style: italic;
+}
+
+/* The staff accounts list on the Secretary's review screen (StaffAccountList
+   in SecretaryReviewPage.jsx). It borrows the match-suggestion row above, so
+   everything here is scoped under .staff-accounts and the match suggestions
+   are untouched.
+
+   Three lines per account, each its own line box 4px apart: @username and
+   role, the email, and the status. A username is up to 100 characters and an
+   email address has no spaces, so both may break anywhere rather than push
+   the row past its card (measured at 390px: 141px past it). */
+.staff-accounts .suggestion-info {
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* The status line is a wrapping flex row, so the pill's own padding is part
+   of the line. As an inline span inside the text, the pill's 4px top padding
+   painted over the email line above it. If "Last link sent ..." does not fit
+   beside the pill it moves under it whole. */
+.staff-accounts .account-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+/* A timestamp never breaks inside itself ("11:16:43" / "AM"). */
+.staff-accounts .account-when {
+  white-space: nowrap;
+}
+
+/* The in-row "send a link?" question: its buttons sit a little below the
+   sentence, inside the blue notice. */
+.staff-accounts .alert .actions {
+  margin-top: 8px;
 }
 
 .empty {

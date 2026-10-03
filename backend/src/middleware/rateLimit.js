@@ -1,4 +1,5 @@
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { SET_PASSWORD_TTL_HOURS } = require('../constants/passwordReset');
 
 // ===========================================================================
 // RATE LIMITING — the unauthenticated auth routes only.
@@ -14,6 +15,7 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 // routes reachable with no credentials at all — /login is an unlimited
 // password oracle, /register writes rows to `users` AND `profiles` on every
 // call, and /forgot-password has an outbound, metered side effect.
+// `/set-password` joined them later; see setPasswordLimiter below for why.
 //
 // THIS DOES NOT REPLACE THE FORGOT-PASSWORD COOLDOWN in routes/auth.js. That
 // one keys on a resolved `user_id` and lives in the `password_resets` table,
@@ -136,4 +138,32 @@ const forgotPasswordLimiter = authLimiter({
     'If you already requested a link, please check your inbox and your spam folder.',
 });
 
-module.exports = { loginLimiter, registerLimiter, forgotPasswordLimiter, clientKey, waitPhrase };
+// 10 per hour, with successful requests refunded.
+//
+// NOT WHAT STOPS A GUESSED TOKEN. A set-password token carries 256 bits, and
+// no limit is needed to make guessing it hopeless. What an anonymous caller
+// CAN do is make the server run bcrypt: a hash lookup is cheap, but a token
+// that resolves leads to a bcrypt compare and a bcrypt hash. This caps that.
+// (/reset-password has the same exposure and no limiter; it predates this one
+// and its tests pin its behaviour, so it was left as it is.)
+//
+// skipSuccessfulRequests: a success spends the link anyway, so it should not
+// count against the officials who share an office connection and set their
+// passwords one after another. A password the policy refuses (400) does count.
+const setPasswordLimiter = authLimiter({
+  windowMs: 60 * 60_000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  message:
+    `Too many attempts to set a password from this connection. Please wait ${waitPhrase(60 * 60_000)} and try again. ` +
+    `Your link still works if it has not been used and is less than ${SET_PASSWORD_TTL_HOURS} hours old.`,
+});
+
+module.exports = {
+  loginLimiter,
+  registerLimiter,
+  forgotPasswordLimiter,
+  setPasswordLimiter,
+  clientKey,
+  waitPhrase,
+};

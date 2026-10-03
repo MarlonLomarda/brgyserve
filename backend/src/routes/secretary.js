@@ -1,17 +1,29 @@
+const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { findMatches } = require('../services/nameMatching');
-const { notify } = require('../services/notifications');
-const { RELATED_TYPE } = require('../constants/notifications');
+const { notify, escapeHtml } = require('../services/notifications');
+const { NOTIFICATION_TYPE, NOTIFICATION_STATUS, RELATED_TYPE } = require('../constants/notifications');
 const { generateTemporaryPassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
 const { PH_MOBILE_RE, CONTACT_NUMBER_ERROR } = require('../constants/phoneNumber');
 const { logActivity, pick } = require('../services/activityLog');
 const { ACTIONS, RESIDENT_LOG_FIELDS } = require('../constants/activityLog');
+const { frontendOrigin } = require('../utils/frontendOrigin');
+const {
+  STAFF_TYPE_ROLES,
+  SET_PASSWORD_TTL_HOURS,
+  SET_PASSWORD_COOLDOWN_MINUTES,
+  generateToken,
+  hashToken,
+  setPasswordEmail,
+  setPasswordLogMessage,
+} = require('../constants/passwordReset');
 const {
   findUserByEmail,
+  validateEmail,
   uniqueViolationField,
   EMAIL_TAKEN_MESSAGE,
 } = require('../utils/userEmail');
@@ -27,8 +39,122 @@ const {
 // Staff-type roles the Secretary may create accounts for (per the
 // "Authentication & account rules" in docs/brgyserve-use-cases.md, this
 // includes another secretary — succession is a real need). Residents
-// self-register and are deliberately NOT creatable here.
-const STAFF_ROLES = ['secretary', 'punong_barangay', 'treasurer', 'staff'];
+// self-register and are deliberately NOT creatable here. The list lives in
+// constants/passwordReset.js because /set-password must accept exactly these
+// roles and no others.
+const STAFF_ROLES = STAFF_TYPE_ROLES;
+
+// The accounts on the staff accounts list, which is where the Secretary sends
+// a set-password link: every staff-type role except 'secretary', so neither
+// the Secretary's own account nor another Secretary's is on it.
+const MANAGED_ROLES = STAFF_ROLES.filter((r) => r !== 'secretary');
+
+// How a new staff account gets its first password. EMAIL is the default and
+// the intended path. TEMPORARY_PASSWORD is the old behaviour, kept as a
+// fallback for when email is not working. The CREATE log row records which
+// one was used.
+const DELIVERY = Object.freeze({ EMAIL: 'email', TEMPORARY_PASSWORD: 'temporary_password' });
+
+// A set-password email that left the server, or that SIMULATED mode wrote to
+// the server log instead. Either way the link exists somewhere a person can
+// reach it. FAILED and SKIPPED mean nobody has it.
+const LINK_REACHED = [NOTIFICATION_STATUS.SENT, NOTIFICATION_STATUS.SIMULATED];
+
+// The HTML body, built from the plain-text one so the two cannot say
+// different things: each paragraph becomes a <p>, and the paragraph that is
+// the bare URL becomes a link. The words come from constants/passwordReset.js.
+function htmlFromText(text, url, linkText) {
+  const safeUrl = escapeHtml(url);
+  return text
+    .split('\n\n')
+    .map((para) => (para === url
+      ? `<p><a href="${safeUrl}">${escapeHtml(linkText)}</a></p><p>Or paste this into your browser:<br>${safeUrl}</p>`
+      : `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`))
+    .join('');
+}
+
+// Issues a set-password link for a staff-type account and emails it.
+//
+// `account` needs user_id, username, email and must_change_password; the last
+// picks the email's wording (new account, or a reset of one already in use).
+// Returns notify()'s { ok, status }. Throws only when the token row cannot be
+// written, and the caller decides what that means.
+//
+// THE NEW TOKEN IS WRITTEN FIRST, THEN SENT, THEN THE RESULT DECIDES:
+//   * The link reached someone (SENT, or SIMULATED): every OLDER unused link
+//     for the account is marked used, so only the newest email works — the
+//     rule /reset-password applies once a link is spent.
+//   * It did not (FAILED): the new row is DELETED and the older links are left
+//     alone. Nobody received the new one, so keeping it would only start the
+//     15-minute cooldown on a send that never happened, and make the staff
+//     list's "last link sent" untrue. An older link the official may already
+//     hold keeps working.
+// This is deliberately NOT what /forgot-password does, which keeps its row
+// after a failed send. That row is the only rate limit on an anonymous
+// endpoint; here only a signed-in Secretary can send, so a retry is not abuse.
+async function sendSetPasswordLink(account, { name = null } = {}) {
+  const token = generateToken();
+  const { data: row, error } = await supabase
+    .from('password_resets')
+    .insert({
+      user_id: account.user_id,
+      token_hash: hashToken(token),
+      expires_at: new Date(Date.now() + SET_PASSWORD_TTL_HOURS * 3_600_000).toISOString(),
+      used_at: null,
+    })
+    .select('reset_id')
+    .single();
+  if (error) {
+    throw new Error(`Failed to record the set-password link: ${error.message}`);
+  }
+
+  const url = `${frontendOrigin()}/set-password?token=${encodeURIComponent(token)}`;
+  const mail = setPasswordEmail({
+    name,
+    username: account.username,
+    url,
+    existingAccount: account.must_change_password !== true,
+  });
+
+  // THE REDACTION SPLIT: the link is in `message` and `html`, which go to the
+  // provider; `logMessage` is what notifications.message records, and the
+  // Secretary notifications screen shows it. See services/notifications.js.
+  const result = await notify({
+    type: NOTIFICATION_TYPE.EMAIL,
+    userId: account.user_id,
+    destination: account.email,
+    subject: mail.subject,
+    message: mail.text,
+    html: htmlFromText(mail.text, url, 'Set your password'),
+    logMessage: setPasswordLogMessage(),
+    relatedType: RELATED_TYPE.ACCOUNT,
+    relatedTo: account.user_id,
+  });
+
+  // Housekeeping either way, so a failure here is logged, not raised: the
+  // send has already happened or failed, and that is what the caller reports.
+  if (LINK_REACHED.includes(result.status)) {
+    const { error: sweepError } = await supabase
+      .from('password_resets')
+      .update({ used_at: new Date().toISOString() })
+      .eq('user_id', account.user_id)
+      .is('used_at', null)
+      .neq('reset_id', row.reset_id);
+    if (sweepError) {
+      console.error(`[set-password link] failed to retire older links: ${sweepError.message}`);
+    }
+  } else {
+    const { error: dropError } = await supabase
+      .from('password_resets')
+      .delete()
+      .eq('reset_id', row.reset_id);
+    if (dropError) {
+      console.error(`[set-password link] failed to drop an unsent link: ${dropError.message}`);
+    }
+  }
+
+  return { ok: result.ok, status: result.status };
+}
 
 const router = express.Router();
 
@@ -120,9 +246,28 @@ async function attachRejectedBy(rows) {
   }));
 }
 
+// What the Secretary is told after creating an account in EMAIL mode, by the
+// email's status. The screen words this itself; the message is the fallback.
+const CREATED_BY_EMAIL_MESSAGE = {
+  [NOTIFICATION_STATUS.SENT]:
+    `Account created. A set-password link was emailed to the address you entered. It works once and expires in ${SET_PASSWORD_TTL_HOURS} hours.`,
+  [NOTIFICATION_STATUS.SIMULATED]:
+    'Account created. Email is simulated on this server, so the set-password link was not sent; it was written to the server log instead.',
+};
+const CREATED_EMAIL_NOT_SENT_MESSAGE =
+  'Account created, but the set-password email could not be sent. Use "Send set-password link" on the staff accounts list to try again.';
+
 // POST /api/secretary/accounts — create a staff-type account.
-// The generated temporary password is returned ONCE so the Secretary can hand
-// it over; must_change_password forces the user to replace it on first login.
+//
+// delivery 'email' (the default): nobody is given a password. The account is
+// created with an unusable one, and the official is emailed a one-time link
+// to choose their own at /set-password. The response says whether the email
+// went, and never contains a password.
+//
+// delivery 'temporary_password': the old behaviour, kept as an explicit
+// fallback for when email is not working. A generated password is returned
+// ONCE for the Secretary to hand over, and must_change_password forces the
+// official to replace it on first login.
 router.post('/accounts', async (req, res) => {
   const {
     username, email, role,
@@ -141,6 +286,24 @@ router.post('/accounts', async (req, res) => {
       error: `role must be one of: ${STAFF_ROLES.join(', ')} (residents self-register)`,
     });
   }
+
+  // Absent means EMAIL. Anything else that is not one of the two is refused
+  // rather than guessed at, since the two differ in who ever sees a password.
+  const delivery = req.body?.delivery ?? DELIVERY.EMAIL;
+  if (!Object.values(DELIVERY).includes(delivery)) {
+    return res.status(400).json({
+      error: `delivery must be one of: ${Object.values(DELIVERY).join(', ')}`,
+    });
+  }
+
+  // The address is how a new official gets a password at all, so a typo
+  // strands the account. Its shape is checked before any database round trip,
+  // and the TRIMMED value is what is checked for uniqueness and stored.
+  const emailCheck = validateEmail(email);
+  if (!emailCheck.ok) {
+    return res.status(400).json({ error: emailCheck.error });
+  }
+  const cleanEmail = emailCheck.value;
 
   // The SAME rules the resident registration form applies — one validator, so
   // a staff account cannot be created in a shape a resident is refused. The
@@ -169,30 +332,43 @@ router.post('/accounts', async (req, res) => {
   // be created on an address another account already holds. The Secretary is
   // the one who hears about it, so the message names the email rather than
   // sending them off to change the username.
-  const emailOwner = await findUserByEmail(email);
+  const emailOwner = await findUserByEmail(cleanEmail);
   if (emailOwner) {
     return res.status(409).json({ error: EMAIL_TAKEN_MESSAGE, code: 'EMAIL_TAKEN' });
   }
 
-  // Generated by constants/passwordPolicy.js, beside the rules it has to
-  // satisfy. It used to be built inline here, and it quietly failed the digit
-  // rule 12.94% of the time — see the note above generateTemporaryPassword()
-  // for the measurement and for why the format guarantees every rule from its
-  // fixed parts rather than from the random ones. The username is passed
-  // because the policy refuses a password containing it.
-  const temporaryPassword = generateTemporaryPassword(cleanUsername);
-  const password_hash = await bcrypt.hash(temporaryPassword, 10);
+  // TEMPORARY_PASSWORD: generated by constants/passwordPolicy.js, beside the
+  // rules it has to satisfy. It used to be built inline here, and it quietly
+  // failed the digit rule 12.94% of the time — see the note above
+  // generateTemporaryPassword() for the measurement and for why the format
+  // guarantees every rule from its fixed parts rather than from the random
+  // ones. The username is passed because the policy refuses a password
+  // containing it.
+  //
+  // EMAIL: the hash of 32 random bytes that are thrown away here. Nobody ever
+  // knows the password it matches, so the account cannot be signed into until
+  // /set-password replaces it, and login needs no special case: it runs its
+  // usual bcrypt compare against a real hash, which simply never matches.
+  const temporaryPassword = delivery === DELIVERY.TEMPORARY_PASSWORD
+    ? generateTemporaryPassword(cleanUsername)
+    : null;
+  const password_hash = await bcrypt.hash(
+    temporaryPassword ?? crypto.randomBytes(32).toString('base64url'),
+    10,
+  );
 
   const { data: user, error: userError } = await supabase
     .from('users')
     .insert({
       username: cleanUsername,
       password_hash,
-      email,
-      email_verified: false,
+      email: cleanEmail,
+      email_verified: false, // set true by /set-password, never here
       role,
-      must_change_password: true, // forced change on first login
-      is_active: true,            // staff accounts can log in immediately
+      // Either delivery: cleared by the forced change on first login, or by
+      // /set-password when the emailed link is used.
+      must_change_password: true,
+      is_active: true,
     })
     .select('user_id, username, email, role')
     .single();
@@ -224,22 +400,209 @@ router.post('/accounts', async (req, res) => {
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
-  // Username and role only — never the temporary password, its hash, or the
-  // new official's email and phone.
+  // EMAIL: the link is issued only now that the profile exists, so the
+  // profile failure above never has a token row to unwind. If the token row
+  // cannot be written, the account is useless — nobody knows its password and
+  // no link exists — so everything written is removed, children before the
+  // user (every foreign key to users is NO ACTION), and the Secretary simply
+  // tries again. A failed SEND is a different case: the account stays, and the
+  // response says the email did not go.
+  let linkEmail = null;
+  if (delivery === DELIVERY.EMAIL) {
+    try {
+      linkEmail = await sendSetPasswordLink(
+        { ...user, must_change_password: true },
+        { name: first_name },
+      );
+    } catch (err) {
+      await supabase.from('password_resets').delete().eq('user_id', user.user_id);
+      await supabase.from('profiles').delete().eq('user_id', user.user_id);
+      await supabase.from('users').delete().eq('user_id', user.user_id);
+      throw err;
+    }
+  }
+
+  // Never the temporary password, its hash, the link, or the new official's
+  // email and phone. How the password was delivered is recorded, and for an
+  // email what became of it — under email_status, because the deny-list in
+  // constants/activityLog.js drops every key containing "password".
   await logActivity({
     userId: req.user.user_id,
     action: ACTIONS.CREATE,
     table: 'users',
     recordId: user.user_id,
-    after: { username: user.username, role: user.role },
+    after: {
+      username: user.username,
+      role: user.role,
+      delivery,
+      ...(linkEmail ? { email_status: linkEmail.status } : {}),
+    },
   });
 
+  if (delivery === DELIVERY.TEMPORARY_PASSWORD) {
+    return res.status(201).json({
+      message: 'Account created. Share the temporary password securely; the user must change it on first login.',
+      user,
+      delivery,
+      temporary_password: temporaryPassword,
+    });
+  }
+
   res.status(201).json({
-    message: 'Account created. Share the temporary password securely; the user must change it on first login.',
+    message: CREATED_BY_EMAIL_MESSAGE[linkEmail.status] || CREATED_EMAIL_NOT_SENT_MESSAGE,
     user,
-    temporary_password: temporaryPassword,
+    delivery,
+    set_password_email: linkEmail,
   });
 });
+
+// GET /api/secretary/staff-accounts
+//
+// The accounts the Secretary manages here — every staff-type role but
+// 'secretary' — with when each was last sent a set-password link. Newest
+// account first, so one just created is at the top.
+//
+// The column list is explicit and must stay that way: users holds
+// password_hash, and nothing about this screen needs it.
+//
+// last_link_sent_at is the newest password_resets row for the account. A
+// staff-type account only ever has rows from set-password links, since
+// /forgot-password issues none to it, and a link whose email failed is
+// deleted rather than kept. null means no link has been sent, which is true
+// for every account created with a temporary password.
+router.get('/staff-accounts', async (req, res) => {
+  const { data: accounts, error } = await supabase
+    .from('users')
+    .select('user_id, username, role, email, is_active, must_change_password')
+    .in('role', MANAGED_ROLES)
+    .order('user_id', { ascending: false });
+  if (error) {
+    throw new Error(`Failed to load staff accounts: ${error.message}`);
+  }
+
+  // One read for all of them. The id list is the number of staff accounts,
+  // which is small, so .in() is safe here.
+  const lastLink = new Map();
+  if (accounts.length > 0) {
+    const { data: links, error: linkError } = await supabase
+      .from('password_resets')
+      .select('user_id, created_at')
+      .in('user_id', accounts.map((a) => a.user_id))
+      .order('created_at', { ascending: false });
+    if (linkError) {
+      throw new Error(`Failed to load set-password links: ${linkError.message}`);
+    }
+    for (const link of links) {
+      if (!lastLink.has(link.user_id)) lastLink.set(link.user_id, link.created_at);
+    }
+  }
+
+  res.json({
+    accounts: accounts.map((a) => ({
+      ...a,
+      last_link_sent_at: lastLink.get(a.user_id) ?? null,
+    })),
+  });
+});
+
+// POST /api/secretary/staff-accounts/:userId/send-set-password-link
+//
+// Emails a new set-password link: for an account still waiting for its
+// first password, or as an admin reset for one already in use. In the second
+// case nothing about the account changes until the link is used — the
+// current password keeps working, so an official who never opens the email
+// has lost nothing.
+//
+// The same roles as the list. A resident, a Secretary or an unknown id is a
+// 404: none of them is on that list.
+router.post('/staff-accounts/:userId/send-set-password-link', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
+
+  const { data: account, error } = await supabase
+    .from('users')
+    .select('user_id, username, email, role, is_active, must_change_password')
+    .eq('user_id', userId)
+    .in('role', MANAGED_ROLES)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load staff account: ${error.message}`);
+  }
+  if (!account) {
+    return res.status(404).json({ error: 'Staff account not found' });
+  }
+  // /set-password refuses an inactive account, so the link would be dead on
+  // arrival.
+  if (!account.is_active) {
+    return res.status(409).json({
+      error: 'This account is inactive, so a set-password link would not let anyone sign in.',
+    });
+  }
+
+  // Counted from password_resets, so it survives a restart. Only links that
+  // were actually sent are rows there (sendSetPasswordLink drops an unsent
+  // one), so a failed send never locks the Secretary out of retrying.
+  const since = new Date(Date.now() - SET_PASSWORD_COOLDOWN_MINUTES * 60_000).toISOString();
+  const { data: recent, error: cooldownError } = await supabase
+    .from('password_resets')
+    .select('created_at')
+    .eq('user_id', userId)
+    .gt('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (cooldownError) {
+    throw new Error(`Set-password cooldown check failed: ${cooldownError.message}`);
+  }
+  if (recent.length > 0) {
+    const nextAt = new Date(recent[0].created_at).getTime() + SET_PASSWORD_COOLDOWN_MINUTES * 60_000;
+    const minutes = Math.max(1, Math.ceil((nextAt - Date.now()) / 60_000));
+    return res.status(429).json({
+      error:
+        `A set-password link was sent to @${account.username} less than ${SET_PASSWORD_COOLDOWN_MINUTES} minutes ago. ` +
+        `Ask them to check their inbox and spam folder, or send another in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      code: 'SET_PASSWORD_LINK_COOLDOWN',
+      retry_after_minutes: minutes,
+    });
+  }
+
+  // Only for the greeting. A failure here must not stop the email.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('first_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const linkEmail = await sendSetPasswordLink(account, { name: profile?.first_name || null });
+
+  // What became of the email, and nothing else: no address, no link.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.SEND_SET_PASSWORD_LINK,
+    table: 'users',
+    recordId: userId,
+    after: { email_status: linkEmail.status },
+  });
+
+  res.json({
+    message: sentLinkMessage(linkEmail.status, account.username),
+    user_id: userId,
+    set_password_email: linkEmail,
+  });
+});
+
+// The send route's message, by the email's status. Like the creation
+// messages, the screen words this itself and this is the fallback.
+function sentLinkMessage(status, username) {
+  if (status === NOTIFICATION_STATUS.SENT) {
+    return `A set-password link was emailed to @${username}. It works once and expires in ${SET_PASSWORD_TTL_HOURS} hours.`;
+  }
+  if (status === NOTIFICATION_STATUS.SIMULATED) {
+    return `Email is simulated on this server, so the set-password link for @${username} was written to the server log instead of being sent.`;
+  }
+  return `The set-password email to @${username} could not be sent. Nothing else was changed, so you can try again.`;
+}
 
 async function loadResidentAccount(userId) {
   const { data, error } = await supabase

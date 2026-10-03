@@ -208,7 +208,8 @@ export default function HelpCenter() {
       <p>
         Not at present. SMS notification is not active. Messages are composed
         and recorded against your record, but they are not delivered to your
-        phone. Email is used only for password reset links.
+        phone. Email is used only for password reset links, and for the
+        set-password links Barangay officials receive to set up their accounts.
       </p>
 
       <h3>If something is wrong</h3>

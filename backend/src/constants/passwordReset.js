@@ -1,4 +1,5 @@
-// Canonical vocabulary and tuning for password reset.
+// Canonical vocabulary and tuning for password reset, and for the
+// set-password links staff-type accounts receive (see the section at the end).
 //
 // Single source of truth, and it is not decoration: the neutral response below
 // is compared BYTE FOR BYTE by scripts/test-password-reset.js across every
@@ -135,6 +136,108 @@ function resetEmail({ name, url }) {
 const resetLogMessage = () =>
   `BrgyServe: a password reset link was emailed to this address. The link itself is not recorded here. It expires in ${TOKEN_TTL_MINUTES} minutes.`;
 
+// ===========================================================================
+// SET-PASSWORD LINKS — how a staff-type account gets its password
+//
+// When the Secretary creates an account for an official (POST /api/secretary/
+// accounts), the official is emailed a one-time link and chooses their own
+// password at /set-password. The Secretary never sees one. The Secretary can
+// send another link later from the staff accounts list, which also makes it
+// the way to reset an official's forgotten password: /forgot-password is for
+// residents only.
+//
+// SAME TABLE, SAME TOKEN, SAME HASH as a reset link. What keeps the two kinds
+// apart is the ACCOUNT'S ROLE, not a column: /forgot-password issues tokens
+// only to residents and /reset-password refuses any account that is not one,
+// while set-password links go only to STAFF_TYPE_ROLES and /set-password
+// refuses any account outside them. A row therefore cannot be spent through
+// the wrong route, and no migration was needed. If staff ever get a
+// self-service forgot-password, that stops being true and password_resets
+// needs a purpose column.
+// ===========================================================================
+
+// Every staff-type role: the roles the Secretary can create an account for,
+// and the only roles /set-password sets a password for. routes/secretary.js
+// takes its STAFF_ROLES from here, so the two lists cannot drift apart.
+const STAFF_TYPE_ROLES = Object.freeze(['secretary', 'punong_barangay', 'treasurer', 'staff']);
+
+// Longer than a reset link's 60 minutes, on purpose. A reset is asked for by
+// someone waiting at their inbox; a set-password email arrives unannounced,
+// and an expired one costs the official a trip back to the Barangay Office.
+const SET_PASSWORD_TTL_HOURS = 72;
+
+// One set-password email per account per 15 minutes, counted from
+// password_resets like the reset cooldown. Only a Secretary can send one, so
+// this is not a security control: it stops a double-clicked button spending
+// the Resend quota (100/day) and filling the official's inbox.
+const SET_PASSWORD_COOLDOWN_MINUTES = 15;
+
+// One answer for every link that will not work: used, expired, unknown, or
+// not a set-password link at all. Like INVALID_TOKEN_MESSAGE it says what to
+// do next, but the next step differs: an official cannot request a link
+// themselves, so it sends them to the Barangay Office.
+const SET_PASSWORD_INVALID_MESSAGE =
+  `This set-password link is no longer valid. Links work only once and expire after ${SET_PASSWORD_TTL_HOURS} hours, so this happens most often when the link has already been used or an older email was opened. Please ask the Barangay Office to send you a new link.`;
+
+const SET_PASSWORD_SUCCESS_MESSAGE =
+  'Your password is set. You can now sign in with your username and this password. Your username is in the email that brought you here.';
+
+const SET_PASSWORD_EMAIL_SUBJECT = 'Set up your BrgyServe account';
+const NEW_PASSWORD_EMAIL_SUBJECT = 'Set a new password for your BrgyServe account';
+
+// The email. Two openings, because one link serves two cases:
+//   * a new account (must_change_password still true): nobody knows its
+//     password, so signing in cannot work until the link is used;
+//   * an account already in use: the Secretary is resetting it, and the
+//     current password keeps working until the link is used.
+// There is deliberately no "if you did not ask for this" line. The official
+// did not ask; the Barangay Office did.
+//
+// The username is included because the Secretary chose it, not the official,
+// and nobody can sign in without it.
+//
+// THE REDACTION SPLIT APPLIES EXACTLY AS IT DOES TO RESETS. The link is in
+// this text only; setPasswordLogMessage() below is what notifications.message
+// records, and the two are written separately for the reason given above
+// resetEmail().
+function setPasswordEmail({ name, username, url, existingAccount = false }) {
+  const greeting = name ? `Hello ${name},` : 'Hello,';
+  const opening = existingAccount
+    ? 'The Barangay Secretary has sent you a link to set a new password for your BrgyServe account (Barangay Ubujan, Tagbilaran City).'
+    : 'The Barangay Secretary has set up a BrgyServe account for you (Barangay Ubujan, Tagbilaran City).';
+  const signingIn = existingAccount
+    ? 'Your current password keeps working until you set a new one with this link.'
+    : 'Signing in will not work until you have set your password with this link.';
+  const text = [
+    greeting,
+    '',
+    opening,
+    '',
+    `Your username: ${username}`,
+    '',
+    'Open this link to choose your password:',
+    '',
+    url,
+    '',
+    `The link works for ${SET_PASSWORD_TTL_HOURS} hours and can only be used once. ${signingIn}`,
+    '',
+    'If the link has expired or does not work, ask the Barangay Office to send you a new one.',
+    '',
+    'BrgyServe',
+    'Barangay Ubujan, Tagbilaran City, Bohol',
+  ].join('\n');
+
+  return {
+    subject: existingAccount ? NEW_PASSWORD_EMAIL_SUBJECT : SET_PASSWORD_EMAIL_SUBJECT,
+    text,
+    url,
+  };
+}
+
+// What lands in notifications.message for a set-password email.
+const setPasswordLogMessage = () =>
+  `BrgyServe: a set-password link was emailed to this address. The link itself is not recorded here. It expires in ${SET_PASSWORD_TTL_HOURS} hours.`;
+
 module.exports = {
   TOKEN_BYTES,
   TOKEN_TTL_MINUTES,
@@ -147,4 +250,13 @@ module.exports = {
   RESET_EMAIL_SUBJECT,
   resetEmail,
   resetLogMessage,
+  STAFF_TYPE_ROLES,
+  SET_PASSWORD_TTL_HOURS,
+  SET_PASSWORD_COOLDOWN_MINUTES,
+  SET_PASSWORD_INVALID_MESSAGE,
+  SET_PASSWORD_SUCCESS_MESSAGE,
+  SET_PASSWORD_EMAIL_SUBJECT,
+  NEW_PASSWORD_EMAIL_SUBJECT,
+  setPasswordEmail,
+  setPasswordLogMessage,
 };

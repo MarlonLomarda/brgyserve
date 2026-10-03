@@ -39,6 +39,36 @@ const supabase = require('../config/supabase');
 // whole table back.
 const EMAIL_PREFILTER_LIMIT = 25;
 
+// ===========================================================================
+// THE SHAPE OF AN ADDRESS SOMEONE TYPED.
+//
+// Deliberately simple: one @, no spaces, and a domain with at least one dot
+// and no empty parts. It refuses the shapes that cannot receive mail —
+// "lon@com" is on file, from before any check existed — without pretending to
+// implement RFC 5322, whose grammar accepts addresses no mail provider issues.
+// 254 is the longest address SMTP can deliver to.
+//
+// Used by POST /api/secretary/accounts, where the address is the only way a
+// new official ever gets a password. /register does not call it yet.
+// ===========================================================================
+const EMAIL_MAX_LENGTH = 254;
+const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+const EMAIL_FORMAT_MESSAGE =
+  `Enter a valid email address of at most ${EMAIL_MAX_LENGTH} characters, such as name@example.com.`;
+
+/**
+ * @param {unknown} raw the submitted address
+ * @returns {{ ok: true, value: string } | { ok: false, error: string }}
+ *          value is the TRIMMED address, which is what callers store
+ */
+function validateEmail(raw) {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value || value.length > EMAIL_MAX_LENGTH || !EMAIL_FORMAT_RE.test(value)) {
+    return { ok: false, error: EMAIL_FORMAT_MESSAGE };
+  }
+  return { ok: true, value };
+}
+
 /**
  * @param {string} email the submitted address, untrimmed
  * @returns {Promise<{user_id: number, username: string, email: string} | null>}
@@ -101,6 +131,9 @@ function uniqueViolationField(error) {
 
 module.exports = {
   findUserByEmail,
+  validateEmail,
+  EMAIL_MAX_LENGTH,
+  EMAIL_FORMAT_MESSAGE,
   uniqueViolationField,
   EMAIL_UNIQUE_INDEX,
   USERNAME_UNIQUE_INDEX,

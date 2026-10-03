@@ -30,6 +30,7 @@ import ResidentRecordsPage from "./pages/ResidentRecordsPage";
 import RoleLandingPage from "./pages/RoleLandingPage";
 import SecretaryRequestsPage from "./pages/SecretaryRequestsPage";
 import SecretaryReviewPage from "./pages/SecretaryReviewPage";
+import SetPasswordPage from "./pages/SetPasswordPage";
 import {
   PUNONG_BARANGAY_NAV,
   RESIDENT_NAV,
@@ -129,6 +130,10 @@ export default function App() {
           the emailed link on a laptop that is still signed in would otherwise
           be redirected away from the only screen that can spend their link. */}
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Set password: the link emailed to an official when the Secretary
+          creates their account or sends them a new one. Public, and does not
+          bounce a signed-in user, for the same reason as /reset-password. */}
+      <Route path="/set-password" element={<SetPasswordPage />} />
       <Route
         path="/change-password"
         element={

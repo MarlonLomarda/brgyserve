@@ -29,6 +29,14 @@
 // SECTIONS B ONWARDS NEED MIGRATION 020. They are skipped with a clear
 // message if password_resets does not exist, rather than failing as if the
 // code were broken.
+//
+// SECTIONS F TO K ARE THE SET-PASSWORD LINKS that staff-type accounts get:
+// creation by email, the staff accounts list, sending another link, spending
+// one at /set-password, and the temporary-password fallback. The SIMULATED
+// email adapter is WRAPPED there, never replaced by a sender: it records what
+// it was given, which is the only place the raw token exists, so the test
+// spends the very link the route emailed. It can also be told to report
+// FAILED, which is how a refused send is exercised without any provider.
 // ===========================================================================
 const path = require('path');
 
@@ -39,7 +47,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true
 
 const bcrypt = require('bcryptjs');
 const supabase = require('../src/config/supabase');
-const { notify } = require('../src/services/notifications');
+const { notify, PROVIDERS, currentMode } = require('../src/services/notifications');
 const { NOTIFICATION_TYPE, NOTIFICATION_STATUS, RELATED_TYPE } = require('../src/constants/notifications');
 const {
   TOKEN_TTL_MINUTES,
@@ -49,7 +57,14 @@ const {
   FORGOT_PASSWORD_RESPONSE,
   resetEmail,
   resetLogMessage,
+  SET_PASSWORD_TTL_HOURS,
+  SET_PASSWORD_COOLDOWN_MINUTES,
+  SET_PASSWORD_INVALID_MESSAGE,
+  SET_PASSWORD_EMAIL_SUBJECT,
+  NEW_PASSWORD_EMAIL_SUBJECT,
 } = require('../src/constants/passwordReset');
+const { ACTIONS } = require('../src/constants/activityLog');
+const { setPasswordLimiter } = require('../src/middleware/rateLimit');
 
 const authRouter = require('../src/routes/auth');
 // Only for the email-uniqueness section below. The router-level
@@ -76,9 +91,11 @@ function handlerFor(router, method, routePath) {
   throw new Error(`${method.toUpperCase()} ${routePath} not found`);
 }
 
-function invoke(handler, { params = {}, body = {}, query = {} } = {}) {
+// `user` stands in for the session authenticate() would have loaded. Only the
+// routes that log an action as the caller read it.
+function invoke(handler, { params = {}, body = {}, query = {}, user } = {}) {
   return new Promise((resolve, reject) => {
-    const req = { params, body, query };
+    const req = { params, body, query, user };
     const res = {
       statusCode: 200,
       status(c) { this.statusCode = c; return this; },
@@ -90,6 +107,13 @@ function invoke(handler, { params = {}, body = {}, query = {} } = {}) {
 
 const forgot = handlerFor(authRouter, 'post', '/forgot-password');
 const reset = handlerFor(authRouter, 'post', '/reset-password');
+const setPassword = handlerFor(authRouter, 'post', '/set-password');
+
+// Undone in the finally block whatever happens, so a failed run cannot leave
+// the email adapter or the Supabase client patched for anything after it.
+const realFromForRestore = supabase.from;
+const emailAdapters = PROVIDERS[NOTIFICATION_TYPE.EMAIL];
+const realSimulatedEmail = emailAdapters.SIMULATED;
 
 // Unique enough that a crashed run cannot collide with the next one.
 const STAMP = `rst${Date.now().toString(36)}`;
@@ -494,6 +518,431 @@ let skipReason = '';
       .from('users').select('password_hash').eq('user_id', pending.user_id).single();
     check('  the pending account\'s password is untouched',
       await bcrypt.compare('OriginalPass123', stillOld.password_hash));
+
+    // ================================================================== F
+    // SET-PASSWORD LINKS: creating a staff account by email.
+    section('F. a staff account created by EMAIL gets a link, never a password');
+
+    // These sections create accounts that email a link. The top of this file
+    // forces SIMULATED; this refuses to go on if anything has undone that, so
+    // a real provider can never be reached from here.
+    if (currentMode(NOTIFICATION_TYPE.EMAIL) !== 'SIMULATED') {
+      throw new Error(`EMAIL_MODE is ${currentMode(NOTIFICATION_TYPE.EMAIL)}, not SIMULATED: refusing to run sections F onwards`);
+    }
+
+    // The SIMULATED adapter, wrapped: it records each email it is handed and
+    // can be told to answer FAILED. Restored in the finally block.
+    const sentMail = [];
+    let failSends = false;
+    emailAdapters.SIMULATED = async (destination, message, opts = {}) => {
+      sentMail.push({ destination, message, ...opts });
+      if (failSends) {
+        return { status: NOTIFICATION_STATUS.FAILED, providerResponse: 'reset:test forced a failed send' };
+      }
+      return realSimulatedEmail(destination, message, opts);
+    };
+    const tokenInMail = (m) => {
+      const found = String(m?.message || '').match(/\/set-password\?token=(\S+)/);
+      return found ? decodeURIComponent(found[1]) : '';
+    };
+
+    // The Secretary acting in this section is a throwaway too, so no real
+    // account is the actor on any row these tests write.
+    const secretary = await mkUser('sec', { role: 'secretary' });
+    const asSecretary = { user_id: secretary.user_id, role: 'secretary' };
+    const staffList = handlerFor(secretaryRouter, 'get', '/staff-accounts');
+    const sendLink = handlerFor(secretaryRouter, 'post', '/staff-accounts/:userId/send-set-password-link');
+    const newAccount = (suffix, over = {}) => ({
+      username: `${STAMP}_${suffix}`,
+      email: `${STAMP}.${suffix}@example.invalid`,
+      role: 'treasurer',
+      first_name: 'Setpw',
+      last_name: 'Fixture',
+      ...over,
+    });
+
+    // ---- refused before anything is written ------------------------------
+    const malformed = ['not-an-email', 'lon@com', 'juan @gmail.com', 'juan@gmail..com', `${'a'.repeat(250)}@x.com`];
+    for (const bad of malformed) {
+      const r = await invoke(accountsHandler, { user: asSecretary, body: newAccount('bademail', { email: bad }) });
+      check(`a malformed address is refused with a 400: ${bad.length > 24 ? `${bad.slice(0, 8)}… (${bad.length} chars)` : bad}`,
+        r.status === 400 && /valid email address/i.test(r.body?.error || ''), `${r.status} ${r.body?.error || ''}`);
+    }
+    const badDelivery = await invoke(accountsHandler, {
+      user: asSecretary, body: newAccount('baddelivery', { delivery: 'sms' }),
+    });
+    check('an unknown delivery is refused with a 400',
+      badDelivery.status === 400 && /delivery must be one of/.test(badDelivery.body?.error || ''),
+      `${badDelivery.status} ${badDelivery.body?.error || ''}`);
+    const { data: refusedRows } = await supabase
+      .from('users').select('user_id')
+      .or(`username.eq.${STAMP}_bademail,username.eq.${STAMP}_baddelivery`);
+    for (const r of refusedRows || []) created.users.push(r.user_id);
+    check('  none of those refusals created an account', (refusedRows?.length || 0) === 0,
+      `${refusedRows?.length || 0} row(s)`);
+    check('  and none sent an email', sentMail.length === 0, `${sentMail.length}`);
+
+    // ---- the real thing --------------------------------------------------
+    // No delivery given: email is the default. The address arrives padded
+    // with spaces and in mixed case, the way a form can send it.
+    const made = await invoke(accountsHandler, {
+      user: asSecretary,
+      body: newAccount('emailed', { email: `  ${STAMP}.Emailed@example.invalid ` }),
+    });
+    const emailed = made.body?.user || {};
+    if (emailed.user_id) created.users.push(emailed.user_id);
+    check('an account created with no delivery given is created by EMAIL',
+      made.status === 201 && made.body?.delivery === 'email', `${made.status} ${made.body?.error || made.body?.delivery}`);
+    check('  THE RESPONSE CARRIES NO PASSWORD',
+      !('temporary_password' in (made.body || {})) && !/Temp-/.test(JSON.stringify(made.body || {})),
+      Object.keys(made.body || {}).join(', '));
+    check('  it reports the email status instead ({ ok, status })',
+      made.body?.set_password_email?.status === NOTIFICATION_STATUS.SIMULATED
+        && made.body?.set_password_email?.ok === false,
+      JSON.stringify(made.body?.set_password_email));
+    check('  the address was stored trimmed', emailed.email === `${STAMP}.Emailed@example.invalid`,
+      JSON.stringify(emailed.email));
+
+    const { data: emailedUser } = await supabase
+      .from('users').select('password_hash, must_change_password, email_verified, is_active')
+      .eq('user_id', emailed.user_id).single();
+    check('  must_change_password is set, email_verified is not, the account is active',
+      emailedUser?.must_change_password === true && emailedUser?.email_verified === false
+        && emailedUser?.is_active === true, JSON.stringify({ ...emailedUser, password_hash: undefined }));
+    check('  the stored password is a real bcrypt hash (of random bytes nobody holds)',
+      /^\$2[aby]\$10\$/.test(emailedUser?.password_hash || ''));
+
+    const emailedRows = await rowsFor(emailed.user_id);
+    check('  exactly ONE link row was written', emailedRows.length === 1, `${emailedRows.length}`);
+    const linkHours = (new Date(emailedRows[0]?.expires_at) - new Date(emailedRows[0]?.created_at)) / 3_600_000;
+    check(`  it expires in about ${SET_PASSWORD_TTL_HOURS} hours`,
+      Math.abs(linkHours - SET_PASSWORD_TTL_HOURS) < 0.05, `${linkHours.toFixed(3)} h`);
+    check('  and is unused', emailedRows[0]?.used_at === null);
+
+    const firstMail = sentMail[0];
+    check('ONE email was handed to the provider, addressed to the account',
+      sentMail.length === 1 && firstMail?.destination === emailed.email, `${sentMail.length} email(s)`);
+    check(`  subject "${SET_PASSWORD_EMAIL_SUBJECT}"`, firstMail?.subject === SET_PASSWORD_EMAIL_SUBJECT,
+      firstMail?.subject);
+    check('  it names the username, the 72 hours, single use, and that signing in will not work yet',
+      String(firstMail?.message).includes(emailed.username) && /72 hours/.test(firstMail?.message)
+        && /only be used once/.test(firstMail?.message) && /Signing in will not work/.test(firstMail?.message));
+    check('  and has no "if you did not ask" line', !/did not ask/i.test(String(firstMail?.message)));
+    const firstToken = tokenInMail(firstMail);
+    check('  its /set-password link carries the token whose hash is stored',
+      !!firstToken && hashToken(firstToken) === emailedRows[0]?.token_hash);
+    check('  and the HTML body carries the same link',
+      String(firstMail?.html).includes(`/set-password?token=${encodeURIComponent(firstToken)}`));
+
+    const { data: setNotif } = await supabase
+      .from('notifications').select('*')
+      .eq('related_type', RELATED_TYPE.ACCOUNT).eq('related_to', emailed.user_id)
+      .order('notification_id', { ascending: false }).limit(1).maybeSingle();
+    check('a notification row was recorded', !!setNotif);
+    check('  EMAIL, SIMULATED, addressed to the account',
+      setNotif?.type === NOTIFICATION_TYPE.EMAIL && setNotif?.status === NOTIFICATION_STATUS.SIMULATED
+        && setNotif?.destination === emailed.email, `${setNotif?.type} ${setNotif?.status}`);
+    check('  THE LINK IS NOT IN notifications.message',
+      !/[?&]token=/i.test(setNotif?.message || '') && !String(setNotif?.message).includes('/set-password')
+        && !String(setNotif?.message).includes(firstToken), JSON.stringify(String(setNotif?.message).slice(0, 80)));
+    check('  and the recorded text still says what happened',
+      /set-password link/i.test(setNotif?.message || '') && /not recorded/i.test(setNotif?.message || ''));
+
+    const { data: createLog } = await supabase
+      .from('activity_logs').select('*')
+      .eq('table_name', 'users').eq('record_id', emailed.user_id).eq('action', ACTIONS.CREATE)
+      .maybeSingle();
+    check('the CREATE log row records the delivery and the email status',
+      createLog?.new_value?.delivery === 'email' && createLog?.new_value?.email_status === 'SIMULATED',
+      JSON.stringify(createLog?.new_value));
+    check('  with the Secretary as the actor', createLog?.user_id === secretary.user_id);
+    check('  and no address, link or password in it',
+      !JSON.stringify(createLog || {}).toLowerCase().includes(emailed.email.toLowerCase())
+        && !JSON.stringify(createLog || {}).includes(firstToken)
+        && !/password"\s*:/.test(JSON.stringify(createLog?.new_value || {})));
+
+    // ================================================================= F2
+    section('F2. a failure part-way through leaves no half-made account');
+    const sabotage = (table, method, error) => {
+      supabase.from = (t) => {
+        const real = realFromForRestore.call(supabase, t);
+        if (t !== table) return real;
+        const failing = method === 'insert'
+          // profiles.insert is awaited bare; password_resets.insert is
+          // followed by .select().single(). This answers both.
+          ? () => Object.assign(Promise.resolve({ data: null, error }), {
+            select: () => ({ single: async () => ({ data: null, error }) }),
+          })
+          : null;
+        return { insert: failing, delete: (...a) => real.delete(...a) };
+      };
+    };
+    for (const [table, label] of [['profiles', 'the profile'], ['password_resets', 'the link row']]) {
+      const before = sentMail.length;
+      sabotage(table, 'insert', { message: `reset:test sabotaged ${table}` });
+      let thrown = null;
+      try {
+        await invoke(accountsHandler, { user: asSecretary, body: newAccount(`unwound_${table === 'profiles' ? 'p' : 'r'}`) });
+      } catch (err) {
+        thrown = err;
+      } finally {
+        supabase.from = realFromForRestore;
+      }
+      const { data: left } = await supabase
+        .from('users').select('user_id').eq('username', `${STAMP}_unwound_${table === 'profiles' ? 'p' : 'r'}`);
+      for (const r of left || []) created.users.push(r.user_id);
+      check(`when ${label} cannot be written, the request fails`, !!thrown && /sabotaged/.test(thrown.message),
+        thrown?.message);
+      check('  and NO account is left behind', (left?.length || 0) === 0, `${left?.length || 0} row(s)`);
+      check('  and no email was sent', sentMail.length === before);
+    }
+
+    // ================================================================== G
+    section('G. the staff accounts list, and sending another link');
+    const listed = await invoke(staffList, { user: asSecretary });
+    const listRows = listed.body?.accounts || [];
+    const emailedRow = listRows.find((r) => r.user_id === emailed.user_id);
+    check('GET /staff-accounts lists the new account', listed.status === 200 && !!emailedRow, `${listed.status}`);
+    check('  with exactly the expected fields',
+      JSON.stringify(Object.keys(emailedRow || {}).sort()) === JSON.stringify(
+        ['email', 'is_active', 'last_link_sent_at', 'must_change_password', 'role', 'user_id', 'username']),
+      Object.keys(emailedRow || {}).join(', '));
+    check('  and no password hash anywhere in the response',
+      !JSON.stringify(listed.body || {}).includes('password_hash')
+        && !JSON.stringify(listed.body || {}).includes(emailedUser?.password_hash || '$2'));
+    check('  last_link_sent_at is the link just issued',
+      emailedRow?.last_link_sent_at === emailedRows[0]?.created_at, String(emailedRow?.last_link_sent_at));
+    check('  only Punong Barangay, Treasurer and Staff accounts are on it',
+      listRows.every((r) => ['punong_barangay', 'treasurer', 'staff'].includes(r.role))
+        && !listRows.some((r) => r.user_id === secretary.user_id || r.user_id === active.user_id),
+      [...new Set(listRows.map((r) => r.role))].join(', '));
+
+    const sendTo = (userId) => invoke(sendLink, { user: asSecretary, params: { userId: String(userId) } });
+
+    const tooSoon = await sendTo(emailed.user_id);
+    check(`another link within ${SET_PASSWORD_COOLDOWN_MINUTES} minutes is refused with a 429`,
+      tooSoon.status === 429 && tooSoon.body?.code === 'SET_PASSWORD_LINK_COOLDOWN',
+      `${tooSoon.status} ${tooSoon.body?.code}`);
+    check('  and says when another can go', /send another in \d+ minutes?/.test(tooSoon.body?.error || ''),
+      tooSoon.body?.error);
+    check('  no second row, no second email',
+      (await rowsFor(emailed.user_id)).length === 1 && sentMail.length === 1);
+
+    const mailBeforeTargets = sentMail.length;
+    for (const [label, id] of [['a resident', active.user_id], ['a Secretary', secretary.user_id], ['an unknown id', 2147480000]]) {
+      const r = await sendTo(id);
+      check(`sending a link to ${label} is a 404`, r.status === 404, `${r.status} ${r.body?.error || ''}`);
+    }
+    const junkId = await invoke(sendLink, { user: asSecretary, params: { userId: 'abc' } });
+    check('a non-numeric id is a 400', junkId.status === 400, `${junkId.status}`);
+    const inactiveStaff = await mkUser('inactivestaff', { role: 'staff', is_active: false });
+    const toInactive = await sendTo(inactiveStaff.user_id);
+    check('an inactive staff account is refused with a 409', toInactive.status === 409, `${toInactive.status}`);
+    check('  none of those sent anything', sentMail.length === mailBeforeTargets);
+
+    // Time is moved rather than waited for: the fixture's own rows are
+    // backdated past the cooldown.
+    const backdate = (userId) => supabase
+      .from('password_resets')
+      .update({ created_at: new Date(Date.now() - (SET_PASSWORD_COOLDOWN_MINUTES + 1) * 60_000).toISOString() })
+      .eq('user_id', userId);
+    await backdate(emailed.user_id);
+
+    // A send the provider refuses: the new row goes, the older link stays.
+    failSends = true;
+    const failedSend = await sendTo(emailed.user_id);
+    failSends = false;
+    check('a send the provider refuses answers 200 with status FAILED',
+      failedSend.status === 200 && failedSend.body?.set_password_email?.status === NOTIFICATION_STATUS.FAILED,
+      `${failedSend.status} ${JSON.stringify(failedSend.body?.set_password_email)}`);
+    const afterFail = await rowsFor(emailed.user_id);
+    check('  the unsent link\'s row was DELETED: still exactly one row', afterFail.length === 1, `${afterFail.length}`);
+    check('  and the earlier link is untouched',
+      afterFail[0]?.reset_id === emailedRows[0]?.reset_id && afterFail[0]?.used_at === null);
+
+    const resent = await sendTo(emailed.user_id);
+    check('so the cooldown did not start: a retry goes straight through',
+      resent.status === 200 && resent.body?.set_password_email?.status === NOTIFICATION_STATUS.SIMULATED,
+      `${resent.status} ${resent.body?.error || JSON.stringify(resent.body?.set_password_email)}`);
+    const afterResend = await rowsFor(emailed.user_id);
+    const liveRows = afterResend.filter((r) => r.used_at === null);
+    check('  a second row exists, and only ONE link is live', afterResend.length === 2 && liveRows.length === 1,
+      afterResend.map((r) => `${r.reset_id}:${r.used_at ? 'used' : 'LIVE'}`).join(' '));
+    check('  the OLDER link was retired', !!afterResend.find((r) => r.reset_id === emailedRows[0]?.reset_id)?.used_at);
+    const resentMail = sentMail.at(-1);
+    const resentToken = tokenInMail(resentMail);
+    check('  the new email carries the live link', hashToken(resentToken) === liveRows[0]?.token_hash);
+    check('  still worded for a new account (must_change_password is still set)',
+      resentMail?.subject === SET_PASSWORD_EMAIL_SUBJECT, resentMail?.subject);
+
+    const { data: sendLogs } = await supabase
+      .from('activity_logs').select('user_id, old_value, new_value')
+      .eq('table_name', 'users').eq('record_id', emailed.user_id).eq('action', ACTIONS.SEND_SET_PASSWORD_LINK)
+      .order('log_id');
+    check('both sends were logged as SEND_SET_PASSWORD_LINK by the Secretary (not the 429)',
+      sendLogs?.length === 2 && sendLogs.every((l) => l.user_id === secretary.user_id), `${sendLogs?.length}`);
+    check('  each holding the email status and nothing else',
+      JSON.stringify((sendLogs || []).map((l) => l.new_value)) === JSON.stringify([
+        { email_status: NOTIFICATION_STATUS.FAILED }, { email_status: NOTIFICATION_STATUS.SIMULATED }])
+        && (sendLogs || []).every((l) => l.old_value === null),
+      JSON.stringify((sendLogs || []).map((l) => l.new_value)));
+
+    // ================================================================== H
+    section('H. spending the link at /set-password');
+    const SET_PASSWORD = 'Treasurer-Set-2026!';
+    const retiredUse = await invoke(setPassword, { body: { token: firstToken, new_password: SET_PASSWORD } });
+    check('the retired first link is refused', retiredUse.status === 400
+      && retiredUse.body?.code === 'SET_PASSWORD_TOKEN_INVALID', `${retiredUse.status} ${retiredUse.body?.code}`);
+    check('  with the set-password answer: 72 hours, the Barangay Office, never "60 minutes"',
+      retiredUse.body?.error === SET_PASSWORD_INVALID_MESSAGE && /72 hours/.test(SET_PASSWORD_INVALID_MESSAGE)
+        && /Barangay Office/.test(SET_PASSWORD_INVALID_MESSAGE) && !/60 minutes/.test(SET_PASSWORD_INVALID_MESSAGE),
+      retiredUse.body?.error);
+
+    const weakSet = await invoke(setPassword, { body: { token: resentToken, new_password: 'short' } });
+    check('a password under 8 characters is refused', weakSet.status === 400
+      && /8 characters/.test(weakSet.body?.error || ''), weakSet.body?.error);
+    check('  and the link is NOT burned',
+      (await rowsFor(emailed.user_id)).find((r) => r.token_hash === hashToken(resentToken))?.used_at === null);
+
+    const setOk = await invoke(setPassword, { body: { token: resentToken, new_password: SET_PASSWORD } });
+    check('the live link sets the password', setOk.status === 200 && /sign in/i.test(setOk.body?.message || ''),
+      `${setOk.status} ${setOk.body?.error || setOk.body?.message}`);
+    const { data: setUser } = await supabase
+      .from('users').select('password_hash, must_change_password, email_verified')
+      .eq('user_id', emailed.user_id).single();
+    check('  THE NEW PASSWORD WORKS', await bcrypt.compare(SET_PASSWORD, setUser.password_hash));
+    check('  must_change_password is cleared', setUser.must_change_password === false);
+    check('  email_verified is set', setUser.email_verified === true);
+    check('  every link for the account is now used',
+      (await rowsFor(emailed.user_id)).every((r) => r.used_at !== null));
+    const { data: setLog } = await supabase
+      .from('activity_logs').select('user_id, old_value, new_value')
+      .eq('table_name', 'users').eq('record_id', emailed.user_id).eq('action', ACTIONS.PASSWORD_SET)
+      .maybeSingle();
+    check('PASSWORD_SET was logged, by the account itself, with no values',
+      setLog?.user_id === emailed.user_id && setLog?.old_value === null && setLog?.new_value === null,
+      JSON.stringify(setLog));
+
+    const spentAgain = await invoke(setPassword, { body: { token: resentToken, new_password: 'Another-Set-2026!' } });
+    check('replaying the spent link is refused with the same answer',
+      spentAgain.status === 400 && spentAgain.body?.error === SET_PASSWORD_INVALID_MESSAGE, `${spentAgain.status}`);
+    const { data: afterReplay } = await supabase
+      .from('users').select('password_hash').eq('user_id', emailed.user_id).single();
+    check('  and the password is unchanged by it', await bcrypt.compare(SET_PASSWORD, afterReplay.password_hash));
+
+    // ================================================================= H2
+    section('H2. the other ways a set-password link fails');
+    const deadAnswer = (r) => r.status === 400 && r.body?.code === 'SET_PASSWORD_TOKEN_INVALID'
+      && r.body?.error === SET_PASSWORD_INVALID_MESSAGE;
+
+    const staleLink = await issue(emailed.user_id, { minutesFromNow: -1 });
+    check('an expired staff link is refused',
+      deadAnswer(await invoke(setPassword, { body: { token: staleLink.token, new_password: 'Whatever-Set-99!' } })));
+    check('an unknown token gets the same answer',
+      deadAnswer(await invoke(setPassword, { body: { token: generateToken(), new_password: 'Whatever-Set-99!' } })));
+    check('a missing token gets the same answer',
+      deadAnswer(await invoke(setPassword, { body: { new_password: 'Whatever-Set-99!' } })));
+
+    const inactiveLink = await issue(inactiveStaff.user_id);
+    check('a link for an INACTIVE staff account gets the same answer',
+      deadAnswer(await invoke(setPassword, { body: { token: inactiveLink.token, new_password: 'Inactive-Set-99!' } })));
+
+    // A resident's token is a reset token, and /set-password must not spend it.
+    const residentLink = await issue(active.user_id);
+    check('A RESIDENT\'S RESET TOKEN gets the same answer',
+      deadAnswer(await invoke(setPassword, { body: { token: residentLink.token, new_password: 'Resident-Set-99!' } })));
+    const { data: residentAfter } = await supabase
+      .from('users').select('password_hash').eq('user_id', active.user_id).single();
+    check('  the resident\'s password is untouched', await bcrypt.compare(RETRY_PASSWORD, residentAfter.password_hash));
+    check('  and their reset link still works where it belongs: not burned',
+      (await rowsFor(active.user_id)).find((r) => r.reset_id === residentLink.reset_id)?.used_at === null);
+
+    // And the other half: /reset-password must not spend a staff link.
+    const staffLink = await issue(emailed.user_id);
+    const viaReset = await invoke(reset, { body: { token: staffLink.token, new_password: 'ViaReset-Set-99!' } });
+    check('/reset-password REFUSES a staff account\'s token', viaReset.status === 400,
+      `${viaReset.status} ${viaReset.body?.code}`);
+    const { data: staffAfterReset } = await supabase
+      .from('users').select('password_hash').eq('user_id', emailed.user_id).single();
+    check('  and the staff password is untouched', await bcrypt.compare(SET_PASSWORD, staffAfterReset.password_hash));
+
+    // ================================================================== I
+    section('I. a link to an account already in use (an admin reset)');
+    await backdate(emailed.user_id);
+    const mailBeforeReset = sentMail.length;
+    const adminReset = await sendTo(emailed.user_id);
+    check('an active account can be sent a link',
+      adminReset.status === 200 && adminReset.body?.set_password_email?.status === NOTIFICATION_STATUS.SIMULATED,
+      `${adminReset.status} ${adminReset.body?.error || ''}`);
+    const resetMail = sentMail[mailBeforeReset];
+    check(`  subject "${NEW_PASSWORD_EMAIL_SUBJECT}"`, resetMail?.subject === NEW_PASSWORD_EMAIL_SUBJECT, resetMail?.subject);
+    check('  it says the current password keeps working, NOT that signing in will fail',
+      /current password keeps working/.test(resetMail?.message || '')
+        && !/Signing in will not work/.test(resetMail?.message || ''));
+    const { data: beforeUse } = await supabase
+      .from('users').select('password_hash, must_change_password').eq('user_id', emailed.user_id).single();
+    check('  nothing about the account changed: the current password still works',
+      await bcrypt.compare(SET_PASSWORD, beforeUse.password_hash) && beforeUse.must_change_password === false);
+    check('  the staff link issued in H2 was retired by the newer one',
+      !!(await rowsFor(emailed.user_id)).find((r) => r.reset_id === staffLink.reset_id)?.used_at);
+
+    const adminToken = tokenInMail(resetMail);
+    const sameAgain = await invoke(setPassword, { body: { token: adminToken, new_password: SET_PASSWORD } });
+    check('setting the CURRENT password again is refused', sameAgain.status === 400
+      && sameAgain.body?.code === 'SET_PASSWORD_REUSED', `${sameAgain.status} ${sameAgain.body?.code}`);
+    check('  and the link survives it',
+      (await rowsFor(emailed.user_id)).find((r) => r.token_hash === hashToken(adminToken))?.used_at === null);
+    const NEXT_PASSWORD = 'Treasurer-Next-2026!';
+    const adminSet = await invoke(setPassword, { body: { token: adminToken, new_password: NEXT_PASSWORD } });
+    check('a different password is accepted', adminSet.status === 200, `${adminSet.status} ${adminSet.body?.error || ''}`);
+    const { data: afterAdmin } = await supabase
+      .from('users').select('password_hash').eq('user_id', emailed.user_id).single();
+    check('  and is now the one that works', await bcrypt.compare(NEXT_PASSWORD, afterAdmin.password_hash)
+      && !(await bcrypt.compare(SET_PASSWORD, afterAdmin.password_hash)));
+
+    // ================================================================== J
+    section('J. the temporary-password fallback is unchanged');
+    const mailBeforeFallback = sentMail.length;
+    const fallback = await invoke(accountsHandler, {
+      user: asSecretary, body: newAccount('fallback', { role: 'staff', delivery: 'temporary_password' }),
+    });
+    const fallbackId = fallback.body?.user?.user_id;
+    if (fallbackId) created.users.push(fallbackId);
+    check('delivery temporary_password creates the account and returns the password ONCE',
+      fallback.status === 201 && fallback.body?.delivery === 'temporary_password'
+        && /^Temp-/.test(fallback.body?.temporary_password || ''),
+      `${fallback.status} ${fallback.body?.error || ''}`);
+    check('  and no email status', !('set_password_email' in (fallback.body || {})));
+    const { data: fallbackUser } = await supabase
+      .from('users').select('password_hash, must_change_password').eq('user_id', fallbackId).single();
+    check('  the returned password is the stored one',
+      await bcrypt.compare(fallback.body?.temporary_password || '', fallbackUser?.password_hash || ''));
+    check('  must_change_password is set', fallbackUser?.must_change_password === true);
+    check('  NO link row was written', (await rowsFor(fallbackId)).length === 0);
+    check('  NO email was sent', sentMail.length === mailBeforeFallback);
+    const { count: fallbackNotifs } = await supabase
+      .from('notifications').select('notification_id', { count: 'exact', head: true })
+      .eq('related_type', RELATED_TYPE.ACCOUNT).eq('related_to', fallbackId);
+    check('  and no notification was recorded', fallbackNotifs === 0, String(fallbackNotifs));
+    const { data: fallbackLog } = await supabase
+      .from('activity_logs').select('new_value')
+      .eq('table_name', 'users').eq('record_id', fallbackId).eq('action', ACTIONS.CREATE).maybeSingle();
+    check('  the CREATE log row records the fallback, with no email status',
+      fallbackLog?.new_value?.delivery === 'temporary_password' && !('email_status' in (fallbackLog?.new_value || {})),
+      JSON.stringify(fallbackLog?.new_value));
+    check('  and never the password',
+      !JSON.stringify(fallbackLog || {}).includes(fallback.body?.temporary_password || 'Temp-'));
+    const relisted = await invoke(staffList, { user: asSecretary });
+    const fallbackRow = (relisted.body?.accounts || []).find((r) => r.user_id === fallbackId);
+    check('  the staff list shows it waiting, with no link ever sent',
+      fallbackRow?.must_change_password === true && fallbackRow?.last_link_sent_at === null,
+      JSON.stringify(fallbackRow));
+
+    // ================================================================== K
+    section('K. /set-password is rate limited');
+    const setLayer = authRouter.stack.find((l) => l.route?.path === '/set-password');
+    check('the route runs setPasswordLimiter before its handler',
+      setLayer?.route.stack.length === 2 && setLayer.route.stack[0].handle === setPasswordLimiter);
   } catch (err) {
     if (err === SKIP_REST) {
       console.log(`\nSKIPPED from section B: password_resets is not there (${skipReason}).`);
@@ -504,6 +953,8 @@ let skipReason = '';
       failures++;
     }
   } finally {
+    emailAdapters.SIMULATED = realSimulatedEmail;
+    supabase.from = realFromForRestore;
     section('cleanup');
     for (const id of created.users) {
       await supabase.from('password_resets').delete().eq('user_id', id);

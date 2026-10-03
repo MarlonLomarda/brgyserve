@@ -11,6 +11,7 @@ const {
   loginLimiter,
   registerLimiter,
   forgotPasswordLimiter,
+  setPasswordLimiter,
 } = require('../middleware/rateLimit');
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
@@ -32,6 +33,9 @@ const {
   RESET_SUCCESS_MESSAGE,
   resetEmail,
   resetLogMessage,
+  STAFF_TYPE_ROLES,
+  SET_PASSWORD_INVALID_MESSAGE,
+  SET_PASSWORD_SUCCESS_MESSAGE,
 } = require('../constants/passwordReset');
 
 const router = express.Router();
@@ -390,9 +394,10 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
 // OUTBOUND, METERED side effect — hence the cooldown below.
 //
 // RESIDENTS ONLY. A staff-type account (secretary, punong_barangay,
-// treasurer, staff) gets nothing, silently: those accounts are created by the
-// Secretary with a temporary password and the same office can reissue one, so
-// an email path for them would add an attack surface with no user behind it.
+// treasurer, staff) gets nothing, silently: an official's password is set
+// through a link the Secretary sends (POST /set-password, below), and the
+// same office can send another, so a self-service email path for them would
+// add an attack surface with no user behind it.
 // Pending and rejected accounts get nothing either — neither may log in, so a
 // working password would change nothing for them, and sending mail to a
 // declined applicant would read as progress that has not happened.
@@ -729,6 +734,133 @@ router.post('/reset-password', async (req, res) => {
   });
 
   res.json({ message: RESET_SUCCESS_MESSAGE });
+});
+
+// POST /api/auth/set-password — UNAUTHENTICATED. The token is the authority.
+//
+// Where an official chooses their password, from the link the Secretary had
+// emailed to them (routes/secretary.js). It follows /reset-password above —
+// the lookup by hash, the policy and reuse checks BEFORE the claim, the
+// status-guarded single-use claim, the sweep — and the reasoning written
+// there applies here unchanged. What differs:
+//
+//   * STAFF-TYPE ACCOUNTS ONLY. A resident's token is a reset token, and it
+//     gets the same answer as an unknown one, so this route can neither spend
+//     a reset link nor confirm that a token is one. /reset-password refuses
+//     staff tokens in turn. Together they are what keeps the two kinds of
+//     link apart with no purpose column (see constants/passwordReset.js).
+//   * ONE ANSWER FOR EVERY DEAD LINK: unknown, used, expired, the wrong kind
+//     of account, or an account that is no longer active. An official cannot
+//     request a link themselves, so every case has the same next step — the
+//     Barangay Office — and the answer says so.
+//   * IT CLEARS must_change_password. The account was created with that flag,
+//     and this link is how it is met. /reset-password leaves the flag alone
+//     for the opposite reason: residents are never created with it.
+//   * IT SETS email_verified. Spending a link that only ever went to this
+//     address proves the official controls it. This is the first code to set
+//     that column true; it was reserved for exactly this.
+//
+// RATE LIMITED, unlike /reset-password: see setPasswordLimiter.
+router.post('/set-password', setPasswordLimiter, async (req, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+  const newPassword = req.body?.new_password;
+  const deadLink = () =>
+    res.status(400).json({ error: SET_PASSWORD_INVALID_MESSAGE, code: 'SET_PASSWORD_TOKEN_INVALID' });
+
+  if (!token) return deadLink();
+  // Presence only; the policy needs the account's username, as in
+  // /reset-password.
+  if (!newPassword) {
+    return res.status(400).json({ error: 'A new password is required.' });
+  }
+
+  const { data: link, error: lookupError } = await supabase
+    .from('password_resets')
+    .select('reset_id, user_id, expires_at, used_at')
+    .eq('token_hash', hashToken(token))
+    .maybeSingle();
+  if (lookupError) {
+    throw new Error(`Set-password lookup failed: ${lookupError.message}`);
+  }
+  if (!link || link.used_at || new Date(link.expires_at).getTime() <= Date.now()) {
+    return deadLink();
+  }
+
+  // As in /reset-password, `username` is read for the password blocklist and
+  // `password_hash` for the reuse check, and neither leaves this handler.
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('user_id, username, password_hash, role, is_active')
+    .eq('user_id', link.user_id)
+    .maybeSingle();
+  if (userError) {
+    throw new Error(`Set-password user lookup failed: ${userError.message}`);
+  }
+  if (!user || !STAFF_TYPE_ROLES.includes(user.role) || !user.is_active) {
+    return deadLink();
+  }
+
+  // Before the claim, so a refused password costs a retry, not the link.
+  const passwordCheck = validatePassword(newPassword, { username: user.username });
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ error: passwordCheck.error });
+  }
+
+  // Only an account already in use can match here: a new account's hash is of
+  // random bytes nobody holds. That is the case where the Secretary sent a
+  // link to reset a password, and reusing it would leave nothing changed.
+  const reusesCurrent = await bcrypt.compare(String(newPassword), user.password_hash);
+  if (reusesCurrent) {
+    return res.status(400).json({
+      error:
+        'Your new password must be different from your current one. Nothing has been changed and this link still works, so please choose a different password.',
+      code: 'SET_PASSWORD_REUSED',
+    });
+  }
+
+  // The status-guarded claim, then the password: the order /reset-password
+  // explains. The worst case is a spent link and an unchanged password, which
+  // costs the official a new link from the Barangay Office and leaks nothing.
+  const { data: claimed, error: claimError } = await supabase
+    .from('password_resets')
+    .update({ used_at: new Date().toISOString() })
+    .eq('reset_id', link.reset_id)
+    .is('used_at', null)
+    .select('reset_id');
+  if (claimError) {
+    throw new Error(`Failed to consume the set-password link: ${claimError.message}`);
+  }
+  if (!claimed || claimed.length === 0) return deadLink();
+
+  const password_hash = await bcrypt.hash(String(newPassword), 10);
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ password_hash, must_change_password: false, email_verified: true })
+    .eq('user_id', user.user_id);
+  if (updateError) {
+    throw new Error(`Failed to set the password: ${updateError.message}`);
+  }
+
+  // Any other link the official still holds dies with this one.
+  const { error: sweepError } = await supabase
+    .from('password_resets')
+    .update({ used_at: new Date().toISOString() })
+    .eq('user_id', user.user_id)
+    .is('used_at', null);
+  if (sweepError) {
+    console.error(`[set password] failed to invalidate other links: ${sweepError.message}`);
+  }
+
+  // Unauthenticated: the actor is the account the link belonged to. That it
+  // happened, and nothing else.
+  await logActivity({
+    userId: user.user_id,
+    action: ACTIONS.PASSWORD_SET,
+    table: 'users',
+    recordId: user.user_id,
+  });
+
+  res.json({ message: SET_PASSWORD_SUCCESS_MESSAGE });
 });
 
 module.exports = router;

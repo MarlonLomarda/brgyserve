@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
   return (
     <>
       <h2 id="legal-modal-title">Privacy Policy</h2>
-      <p className="legal-effective">Effective: 1 October 2026</p>
+      <p className="legal-effective">Effective: 3 October 2026</p>
 
       <h3>Who we are, and what this system is</h3>
       <p>
@@ -93,6 +93,15 @@ export default function PrivacyPolicy() {
         registered, and — if your registration is declined — the reason recorded
         and which official recorded it.
       </p>
+      <p>
+        Accounts for Barangay officials, which the Barangay Secretary creates,
+        hold the same kind of account details: a username, an email address, a
+        role, and the password stored only as a bcrypt hash and never in
+        readable form. They also store the official&apos;s name and,
+        optionally, a phone number. An official&apos;s email address is marked
+        as verified once they set their password from the emailed set-password
+        link.
+      </p>
 
       <h4>What you do in the portal</h4>
       <p>
@@ -112,11 +121,12 @@ export default function PrivacyPolicy() {
       <p>
         BrgyServe keeps a log of the actions Barangay officials and staff take
         on records: adding, editing, archiving and approving them, recording
-        payments, recording event attendance, and recording blotter cases.
-        Actions of yours that change a record are logged too: registering,
-        submitting or cancelling a request, booking a facility, declaring a
-        payment, having a GCash payment confirmed, and changing or resetting
-        your password.
+        payments, recording event attendance, recording blotter cases, and
+        sending an official a set-password link. Actions of yours that change a
+        record are logged too: registering, submitting or cancelling a request,
+        booking a facility, declaring a payment, having a GCash payment
+        confirmed, changing or resetting your password, and setting your
+        password from an emailed set-password link.
       </p>
       <p>
         Each entry holds who took the action, what the action was, which record
@@ -124,8 +134,8 @@ export default function PrivacyPolicy() {
         and after the change. When a resident record is added, the entry holds
         the person&apos;s name only, not the rest of the record.{' '}
         <strong>
-          Passwords, password reset links, household QR codes and payment
-          credentials are never written to it.
+          Passwords, password reset links, set-password links, household QR
+          codes and payment credentials are never written to it.
         </strong>{' '}
         Viewing a page or a record is not logged, and neither is signing in.
       </p>
@@ -235,9 +245,15 @@ export default function PrivacyPolicy() {
                 <strong>Resend</strong>
               </td>
               <td data-label="What it receives">
-                Your email address, your first name, and the reset link.
+                Your email address, your first name, and the link: a password
+                reset link, or for a Barangay official&apos;s account, a
+                set-password link and the account&apos;s username.
               </td>
-              <td data-label="When">Only when you request a password reset</td>
+              <td data-label="When">
+                Only when you request a password reset, or when the Barangay
+                Secretary creates an official&apos;s account or sends the
+                official a new set-password link
+              </td>
             </tr>
             <tr>
               <td>
@@ -289,7 +305,7 @@ export default function PrivacyPolicy() {
       <h3>4. Where it is stored</h3>
       <p>
         Our backend runs in <strong>Singapore</strong>. Password reset emails
-        are dispatched from a provider region in{' '}
+        and set-password emails are dispatched from a provider region in{' '}
         <strong>Tokyo, Japan</strong>. The database is hosted by Supabase.
         Personal data is therefore processed outside the Philippines, as RA
         10173 permits, and we remain accountable for it.
@@ -307,8 +323,10 @@ export default function PrivacyPolicy() {
         </li>
         <li>Row-level security is enabled on every table in the database</li>
         <li>
-          Password reset links are stored only as a SHA-256 hash, expire after
-          60 minutes, and stop working after a single use
+          Password reset links and set-password links are stored only as a
+          SHA-256 hash and stop working after a single use. Reset links expire
+          after 60 minutes; set-password links, which Barangay officials
+          receive, after 72 hours
         </li>
         <li>
           Sign-in, registration, and password-reset attempts are rate-limited,

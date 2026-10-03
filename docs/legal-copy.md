@@ -4,10 +4,13 @@ Source copy for the three `/login` modals, and the source of truth for their
 wording. The Privacy Policy's activity-log text — "A log of changes to records"
 in §1, the audit-trail purpose in §2 and the log's retention in §6 — was checked
 against the logging code and its tests (`activity:test`) on 1 October 2026. The
-"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Every
-other factual claim below was checked against the codebase on 10 September
-2026. If the system changes, change this file and re-render the modals from it
-— do not edit the JSX copy directly.
+lines about set-password links and officials' accounts, in §1, §3, §4 and §5 of
+the Privacy Policy, Terms of Use §10, and the Help Center's answer about text
+messages, were checked against the set-password code and its tests
+(`reset:test`) on 3 October 2026. The "No uploaded files" point was corrected on
+24 September 2026 (`3e372e6`). Every other factual claim below was checked
+against the codebase on 10 September 2026. If the system changes, change this
+file and re-render the modals from it — do not edit the JSX copy directly.
 
 Heading levels are the intended render: the modal title is `h2`, numbered
 sections are `h3`, sub-points are `h4`.
@@ -16,7 +19,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 1 October 2026*
+*Effective: 3 October 2026*
 
 ### Who we are, and what this system is
 
@@ -63,6 +66,13 @@ bcrypt hash and never in readable form, your role, the date you registered, and
 — if your registration is declined — the reason recorded and which official
 recorded it.
 
+Accounts for Barangay officials, which the Barangay Secretary creates, hold the
+same kind of account details: a username, an email address, a role, and the
+password stored only as a bcrypt hash and never in readable form. They also
+store the official's name and, optionally, a phone number. An official's email
+address is marked as verified once they set their password from the emailed
+set-password link.
+
 #### What you do in the portal
 
 Document requests and their status, facility bookings and returns, charges and
@@ -78,17 +88,19 @@ addressed to, and whether it was delivered.
 
 BrgyServe keeps a log of the actions Barangay officials and staff take on
 records: adding, editing, archiving and approving them, recording payments,
-recording event attendance, and recording blotter cases. Actions of yours that
-change a record are logged too: registering, submitting or cancelling a
-request, booking a facility, declaring a payment, having a GCash payment
-confirmed, and changing or resetting your password.
+recording event attendance, recording blotter cases, and sending an official a
+set-password link. Actions of yours that change a record are logged too:
+registering, submitting or cancelling a request, booking a facility, declaring
+a payment, having a GCash payment confirmed, changing or resetting your
+password, and setting your password from an emailed set-password link.
 
 Each entry holds who took the action, what the action was, which record it was
 taken on, the time, and the values of the changed fields before and after the
 change. When a resident record is added, the entry holds the person's name
-only, not the rest of the record. **Passwords, password reset links, household
-QR codes and payment credentials are never written to it.** Viewing a page or a
-record is not logged, and neither is signing in.
+only, not the rest of the record. **Passwords, password reset links,
+set-password links, household QR codes and payment credentials are never
+written to it.** Viewing a page or a record is not logged, and neither is
+signing in.
 
 Access to this log is limited to authorised Barangay officials and to the
 development team that operates BrgyServe on the Barangay's behalf.
@@ -125,7 +137,7 @@ and we do not share it for advertising.
 |---|---|---|
 | **Supabase** | The database. All records described in §1. | Always |
 | **PayMongo** | Your name, email address, and mobile number where we hold them; the amount, the description of what is being paid for, and our internal charge reference. | Only when you choose to pay by GCash |
-| **Resend** | Your email address, your first name, and the reset link. | Only when you request a password reset |
+| **Resend** | Your email address, your first name, and the link: a password reset link, or for a Barangay official's account, a set-password link and the account's username. | Only when you request a password reset, or when the Barangay Secretary creates an official's account or sends the official a new set-password link |
 | **Render** | Backend hosting. Processes all of the above. | Always |
 | **Vercel** | Frontend hosting. Receives request information when you load the site. | Always |
 | **Cloudflare** | Sits in front of our backend, so portal traffic passes through it. | Always |
@@ -142,18 +154,19 @@ country in which they may hold data. Their own privacy policies govern that.
 
 ### 4. Where it is stored
 
-Our backend runs in **Singapore**. Password reset emails are dispatched from a
-provider region in **Tokyo, Japan**. The database is hosted by Supabase.
-Personal data is therefore processed outside the Philippines, as RA 10173
-permits, and we remain accountable for it.
+Our backend runs in **Singapore**. Password reset emails and set-password
+emails are dispatched from a provider region in **Tokyo, Japan**. The database
+is hosted by Supabase. Personal data is therefore processed outside the
+Philippines, as RA 10173 permits, and we remain accountable for it.
 
 ### 5. How we protect it
 
 - All traffic between you and BrgyServe is encrypted in transit (HTTPS/TLS)
 - Passwords are stored as bcrypt hashes and cannot be read back, including by us
 - Row-level security is enabled on every table in the database
-- Password reset links are stored only as a SHA-256 hash, expire after 60
-  minutes, and stop working after a single use
+- Password reset links and set-password links are stored only as a SHA-256
+  hash and stop working after a single use. Reset links expire after 60
+  minutes; set-password links, which Barangay officials receive, after 72 hours
 - Sign-in, registration, and password-reset attempts are rate-limited, and each
   account may only be sent one reset email every 15 minutes
 - Officials and staff see only the data their role requires. Staff accounts, for
@@ -223,7 +236,7 @@ received in person at the Barangay Office.
 
 ## TERMS OF USE
 
-*Effective: 10 September 2026*
+*Effective: 3 October 2026*
 
 ### 1. What BrgyServe is
 
@@ -331,7 +344,8 @@ the Barangay Office, not through the portal.
 ### 10. Notifications
 
 Notices about your requests, bookings, and payments appear **inside the portal**
-when you sign in. Email is used only to send a password reset link. SMS
+when you sign in. Email is used only to send password reset links, and the
+set-password links Barangay officials receive to set up their accounts. SMS
 notification is not currently active — messages are recorded against your
 record but are not delivered to your phone.
 
@@ -528,7 +542,8 @@ authoritative place.
 
 Not at present. SMS notification is not active. Messages are composed and
 recorded against your record, but they are not delivered to your phone. Email
-is used only for password reset links.
+is used only for password reset links, and for the set-password links Barangay
+officials receive to set up their accounts.
 
 ### If something is wrong
 

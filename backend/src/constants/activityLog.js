@@ -31,6 +31,11 @@ const ACTIONS = {
   REOPEN: 'REOPEN',
   PASSWORD_CHANGE: 'PASSWORD_CHANGE',
   PASSWORD_RESET: 'PASSWORD_RESET',
+  // The Secretary emailing an official a set-password link from the staff
+  // accounts list, and the official spending one. A link sent at account
+  // creation is recorded on that CREATE row instead.
+  SEND_SET_PASSWORD_LINK: 'SEND_SET_PASSWORD_LINK',
+  PASSWORD_SET: 'PASSWORD_SET',
   IMPORT: 'IMPORT',
 };
 
