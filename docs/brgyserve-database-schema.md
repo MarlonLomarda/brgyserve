@@ -165,7 +165,7 @@ Stores system user accounts, including login credentials, roles, and account sta
 | username | varchar(100) | | No | Unique username used for system login. |
 | password_hash | varchar(255) | | No | Hashed password used for authentication. |
 | email | varchar(255) | | No | Email address associated with the account. |
-| email_verified | boolean | | No | Whether the user's email has been verified. |
+| email_verified | boolean | | No | Whether the user's email has been verified. Written false at both account-creation paths; set true by `POST /api/auth/set-password` when a staff member sets their password from an emailed set-password link, which proves they control the address. No route reads it yet. |
 | role | varchar(50) | | No | System role (Secretary, Punong Barangay, Treasurer, Staff, Resident). |
 | must_change_password | boolean | | No | Whether the user must change their password on next login. |
 | is_active | boolean | | No | Whether the account is active and allowed to access the system. |
@@ -192,7 +192,7 @@ Stores additional profile information for system users, such as name, contact nu
 | birthdate | date | | Yes | Birthdate claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
 | address | varchar(255) | | Yes | Address claimed by the resident at self-registration; used by the Secretary to match against resident_records. Added in migration 002. |
 
-**`profile_pic varchar(255)` was DROPPED in migration 019.** It existed from migration 001 and was never read or written by any code. A resident photo was considered and **declined**: under the Data Privacy Act a photograph needs a stated purpose, and no BrgyServe function uses one. This is a decision against the feature, not a deferral — contrast `users.email_verified`, which is equally unused but is **reserved** for planned email verification and therefore kept.
+**`profile_pic varchar(255)` was DROPPED in migration 019.** It existed from migration 001 and was never read or written by any code. A resident photo was considered and **declined**: under the Data Privacy Act a photograph needs a stated purpose, and no BrgyServe function uses one. This is a decision against the feature, not a deferral — contrast `users.email_verified`, which was equally unused but **reserved** for email verification and therefore kept, and which the staff set-password flow has written since 3 Oct 2026.
 
 ---
 
@@ -316,7 +316,7 @@ Stores notifications sent to users or households via SMS or email, including del
 | destination | varchar(255) | | No | Target contact address (phone number or email). NOT NULL, so a SKIPPED row (no number on record) stores an empty string and the status carries the reason. |
 | subject | varchar(255) | | Yes | Subject line (mainly for email); null for SMS. |
 | message | text | | No | Content/body of the notification. |
-| status | varchar(50) | | No | Delivery status: PENDING, SIMULATED, SENT, FAILED, SKIPPED. **SIMULATED** = composed, addressed and recorded but deliberately not transmitted; it is a separate value from SENT so the log never reports a delivery that did not happen. The mode is per type and read from its own variable — `SMS_MODE` (default SIMULATED, and it stays there) and `EMAIL_MODE` (SIMULATED or RESEND) — so an SMS setting can never route email. **SENT** is currently only ever reached by a password reset email under `EMAIL_MODE=RESEND`. **SKIPPED** = there was no destination on record, so there was nothing to send to; the row is still written, because who the barangay cannot reach is worth knowing. |
+| status | varchar(50) | | No | Delivery status: PENDING, SIMULATED, SENT, FAILED, SKIPPED. **SIMULATED** = composed, addressed and recorded but deliberately not transmitted; it is a separate value from SENT so the log never reports a delivery that did not happen. The mode is per type and read from its own variable — `SMS_MODE` (default SIMULATED, and it stays there) and `EMAIL_MODE` (SIMULATED or RESEND) — so an SMS setting can never route email. **SENT** is only ever reached by an email under `EMAIL_MODE=RESEND`: a resident's password reset link or a staff member's set-password link. **SKIPPED** = there was no destination on record, so there was nothing to send to; the row is still written, because who the barangay cannot reach is worth knowing. |
 | provider_response | text | | Yes | Response from the SMS/email provider (message ID, error details). Never the API key. |
 | related_type | varchar(50) | | Yes | Type of related record (CHARGE, EVENT, DOCUMENT_REQUEST, RENTAL_REQUEST, ACCOUNT). Not an enforced vocabulary — the column has no CHECK, so a new kind is a constants-only change. |
 | related_to | bigint | | Yes | ID of the related record (polymorphic — not an enforced FK). |
@@ -330,16 +330,17 @@ Stores system audit logs of user actions, including what was changed, where, and
 |---|---|---|---|---|
 | log_id | bigint | PK | No | Uniquely identifies each activity log entry. |
 | user_id | bigint | FK → users | No | User who performed the action. NOT NULL with **no ON DELETE rule**, so a user who has any log row cannot be deleted until those rows are. |
-| action | varchar(100) | | No | Type of action. The codes are fixed in `backend/src/constants/activityLog.js` (`ACTIONS`): CREATE, UPDATE, ARCHIVE, UNARCHIVE, APPROVE, REJECT, UNREJECT, LINK, ACTIVATE, DEACTIVATE, RELEASE, CLAIM, CANCEL, RETURN, VERIFY_PAYMENT, SETTLE_PAYMENT, DECLARE_PAYMENT, RECORD_ATTENDANCE, REMOVE_ATTENDANCE, GENERATE_FINES, VOID_FINE, SETTLE, REOPEN, PASSWORD_CHANGE, PASSWORD_RESET, IMPORT. There is no LOGIN: signing in is deliberately not logged. No CHECK, so a new code is a constants-only change. |
+| action | varchar(100) | | No | Type of action. The 28 codes are fixed in `backend/src/constants/activityLog.js` (`ACTIONS`): CREATE, UPDATE, ARCHIVE, UNARCHIVE, APPROVE, REJECT, UNREJECT, LINK, ACTIVATE, DEACTIVATE, RELEASE, CLAIM, CANCEL, RETURN, VERIFY_PAYMENT, SETTLE_PAYMENT, DECLARE_PAYMENT, RECORD_ATTENDANCE, REMOVE_ATTENDANCE, GENERATE_FINES, VOID_FINE, SETTLE, REOPEN, PASSWORD_CHANGE, PASSWORD_RESET, SEND_SET_PASSWORD_LINK, PASSWORD_SET, IMPORT. There is no LOGIN: signing in is deliberately not logged. No CHECK, so a new code is a constants-only change. |
 | table_name | varchar(100) | | No | The REAL name of the database table affected (`household_records`, not "households"), so a row can be joined back by hand. |
 | record_id | bigint | | Yes | ID of the specific record affected (polymorphic — not an enforced FK). Null only for an action that covers many records at once — a masterlist import (IMPORT) and fine generation (GENERATE_FINES), each logged as one summary row. |
 | old_value | jsonb | | Yes | Values before the action — for an edit, only the fields that changed. Null when the action records no prior values — always on CREATE, and on some status toggles that record only the new state. |
-| new_value | jsonb | | Yes | Values after the action — for an edit, only the fields that changed. Null when the action records no new values — on REMOVE_ATTENDANCE, whose attendance row is hard-deleted. PASSWORD_CHANGE and PASSWORD_RESET leave both value columns null: the row records that the change happened and nothing else. |
+| new_value | jsonb | | Yes | Values after the action — for an edit, only the fields that changed. Null when the action records no new values — on REMOVE_ATTENDANCE, whose attendance row is hard-deleted. PASSWORD_CHANGE, PASSWORD_RESET and PASSWORD_SET leave both value columns null: the row records that the change happened and nothing else. |
 | timestamp | timestamptz | | No | When the action was performed. **Set by the application; the column has no database default.** |
 
 **Notes:**
 - **Sensitive keys are removed before a row is stored** — removed entirely, not masked, at every depth of `old_value` and `new_value`: passwords and password hashes, tokens and reset links, QR tokens, secrets and API keys, notification message text, provider responses, PayMongo ids and checkout URLs, and any key containing `password`, `token` or `secret`. A string value carrying a `?token=` / `&token=` link is dropped too. The list is `SENSITIVE_KEYS` and its neighbours in `backend/src/constants/activityLog.js`.
 - A CREATE of a resident record stores the name fields only (`RESIDENT_LOG_FIELDS`), not the rest of the row, so the log does not hold a second copy of birthdates, addresses and contact numbers.
+- A CREATE of an account (`table_name` users) stores `username` and `role`. A staff account created by the Secretary adds `delivery` (`email` or `temporary_password`) and, for email, `email_status` (the set-password email's SENT, SIMULATED or FAILED), so its new_value is `{username, role, delivery, email_status}`. SEND_SET_PASSWORD_LINK stores `{email_status}` only. Never the address, the link or a password: the key is `email_status` because any key containing `password` is removed.
 - An edit that changed nothing writes no row: an UPDATE whose old and new values are both empty objects is skipped (`73b6fe6`).
 - Written by `backend/src/services/activityLog.js`, after the action's own write has succeeded; a failure to log is reported to the server console and never undoes or fails the action.
 
@@ -370,21 +371,26 @@ Stores pairs of resident records flagged by the two-stage fuzzy name-matching co
 ## Auth (NEW — not yet in the thesis)
 
 ### TABLE 20. password_resets
-Stores outstanding and spent password reset links (migration 020). One row per request from `POST /api/auth/forgot-password`; consumed by `POST /api/auth/reset-password`. Residents only — the routes refuse every other role, and pending and rejected accounts as well.
+Stores outstanding and spent password links (migration 020), of two kinds:
+
+- **Resident password reset links**: one row per request from `POST /api/auth/forgot-password`, consumed by `POST /api/auth/reset-password`, valid 60 minutes. Those routes serve active residents only and refuse every other role (a staff token gets a 400), and pending and rejected accounts as well.
+- **Staff set-password links** (since 3 Oct 2026): one row per link the Secretary sends, from `POST /api/secretary/accounts` (delivery `email`) or `POST /api/secretary/staff-accounts/:userId/send-set-password-link`, consumed by `POST /api/auth/set-password`, valid 72 hours. That route accepts staff-type accounts only.
+
+Both kinds work once and are stored only as a SHA-256 hash of the token. They are told apart by the account's role, not by a column, so no migration was needed.
 
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
 | reset_id | bigint | PK | No | Uniquely identifies each reset request. |
 | user_id | bigint | FK → users | No | Account the link belongs to. |
-| token_hash | varchar(64) | UNIQUE | No | SHA-256 hex digest of the reset token. The raw token (32 random bytes, base64url, 43 characters) exists only in the email and in the resident's URL bar; it is never stored. UNIQUE so the lookup resolves to at most one row without ordering. |
-| expires_at | timestamptz | | No | When the link stops working — 60 minutes after it was issued. |
+| token_hash | varchar(64) | UNIQUE | No | SHA-256 hex digest of the token. The raw token (32 random bytes, base64url, 43 characters) exists only in the email and in the recipient's address bar; it is never stored. UNIQUE so the lookup resolves to at most one row without ordering. |
+| expires_at | timestamptz | | No | When the link stops working: 60 minutes after it was issued for a reset link, 72 hours for a set-password link. |
 | used_at | timestamptz | | Yes | When the link was spent; null while it is still live. Consumed with a status-guarded `UPDATE … WHERE used_at IS NULL`, so two simultaneous submissions of one link cannot both succeed. |
-| created_at | timestamptz | | No | When the request was made. Defaults to `now()`. Also what the per-user 15-minute cooldown is counted against. |
+| created_at | timestamptz | | No | When the link was issued. Defaults to `now()`. Also what the 15-minute per-account cooldowns are counted against: the reset one in `/forgot-password`, and the set-password one in the Secretary's send route. |
 
 **Notes:**
 - The hash is a FAST one on purpose, which is the opposite of the rule for `users.password_hash`. bcrypt is slow because a password is low-entropy and worth brute-forcing; a 256-bit random token is not, so slowness would buy nothing and only make an unauthenticated route expensive to call.
 - `household_qr.qr_token` (Table 2) is stored RAW and is a different case, not an inconsistency: it is a long-lived identifier, scanned repeatedly, granting no account access.
-- Rows are marked used rather than deleted — a used row is the only record that a reset happened once the password itself has changed.
+- Rows are marked used rather than deleted — a used row is the only record that a reset happened once the password itself has changed. The one exception: a set-password link whose email could not be sent is deleted at once, because nobody received it, and keeping it would start the cooldown on a send that never happened.
 - Index `password_resets_user_created_idx` on `(user_id, created_at DESC)` serves the cooldown check, not the token lookup (which uses the UNIQUE index on `token_hash`).
 - **Row Level Security is enabled explicitly by the migration.** A new table does NOT inherit the RLS that was switched on for the other 19; without that line this would be the only table in the database writable through the anon key, and inserting a row whose hash you chose is an account takeover.
 

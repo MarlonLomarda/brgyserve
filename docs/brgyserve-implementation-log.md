@@ -172,6 +172,20 @@ The four items below were not in the decided design. They came out of the work a
 
 **A missing `RESEND_API_KEY` deliberately does NOT stop the API booting**, unlike `SUPABASE_SERVICE_ROLE_KEY`. That guard exists because every query depends on that key *and* its absence fails **silently** — an empty result set for everything, a login reading as "invalid credentials". Resend has neither property: one feature depends on it, and its absence is loud and local. Refusing to boot would take document requests, payments, attendance, reports and login down for a password-reset misconfiguration. `PAYMONGO_SECRET_KEY` is treated the same way.
 
+### Staff account email activation, 3 Oct 2026
+
+**A Secretary-created account no longer starts with a password the Secretary has seen.** Raised in the TA's review of Chapters 1 and 2. No migration was needed.
+
+- **Creation by email is the default.** `POST /api/secretary/accounts` takes a `delivery`:
+  - `'email'` stores the bcrypt hash of 32 random bytes that nobody keeps, and emails a one-time set-password link (72 hours, single use, stored only as a SHA-256 hash in `password_resets`);
+  - `'temporary_password'` is the old one-time temporary password, now an explicit, logged **fallback** for when email is not working, to be removed after the defense.
+- **The link is spent at `POST /api/auth/set-password`** (public; `setPasswordLimiter`, 10 per hour, successes not counted). It follows `/reset-password` step for step, and it also clears `must_change_password` and sets `email_verified`, the first code to write that reserved column true.
+- **The Secretary's staff accounts list** (`GET /api/secretary/staff-accounts`) shows Punong Barangay, Treasurer and Staff accounts and when each was last sent a link. `POST /api/secretary/staff-accounts/:userId/send-set-password-link` sends another, at most once per account per 15 minutes; on an account already in use it is an admin password reset. An active account is asked about in its own row first, not through `window.confirm`.
+- **Reset links and set-password links share `password_resets`, kept apart by role:** `/forgot-password` serves residents only, `/reset-password` refuses staff tokens, and `/set-password` refuses residents' tokens.
+- **Logging:** two new codes, `SEND_SET_PASSWORD_LINK` and `PASSWORD_SET`, for 28 in all. A staff account's CREATE row records `{ username, role, delivery, email_status }`. The key is `email_status` because the deny-list drops any key containing "password".
+- **Privacy Policy, Terms of Use and Help Center** now say that email also carries officials' set-password links, that those links last 72 hours, and what officials' accounts and the log hold (`docs/legal-copy.md`).
+- **Tests:** `reset:test` sections F–K, 171 assertions in all, with `EMAIL_MODE` forced to SIMULATED and a stop if it is not; `activity:test` 75, `roles:test` 158, `test:auth` 30.
+
 ## Frontend Layout
 
 ### IT HAPPENED AGAIN — PR #5 (`488e529`), fixed by `764bec8`

@@ -36,7 +36,7 @@ All actors share one common function: managing their own account (log in, update
 ## The seven use cases
 
 ### 1. Manage Account
-Controlled access and full account lifecycle. The Secretary creates the accounts of the Punong Barangay, Treasurer, and Staff, issuing temporary credentials that require a password change on first login, and may activate, deactivate, and reset accounts. Residents enter through self-registration, providing personal information for verification against the resident records, after which they log in, complete their profile, and maintain their account. Every actor can manage their own account; **account administration functions are exclusive to the Secretary.** The Punong Barangay's participation here is limited to maintaining their own login credentials.
+Controlled access and full account lifecycle. The Secretary creates the accounts of the Punong Barangay, Treasurer, and Staff. In the main flow, the system emails the new staff member a one-time set-password link, and they choose their own password with it; in the alternative flow, used only when email is not working, the Secretary is shown a one-time temporary password that must be changed on first login. The Secretary may activate, deactivate, and reset accounts. Residents enter through self-registration, providing personal information for verification against the resident records, after which they log in, complete their profile, and maintain their account. Every actor can manage their own account; **account administration functions are exclusive to the Secretary.** The Punong Barangay's participation here is limited to maintaining their own login credentials.
 
 ### 2. Manage Document Request
 Full flow from submission to release. The Resident logs in and submits a request (document type, e.g. Barangay Clearance / Certificate of Residency / Certificate of Indigency / Business Clearance; purpose; supporting requirements). Staff receive it, verify the requester against resident records, prepare and verify the request record, update status, and record issuance/release details (triggers SMS). The Secretary reviews/certifies the prepared document and endorses it to the Punong Barangay. The Punong Barangay approves or declines; the decision reflects in the status (SMS to resident). Once approved and payment is confirmed (via Manage Payment), the document is released. The resident tracks real-time status throughout.
@@ -111,9 +111,9 @@ These are the concrete rules the login/registration feature must enforce, taken 
 
 **Staff-type accounts (secretary, punong_barangay, treasurer, staff):**
 - Created *only by the Secretary* — there is no public sign-up for these roles.
-- Issued temporary credentials with `must_change_password = true`.
-- On first login, the user is forced to set a new password before doing anything else; set `must_change_password = false` after.
-- The Secretary can activate, deactivate (`is_active`), and reset these accounts.
+- **Main flow:** the system emails the staff member a one-time set-password link (valid 72 hours, single use). The account is created with `must_change_password = true` and cannot be signed into until the link is used; setting the password clears `must_change_password` and marks the email verified.
+- **Alternative flow,** only when email is not working: the Secretary is shown a one-time temporary password, the account has `must_change_password = true`, and on first login the user is forced to set a new password before doing anything else; `must_change_password = false` after.
+- The Secretary can activate, deactivate (`is_active`), and reset these accounts; a reset sends a new set-password link.
 
 **Resident accounts:**
 - Created via public self-registration.
