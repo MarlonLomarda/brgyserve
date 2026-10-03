@@ -330,8 +330,12 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   }
 
   const valid = await bcrypt.compare(String(current_password), user.password_hash);
+  // 400, NOT 401. The session is fine; only the typed password is wrong.
+  // authFetch in the frontend ends the session on ANY 401, so a 401 here
+  // logged the person out and sent them to /login without ever showing this
+  // message. 401 stays reserved for a missing or dead token.
   if (!valid) {
-    return res.status(401).json({ error: 'Current password is incorrect' });
+    return res.status(400).json({ error: 'Current password is incorrect' });
   }
 
   // THE NEW PASSWORD MUST ACTUALLY BE NEW.

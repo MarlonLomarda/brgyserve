@@ -12,6 +12,9 @@
 // ProtectedRoute and App, mounts them in jsdom, and stubs fetch and
 // localStorage to count what actually happens.
 //
+// Section G adds a third: a wrong current password on the change-password
+// screen must leave the session alone and show the server's message.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -70,20 +73,22 @@ global.localStorage = localStorageStub;
 dom.window.localStorage = localStorageStub;
 
 // fetch stub: counts calls, records whether each carried a token, and answers
-// with whatever status the current test wants.
-const net = { calls: [], status: 200, body: { ok: true } };
+// with whatever status the current test wants. `reply`, when a test sets one,
+// is the body sent with that status; otherwise a 401 carries the token error.
+const net = { calls: [], status: 200, body: { ok: true }, reply: null };
 global.fetch = async (url, options = {}) => {
   const auth = options.headers?.Authorization || null;
   net.calls.push({ url: String(url), token: auth ? auth.replace('Bearer ', '') : null });
   return {
     ok: net.status >= 200 && net.status < 300,
     status: net.status,
-    json: async () => (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
+    json: async () => net.reply ?? (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
   };
 };
-function resetNet(status = 200) {
+function resetNet(status = 200, reply = null) {
   net.calls = [];
   net.status = status;
+  net.reply = reply;
 }
 function seedSession(token) {
   store.data.clear();
@@ -255,6 +260,50 @@ const root = () => dom.window.document.getElementById('root');
   check('the request is never sent', net.calls.length === 0, `${net.calls.length} call(s)`);
   check('the caller gets a 401 it can handle', dead.status === 401, dead.message);
   await probe4.unmount();
+
+  // =========================================================================
+  // G. a wrong current password keeps the session
+  // =========================================================================
+  // POST /auth/change-password answers a mistyped current password with 400
+  // and this message (asserted on the server side by backend reset:test,
+  // section L). authFetch ends the session on ANY 401, so this answer must
+  // never be one: when it was, the person landed on /login without seeing why.
+  console.log('\n--- wrong current password: the session stays, the message shows ---');
+  const WRONG_CURRENT = { error: 'Current password is incorrect' };
+  const submitChange = async () => {
+    const page = await globalThis.mountInteractive(root(), '/change-password');
+    await page.fill('input[autocomplete="current-password"]', 'NotTheCurrent-99!');
+    await page.fill('input[autocomplete="new-password"]', 'Changed-Pass-2026!', 0);
+    await page.fill('input[autocomplete="new-password"]', 'Changed-Pass-2026!', 1);
+    await page.submit();
+    return page;
+  };
+
+  seedSession(VALID);
+  resetNet(400, WRONG_CURRENT);
+  const kept = await submitChange();
+  const keptAlert = root().querySelector('.alert.error');
+  check('the change request went out once, with the session token',
+    net.calls.length === 1 && net.calls[0].url.endsWith('/auth/change-password') && net.calls[0].token === VALID,
+    `${net.calls.length} call(s)`);
+  check("the server's message is shown on the form",
+    keptAlert?.textContent === WRONG_CURRENT.error, JSON.stringify(keptAlert?.textContent ?? null));
+  check('still on the change-password screen, not sent to /login',
+    root().querySelector('h1')?.textContent === 'Change password' && !/Forgot your password\?/.test(kept.html()));
+  check('the session was NOT ended', store.removes === 0 && store.data.has(STORAGE_KEY),
+    `${store.removes} teardown(s)`);
+  await kept.unmount();
+
+  // CONTROL: the same answer with the 401 the server used to send. It must end
+  // the session, or the checks above could not tell the two apart.
+  seedSession(VALID);
+  resetNet(401, WRONG_CURRENT);
+  const lost = await submitChange();
+  check('CONTROL: answered with 401, the session IS ended',
+    store.removes === 1 && !store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
+  check('CONTROL: and the person is on the login screen, without the message',
+    /Forgot your password\?/.test(lost.html()) && !lost.html().includes(WRONG_CURRENT.error));
+  await lost.unmount();
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);

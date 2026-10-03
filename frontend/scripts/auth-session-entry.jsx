@@ -31,6 +31,50 @@ globalThis.mountApp = async (container, route) => {
   return html;
 };
 
+// Mount the whole app at `route` and KEEP it mounted, so the test can fill in
+// a form and submit it the way a person would, then read what is on screen.
+globalThis.mountInteractive = async (container, route) => {
+  const win = container.ownerDocument.defaultView;
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[route]}>
+          <App />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+  });
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  return {
+    html: () => container.innerHTML,
+    // React tracks an input's value through its own setter, so assigning
+    // .value directly never reaches onChange. The native setter plus a
+    // bubbling input event is what a keystroke produces.
+    fill: async (selector, value, index = 0) => {
+      const input = container.querySelectorAll(selector)[index];
+      if (!input) throw new Error(`no ${selector} at index ${index}`);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set.call(input, value);
+        input.dispatchEvent(new win.Event('input', { bubbles: true }));
+      });
+    },
+    // Dispatched on the form itself, the way a submit button would, so the
+    // request and whatever follows it (a logout, a redirect) have settled
+    // before this returns.
+    submit: async () => {
+      const form = container.querySelector('form');
+      if (!form) throw new Error('no form on screen');
+      await act(async () => {
+        form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await settle();
+      await settle();
+    },
+    unmount: async () => { await act(async () => root.unmount()); },
+  };
+};
+
 // Fires `count` authFetch calls concurrently, the way a screen with several
 // loaders in flight does, and reports what each one threw.
 function Burst({ count, onDone }) {

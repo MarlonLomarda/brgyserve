@@ -37,6 +37,9 @@
 // it was given, which is the only place the raw token exists, so the test
 // spends the very link the route emailed. It can also be told to report
 // FAILED, which is how a refused send is exercised without any provider.
+//
+// SECTION L IS /change-password's answer to a wrong current password: a 400,
+// never a 401, because the frontend ends the session on any 401.
 // ===========================================================================
 const path = require('path');
 
@@ -943,6 +946,43 @@ let skipReason = '';
     const setLayer = authRouter.stack.find((l) => l.route?.path === '/set-password');
     check('the route runs setPasswordLimiter before its handler',
       setLayer?.route.stack.length === 2 && setLayer.route.stack[0].handle === setPasswordLimiter);
+
+    // ================================================================== L
+    // A WRONG CURRENT PASSWORD IS A 400, NEVER A 401. authFetch in the
+    // frontend ends the session on ANY 401, so when this answer was a 401 the
+    // person was logged out and sent to /login without seeing why. The
+    // frontend half, that a 400 keeps the session and shows this message, is
+    // in `cd frontend && npm run test:auth`.
+    section('L. /change-password: a wrong current password is a 400');
+    const changePassword = handlerFor(authRouter, 'post', '/change-password');
+    const chpw = await mkUser('chpw');
+    const asChpw = { user_id: chpw.user_id, username: chpw.username };
+    const CHANGED_PASSWORD = 'Changed-Pass-2026!';
+
+    const wrongCurrent = await invoke(changePassword, {
+      user: asChpw,
+      body: { current_password: 'NotTheCurrent-99!', new_password: CHANGED_PASSWORD },
+    });
+    check('a wrong current password is refused with 400, not 401',
+      wrongCurrent.status === 400, `got ${wrongCurrent.status}`);
+    check('  with the message the change-password screen shows',
+      wrongCurrent.body?.error === 'Current password is incorrect', JSON.stringify(wrongCurrent.body));
+    const { data: afterWrong } = await supabase
+      .from('users').select('password_hash, must_change_password').eq('user_id', chpw.user_id).single();
+    check('  the stored password and must_change_password are untouched',
+      afterWrong?.password_hash === chpw.password_hash && afterWrong?.must_change_password === false);
+    const { data: wrongLogs } = await supabase
+      .from('activity_logs').select('log_id').eq('user_id', chpw.user_id).eq('action', ACTIONS.PASSWORD_CHANGE);
+    check('  and no PASSWORD_CHANGE was logged', (wrongLogs || []).length === 0, `${(wrongLogs || []).length} row(s)`);
+
+    // CONTROL: the same request with the right current password goes through,
+    // so the refusal above came from the comparison and from nothing else.
+    const rightCurrent = await invoke(changePassword, {
+      user: asChpw,
+      body: { current_password: 'OriginalPass123', new_password: CHANGED_PASSWORD },
+    });
+    check('CONTROL: the correct current password is accepted',
+      rightCurrent.status === 200, `${rightCurrent.status} ${JSON.stringify(rightCurrent.body)}`);
   } catch (err) {
     if (err === SKIP_REST) {
       console.log(`\nSKIPPED from section B: password_resets is not there (${skipReason}).`);
