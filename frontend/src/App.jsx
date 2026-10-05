@@ -19,6 +19,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import MyRequestsPage from "./pages/MyRequestsPage";
 import PaymentResultPage from "./pages/PaymentResultPage";
 import PaymentsPage from "./pages/PaymentsPage";
+import ProfilePage from "./pages/ProfilePage";
 import PublicEventsPage from "./pages/PublicEventsPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -32,6 +33,7 @@ import SecretaryRequestsPage from "./pages/SecretaryRequestsPage";
 import SecretaryReviewPage from "./pages/SecretaryReviewPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
 import {
+  NAV_BY_ROLE,
   PUNONG_BARANGAY_NAV,
   RESIDENT_NAV,
   SECRETARY_NAV,
@@ -138,6 +140,24 @@ export default function App() {
         path="/change-password"
         element={
           user ? <ChangePasswordPage /> : <Navigate to="/login" replace />
+        }
+      />
+      {/* The signed-in user's own account, read-only, for every role, opened
+          from the account menu. ProtectedRoute with NO role: it still sends a
+          user on a temporary password to /change-password, so the forced
+          flow is unchanged. */}
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <PageLayout
+              dashTitle={"My profile"}
+              dashSubtitle={"Your account details"}
+              navItems={NAV_BY_ROLE[user?.role] || []}
+            >
+              <ProfilePage />
+            </PageLayout>
+          </ProtectedRoute>
         }
       />
 

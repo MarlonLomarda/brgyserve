@@ -1032,6 +1032,86 @@ a {
   white-space: nowrap;
 }
 
+/* ACCOUNT MENU (components/AccountMenu.jsx): the one control in BOTH top
+   bars, replacing their Log out buttons. Every rule here is scoped to it.
+
+   The panel is absolutely positioned and right-aligned to the button, which
+   sits at the right edge of each header, so it opens leftward and stays inside
+   the viewport at 390px. Nothing clips it: the only overflow: hidden in the
+   dashboard shell is .dash-side, which holds neither header.
+
+   z-index 45. In the narrow header it is local to .dash-header's own stacking
+   context (sticky, z-index 30), so it can never rise above the drawer's
+   backdrop at 40. In the wide header it sits above page content, where no
+   dashboard element sets a z-index at all.
+
+   The selectors carry two classes because the base `button:hover:not(:disabled)`
+   rule is (0,2,1) and would otherwise repaint the button and items blue. */
+.account-menu {
+  position: relative;
+  flex: none;
+}
+
+.account-menu .account-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+}
+
+.account-menu .account-menu-btn:hover:not(:disabled),
+.account-menu .account-menu-btn[aria-expanded="true"] {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.account-menu .account-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  min-width: 180px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.account-menu .account-menu-user {
+  margin: 0 0 6px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.account-menu .account-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: none;
+  border-radius: 6px;
+}
+
+.account-menu .account-menu-item:hover:not(:disabled),
+.account-menu .account-menu-item:focus-visible {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
 .dash-main {
   grid-column: 2;
 

@@ -71,6 +71,40 @@ globalThis.mountInteractive = async (container, route) => {
       await settle();
       await settle();
     },
+    // A selector or an element. Settles like submit, because a click can
+    // navigate, fetch, or end the session.
+    click: async (target) => {
+      const el = typeof target === 'string' ? container.querySelector(target) : target;
+      if (!el) throw new Error(`nothing to click: ${target}`);
+      await act(async () => {
+        el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
+      await settle();
+      await settle();
+    },
+    // A press somewhere that is not the account menu.
+    pressOutside: async () => {
+      await act(async () => {
+        container.ownerDocument.body.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+      });
+    },
+    // keydown on the focused element, or on `target` when given.
+    key: async (key, target) => {
+      const el = target
+        ? (typeof target === 'string' ? container.querySelector(target) : target)
+        : container.ownerDocument.activeElement;
+      await act(async () => {
+        el.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+    },
+    // For a page whose own fetch resolves after the mount.
+    settle: async () => {
+      await settle();
+      await settle();
+    },
+    query: (selector) => container.querySelector(selector),
+    queryAll: (selector) => [...container.querySelectorAll(selector)],
+    active: () => container.ownerDocument.activeElement,
     unmount: async () => { await act(async () => root.unmount()); },
   };
 };

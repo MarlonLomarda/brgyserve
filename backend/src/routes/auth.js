@@ -389,6 +389,53 @@ router.post('/change-password', allowPendingPasswordChange, authenticate, async 
   res.json({ message: 'Password changed successfully' });
 });
 
+// GET /api/auth/profile — the signed-in user's own account, read-only.
+//
+// EXPLICIT COLUMN LISTS, never '*'. users also holds password_hash and the
+// rejection columns, and none of that may leave this route. No resident_records
+// column is returned either: `linked` says only whether a record is attached,
+// and it is sent for residents alone, because "not linked" is not a fact about
+// a staff account, which never has one.
+//
+// An account with no profiles row gets the same keys holding null, not a 500.
+//
+// Plain authenticate, deliberately WITHOUT allowPendingPasswordChange, so a
+// user on a temporary password gets the same 403 PASSWORD_CHANGE_REQUIRED here
+// as on every other route.
+const OWN_PROFILE_FIELDS = [
+  'first_name', 'middle_name', 'last_name', 'suffix', 'birthdate', 'address', 'phone_number',
+];
+
+router.get('/profile', authenticate, async (req, res) => {
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('username, email, role, email_verified')
+    .eq('user_id', req.user.user_id)
+    .maybeSingle();
+  if (error || !user) {
+    throw new Error(`Failed to load account: ${error?.message || 'not found'}`);
+  }
+
+  const { data: row, error: profileError } = await supabase
+    .from('profiles')
+    .select(`${OWN_PROFILE_FIELDS.join(', ')}, resident_id`)
+    .eq('user_id', req.user.user_id)
+    .maybeSingle();
+  if (profileError) {
+    throw new Error(`Failed to load profile: ${profileError.message}`);
+  }
+
+  // Built field by field from the list above, so resident_id, read only to
+  // derive `linked`, can never ride along.
+  const profile = Object.fromEntries(OWN_PROFILE_FIELDS.map((f) => [f, row?.[f] ?? null]));
+
+  res.json({
+    user,
+    profile,
+    ...(user.role === 'resident' ? { linked: Boolean(row?.resident_id) } : {}),
+  });
+});
+
 // ===========================================================================
 // PASSWORD RESET — POST /forgot-password and POST /reset-password
 //

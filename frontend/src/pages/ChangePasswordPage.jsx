@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { roleHome } from '../auth/roles';
 import PasswordInput from '../components/PasswordInput';
@@ -30,7 +30,15 @@ export default function ChangePasswordPage() {
         body: { current_password: current, new_password: newPassword },
       });
       updateUser({ must_change_password: false });
-      navigate(roleHome(user.role), { replace: true });
+      // A forced change goes on to the role home, exactly as before. A
+      // voluntary one was opened from the Profile page, so it goes back there
+      // with a one-line notice. `forced` is this render's value, read before
+      // updateUser above clears the flag.
+      if (forced) {
+        navigate(roleHome(user.role), { replace: true });
+      } else {
+        navigate('/profile', { replace: true, state: { notice: 'Password changed.' } });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -93,6 +101,13 @@ export default function ChangePasswordPage() {
           {busy ? 'Saving…' : 'Change password'}
         </button>
 
+        {/* Only for a voluntary change. A forced one has nowhere to go back
+            to: every other page refuses the account until this is done. */}
+        {!forced && (
+          <p className="alt">
+            <Link to="/profile">Back to profile</Link>
+          </p>
+        )}
         <p className="alt">
           <button type="button" className="link-button" onClick={handleLogout}>
             Sign out instead

@@ -85,3 +85,13 @@ export const PUNONG_BARANGAY_NAV = [
   { to: "/punong-barangay/reports", label: "Reports", icon: IoMdAnalytics },
   { to: "/punong-barangay/activity-log", label: "Activity log", icon: MdHistory },
 ];
+
+// For pages every role can open (the Profile page): the signed-in user's own
+// nav, from the lists above rather than a copy of them.
+export const NAV_BY_ROLE = {
+  secretary: SECRETARY_NAV,
+  punong_barangay: PUNONG_BARANGAY_NAV,
+  treasurer: TREASURER_NAV,
+  staff: STAFF_NAV,
+  resident: RESIDENT_NAV,
+};

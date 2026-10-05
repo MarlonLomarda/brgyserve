@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS } from "../auth/roles";
+import AccountMenu from "./AccountMenu";
 import { IoIosClose } from "react-icons/io";
 import { MdKeyboardDoubleArrowLeft } from "react-icons/md";
 
@@ -178,9 +179,7 @@ export default function DashHeader({
 
         <div className="dash-user">
           <span className="muted dash-username">@{user.username}</span>
-          <button className="btn secondary" onClick={handleLogout}>
-            Log out
-          </button>
+          <AccountMenu user={user} onLogout={handleLogout} />
         </div>
       </header>
 

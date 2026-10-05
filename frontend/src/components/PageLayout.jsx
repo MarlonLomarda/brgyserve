@@ -1,4 +1,5 @@
 import DashHeader from "./DashHeader";
+import AccountMenu from "./AccountMenu";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -26,9 +27,7 @@ function PageLayout({ dashTitle, dashSubtitle, navItems, children }) {
             <h1>{dashTitle}</h1>
             <span>{dashSubtitle}</span>
           </section>
-          <button className="btn secondary" onClick={handleLogout}>
-            Log out
-          </button>
+          <AccountMenu user={user} onLogout={handleLogout} />
         </div>
         {children}
       </main>

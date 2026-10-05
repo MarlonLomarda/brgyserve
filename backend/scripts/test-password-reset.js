@@ -40,6 +40,9 @@
 //
 // SECTION L IS /change-password's answer to a wrong current password: a 400,
 // never a 401, because the frontend ends the session on any 401.
+//
+// SECTION M IS GET /profile, run through its real middleware against an
+// in-memory users/profiles fake (it writes nothing, live or otherwise).
 // ===========================================================================
 const path = require('path');
 
@@ -983,6 +986,127 @@ let skipReason = '';
     });
     check('CONTROL: the correct current password is accepted',
       rightCurrent.status === 200, `${rightCurrent.status} ${JSON.stringify(rightCurrent.body)}`);
+
+    // ================================================================== M
+    // GET /profile, the signed-in user's own account, run through the route's
+    // REAL middleware (authenticate included) with real signed tokens. The
+    // tables are an in-memory fake, because a linked resident needs a
+    // resident_records row and this harness writes none. The fake honours the
+    // select string, so a handler that asked for more columns would really
+    // receive them, and the sweep below would see the planted hash.
+    section('M. GET /profile: own account, explicit columns, auth guards');
+    const { authenticate: realAuthenticate } = require('../src/middleware/auth');
+    const jwt = require('jsonwebtoken');
+    if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'reset-test-profile-key';
+    const profileLayer = authRouter.stack.find((l) => l.route?.path === '/profile' && l.route.methods.get);
+    check('GET /profile exists and runs authenticate first, with no pending-password exemption',
+      profileLayer?.route.stack.length === 2 && profileLayer.route.stack[0].handle === realAuthenticate);
+
+    const LEAK_HASH = '$2a$10$PROFILE.TEST.HASH.MUST.NEVER.LEAVE';
+    const LEAK_NOTE = 'internal rejection note, never sent';
+    const fakeUser = (user_id, username, role, over = {}) => ({
+      user_id, username, role, email: `${username}@example.invalid`, email_verified: false,
+      is_active: true, must_change_password: false, password_hash: LEAK_HASH, rejection_note: LEAK_NOTE, ...over,
+    });
+    const FAKE = {
+      users: [
+        fakeUser(9101, 'p_res_linked', 'resident', { email_verified: true }),
+        fakeUser(9102, 'p_res_unlinked', 'resident'),
+        fakeUser(9103, 'p_staff', 'staff'),
+        fakeUser(9104, 'p_no_profile', 'treasurer'),
+        fakeUser(9105, 'p_forced', 'staff', { must_change_password: true }),
+      ],
+      profiles: [
+        { user_id: 9101, first_name: 'Lina', middle_name: 'Reyes', last_name: 'Profilecheck', suffix: null,
+          birthdate: '1990-02-03', address: 'Purok 1, Ubujan', phone_number: '09170000001', resident_id: 7701 },
+        { user_id: 9102, first_name: 'Nel', middle_name: null, last_name: 'Unlinked', suffix: 'Jr.',
+          birthdate: null, address: 'Purok 2, Ubujan', phone_number: null, resident_id: null },
+        { user_id: 9103, first_name: 'Sam', middle_name: null, last_name: 'Staffer', suffix: null,
+          birthdate: null, address: null, phone_number: '09170000003', resident_id: null },
+        { user_id: 9105, first_name: 'Fay', middle_name: null, last_name: 'Forced', suffix: null,
+          birthdate: null, address: null, phone_number: null, resident_id: null },
+      ],
+    };
+    const selects = [];
+    supabase.from = (table) => {
+      const rows = FAKE[table];
+      if (!rows) throw new Error(`GET /profile touched an unexpected table: ${table}`);
+      let cols = '';
+      const filters = [];
+      const q = {
+        select(c) { cols = c; selects.push(`${table}: ${c}`); return q; },
+        eq(col, val) { filters.push([col, val]); return q; },
+        async maybeSingle() {
+          const hit = rows.filter((r) => filters.every(([c, v]) => String(r[c]) === String(v)));
+          if (hit.length !== 1) return { data: null, error: null };
+          if (cols.trim() === '*') return { data: { ...hit[0] }, error: null };
+          return { data: Object.fromEntries(cols.split(',').map((s) => s.trim()).map((k) => [k, hit[0][k]])), error: null };
+        },
+      };
+      q.single = q.maybeSingle;
+      return q;
+    };
+
+    // The route's own stack, in order, the way Express runs it.
+    const getProfile = (token) => new Promise((resolve, reject) => {
+      const req = { headers: token ? { authorization: `Bearer ${token}` } : {}, params: {}, query: {}, body: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(payload) { resolve({ status: this.statusCode, body: payload }); return this; },
+      };
+      const handles = profileLayer.route.stack.map((s) => s.handle);
+      const step = (i) => Promise.resolve(handles[i](req, res, (err) => (err ? reject(err) : step(i + 1)))).catch(reject);
+      step(0);
+    });
+    const tokenFor = (u) => jwt.sign({ sub: String(u.user_id), role: u.role }, process.env.JWT_SECRET, { expiresIn: '5m' });
+    const byName = Object.fromEntries(FAKE.users.map((u) => [u.username, u]));
+    const USER_KEYS = 'email,email_verified,role,username';
+    const PROFILE_KEYS = 'address,birthdate,first_name,last_name,middle_name,phone_number,suffix';
+    const keysOf = (o) => Object.keys(o || {}).sort().join(',');
+
+    const anon = await getProfile(null);
+    check('no token: 401', anon.status === 401, `${anon.status}`);
+
+    const forcedBefore = selects.length;
+    const forced = await getProfile(tokenFor(byName.p_forced));
+    check('a forced-change user: 403 PASSWORD_CHANGE_REQUIRED, as on every other route',
+      forced.status === 403 && forced.body?.code === 'PASSWORD_CHANGE_REQUIRED', `${forced.status} ${forced.body?.code}`);
+    check('  and the handler never read a profile for them',
+      !selects.slice(forcedBefore).some((s) => s.startsWith('profiles')), selects.slice(forcedBefore).join(' | '));
+
+    const linked = await getProfile(tokenFor(byName.p_res_linked));
+    check('a linked resident: 200 with exactly the four user fields and seven profile fields',
+      linked.status === 200 && keysOf(linked.body?.user) === USER_KEYS && keysOf(linked.body?.profile) === PROFILE_KEYS,
+      `${linked.status} user[${keysOf(linked.body?.user)}] profile[${keysOf(linked.body?.profile)}]`);
+    check('  with their own values, and linked: true',
+      linked.body?.user?.username === 'p_res_linked' && linked.body?.user?.email_verified === true
+        && linked.body?.profile?.birthdate === '1990-02-03' && linked.body?.profile?.phone_number === '09170000001'
+        && linked.body?.linked === true);
+
+    const unlinked = await getProfile(tokenFor(byName.p_res_unlinked));
+    check('an unlinked resident: 200 with linked: false',
+      unlinked.status === 200 && unlinked.body?.linked === false && unlinked.body?.profile?.suffix === 'Jr.',
+      `${unlinked.status} linked=${unlinked.body?.linked}`);
+
+    const staffProfile = await getProfile(tokenFor(byName.p_staff));
+    check('a staff account with no resident record: 200, and no `linked` key at all',
+      staffProfile.status === 200 && !('linked' in (staffProfile.body || {}))
+        && staffProfile.body?.profile?.first_name === 'Sam' && staffProfile.body?.profile?.birthdate === null,
+      `${staffProfile.status} ${keysOf(staffProfile.body)}`);
+
+    const noProfile = await getProfile(tokenFor(byName.p_no_profile));
+    check('an account with no profiles row: 200 with every profile field null, not a 500',
+      noProfile.status === 200 && keysOf(noProfile.body?.profile) === PROFILE_KEYS
+        && Object.values(noProfile.body?.profile || {}).every((v) => v === null),
+      `${noProfile.status} ${JSON.stringify(noProfile.body?.profile)}`);
+
+    const everyBody = JSON.stringify([anon, forced, linked, unlinked, staffProfile, noProfile].map((r) => r.body));
+    check('no response carries password_hash, the hash, the rejection note or resident_id',
+      !/password_hash|resident_id/.test(everyBody) && !everyBody.includes(LEAK_HASH) && !everyBody.includes(LEAK_NOTE));
+    check('every select names its columns: no *, no password_hash',
+      selects.length > 0 && selects.every((s) => !/\*|password_hash/.test(s)), selects.join(' | '));
+    supabase.from = realFromForRestore;
   } catch (err) {
     if (err === SKIP_REST) {
       console.log(`\nSKIPPED from section B: password_resets is not there (${skipReason}).`);

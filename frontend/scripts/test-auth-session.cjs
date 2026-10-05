@@ -75,14 +75,17 @@ dom.window.localStorage = localStorageStub;
 // fetch stub: counts calls, records whether each carried a token, and answers
 // with whatever status the current test wants. `reply`, when a test sets one,
 // is the body sent with that status; otherwise a 401 carries the token error.
+// A `reply` that is a function is asked per request, (url, method), so one
+// mount can answer two endpoints differently; returning undefined falls back.
 const net = { calls: [], status: 200, body: { ok: true }, reply: null };
 global.fetch = async (url, options = {}) => {
   const auth = options.headers?.Authorization || null;
-  net.calls.push({ url: String(url), token: auth ? auth.replace('Bearer ', '') : null });
+  net.calls.push({ url: String(url), method: options.method || 'GET', token: auth ? auth.replace('Bearer ', '') : null });
+  const reply = typeof net.reply === 'function' ? net.reply(String(url), options.method || 'GET') : net.reply;
   return {
     ok: net.status >= 200 && net.status < 300,
     status: net.status,
-    json: async () => net.reply ?? (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
+    json: async () => reply ?? (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
   };
 };
 function resetNet(status = 200, reply = null) {
@@ -90,11 +93,11 @@ function resetNet(status = 200, reply = null) {
   net.status = status;
   net.reply = reply;
 }
-function seedSession(token) {
+function seedSession(token, user = USER) {
   store.data.clear();
   store.removes = 0;
   store.sets = 0;
-  if (token) store.data.set(STORAGE_KEY, JSON.stringify({ token, user: USER }));
+  if (token) store.data.set(STORAGE_KEY, JSON.stringify({ token, user }));
 }
 
 const root = () => dom.window.document.getElementById('root');
@@ -176,11 +179,13 @@ const root = () => dom.window.document.getElementById('root');
   seedSession(VALID);
   resetNet(200);
   const validHtml = await globalThis.mountApp(root(), '/secretary');
-  // "Log out" is on the dashboard header and nowhere on the login screen. This
-  // used to assert the ABSENCE of "Sign in to BrgyServe", a string the app has
-  // never rendered, so it passed whatever this mount showed.
+  // The account menu button is in the dashboard header and nowhere on the
+  // login screen. This used to look for the text "Log out", which moved INTO
+  // the closed account menu and so is no longer in the markup at all; before
+  // that it asserted the ABSENCE of "Sign in to BrgyServe", a string the app
+  // has never rendered, so it passed whatever this mount showed.
   check('CONTROL: a valid token still renders the logged-in view',
-    /Log out/.test(validHtml) && !/Log out/.test(expiredHtml),
+    /aria-label="Account menu"/.test(validHtml) && !/aria-label="Account menu"/.test(expiredHtml),
     `${validHtml.length} chars`);
   check('CONTROL: the valid session was left in localStorage', store.data.has(STORAGE_KEY) === true);
   check('CONTROL: a valid session sends its request with the token',
@@ -304,6 +309,148 @@ const root = () => dom.window.document.getElementById('root');
   check('CONTROL: and the person is on the login screen, without the message',
     /Forgot your password\?/.test(lost.html()) && !lost.html().includes(WRONG_CURRENT.error));
   await lost.unmount();
+
+  // =========================================================================
+  // H. the account menu, the Profile page, and the voluntary password change
+  // =========================================================================
+  // The menu replaced the Log out button in BOTH top bars. jsdom applies no
+  // stylesheet, so both headers are in the DOM here, as they are in the
+  // browser before CSS hides one; interactions use the narrow header's menu,
+  // which comes first in the markup.
+  console.log('\n--- account menu, Profile page, voluntary change ---');
+  const RES_USER = { user_id: 2, username: 'res_one', role: 'resident', must_change_password: false };
+  const RES_TOKEN = makeToken({ sub: '2', role: 'resident', exp: VALID_EXP });
+  const FORCED_USER = { ...USER, must_change_password: true };
+  const STAFF_PROFILE = {
+    user: { username: 'secretary1', email: 'sec@example.invalid', role: 'secretary', email_verified: true },
+    profile: { first_name: 'Ana', middle_name: null, last_name: 'Secretario', suffix: null, birthdate: null, address: null, phone_number: null },
+  };
+  const RESIDENT_PROFILE = {
+    user: { username: 'res_one', email: 'res@example.invalid', role: 'resident', email_verified: false },
+    profile: { first_name: 'Rita', middle_name: 'Cruz', last_name: 'Residente', suffix: null, birthdate: '1990-02-03', address: 'Purok 1, Ubujan', phone_number: '09170000001' },
+    linked: true,
+  };
+  // The profile endpoint, a successful password change, and an empty list in
+  // its real shape for each page loader these mounts pass through.
+  const answer = (profileBody) => (url, method) => {
+    if (url.endsWith('/auth/profile')) return profileBody;
+    if (url.endsWith('/auth/change-password') && method === 'POST') return { message: 'Password changed successfully' };
+    if (url.includes('/document-types/all')) return { document_types: [] };
+    if (url.includes('/secretary/staff-accounts')) return { accounts: [] };
+    if (url.includes('/secretary/pending-residents')) return { pending: [] };
+    return undefined;
+  };
+  const labels = (page) => page.queryAll('dt').map((d) => d.textContent);
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const menuPage = await globalThis.mountInteractive(root(), '/secretary/document-types');
+  const menuButtons = menuPage.queryAll('button[aria-label="Account menu"]');
+  check('the account menu is in BOTH top bars (CSS shows one at any width)',
+    menuButtons.length === 2 && !!menuPage.query('.dash-user .account-menu-btn')
+      && !!menuPage.query('.page-header-wrapper .account-menu-btn'), `${menuButtons.length} button(s)`);
+  check('  each with aria-haspopup="menu", aria-expanded="false" and a title',
+    menuButtons.every((b) => b.getAttribute('aria-haspopup') === 'menu'
+      && b.getAttribute('aria-expanded') === 'false' && !!b.getAttribute('title')));
+  check('no Log out button is left in either top bar, and "Log out" is nowhere until the menu opens',
+    !menuPage.queryAll('.dash-user button, .page-header-wrapper button').some((b) => /Log out/.test(b.textContent))
+      && !/Log out/.test(menuPage.html()));
+
+  const menuBtn = menuButtons[0];
+  const items = () => menuPage.queryAll('[role="menu"] [role="menuitem"]');
+  await menuPage.click(menuBtn);
+  check('a click opens it: Profile and Log out as role="menuitem" in role="menu", under "@secretary1"',
+    menuBtn.getAttribute('aria-expanded') === 'true' && items().map((i) => i.textContent).join('|') === 'Profile|Log out'
+      && /@secretary1/.test(menuPage.query('.account-menu-panel')?.textContent || ''),
+    items().map((i) => i.textContent).join('|'));
+  check('  focus moves to the first item', menuPage.active() === items()[0]);
+  await menuPage.key('ArrowDown');
+  check('ArrowDown moves to Log out', menuPage.active() === items()[1]);
+  await menuPage.key('ArrowDown');
+  check('  and wraps round to Profile', menuPage.active() === items()[0]);
+  await menuPage.click(menuBtn);
+  check('a second click on the button closes it',
+    items().length === 0 && menuBtn.getAttribute('aria-expanded') === 'false');
+  await menuPage.click(menuBtn);
+  await menuPage.pressOutside();
+  check('a press outside closes it', items().length === 0);
+  await menuPage.click(menuBtn);
+  await menuPage.key('Escape');
+  check('Escape closes it and puts focus back on the button', items().length === 0 && menuPage.active() === menuBtn);
+  await menuPage.key('ArrowDown', menuBtn);
+  check('ArrowDown on the button opens it with focus on the first item',
+    items().length === 2 && menuPage.active() === items()[0]);
+
+  net.calls = [];
+  await menuPage.click(items()[0]);
+  await menuPage.settle();
+  check('"Profile" goes to /profile, which fetches /auth/profile and shows the account',
+    menuPage.query('.page-title h1')?.textContent === 'My profile'
+      && net.calls.some((c) => c.url.endsWith('/auth/profile'))
+      && /@secretary1/.test(menuPage.query('.pending-card')?.textContent || ''));
+  check('  and the menu closed behind it', items().length === 0);
+  const staffLabels = labels(menuPage);
+  check('a staff-type profile has name and contact rows and NO birthdate or address row',
+    ['Username', 'Email', 'Role', 'First name', 'Last name', 'Contact number'].every((l) => staffLabels.includes(l))
+      && !staffLabels.includes('Birthdate') && !staffLabels.includes('Address'), staffLabels.join(', '));
+  check('  blanks read "Not provided", and there is no Barangay Office line',
+    /Not provided/.test(menuPage.html()) && !/contact the Barangay Office/.test(menuPage.html()));
+  check('  "Change password" links to /change-password',
+    menuPage.query('a[href="/change-password"]')?.textContent === 'Change password');
+
+  await menuPage.click('button[aria-label="Account menu"]');
+  await menuPage.click(items()[1]);
+  check('"Log out" in the menu ends the session once and lands on the login screen',
+    store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(menuPage.html()),
+    `${store.removes} teardown(s)`);
+  await menuPage.unmount();
+
+  seedSession(RES_TOKEN, RES_USER);
+  resetNet(200, answer(RESIDENT_PROFILE));
+  const residentPage = await globalThis.mountInteractive(root(), '/profile');
+  await residentPage.settle();
+  const residentLabels = labels(residentPage);
+  check('a resident profile shows birthdate, address and contact number',
+    ['Birthdate', 'Address', 'Contact number'].every((l) => residentLabels.includes(l))
+      && /1990-02-03/.test(residentPage.html()) && /Purok 1, Ubujan/.test(residentPage.html()), residentLabels.join(', '));
+  check('  and the line about correcting details at the Barangay Office',
+    /To correct your name, birthdate or address, contact the Barangay Office\./.test(residentPage.html()));
+  await residentPage.unmount();
+
+  seedSession(VALID, FORCED_USER);
+  resetNet(200, answer(STAFF_PROFILE));
+  const forcedPage = await globalThis.mountInteractive(root(), '/profile');
+  await forcedPage.settle();
+  check('/profile sends a user on a temporary password to /change-password, without fetching the profile',
+    forcedPage.query('h1')?.textContent === 'Change password' && !net.calls.some((c) => c.url.endsWith('/auth/profile')));
+  check('  where there is no "Back to profile", and "Sign out instead" stays',
+    !/Back to profile/.test(forcedPage.html()) && /Sign out instead/.test(forcedPage.html()));
+  await forcedPage.fill('input[autocomplete="current-password"]', 'Temporary-Pass-1!');
+  await forcedPage.fill('input[autocomplete="new-password"]', 'Brand-New-Pass-2026!', 0);
+  await forcedPage.fill('input[autocomplete="new-password"]', 'Brand-New-Pass-2026!', 1);
+  await forcedPage.submit();
+  await forcedPage.settle();
+  check('a forced change still goes to the role home, with no notice',
+    forcedPage.query('.page-title h1')?.textContent === 'Resident review' && !/Password changed\./.test(forcedPage.html()),
+    forcedPage.query('.page-title h1')?.textContent);
+  await forcedPage.unmount();
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const voluntaryPage = await globalThis.mountInteractive(root(), '/change-password');
+  check('a voluntary change shows "Back to profile" (to /profile) and still offers "Sign out instead"',
+    voluntaryPage.query('a[href="/profile"]')?.textContent === 'Back to profile' && /Sign out instead/.test(voluntaryPage.html()));
+  await voluntaryPage.fill('input[autocomplete="current-password"]', 'Old-Pass-2026!');
+  await voluntaryPage.fill('input[autocomplete="new-password"]', 'Brand-New-Pass-2026!', 0);
+  await voluntaryPage.fill('input[autocomplete="new-password"]', 'Brand-New-Pass-2026!', 1);
+  await voluntaryPage.submit();
+  await voluntaryPage.settle();
+  check('after a voluntary change it returns to /profile with "Password changed."',
+    voluntaryPage.query('.page-title h1')?.textContent === 'My profile'
+      && voluntaryPage.query('.alert.success')?.textContent === 'Password changed.',
+    voluntaryPage.query('.page-title h1')?.textContent);
+  check('  and the session is kept', store.removes === 0 && store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
+  await voluntaryPage.unmount();
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
