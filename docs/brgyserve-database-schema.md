@@ -261,6 +261,9 @@ Stores rental and booking requests for barangay items and facilities, including 
 | return_note | text | | Yes | Optional note recorded with a return (e.g. damage). Added in migration 011. |
 | returned_at | timestamptz | | Yes | When Staff recorded the return; null until returned. Added in migration 011. |
 | returned_by_user_id | bigint | FK → users | Yes | Staff user who recorded the return; null until returned. Added in migration 011. |
+| resident_id | bigint | FK → resident_records | Yes | Resident the booking is for: the submitter's own linked record when they book for themselves, or the resident the Secretary chose for a walk-in. Null only on an outside borrower's booking. CHECK `rental_requests_resident_xor_outside_borrower`: either this is set and both `outside_borrower_*` columns are null, or this is null and both are set. Added in migration 022. |
+| outside_borrower_name | text | | Yes | Name of a borrower from another barangay, who has no resident record; set only when `resident_id` is null. The API limits it to 200 characters. Added in migration 022. |
+| outside_borrower_contact | text | | Yes | That borrower's contact number; set only when `resident_id` is null. The API requires a Philippine mobile number (`09XXXXXXXXX`, `639XXXXXXXXX` or `+639XXXXXXXXX`, at most 50 characters). Added in migration 022. |
 
 ---
 
