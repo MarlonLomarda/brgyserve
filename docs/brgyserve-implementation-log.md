@@ -215,7 +215,7 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 - **`b5b070c` — nav row wrapping. SUPERSEDED by `07cc26d`, kept as history.** `flex-wrap: wrap` on `.dash-nav`, `white-space: nowrap` on `.dash-nav a`. The header was pushing the whole dashboard past the viewport between roughly 900 and 1300px. **Both declarations are still in the file** **and both are dead**: the element is no longer rendered, and the `.dash-nav { display: none }` backstop would hide it anyway. Left in place rather than deleted because they are the backstop's companions — if a tab row is ever reinstated, this is the wrapping behaviour it needs, and the bug it fixed is real and would return. Do not cite this entry as evidence of current behaviour.
 - **`25fe20b` — duplicate React key in `ReportRenderers`.** `key={c.label ?? c}`. The `columns` array is **mixed** — plain strings for text columns, `num()`-wrapped objects for numeric ones — so every numeric column stringified to `[object Object]` and collided. **`npm run test:reports` structurally cannot catch this class of bug:** it renders through `react-dom/server`, and **React's duplicate-key validation runs only in the client reconciler**. Catching a key bug requires mounting.
 - **`7a606e9` — `capped-column` on Secretary Resident review.** Caps `.list-head`, `.alert` and `.empty` to 720px so they line up with the cards below them. **Coupled to the 720px form cap: the two values must stay equal**, and with no CSS variable to bind them the comment beside the rule is the only thing recording the link.
-- **`ab12fc7` — `white-space: nowrap` on `.dash-user .btn`.** "Log out" was breaking into "Log / out": the label contains a space, so its min-content is its widest word — "Log" — and flex shrinking took it there. `.row-actions .btn` already does the same thing for the same reason. **Still live** — this one survived the navigation rework unchanged.
+- **`ab12fc7` — `white-space: nowrap` on `.dash-user .btn`.** "Log out" was breaking into "Log / out": the label contains a space, so its min-content is its widest word — "Log" — and flex shrinking took it there. `.row-actions .btn` already does the same thing for the same reason. It survived the navigation rework unchanged, but **it is now inert:** `0a5a659` moved Log out into the account menu, so `.dash-user` holds no `.btn` (see "Profile page and account menu, 5 Oct 2026").
 
 ### Navigation rework, 19–20 Aug 2026
 
@@ -995,3 +995,42 @@ The `diffFields` comment, which called an empty result "an honest compared, no d
 - **`activity_logs` ids do not restart.** The next real action is logged as id 55, and ids 14–54 will never appear again. The gap is expected, not a bug.
 - **Two pages are empty until someone acts.** The Blotter and the Activity log stay empty until real or demo actions are performed.
 - **The ids above now name nothing.** Records 69, 89, 160, 76, 71, 86, 87 and case 10 no longer exist, and identity columns never hand out a used id again, so none of them will reappear.
+
+## Account menu and Profile page
+
+### Profile page and account menu, 5 Oct 2026 (`0a5a659`)
+
+**Every role can now see their own account and reach Change password, which before this was reachable only by typing `/change-password`.** No migration was needed.
+
+- **The account menu replaces the top-bar Log out button.** It is one shared component, `components/AccountMenu.jsx`, used by both headers: PageLayout's wide one and DashHeader's narrow one, which swap at 1045px. A 40px icon button (`FaUserCircle`) opens a dropdown with "@username", **Profile** and **Log out**. Log out does what the old button did.
+  - **Keyboard and ARIA:** the button carries `aria-label="Account menu"`, `aria-haspopup="menu"`, `aria-expanded` and a title. The items are `role="menuitem"` inside `role="menu"`. Enter or Space opens it, and so does ArrowDown or ArrowUp. Opening moves focus to the first item; the arrow keys, Home and End move between items, and so does Tab.
+  - **Closing:** Escape closes it and returns focus to the button. A press outside, Tab past the last item, and choosing an item also close it. A blur with no `relatedTarget` is ignored, because Safari does not focus a clicked button and the menu would otherwise blur shut before the click landed.
+  - **Styling** is one scoped block in `index.css`. The panel is right-aligned under the button at z-index 45; below 1045px that is local to the sticky header's own stacking context.
+- **The Profile page, `/profile`, is read-only for every role.** A resident sees name, birthdate, address and contact number, plus a line sending corrections to the Barangay Office. A staff-type account sees name and contact rows only. Blanks read "Not provided", and a Change password button goes to `/change-password`.
+  - **Read-only on purpose:** a resident's profile holds only the values they claimed at registration, while the barangay's record is `resident_records` and SMS goes to its contact number.
+- **The endpoint, `GET /api/auth/profile`,** uses plain `authenticate`, so a forced-change user gets 403 as everywhere else.
+  - It returns explicit columns only: never `password_hash` or `resident_id`.
+  - It adds `linked` for residents only.
+  - An account with no profiles row gets null fields, not a 500.
+- **Voluntary password change:** "Back to profile", and a return to `/profile` with "Password changed.". A forced change is unchanged.
+- **Header height is unchanged.** Measured in headless Chrome against the real components and stylesheet, HEAD against the new code, on the longest title and subtitle and on three real pages:
+  - 1280: 56.8px before and after;
+  - 641: 89.6px before and after;
+  - 390: 109.6px before and after.
+
+  The page never got wider than the screen. The open menu sat inside the viewport and on top at all three widths (at 390 it spans x 194–374).
+
+**Verified:**
+
+- **Counts:**
+  - `test:auth` 36 → 61: a new section H, and section B's control now looks for the account menu button instead of "Log out";
+  - `reset:test` 176 → 187: a new section M, run through the route's real `authenticate` against an in-memory `users`/`profiles` fake, with no live rows;
+  - `roles:test` 158, `activity:test` 75, unchanged;
+  - lint 7 warnings, unchanged; the build is clean.
+- **Mutations, each applied in memory or in the bundler, with no repo file changed; each turned at least one check red:**
+  - 4 route breaks: `select('*')`, the whole profile row returned, the forced-user exemption added, `linked` sent to everyone;
+  - 7 frontend breaks: Escape not refocusing, no outside-press listener, opening without moving focus, "Back to profile" for forced users, a voluntary change going to the role home, a birthdate row for staff, Log out kept in the wide header.
+- **Left for later** (listed under Outstanding work in CLAUDE.md):
+  - the now-inert `.dash-user .btn` rule;
+  - `RoleLandingPage.jsx`'s own Log out button;
+  - two spacing nits on `/profile`.
