@@ -10,7 +10,11 @@
 // Vite), server-renders each against LIVE API data, and mounts the
 // ErrorBoundary in jsdom (boundaries do not catch during SSR).
 //
-// Requires the backend running on :5000 with the usual test accounts.
+// Requires the backend running on :5000, and a Secretary and a Treasurer
+// account given through four environment variables (no password is kept in
+// this file):
+//   REPORT_TEST_SECRETARY_USER / REPORT_TEST_SECRETARY_PASS
+//   REPORT_TEST_TREASURER_USER / REPORT_TEST_TREASURER_PASS
 //   cd frontend && npm run test:reports
 
 const path = require('path');
@@ -23,20 +27,51 @@ function check(label, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
   if (!ok) process.exitCode = 1;
 }
-const login = (u, p) =>
-  fetch(`${BASE}/auth/login`, {
+// Signs one account in and says how it went, by username, never by password:
+// "<username>: logged in", or "<username>: HTTP <status> <error text>".
+// Returns the token, or null on any refusal.
+const login = async ({ username, password }) => {
+  const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: u, password: p }),
-  })
-    .then((r) => r.json())
-    .then((d) => d.token);
+    body: JSON.stringify({ username, password }),
+  });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* not JSON — reported by status below */
+  }
+  if (res.ok && body?.token) {
+    console.log(`${username}: logged in`);
+    return body.token;
+  }
+  console.log(`${username}: HTTP ${res.status} ${body?.error || res.statusText || 'no token returned'}`);
+  return null;
+};
 const get = (p, t) => fetch(BASE + p, { headers: { Authorization: `Bearer ${t}` } }).then((r) => r.json());
 
-const SECRETARY = ['secretary1', 'UbujanSec-7324d66f!'];
-const TREASURER = ['treasurer_test_mr8zecuq', 'MyNewSecret-123'];
+// Credentials come from the environment and nowhere else. A missing one stops
+// the run before anything is bundled or sent; only the variable NAMES are
+// printed, never a value.
+const ENV = {
+  secretaryUser: 'REPORT_TEST_SECRETARY_USER',
+  secretaryPass: 'REPORT_TEST_SECRETARY_PASS',
+  treasurerUser: 'REPORT_TEST_TREASURER_USER',
+  treasurerPass: 'REPORT_TEST_TREASURER_PASS',
+};
 
 (async () => {
+  const missing = Object.values(ENV).filter((name) => !process.env[name]);
+  if (missing.length) {
+    console.log(`Missing environment variable(s): ${missing.join(', ')}`);
+    console.log('Set all four (a Secretary and a Treasurer account) and run again. Nothing was sent.');
+    process.exitCode = 1;
+    return;
+  }
+  const SECRETARY = { username: process.env[ENV.secretaryUser], password: process.env[ENV.secretaryPass] };
+  const TREASURER = { username: process.env[ENV.treasurerUser], password: process.env[ENV.treasurerPass] };
+
   // 1) bundle the real components (JSX -> CJS) so Node can execute them
   const out = path.join(HERE, '.report-render-bundle.cjs');
   const REACT_PKGS = ['react', 'react-dom', 'react-dom/server', 'react-dom/client', 'react/jsx-runtime'];
@@ -52,11 +87,16 @@ const TREASURER = ['treasurer_test_mr8zecuq', 'MyNewSecret-123'];
   check('report components bundled and loaded', typeof globalThis.renderReport === 'function');
   check('all four renderers registered', globalThis.rendererKeys.length === 4, globalThis.rendererKeys.join(', '));
 
-  // 2) real payloads from the live API
-  const sec = await login(...SECRETARY);
-  const tre = await login(...TREASURER);
-  if (!sec || !tre) {
-    console.log('\nCould not log in — is the backend running on :5000 with the test accounts?');
+  // 2) real payloads from the live API. One login at a time, stopping at the
+  //    first refusal: /login allows 5 failed attempts per 15 minutes per
+  //    connection, so a second doomed attempt would only spend another.
+  const sec = await login(SECRETARY);
+  if (!sec) {
+    process.exitCode = 1;
+    return;
+  }
+  const tre = await login(TREASURER);
+  if (!tre) {
     process.exitCode = 1;
     return;
   }
