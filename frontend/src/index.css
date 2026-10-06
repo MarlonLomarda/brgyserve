@@ -1566,6 +1566,26 @@ button.link-button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* An actions <td> must stay a TABLE CELL. As display: flex (the .row-actions
+   rule above) it stops being one: the browser wraps it in an anonymous cell,
+   it does not stretch to the row, and its bottom border is drawn under its
+   buttons instead of at the foot of the row, so the row divider breaks at the
+   last column. The buttons keep the flex layout's look: right-aligned, 8px
+   apart, wrapping between buttons, never inside a label. The padding below
+   pays for the buttons' margins exactly, so the column, the rows and the
+   button positions measure the same as before (1280, 1366, 1920). */
+.data-table td.row-actions {
+  display: table-cell;
+  text-align: right;
+  padding: 8px 16px 8px 8px;
+}
+
+.data-table td.row-actions > * {
+  display: inline-block;
+  vertical-align: top;
+  margin: 4px 0 4px 8px;
+}
+
 .badge.gray {
   background: #f1f5f9;
   color: #64748b;
@@ -3664,6 +3684,13 @@ button.tab:hover:not(:disabled) {
   .data-table.stack-narrow .row-actions .btn {
     width: 100%;
     margin-top: 8px;
+  }
+
+  /* Stacked cards keep spacing their full-width buttons with margin-top
+     alone, as before. */
+  .data-table.stack-narrow td.row-actions > * {
+    margin-left: 0;
+    margin-bottom: 0;
   }
 
   /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
