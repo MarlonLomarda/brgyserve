@@ -1586,6 +1586,10 @@ button.link-button:hover:not(:disabled) {
   margin: 4px 0 4px 8px;
 }
 
+.data-table td.row-actions > .inline-form {
+  display: inline-flex;
+}
+
 .badge.gray {
   background: #f1f5f9;
   color: #64748b;
@@ -3691,6 +3695,23 @@ button.tab:hover:not(:disabled) {
   .data-table.stack-narrow td.row-actions > * {
     margin-left: 0;
     margin-bottom: 0;
+  }
+
+  .data-table.stack-narrow td.row-actions {
+    text-align: left;
+  }
+
+  .data-table.stack-narrow td.row-actions > .inline-form {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .data-table.stack-narrow td.row-actions > .inline-form input {
+    flex: 1 1 100%;
+    width: auto;
   }
 
   /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
