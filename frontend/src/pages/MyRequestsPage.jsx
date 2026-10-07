@@ -125,6 +125,43 @@ export default function MyRequestsPage() {
     }
   }
 
+  // A GCASH REFERENCE ON FILE: ASK BEFORE ERASING IT OR PAYING TWICE.
+  //
+  // Once the resident has submitted a GCash reference, two of the Pay ▾
+  // options can do harm without saying so. "Pay onsite" goes through the same
+  // /pay route, which records the new method and sets the reference to null,
+  // and "Pay online via GCash" can collect a second payment for a charge the
+  // resident has already paid by hand. So both ask first, and Cancel sends
+  // nothing. "I already paid via GCash" does not ask: it only replaces the
+  // reference, which is how a mistyped one is fixed. With no GCash reference
+  // on file nothing asks.
+  //
+  // MyRentalsPage.jsx carries the identical checks and wording.
+  // IF ONE CHANGES, CHECK THE OTHER.
+  function payOnsite(r, charge) {
+    if (
+      charge.declared_method === "gcash" &&
+      !window.confirm(
+        "You already submitted a GCash reference for this payment. Choosing Pay onsite will remove it. Continue?",
+      )
+    ) {
+      return;
+    }
+    handleDeclare(r, "onsite");
+  }
+
+  function payOnline(r, charge) {
+    if (
+      charge.declared_method === "gcash" &&
+      !window.confirm(
+        "You already submitted a GCash reference for this payment. Paying online as well could charge you twice. Continue?",
+      )
+    ) {
+      return;
+    }
+    handlePayOnline(r, charge);
+  }
+
   async function handleCancel(r) {
     const name = r.document_types?.name || "document";
     if (
@@ -321,8 +358,8 @@ export default function MyRequestsPage() {
                             ) : (
                               <PayMenu
                                 busy={busyId === r.request_id}
-                                onPayOnline={() => handlePayOnline(r, charge)}
-                                onPayOnsite={() => handleDeclare(r, "onsite")}
+                                onPayOnline={() => payOnline(r, charge)}
+                                onPayOnsite={() => payOnsite(r, charge)}
                                 onAlreadyPaid={() => {
                                   setPayTarget(r.request_id);
                                   setGcashRef("");
