@@ -1590,6 +1590,68 @@ button.link-button:hover:not(:disabled) {
   display: inline-flex;
 }
 
+/* The resident's "Pay ▾" menu (components/PayMenu.jsx) on My rentals and My
+   requests: one button in the actions cell in place of three. The wrapper is
+   the cell's direct child, so it takes the inline-box margins above and the
+   button inside it sits exactly where a lone button would.
+
+   Above 640px the list FLOATS. It is position: fixed and the component places
+   it from the button's rectangle, because the table card is overflow-x: auto
+   and clips an absolutely positioned child at its edge; a fixed one escapes
+   it, since nothing in the dashboard shell sets a transform, filter or
+   contain that would capture it. z-index 35: above the sticky header (30)
+   where they meet, below the drawer's backdrop (40) and the drawer (50).
+   The border, radius, shadow and item colours are the account menu's.
+
+   The item selectors carry two classes because the base
+   `button:hover:not(:disabled)` rule is (0,2,1) and would otherwise repaint
+   the items blue. */
+.pay-menu .pay-menu-list {
+  position: fixed;
+  z-index: 35;
+  min-width: 200px;
+  padding: 6px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+/* The button and every item are 40px tall at least: touch targets. A primary
+   .btn has no border, so it would otherwise render 38px where a secondary
+   one renders 40. */
+.pay-menu > .btn {
+  min-height: 40px;
+}
+
+.pay-menu .pay-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: none;
+  border-radius: 6px;
+}
+
+/* The gateway option leads and reads strongest, as the primary button did,
+   so the three stay clearly distinguished. */
+.pay-menu .pay-menu-online {
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.pay-menu .pay-menu-item:hover:not(:disabled),
+.pay-menu .pay-menu-item:focus-visible {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
 .badge.gray {
   background: #f1f5f9;
   color: #64748b;
@@ -3725,6 +3787,22 @@ button.tab:hover:not(:disabled) {
   .data-table.stack-narrow td.row-actions > .inline-form input {
     flex: 1 1 100%;
     width: auto;
+  }
+
+  /* The Pay menu in a card: the button is full width like every card button,
+     and the list opens IN FLOW under it, full width, pushing the card's foot
+     down, so nothing floats over a phone screen and nothing can clip it. The
+     wrapper drops its 4px top margin so the button sits where a lone card
+     button sits, 8px down. */
+  .data-table.stack-narrow td.row-actions > .pay-menu {
+    display: block;
+    margin-top: 0;
+  }
+
+  .data-table.stack-narrow .pay-menu .pay-menu-list {
+    position: static;
+    margin-top: 8px;
+    box-shadow: none;
   }
 
   /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----

@@ -8,6 +8,7 @@ import {
   chargeOf,
   formatDate,
 } from "../constants/requestStatus";
+import PayMenu from "../components/PayMenu";
 import TableSkeleton from "../components/TableSkeleton";
 
 export default function MyRequestsPage() {
@@ -47,9 +48,9 @@ export default function MyRequestsPage() {
   // path the page is expected to be gone. It is not always gone: pressing the
   // browser's BACK button on PayMongo restores this page from the bfcache
   // frozen exactly as it left. React resumes with busyId still holding the
-  // request id, so that row's three payment buttons stay disabled under
-  // "Opening GCash…" until the resident thinks to refresh — and nothing on
-  // screen suggests refreshing.
+  // request id, so that row's Pay ▾ button stays disabled under "Opening
+  // GCash…" until the resident thinks to refresh — and nothing on screen
+  // suggests refreshing.
   //
   // `event.persisted` IS THE WHOLE GUARD. It is true only for a bfcache
   // restore, so a first load, a client-side route change and a hard reload all
@@ -318,34 +319,15 @@ export default function MyRequestsPage() {
                                 </button>
                               </form>
                             ) : (
-                              <>
-                                <button
-                                  className="btn"
-                                  disabled={busyId === r.request_id}
-                                  onClick={() => handlePayOnline(r, charge)}
-                                >
-                                  {busyId === r.request_id
-                                    ? "Opening GCash…"
-                                    : "Pay online via GCash"}
-                                </button>
-                                <button
-                                  className="btn secondary"
-                                  disabled={busyId === r.request_id}
-                                  onClick={() => handleDeclare(r, "onsite")}
-                                >
-                                  Pay onsite
-                                </button>
-                                <button
-                                  className="btn secondary"
-                                  disabled={busyId === r.request_id}
-                                  onClick={() => {
-                                    setPayTarget(r.request_id);
-                                    setGcashRef("");
-                                  }}
-                                >
-                                  I already paid via GCash
-                                </button>
-                              </>
+                              <PayMenu
+                                busy={busyId === r.request_id}
+                                onPayOnline={() => handlePayOnline(r, charge)}
+                                onPayOnsite={() => handleDeclare(r, "onsite")}
+                                onAlreadyPaid={() => {
+                                  setPayTarget(r.request_id);
+                                  setGcashRef("");
+                                }}
+                              />
                             ))}
                         </td>
                       </tr>
