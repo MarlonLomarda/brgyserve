@@ -18,6 +18,18 @@ export function formatDate(value) {
   return new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+// The two halves of formatDate, same locale and styles, for a cell that shows
+// the date over the time (the Payments queue's Billed column).
+export function formatDateOnly(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-PH', { dateStyle: 'medium' });
+}
+
+export function formatTimeOnly(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleTimeString('en-PH', { timeStyle: 'short' });
+}
+
 // Charge statuses are UPPERCASE (mirrors backend/src/constants/charges.js).
 export const CHARGE_META = {
   UNPAID: { label: 'Unpaid', className: 'status-pending' },

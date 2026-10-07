@@ -1542,8 +1542,8 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* Action cells size themselves from their buttons, so they must be able to
-   wrap. A cell holding two long-labelled buttons — the payments queue has
-   "Verify / record" next to "Re-check with PayMongo" — otherwise demands the
+   wrap. A cell holding two buttons — the payments queue has
+   "Verify" next to "Re-check" — otherwise demands the
    full width of both on one line and REFUSES to shrink (flex items default to
    min-width: auto), starving every text column in the same table. Wrapping
    drops that demand to the widest single button.
@@ -1559,8 +1559,8 @@ button.link-button:hover:not(:disabled) {
      the table algorithm happily allots less than two buttons need and they
      stack even when the table has hundreds of pixels spare (measured on
      Document types: 282.9px surplus, actions still stacked). This floor asks
-     for enough to keep two ordinary buttons on one line. Cells that already
-     need more than this — the payments queue at 227.7 — are unaffected. */
+     for enough to keep two ordinary buttons on one line. The payments queue
+     now sits exactly on it — that column measures 200. */
   /* min-width: 200px; */
 }
 
@@ -1588,6 +1588,72 @@ button.link-button:hover:not(:disabled) {
   display: inline-block;
   vertical-align: top;
   margin: 4px 0 4px 8px;
+}
+
+.data-table td.row-actions > .inline-form {
+  display: inline-flex;
+}
+
+/* The resident's "Pay ▾" menu (components/PayMenu.jsx) on My rentals and My
+   requests: one button in the actions cell in place of three. The wrapper is
+   the cell's direct child, so it takes the inline-box margins above and the
+   button inside it sits exactly where a lone button would.
+
+   Above 640px the list FLOATS. It is position: fixed and the component places
+   it from the button's rectangle, because the table card is overflow-x: auto
+   and clips an absolutely positioned child at its edge; a fixed one escapes
+   it, since nothing in the dashboard shell sets a transform, filter or
+   contain that would capture it. z-index 35: above the sticky header (30)
+   where they meet, below the drawer's backdrop (40) and the drawer (50).
+   The border, radius, shadow and item colours are the account menu's.
+
+   The item selectors carry two classes because the base
+   `button:hover:not(:disabled)` rule is (0,2,1) and would otherwise repaint
+   the items blue. */
+.pay-menu .pay-menu-list {
+  position: fixed;
+  z-index: 35;
+  min-width: 200px;
+  padding: 6px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+/* The button and every item are 40px tall at least: touch targets. A primary
+   .btn has no border, so it would otherwise render 38px where a secondary
+   one renders 40. */
+.pay-menu > .btn {
+  min-height: 40px;
+}
+
+.pay-menu .pay-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: none;
+  border-radius: 6px;
+}
+
+/* The gateway option leads and reads strongest, as the primary button did,
+   so the three stay clearly distinguished. */
+.pay-menu .pay-menu-online {
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.pay-menu .pay-menu-item:hover:not(:disabled),
+.pay-menu .pay-menu-item:focus-visible {
+  color: #1d4ed8;
+  background: #eff6ff;
 }
 
 .badge.gray {
@@ -2220,9 +2286,10 @@ button.link-button:hover:not(:disabled) {
    Both are scoped by their own class, not nth-child, so reordering a column
    cannot silently move the rule to a different one. */
 
-/* Payments queue: the billed timestamp reads on one line. Measured cost is
-   +100.6px of table min-content (936 -> 1036.6), which fits the widened
-   container. The date FORMAT is deliberately unchanged — the short form was
+/* Payments queue: the billed date and the billed time each read on one line.
+   Since 7 Oct 2026 the time sits under the date (PaymentsPage.jsx), so the
+   column is only as wide as the date: 113.2px, against 180.6 for the one-line
+   timestamp, measured. The format itself is unchanged — the short form was
    measured as worse (89.8 vs 73.2 min-content). */
 .data-table .col-billed {
   white-space: nowrap;
@@ -2276,6 +2343,18 @@ button.link-button:hover:not(:disabled) {
 
 .data-table .col-declared .cell-clamp {
   max-width: 200px;
+}
+
+/* Payments queue, For column: a fine's second line is the household address,
+   which can run long. Two lines, then an ellipsis; the full address is the
+   element's title. The column's width is unchanged — only the row stops
+   growing. */
+.data-table .two-line-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 /* Events stage 3c: the resident's household QR code. The code is the only
@@ -3718,6 +3797,39 @@ button.tab:hover:not(:disabled) {
     margin-bottom: 0;
   }
 
+  .data-table.stack-narrow td.row-actions {
+    text-align: left;
+  }
+
+  .data-table.stack-narrow td.row-actions > .inline-form {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .data-table.stack-narrow td.row-actions > .inline-form input {
+    flex: 1 1 100%;
+    width: auto;
+  }
+
+  /* The Pay menu in a card: the button is full width like every card button,
+     and the list opens IN FLOW under it, full width, pushing the card's foot
+     down, so nothing floats over a phone screen and nothing can clip it. The
+     wrapper drops its 4px top margin so the button sits where a lone card
+     button sits, 8px down. */
+  .data-table.stack-narrow td.row-actions > .pay-menu {
+    display: block;
+    margin-top: 0;
+  }
+
+  .data-table.stack-narrow .pay-menu .pay-menu-list {
+    position: static;
+    margin-top: 8px;
+    box-shadow: none;
+  }
+
   /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
      ISSUE 8 built the mechanism for one table; these three rules are all that
      was missing to reuse it everywhere else. The tables now carrying
@@ -3775,6 +3887,14 @@ button.tab:hover:not(:disabled) {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
+  }
+
+  /* Payments queue: Billed puts the time under the date so the column stays
+     narrow. A card has room, so the time goes back on the date's line at the
+     date's size, and the card does not grow. */
+  .data-table.stack-narrow .col-billed .small-note {
+    display: inline;
+    font-size: inherit;
   }
 }
 

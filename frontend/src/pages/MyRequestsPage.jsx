@@ -8,6 +8,7 @@ import {
   chargeOf,
   formatDate,
 } from "../constants/requestStatus";
+import PayMenu from "../components/PayMenu";
 import TableSkeleton from "../components/TableSkeleton";
 
 export default function MyRequestsPage() {
@@ -47,9 +48,9 @@ export default function MyRequestsPage() {
   // path the page is expected to be gone. It is not always gone: pressing the
   // browser's BACK button on PayMongo restores this page from the bfcache
   // frozen exactly as it left. React resumes with busyId still holding the
-  // request id, so that row's three payment buttons stay disabled under
-  // "Opening GCash…" until the resident thinks to refresh — and nothing on
-  // screen suggests refreshing.
+  // request id, so that row's Pay ▾ button stays disabled under "Opening
+  // GCash…" until the resident thinks to refresh — and nothing on screen
+  // suggests refreshing.
   //
   // `event.persisted` IS THE WHOLE GUARD. It is true only for a bfcache
   // restore, so a first load, a client-side route change and a hard reload all
@@ -122,6 +123,43 @@ export default function MyRequestsPage() {
       setBusyId(null);
       await load();
     }
+  }
+
+  // A GCASH REFERENCE ON FILE: ASK BEFORE ERASING IT OR PAYING TWICE.
+  //
+  // Once the resident has submitted a GCash reference, two of the Pay ▾
+  // options can do harm without saying so. "Pay onsite" goes through the same
+  // /pay route, which records the new method and sets the reference to null,
+  // and "Pay online via GCash" can collect a second payment for a charge the
+  // resident has already paid by hand. So both ask first, and Cancel sends
+  // nothing. "I already paid via GCash" does not ask: it only replaces the
+  // reference, which is how a mistyped one is fixed. With no GCash reference
+  // on file nothing asks.
+  //
+  // MyRentalsPage.jsx carries the identical checks and wording.
+  // IF ONE CHANGES, CHECK THE OTHER.
+  function payOnsite(r, charge) {
+    if (
+      charge.declared_method === "gcash" &&
+      !window.confirm(
+        "You already submitted a GCash reference for this payment. Choosing Pay onsite will remove it. Continue?",
+      )
+    ) {
+      return;
+    }
+    handleDeclare(r, "onsite");
+  }
+
+  function payOnline(r, charge) {
+    if (
+      charge.declared_method === "gcash" &&
+      !window.confirm(
+        "You already submitted a GCash reference for this payment. Paying online as well could charge you twice. Continue?",
+      )
+    ) {
+      return;
+    }
+    handlePayOnline(r, charge);
   }
 
   async function handleCancel(r) {

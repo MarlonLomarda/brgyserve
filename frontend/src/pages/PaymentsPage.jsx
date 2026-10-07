@@ -4,6 +4,8 @@ import {
   chargeMeta,
   CHARGE_TYPE_LABELS,
   formatDate,
+  formatDateOnly,
+  formatTimeOnly,
   METHOD_LABELS,
 } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
@@ -331,8 +333,23 @@ export default function PaymentsPage() {
                       </td>
                       <td data-label="For">
                         {chargeSubject(c).main}
+                        {/* A fine's second line is the household address,
+                            which can run long: two lines, then an ellipsis,
+                            with the full address on hover. A rental's
+                            schedule is never cut. */}
                         {chargeSubject(c).note && (
-                          <div className="muted small-note">
+                          <div
+                            className={
+                              c.charge_type === "FINE"
+                                ? "muted small-note two-line-clamp"
+                                : "muted small-note"
+                            }
+                            title={
+                              c.charge_type === "FINE"
+                                ? chargeSubject(c).note
+                                : undefined
+                            }
+                          >
                             {chargeSubject(c).note}
                           </div>
                         )}
@@ -354,15 +371,26 @@ export default function PaymentsPage() {
                         </span>
                       </td>
                       <td className="muted col-billed" data-label="Billed">
-                        {formatDate(c.created_at)}
+                        {/* The date over the time, so the column is only as
+                            wide as the date. Phone cards put them back on one
+                            line (index.css). */}
+                        {formatDateOnly(c.created_at)}{" "}
+                        <div className="small-note">
+                          {formatTimeOnly(c.created_at)}
+                        </div>
                       </td>
                       <td className="row-actions">
+                        {/* Short labels keep both buttons on one line in the
+                            200px action column. The full wording stays on
+                            hover, and is what a screen reader announces. */}
                         {c.status === "UNPAID" && (
                           <button
                             className="btn secondary"
                             onClick={() => setSelected(c)}
+                            title="Verify / record"
+                            aria-label="Verify / record"
                           >
-                            Verify / record
+                            Verify
                           </button>
                         )}
                         {c.status === "UNPAID" && c.paymongo_session_id && (
@@ -370,11 +398,16 @@ export default function PaymentsPage() {
                             className="btn secondary"
                             disabled={recheckingId === c.charge_id}
                             onClick={() => handleRecheck(c)}
-                            title="Ask PayMongo whether this online payment went through"
+                            title="Re-check with PayMongo: ask whether this online payment went through"
+                            aria-label={
+                              recheckingId === c.charge_id
+                                ? undefined
+                                : "Re-check with PayMongo"
+                            }
                           >
                             {recheckingId === c.charge_id
                               ? "Checking…"
-                              : "Re-check with PayMongo"}
+                              : "Re-check"}
                           </button>
                         )}
                       </td>
