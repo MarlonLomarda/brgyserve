@@ -3603,6 +3603,17 @@ button.tab:hover:not(:disabled) {
    here applies above 640px, and none of the six protected desktop rules is
    referenced. */
 @media (max-width: 640px) {
+  .table-wrap {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+
+    tr {
+      background-color: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+  }
+
   .list-head,
   .head-actions {
     flex-wrap: wrap;
