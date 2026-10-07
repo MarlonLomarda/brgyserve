@@ -206,7 +206,7 @@ export default function MyRequestsPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <TableSkeleton col={6} row={8} />
+                  <TableSkeleton col={6} row={requests?.length} />
                 ) : (
                   requests.map((r) => {
                     const meta = statusMeta(r.status);
