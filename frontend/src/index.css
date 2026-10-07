@@ -1510,6 +1510,10 @@ button.link-button:hover:not(:disabled) {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
+
+  th.num {
+    text-align: start;
+  }
 }
 
 .data-table th {
@@ -1557,7 +1561,7 @@ button.link-button:hover:not(:disabled) {
      Document types: 282.9px surplus, actions still stacked). This floor asks
      for enough to keep two ordinary buttons on one line. The payments queue
      now sits exactly on it — that column measures 200. */
-  min-width: 200px;
+  /* min-width: 200px; */
 }
 
 /* Labels stay on one line; the cell wraps between buttons rather than inside
@@ -2694,6 +2698,16 @@ button.link-button:hover:not(:disabled) {
   border-radius: 8px;
 }
 
+.table-message {
+  text-align: center;
+  padding: 2rem !important;
+
+  p {
+    margin-top: 0;
+    color: #94a3b8;
+  }
+}
+
 @keyframes skeleton-loading {
   0% {
     opacity: 1;
@@ -3668,6 +3682,17 @@ button.tab:hover:not(:disabled) {
    here applies above 640px, and none of the six protected desktop rules is
    referenced. */
 @media (max-width: 640px) {
+  .table-wrap {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+
+    tr {
+      background-color: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+  }
+
   .list-head,
   .head-actions {
     flex-wrap: wrap;
