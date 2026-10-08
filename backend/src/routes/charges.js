@@ -83,15 +83,17 @@ async function attachHouseholdHeads(charges) {
 
 // GET /api/charges?status=UNPAID|PAID|VOID|all — defaults to UNPAID (the
 // verification queue: plain unpaid charges plus those with a submitted-but-
-// unverified GCash reference, which stay UNPAID until verified). Oldest
-// first, so the queue is worked in billing order.
+// unverified GCash reference, which stay UNPAID until verified). Newest
+// first, under every filter, so the most recent transactions are at the top
+// of the Payments page; charge_id breaks a tie on created_at, newest first.
 router.get('/', async (req, res) => {
   const status = String(req.query.status || CHARGE_STATUS.UNPAID).toUpperCase();
 
   let query = supabase
     .from('charges')
     .select(CHARGE_FIELDS)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false })
+    .order('charge_id', { ascending: false });
 
   if (status !== 'ALL') {
     if (!Object.values(CHARGE_STATUS).includes(status)) {
