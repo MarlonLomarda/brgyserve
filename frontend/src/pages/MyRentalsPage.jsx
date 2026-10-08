@@ -175,7 +175,7 @@ export default function MyRentalsPage() {
             </button>
           </div>
           <div className="table-wrap">
-            <table className="data-table stack-narrow">
+            <table className="data-table stack-narrow my-rentals-table">
               <thead>
                 <tr>
                   <th>Item</th>

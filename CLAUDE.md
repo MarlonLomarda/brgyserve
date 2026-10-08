@@ -323,6 +323,7 @@ Six rules, **verified across 58 filter states in `fdaf80a` / `7eba429`**. They a
 - **`.dash-main { max-width: 1180px }`** — the page column bound.
 - **`.pending-card:not(:has(.table-wrap)) { max-width: 720px }`** — the form cap, **with its `:has(.table-wrap)` exclusion**: a card containing a table must not be capped or the table is squeezed.
 - **`.row-actions { min-width: 200px }`** — the action-column floor, sized to keep two ordinary buttons on one line.
+  - **Two scoped exceptions (8 Oct 2026): `.my-requests-table td.row-actions` and `.my-rentals-table td.row-actions` take `min-width: 0`.** Those cells only ever hold one button ("Pay ▾", or "Cancel" on a pending request), so the floor only took width from their text columns. The shared rule itself is unchanged. PR #15 had commented the floor out for every table, which stacked "Verify" over "Re-check" on Payments even at 1920, and did the same on Rental bookings and Document types. **Another table gets the same exception only with its own measurement, never by editing the shared rule.**
 - **`.data-table .col-billed { white-space: nowrap }`** — billed dates never break.
 - **`.data-table .col-purpose .cell-clamp { max-width: 300px }`**
 - **`.data-table .col-resident .cell-clamp { max-width: 170px }`**

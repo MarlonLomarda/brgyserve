@@ -1510,10 +1510,6 @@ button.link-button:hover:not(:disabled) {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
-
-  th.num {
-    text-align: start;
-  }
 }
 
 .data-table th {
@@ -1560,8 +1556,10 @@ button.link-button:hover:not(:disabled) {
      stack even when the table has hundreds of pixels spare (measured on
      Document types: 282.9px surplus, actions still stacked). This floor asks
      for enough to keep two ordinary buttons on one line. The payments queue
-     now sits exactly on it — that column measures 200. */
-  /* min-width: 200px; */
+     now sits exactly on it — that column measures 200. Two tables opt out,
+     My requests and My rentals, whose cells only ever hold one button (see
+     .my-requests-table below). */
+  min-width: 200px;
 }
 
 /* Labels stay on one line; the cell wraps between buttons rather than inside
@@ -1592,6 +1590,21 @@ button.link-button:hover:not(:disabled) {
 
 .data-table td.row-actions > .inline-form {
   display: inline-flex;
+}
+
+/* My requests and My rentals only: no 200px floor. Their actions cell only
+   ever holds ONE button, "Pay ▾" (or "Cancel" on a pending request), so the
+   shared floor above only took width from the text columns; the reference
+   form is wider than 200 on its own and is unaffected. Measured: the column
+   goes from 200 to about 105px (My requests) and 99px (My rentals). My
+   requests' rows total 119px shorter at 1280; My rentals stops scrolling
+   sideways at 641-700 and its rows total 76-169px shorter between 700 and
+   1100. Scoped by each table's own class, so the protected .row-actions rule
+   is unchanged for every other table; at (0,2,1) this beats it on
+   specificity, with no !important. */
+.my-requests-table td.row-actions,
+.my-rentals-table td.row-actions {
+  min-width: 0;
 }
 
 /* The resident's "Pay ▾" menu (components/PayMenu.jsx) on My rentals and My
@@ -2698,13 +2711,17 @@ button.link-button:hover:not(:disabled) {
   border-radius: 8px;
 }
 
+/* The empty-state row inside a table (My requests). Its padding lives in
+   `.data-table td.table-message`, after the 640px .stack-narrow block, because
+   it has to beat that block's `td` padding on equal specificity. The text is
+   the .empty box's colour, #64748b (4.76:1 on white); the header grey,
+   #94a3b8, is 2.56:1 and too faint for a sentence. */
 .table-message {
   text-align: center;
-  padding: 2rem !important;
 
   p {
     margin-top: 0;
-    color: #94a3b8;
+    color: #64748b;
   }
 }
 
@@ -3682,17 +3699,6 @@ button.tab:hover:not(:disabled) {
    here applies above 640px, and none of the six protected desktop rules is
    referenced. */
 @media (max-width: 640px) {
-  .table-wrap {
-    background-color: transparent;
-    border: none;
-    box-shadow: none;
-
-    tr {
-      background-color: #fff;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-    }
-  }
-
   .list-head,
   .head-actions {
     flex-wrap: wrap;
@@ -3772,6 +3778,24 @@ button.tab:hover:not(:disabled) {
   .data-table.stack-narrow td {
     border: none;
     padding: 4px 0;
+  }
+
+  /* The cards stand on the page, not inside a second card (PR 15). The wrap
+     around a STACKED table drops its white box, border and shadow, and each
+     card takes the white background and the shadow instead. Scoped by :has()
+     to a wrap whose own table is stacked, so a table that keeps its columns on
+     a phone keeps its frame: Rental items, the household and payment-result
+     key-value tables, the attendance roster, and the Reports tables, which
+     exportPdf.js captures from the live page. */
+  .table-wrap:has(> .data-table.stack-narrow) {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .table-wrap:has(> .data-table.stack-narrow) tr {
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
   /* Reuses the <th> type scale this is standing in for, so a stacked field
@@ -3896,6 +3920,14 @@ button.tab:hover:not(:disabled) {
     display: inline;
     font-size: inherit;
   }
+}
+
+/* The empty-state row's padding (see .table-message). It must come AFTER the
+   640px .stack-narrow block above: `.data-table.stack-narrow td` is (0,2,1),
+   the same as this selector, so source order decides on a phone. Above 640px
+   it beats `.data-table td` (0,1,1) on specificity alone. No !important. */
+.data-table td.table-message {
+  padding: 2rem;
 }
 
 @media (max-width: 768px) {

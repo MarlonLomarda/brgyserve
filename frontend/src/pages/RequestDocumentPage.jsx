@@ -124,7 +124,7 @@ export default function RequestDocumentPage() {
                   required
                 >
                   <option value="" disabled>
-                    Select a document...
+                    Select a document…
                   </option>
                   {types.map((t) => (
                     <option key={t.document_type_id} value={t.document_type_id}>
