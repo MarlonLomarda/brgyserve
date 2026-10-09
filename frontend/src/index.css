@@ -2164,13 +2164,14 @@ button.link-button:hover:not(:disabled) {
   color: #64748b;
 }
 
-/* Label beside value. Amount and Billed, and Declared payment and Declared
-   on, share a row; every other pair runs across (.pay-wide). The second value
-   column is the wider one because it holds the timestamps. Digits are
-   tabular so amounts, dates and references line up. */
+/* Label beside value, every field on its own row: one label column as wide
+   as the longest label, one value column, the same at every width. (Pairing
+   Amount with Billed left "Billed" floating mid-row, out of line with every
+   other value.) Digits are tabular so amounts, dates and references line
+   up. */
 .pay-panel-list {
   display: grid;
-  grid-template-columns: max-content minmax(0, 0.8fr) max-content minmax(0, 1.2fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: baseline;
   gap: 10px 12px;
   margin: 0;
@@ -2187,14 +2188,6 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
-}
-
-.pay-panel-list .pay-pair {
-  padding-left: 8px;
-}
-
-.pay-panel-list .pay-wide {
-  grid-column: span 3;
 }
 
 .pay-panel-list .pay-amount {
@@ -4273,18 +4266,6 @@ button.tab:hover:not(:disabled) {
   .pay-panel-actions {
     padding: 14px 20px 16px;
     background: none;
-  }
-
-  .pay-panel-list {
-    grid-template-columns: max-content minmax(0, 1fr);
-  }
-
-  .pay-panel-list .pay-wide {
-    grid-column: auto;
-  }
-
-  .pay-panel-list .pay-pair {
-    padding-left: 0;
   }
 
   .pay-panel-fields {

@@ -280,62 +280,52 @@ function ChargePanel({
           <div className="pay-panel-details">
             {!unpaid && <p className="pay-panel-note">Read-only</p>}
 
-            {/* Label and value side by side; Amount with Billed and Declared
-                payment with Declared on share a row. Paid and void charges
-                say so in place of a declaration they no longer wait on: the
-                payload has no payments data, so a paid charge cannot show
-                how it was paid unless PayMongo settled it. */}
+            {/* One label column, one value column: every field on its own
+                row. Paid and void charges say so in place of a declaration
+                they no longer wait on. A paid one says only "Paid.": the
+                payload has no payments data, and no screen shows a payment's
+                method or reference (the Collections report totals them by
+                method), so there is nowhere to point to. */}
             <dl className="pay-panel-list">
               <dt>For</dt>
-              <dd className="pay-wide">{subject.main}</dd>
+              <dd>{subject.main}</dd>
               {c.rental_requests && (
                 <>
                   <dt>Schedule</dt>
-                  <dd className="pay-wide">{subject.note}</dd>
+                  <dd>{subject.note}</dd>
                 </>
               )}
               {c.charge_type === "FINE" && subject.note && (
                 <>
                   <dt>Household address</dt>
-                  <dd className="pay-wide">{subject.note}</dd>
+                  <dd>{subject.note}</dd>
                 </>
               )}
               {c.document_requests?.purpose && (
                 <>
                   <dt>Purpose</dt>
-                  <dd className="pay-wide">{c.document_requests.purpose}</dd>
+                  <dd>{c.document_requests.purpose}</dd>
                 </>
               )}
               <dt>Amount</dt>
               <dd className="pay-amount">₱{Number(c.amount).toFixed(2)}</dd>
-              <dt className="pay-pair">Billed</dt>
+              <dt>Billed</dt>
               <dd>{formatDate(c.created_at)}</dd>
               {!unpaid && (
                 <>
                   <dt>Payment</dt>
-                  <dd className="pay-wide">
-                    {c.status === "PAID"
-                      ? "Paid. Payment details are not shown here."
-                      : "Void."}
-                  </dd>
+                  <dd>{c.status === "PAID" ? "Paid." : "Void."}</dd>
                 </>
               )}
               {(unpaid || c.declared_method) && (
                 <>
                   <dt>Declared payment</dt>
-                  <dd
-                    className={[
-                      c.declared_at ? null : "pay-wide",
-                      c.declared_method ? null : "muted",
-                    ]
-                      .filter(Boolean)
-                      .join(" ") || undefined}
-                  >
+                  <dd className={c.declared_method ? undefined : "muted"}>
                     {declaredText(c)}
                   </dd>
                   {c.declared_at && (
                     <>
-                      <dt className="pay-pair">Declared on</dt>
+                      <dt>Declared on</dt>
                       <dd>{formatDate(c.declared_at)}</dd>
                     </>
                   )}
@@ -344,13 +334,13 @@ function ChargePanel({
               {c.declared_reference && (
                 <>
                   <dt>GCash reference</dt>
-                  <dd className="pay-wide">{c.declared_reference}</dd>
+                  <dd>{c.declared_reference}</dd>
                 </>
               )}
               {online && (
                 <>
                   <dt>Online payment</dt>
-                  <dd className="pay-wide">{online}</dd>
+                  <dd>{online}</dd>
                 </>
               )}
             </dl>
