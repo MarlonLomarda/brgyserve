@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { FaUserCircle } from "react-icons/fa";
 
 // The account menu: one icon button in the top bar that opens Profile and
-// Log out. ONE component used by BOTH headers, PageLayout's wide one and
-// DashHeader's narrow one, which swap at 1045px, so the two cannot drift.
+// Log out, with Staff accounts between them for the Secretary only. ONE
+// component used by BOTH headers, PageLayout's wide one and DashHeader's
+// narrow one, which swap at 1045px, so the two cannot drift.
 // Exactly one of the two is visible at any width, as with the two Log out
 // buttons it replaced.
 //
@@ -96,6 +97,23 @@ export default function AccountMenu({ user, onLogout }) {
     action();
   };
 
+  // ONE list, filtered by role before it is rendered, so each item's ref slot
+  // is its position on screen. The Secretary's item written inline behind a
+  // role check would leave an empty slot in itemRefs for every other role,
+  // and since onMenuKeyDown counts positions in that array, ArrowDown on
+  // Log out would stop wrapping round to Profile.
+  const items = [
+    { label: "Profile", action: () => navigate("/profile") },
+    // A link only: the route admits the Secretary alone, and the server
+    // refuses every other role regardless.
+    {
+      label: "Staff accounts",
+      action: () => navigate("/secretary/staff-accounts"),
+      onlyFor: "secretary",
+    },
+    { label: "Log out", action: onLogout },
+  ].filter((item) => !item.onlyFor || item.onlyFor === user?.role);
+
   return (
     <div className="account-menu" ref={rootRef} onBlur={onBlur}>
       <button
@@ -119,24 +137,18 @@ export default function AccountMenu({ user, onLogout }) {
             @{user?.username}
           </p>
           <div role="menu" id={menuId} aria-labelledby={labelId} onKeyDown={onMenuKeyDown}>
-            <button
-              ref={(el) => { itemRefs.current[0] = el; }}
-              type="button"
-              role="menuitem"
-              className="account-menu-item"
-              onClick={() => choose(() => navigate("/profile"))}
-            >
-              Profile
-            </button>
-            <button
-              ref={(el) => { itemRefs.current[1] = el; }}
-              type="button"
-              role="menuitem"
-              className="account-menu-item"
-              onClick={() => choose(onLogout)}
-            >
-              Log out
-            </button>
+            {items.map((item, index) => (
+              <button
+                key={item.label}
+                ref={(el) => { itemRefs.current[index] = el; }}
+                type="button"
+                role="menuitem"
+                className="account-menu-item"
+                onClick={() => choose(item.action)}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
       )}

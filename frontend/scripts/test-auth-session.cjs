@@ -20,6 +20,9 @@
 // could not be made, and that the check sends the token in its body, with no
 // session header, and leaves a signed-in session alone.
 //
+// Section J is the Secretary's Staff accounts page: its route, the account
+// menu item that opens it, and that no other role gets either.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -336,7 +339,8 @@ const root = () => dom.window.document.getElementById('root');
   // The menu replaced the Log out button in BOTH top bars. jsdom applies no
   // stylesheet, so both headers are in the DOM here, as they are in the
   // browser before CSS hides one; interactions use the narrow header's menu,
-  // which comes first in the markup.
+  // which comes first in the markup. These mounts are the Secretary's, whose
+  // menu has a third item, Staff accounts, between the two (section J).
   console.log('\n--- account menu, Profile page, voluntary change ---');
   const RES_USER = { user_id: 2, username: 'res_one', role: 'resident', must_change_password: false };
   const RES_TOKEN = makeToken({ sub: '2', role: 'resident', exp: VALID_EXP });
@@ -351,13 +355,17 @@ const root = () => dom.window.document.getElementById('root');
     linked: true,
   };
   // The profile endpoint, a successful password change, and an empty list in
-  // its real shape for each page loader these mounts pass through.
+  // its real shape for each page loader these mounts pass through, the four
+  // role homes section J lands on included.
   const answer = (profileBody) => (url, method) => {
     if (url.endsWith('/auth/profile')) return profileBody;
     if (url.endsWith('/auth/change-password') && method === 'POST') return { message: 'Password changed successfully' };
     if (url.includes('/document-types/all')) return { document_types: [] };
     if (url.includes('/secretary/staff-accounts')) return { accounts: [] };
     if (url.includes('/secretary/pending-residents')) return { pending: [] };
+    if (url.includes('/rental-requests?')) return { requests: [] };
+    if (url.includes('/charges?status=')) return { charges: [] };
+    if (url.includes('/document-requests/mine')) return { requests: [] };
     return undefined;
   };
   const labels = (page) => page.queryAll('dt').map((d) => d.textContent);
@@ -378,16 +386,26 @@ const root = () => dom.window.document.getElementById('root');
 
   const menuBtn = menuButtons[0];
   const items = () => menuPage.queryAll('[role="menu"] [role="menuitem"]');
+  const focused = () => menuPage.active()?.textContent;
   await menuPage.click(menuBtn);
-  check('a click opens it: Profile and Log out as role="menuitem" in role="menu", under "@secretary1"',
-    menuBtn.getAttribute('aria-expanded') === 'true' && items().map((i) => i.textContent).join('|') === 'Profile|Log out'
+  check('a click opens it: Profile, Staff accounts and Log out as role="menuitem" in role="menu", under "@secretary1"',
+    menuBtn.getAttribute('aria-expanded') === 'true' && items().map((i) => i.textContent).join('|') === 'Profile|Staff accounts|Log out'
       && /@secretary1/.test(menuPage.query('.account-menu-panel')?.textContent || ''),
     items().map((i) => i.textContent).join('|'));
   check('  focus moves to the first item', menuPage.active() === items()[0]);
   await menuPage.key('ArrowDown');
-  check('ArrowDown moves to Log out', menuPage.active() === items()[1]);
+  check('ArrowDown moves to Staff accounts', focused() === 'Staff accounts', focused());
   await menuPage.key('ArrowDown');
-  check('  and wraps round to Profile', menuPage.active() === items()[0]);
+  check('  then to Log out', focused() === 'Log out', focused());
+  await menuPage.key('ArrowDown');
+  check('  and wraps round to Profile', menuPage.active() === items()[0], focused());
+  await menuPage.key('ArrowUp');
+  check('ArrowUp on Profile wraps round to Log out', focused() === 'Log out', focused());
+  await menuPage.key('Home');
+  const homeKeyOn = focused();
+  await menuPage.key('End');
+  check('  Home goes to Profile and End to Log out', homeKeyOn === 'Profile' && focused() === 'Log out',
+    `${homeKeyOn} / ${focused()}`);
   await menuPage.click(menuBtn);
   check('a second click on the button closes it',
     items().length === 0 && menuBtn.getAttribute('aria-expanded') === 'false');
@@ -399,7 +417,7 @@ const root = () => dom.window.document.getElementById('root');
   check('Escape closes it and puts focus back on the button', items().length === 0 && menuPage.active() === menuBtn);
   await menuPage.key('ArrowDown', menuBtn);
   check('ArrowDown on the button opens it with focus on the first item',
-    items().length === 2 && menuPage.active() === items()[0]);
+    items().length === 3 && menuPage.active() === items()[0]);
 
   net.calls = [];
   await menuPage.click(items()[0]);
@@ -419,7 +437,7 @@ const root = () => dom.window.document.getElementById('root');
     menuPage.query('a[href="/change-password"]')?.textContent === 'Change password');
 
   await menuPage.click('button[aria-label="Account menu"]');
-  await menuPage.click(items()[1]);
+  await menuPage.click(items().find((i) => i.textContent === 'Log out'));
   check('"Log out" in the menu ends the session once and lands on the login screen',
     store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(menuPage.html()),
     `${store.removes} teardown(s)`);
@@ -654,6 +672,93 @@ const root = () => dom.window.document.getElementById('root');
     passwordFields(strict).length === 2 && !deadPanel(strict));
   await strict.unmount();
   dom.window.history.replaceState(null, '', '/');
+
+  // =========================================================================
+  // J. Staff accounts: a Secretary-only page, opened from the account menu
+  // =========================================================================
+  // The page has its own route, /secretary/staff-accounts, and is reached
+  // from the account menu, not the sidebar. Only the Secretary's menu offers
+  // it. Every other role's menu is still exactly Profile and Log out, and its
+  // arrow keys wrap with no gap where the Secretary's item would be.
+  //
+  // The MemoryRouter here exposes no address, so where a mount landed is read
+  // from the page: its title, and the sidebar link marked aria-current="page".
+  // NavLink sets that from the router's own location, and each role home is
+  // the exact-match first link of that role's nav, so the link names the
+  // address. No sidebar link is current on Staff accounts, which has none.
+  console.log('\n--- Staff accounts: a Secretary-only page, opened from the account menu ---');
+  const menuItems = (page) => page.queryAll('[role="menu"] [role="menuitem"]');
+  const menuLabels = (page) => menuItems(page).map((i) => i.textContent).join(' | ');
+  const itemNamed = (page, label) => menuItems(page).find((i) => i.textContent === label);
+  const pageTitle = (page) => page.query('.page-title h1')?.textContent ?? null;
+  const currentNav = (page) => page.query('.dash-side-nav a[aria-current="page"]')?.getAttribute('href') ?? null;
+  const staffListCalls = () => net.calls.filter((c) => c.url.endsWith('/secretary/staff-accounts'));
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const staffDirect = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await staffDirect.settle();
+  check('the Secretary opening /secretary/staff-accounts gets the Staff accounts page, not Resident review',
+    pageTitle(staffDirect) === 'Staff accounts' && currentNav(staffDirect) === null,
+    `title ${JSON.stringify(pageTitle(staffDirect))}, current sidebar link ${currentNav(staffDirect)}`);
+  await staffDirect.unmount();
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const staffViaMenu = await globalThis.mountInteractive(root(), '/secretary/document-types');
+  await staffViaMenu.click('button[aria-label="Account menu"]');
+  const staffItem = itemNamed(staffViaMenu, 'Staff accounts');
+  check('the Secretary\'s account menu offers "Staff accounts"', !!staffItem, menuLabels(staffViaMenu));
+  net.calls = [];
+  if (staffItem) await staffViaMenu.click(staffItem);
+  await staffViaMenu.settle();
+  check('  choosing it opens the Staff accounts page, and the menu closes behind it',
+    pageTitle(staffViaMenu) === 'Staff accounts' && currentNav(staffViaMenu) === null && menuItems(staffViaMenu).length === 0,
+    `title ${JSON.stringify(pageTitle(staffViaMenu))}`);
+  check('  which asks GET /secretary/staff-accounts with the session and shows "New staff account"',
+    staffListCalls().length === 1 && staffListCalls()[0].method === 'GET' && staffListCalls()[0].token === VALID
+      && staffViaMenu.queryAll('button').some((b) => b.textContent === 'New staff account'),
+    `${staffListCalls().length} staff-accounts request(s)`);
+  await staffViaMenu.unmount();
+
+  const OTHER_ROLES = [
+    { role: 'punong_barangay', home: '/punong-barangay' },
+    { role: 'treasurer', home: '/treasurer' },
+    { role: 'staff', home: '/staff' },
+    { role: 'resident', home: '/resident' },
+  ];
+  for (const { role, home } of OTHER_ROLES) {
+    seedSession(makeToken({ sub: '7', role, exp: VALID_EXP }), { user_id: 7, username: `${role}_one`, role, must_change_password: false });
+    resetNet(200, answer(STAFF_PROFILE));
+    const other = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await other.settle();
+    check(`${role} opening /secretary/staff-accounts is sent to ${home}, with no staff-accounts request`,
+      currentNav(other) === home && pageTitle(other) !== 'Staff accounts'
+        && !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+      `current sidebar link ${currentNav(other)}, title ${JSON.stringify(pageTitle(other))}, `
+        + `${net.calls.filter((c) => c.url.includes('/secretary/staff-accounts')).length} staff-accounts request(s)`);
+    await other.click('button[aria-label="Account menu"]');
+    check(`  the ${role} menu is exactly Profile | Log out`, menuLabels(other) === 'Profile | Log out', menuLabels(other));
+    const logOut = itemNamed(other, 'Log out');
+    if (logOut) await other.key('ArrowDown', logOut);
+    check(`  ${role}: ArrowDown on Log out wraps round to Profile`, other.active()?.textContent === 'Profile',
+      `focus on ${JSON.stringify(other.active()?.textContent)}`);
+    const profile = itemNamed(other, 'Profile');
+    if (profile) await other.key('ArrowUp', profile);
+    check(`  ${role}: ArrowUp on Profile wraps round to Log out`, other.active()?.textContent === 'Log out',
+      `focus on ${JSON.stringify(other.active()?.textContent)}`);
+    await other.unmount();
+  }
+
+  seedSession(VALID, FORCED_USER);
+  resetNet(200, answer(STAFF_PROFILE));
+  const forcedStaff = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await forcedStaff.settle();
+  check('a Secretary on a temporary password is still sent to /change-password, with no staff-accounts request',
+    forcedStaff.query('h1')?.textContent === 'Change password'
+      && !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+    JSON.stringify(forcedStaff.query('h1')?.textContent ?? null));
+  await forcedStaff.unmount();
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
