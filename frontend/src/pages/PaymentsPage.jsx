@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { IoIosClose } from "react-icons/io";
 import { useAuth } from "../auth/AuthContext";
 import {
   chargeMeta,
   CHARGE_TYPE_LABELS,
   formatDate,
   formatDateOnly,
-  formatTimeOnly,
   METHOD_LABELS,
 } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
@@ -14,6 +14,12 @@ import { formatSchedule } from "../constants/rentals";
 // 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
 // (their landing page) and the Secretary (a Payments tab) — pass the role's
 // title and nav.
+//
+// ONE LINE PER ROW (9 Oct 2026). A row shows who, what for, the amount, a
+// one-word Declared marker, the status, the billed date and one View button.
+// Everything else, and both money actions (Record and Re-check), is in the
+// View panel, which copies the /login modal: see "Overlays follow one
+// pattern" in CLAUDE.md.
 const FILTERS = ["UNPAID", "PAID", "VOID", "all"];
 const FILTER_LABELS = {
   UNPAID: "Needs verification",
@@ -21,6 +27,16 @@ const FILTER_LABELS = {
   VOID: "Void",
   all: "All charges",
 };
+
+// Re-check outcomes that mean the charge is ALREADY paid although this call
+// recorded nothing (SETTLE_OUTCOME in backend/src/routes/payments.js). The
+// list reloads for these as it does for a new payment, so the charge stops
+// showing as unpaid and its panel, which still offers Record, closes.
+const ALREADY_PAID = [
+  "already_recorded",
+  "already_processed",
+  "already_paid_manually",
+];
 
 function fullName(p) {
   if (!p) return null;
@@ -78,25 +94,49 @@ function chargeSubject(charge) {
   };
 }
 
-function declaredInfo(c) {
-  // A charge paid through the GCash gateway was never "declared" — it arrived
-  // already confirmed, so say so rather than showing a blank cell.
+// The Declared column: one short label, so the queue still shows at a glance
+// what each charge is waiting on. The full method, reference and times are in
+// the View panel. The first that applies wins: a payment PayMongo confirmed; a
+// GCash reference to check against GCash (the declare routes refuse a GCash
+// declaration without one); an online checkout started but not confirmed,
+// which is what Re-check is for; a resident who said they would pay onsite.
+function declaredMarker(c) {
+  if (c.paymongo_payment_id) return "Paid online";
+  if (c.declared_method === "gcash") return "GCash ref";
+  if (c.paymongo_session_id && c.status === "UNPAID") return "Online started";
+  if (c.declared_method === "onsite") return "Onsite";
+  return "—";
+}
+
+// What the resident declared, for the panel. "Walk-in" only where no account
+// is behind the charge — a walk-in encoded at the counter, a guest, most
+// household fines; with an account the resident can still declare from home.
+function declaredText(c) {
+  if (c.declared_method)
+    return METHOD_LABELS[c.declared_method] || c.declared_method;
+  return c.payer ? "Nothing declared yet" : "Nothing declared yet (walk-in)";
+}
+
+// The gateway's part, which is not a declaration: a charge paid through it
+// arrived already confirmed. The panel shows this BESIDE any declared GCash
+// reference; the old one-line summary hid the reference once a checkout had
+// been started.
+function onlineNote(c) {
   if (c.paymongo_payment_id) return `GCash online · ${c.paymongo_payment_id}`;
   if (c.paymongo_session_id && c.status === "UNPAID")
     return "GCash online — started, not yet confirmed";
-  if (!c.declared_method) return null;
-  const label = METHOD_LABELS[c.declared_method] || c.declared_method;
-  return c.declared_method === "gcash" && c.declared_reference
-    ? `${label} · ref ${c.declared_reference}`
-    : label;
+  return null;
 }
 
-function VerifyPanel({ charge, onDone }) {
+// The Record section of the View panel. `busy` and `setBusy` belong to the
+// page, so the panel can refuse to close and Re-check can wait while a
+// payment is being recorded; handleSubmit is unchanged. `locked` holds the
+// button while Re-check is in flight.
+function VerifyPanel({ charge, onDone, busy, setBusy, locked }) {
   const { authFetch } = useAuth();
   const [method, setMethod] = useState(charge.declared_method || "onsite");
   const [reference, setReference] = useState(charge.declared_reference || "");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -121,83 +161,256 @@ function VerifyPanel({ charge, onDone }) {
   }
 
   return (
-    <div className="pending-card">
-      <div className="pending-head">
-        <div>
-          <h3>Verify payment — charge #{charge.charge_id}</h3>
-          <p className="muted">
-            {payerName(charge)} ·{" "}
-            {CHARGE_TYPE_LABELS[charge.charge_type] || charge.charge_type}:{" "}
-            {chargeSubject(charge).main}
-            {chargeSubject(charge).note && <> · {chargeSubject(charge).note}</>}
-          </p>
-        </div>
-        <button className="btn secondary" onClick={() => onDone(null)}>
-          ← Back to list
-        </button>
-      </div>
+    <section className="pay-panel-section">
+      <h3>Verify / record</h3>
 
       {error && <div className="alert error">{error}</div>}
 
-      <dl className="info-grid">
-        <div>
-          <dt>Amount</dt>
-          <dd>
-            <strong>₱{Number(charge.amount).toFixed(2)}</strong>
-          </dd>
-        </div>
-        <div>
-          <dt>Billed</dt>
-          <dd>{formatDate(charge.created_at)}</dd>
-        </div>
-        <div className="span-2">
-          <dt>Resident declared</dt>
-          <dd>
-            {declaredInfo(charge) || (
-              <span className="muted">nothing yet (walk-in)</span>
-            )}
-            {charge.declared_at && (
-              <span className="muted"> — {formatDate(charge.declared_at)}</span>
-            )}
-          </dd>
-        </div>
-      </dl>
-
+      {/* Each label is one line above its own field, so the two fields share
+          their top edge; the optional hint is helper text under the field,
+          which used to sit in the label and wrap it onto a second line. */}
       <form onSubmit={handleSubmit}>
-        <div className="grid-2">
-          <label>
-            Payment method
-            <select value={method} onChange={(e) => setMethod(e.target.value)}>
+        <div className="pay-panel-fields">
+          <div className="pay-field">
+            <label htmlFor="pay-method">Payment method</label>
+            <select
+              id="pay-method"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+            >
               <option value="onsite">Cash (on-site)</option>
               <option value="gcash">GCash</option>
             </select>
-          </label>
-          <label>
-            Reference no.{" "}
-            {method !== "gcash" && (
-              <span className="hint">(optional — e.g. OR number)</span>
-            )}
+          </div>
+          <div className="pay-field">
+            <label htmlFor="pay-reference">Reference no.</label>
             <input
+              id="pay-reference"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               maxLength={100}
               required={method === "gcash"}
+              aria-describedby={
+                method !== "gcash" ? "pay-reference-help" : undefined
+              }
               placeholder={
                 method === "gcash"
                   ? "GCash reference number"
                   : "Official receipt no."
               }
             />
-          </label>
+            {method !== "gcash" && (
+              <p className="pay-help" id="pay-reference-help">
+                Optional — e.g. OR number
+              </p>
+            )}
+          </div>
         </div>
-        <div className="actions">
-          <button className="btn" type="submit" disabled={busy}>
-            {busy
-              ? "Recording…"
-              : `Record payment of ₱${Number(charge.amount).toFixed(2)}`}
+        <button
+          className="btn pay-record"
+          type="submit"
+          disabled={busy || locked}
+        >
+          {busy
+            ? "Recording…"
+            : `Record payment of ₱${Number(charge.amount).toFixed(2)}`}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+// The View panel: a header (charge, payer, status, Close), the details, which
+// scroll when the panel is short, and for an unpaid charge the actions,
+// pinned under the details so Record never needs a scroll. Its effects
+// (Escape, the scroll lock, focus) live in the page, which owns the busy
+// state they depend on.
+function ChargePanel({
+  charge: c,
+  panelRef,
+  flash,
+  busy,
+  verifying,
+  setVerifying,
+  rechecking,
+  onRecheck,
+  onRecorded,
+  onClose,
+}) {
+  const subject = chargeSubject(c);
+  const online = onlineNote(c);
+  const unpaid = c.status === "UNPAID";
+  const meta = chargeMeta(c.status);
+  return (
+    <div className="modal-overlay pay-panel-overlay" onClick={onClose}>
+      <div
+        className="pay-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pay-panel-charge pay-panel-title"
+        ref={panelRef}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pay-panel-head">
+          <div className="pay-panel-heading">
+            <p className="pay-panel-meta">
+              <span id="pay-panel-charge">Charge #{c.charge_id}</span>
+              <span aria-hidden="true">·</span>
+              <span>{CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}</span>
+              <span className={`badge ${meta.className}`}>{meta.label}</span>
+            </p>
+            <h2 id="pay-panel-title">{payerName(c)}</h2>
+            {c.payer?.username && (
+              <p className="pay-panel-user">@{c.payer.username}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="pay-panel-x"
+            aria-label="Close"
+            onClick={onClose}
+            disabled={busy}
+          >
+            <IoIosClose size={26} aria-hidden="true" />
           </button>
         </div>
-      </form>
+
+        <div className="pay-panel-main">
+          <div className="pay-panel-details">
+            {!unpaid && <p className="pay-panel-note">Read-only</p>}
+
+            {/* Label and value side by side; Amount with Billed and Declared
+                payment with Declared on share a row. Paid and void charges
+                say so in place of a declaration they no longer wait on: the
+                payload has no payments data, so a paid charge cannot show
+                how it was paid unless PayMongo settled it. */}
+            <dl className="pay-panel-list">
+              <dt>For</dt>
+              <dd className="pay-wide">{subject.main}</dd>
+              {c.rental_requests && (
+                <>
+                  <dt>Schedule</dt>
+                  <dd className="pay-wide">{subject.note}</dd>
+                </>
+              )}
+              {c.charge_type === "FINE" && subject.note && (
+                <>
+                  <dt>Household address</dt>
+                  <dd className="pay-wide">{subject.note}</dd>
+                </>
+              )}
+              {c.document_requests?.purpose && (
+                <>
+                  <dt>Purpose</dt>
+                  <dd className="pay-wide">{c.document_requests.purpose}</dd>
+                </>
+              )}
+              <dt>Amount</dt>
+              <dd className="pay-amount">₱{Number(c.amount).toFixed(2)}</dd>
+              <dt className="pay-pair">Billed</dt>
+              <dd>{formatDate(c.created_at)}</dd>
+              {!unpaid && (
+                <>
+                  <dt>Payment</dt>
+                  <dd className="pay-wide">
+                    {c.status === "PAID"
+                      ? "Paid. Payment details are not shown here."
+                      : "Void."}
+                  </dd>
+                </>
+              )}
+              {(unpaid || c.declared_method) && (
+                <>
+                  <dt>Declared payment</dt>
+                  <dd
+                    className={[
+                      c.declared_at ? null : "pay-wide",
+                      c.declared_method ? null : "muted",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined}
+                  >
+                    {declaredText(c)}
+                  </dd>
+                  {c.declared_at && (
+                    <>
+                      <dt className="pay-pair">Declared on</dt>
+                      <dd>{formatDate(c.declared_at)}</dd>
+                    </>
+                  )}
+                </>
+              )}
+              {c.declared_reference && (
+                <>
+                  <dt>GCash reference</dt>
+                  <dd className="pay-wide">{c.declared_reference}</dd>
+                </>
+              )}
+              {online && (
+                <>
+                  <dt>Online payment</dt>
+                  <dd className="pay-wide">{online}</dd>
+                </>
+              )}
+            </dl>
+          </div>
+
+          {/* Re-check comes before Record: a checkout that went through
+              should be found before anyone records a second payment by
+              hand. Its result is announced here (role="status") while the
+              panel stays open; when the charge turns out to be paid, the
+              panel closes and the message moves above the list. */}
+          {unpaid && (
+            <div className="pay-panel-actions">
+              {c.paymongo_session_id && (
+                <section className="pay-panel-section">
+                  <h3>Check with PayMongo</h3>
+                  <div className="pay-panel-recheck">
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={rechecking || verifying}
+                      onClick={onRecheck}
+                    >
+                      {rechecking ? "Checking…" : "Re-check with PayMongo"}
+                    </button>
+                    <p className="pay-help">
+                      Ask PayMongo whether this online payment went through.
+                    </p>
+                  </div>
+                  <div role="status" className="pay-panel-message">
+                    {flash && (
+                      <div className={`alert ${flash.type}`}>{flash.text}</div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <VerifyPanel
+                charge={c}
+                onDone={onRecorded}
+                busy={verifying}
+                setBusy={setVerifying}
+                locked={rechecking}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* A phone has no corner Close: this full-width one, pinned at the
+            foot, takes its place (index.css shows it at 640px and below). */}
+        <div className="pay-panel-footer">
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -208,8 +421,17 @@ export default function PaymentsPage() {
   const [charges, setCharges] = useState(null); // null = loading
   const [listError, setListError] = useState("");
   const [flash, setFlash] = useState(null);
-  const [selected, setSelected] = useState(null); // charge being verified
+  const [selected, setSelected] = useState(null); // charge open in the View panel
   const [recheckingId, setRecheckingId] = useState(null);
+  const [verifying, setVerifying] = useState(false);
+  // The View button that opened the panel, captured from the click, so a
+  // close can give focus back to it (closeModal in LoginPage.jsx).
+  const openerRef = useRef(null);
+  const panelRef = useRef(null);
+  const flashRef = useRef(null);
+  // Set when the panel closes because its charge was just paid: focus then
+  // goes to the message rather than back to the View button.
+  const toMessageRef = useRef(false);
 
   // Safety net for the GCash gateway: PayMongo disables a webhook endpoint
   // after repeated delivery failures and never replays what was missed, so a
@@ -227,7 +449,7 @@ export default function PaymentsPage() {
         type: data.settled ? "success" : "error",
         text: data.message,
       });
-      if (data.settled) await load();
+      if (data.settled || ALREADY_PAID.includes(data.outcome)) await load();
     } catch (err) {
       setFlash({ type: "error", text: err.message });
     } finally {
@@ -250,174 +472,200 @@ export default function PaymentsPage() {
     load();
   }, [load]);
 
+  const busy = verifying || recheckingId !== null;
+  const openId = selected ? selected.charge_id : null;
+
+  function openPanel(c, opener) {
+    openerRef.current = opener;
+    setFlash(null);
+    setSelected(c);
+  }
+
+  // EVERY close route goes through this — Escape, the Close button and the
+  // backdrop — and gives focus back to the View button. Refused while Record
+  // or Re-check is in flight, so their result never lands on a panel that is
+  // no longer there.
+  const closePanel = useCallback(() => {
+    if (busy) return;
+    setSelected(null);
+    openerRef.current?.focus();
+  }, [busy]);
+
+  // After Record succeeds: the panel closes, the list reloads, and focus goes
+  // to the message (the effect further down).
+  function handleRecorded(result) {
+    setVerifying(false);
+    toMessageRef.current = true;
+    setSelected(null);
+    setFlash(result);
+    load();
+  }
+
+  // Body-scroll lock and focus, only while the panel is open, and undone in
+  // the cleanup: the /login modal's effect. Keyed on the open charge, so a
+  // panel opened for another charge runs it again.
+  useEffect(() => {
+    if (openId === null) return undefined;
+    // Captured, not assumed to be '': restoring a value the page did not have
+    // would be its own bug.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [openId]);
+
+  useEffect(() => {
+    if (openId === null) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") closePanel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openId, closePanel]);
+
+  // The panel shows the charge as it was when View was pressed. When a reload
+  // shows that charge is no longer unpaid — Re-check has just settled it, or
+  // found it already paid — the panel has nothing left to offer, so it closes
+  // and focus goes to the message, as after Record. It waits until nothing is
+  // in flight, because handleRecheck reloads before it clears its busy state.
+  useEffect(() => {
+    if (!selected || selected.status !== "UNPAID" || busy || !charges) return;
+    const now = charges.find((c) => c.charge_id === selected.charge_id);
+    if (!now || now.status !== "UNPAID") {
+      toMessageRef.current = true;
+      setSelected(null);
+    }
+  }, [charges, selected, busy]);
+
+  // Focus to the message after a payment: the row that held the View button
+  // has usually left the list (Needs verification shows unpaid charges only),
+  // so there is no button to give focus back to.
+  useEffect(() => {
+    if (selected || !toMessageRef.current || !flash) return;
+    toMessageRef.current = false;
+    flashRef.current?.focus();
+  }, [selected, flash]);
+
   return (
     <>
-      {selected ? (
-        <VerifyPanel
-          charge={selected}
-          onDone={(result) => {
-            setSelected(null);
-            if (result) {
-              setFlash(result);
-              load();
-            }
-          }}
-        />
+      {flash && !selected && (
+        <div ref={flashRef} tabIndex={-1} className={`alert ${flash.type}`}>
+          {flash.text}
+        </div>
+      )}
+      {listError && <div className="alert error">{listError}</div>}
+
+      <div className="list-head">
+        <h2>
+          {charges === null
+            ? "Charges"
+            : `${charges.length} charge${charges.length === 1 ? "" : "s"}`}
+        </h2>
+        <div className="head-actions">
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            {FILTERS.map((f) => (
+              <option key={f} value={f}>
+                {FILTER_LABELS[f]}
+              </option>
+            ))}
+          </select>
+          <button className="btn secondary" onClick={load}>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {charges === null ? (
+        <p className="muted">Loading charges…</p>
+      ) : charges.length === 0 ? (
+        <div className="empty">
+          <p>
+            No charges{" "}
+            {filter === "UNPAID" ? "awaiting verification" : "here"}.
+          </p>
+        </div>
       ) : (
-        <>
-          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-          {listError && <div className="alert error">{listError}</div>}
-
-          <div className="list-head">
-            <h2>
-              {charges === null
-                ? "Charges"
-                : `${charges.length} charge${charges.length === 1 ? "" : "s"}`}
-            </h2>
-            <div className="head-actions">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                {FILTERS.map((f) => (
-                  <option key={f} value={f}>
-                    {FILTER_LABELS[f]}
-                  </option>
-                ))}
-              </select>
-              <button className="btn secondary" onClick={load}>
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          {charges === null ? (
-            <p className="muted">Loading charges…</p>
-          ) : charges.length === 0 ? (
-            <div className="empty">
-              <p>
-                No charges{" "}
-                {filter === "UNPAID" ? "awaiting verification" : "here"}.
-              </p>
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table className="data-table stack-narrow">
-                <thead>
-                  <tr>
-                    <th className="col-resident">Resident</th>
-                    <th>Type</th>
-                    <th>For</th>
-                    <th className="num">Amount</th>
-                    <th className="col-declared">Declared payment</th>
-                    <th>Status</th>
-                    <th className="col-billed">Billed</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {charges.map((c) => (
-                    <tr key={c.charge_id}>
-                      <td className="col-resident">
-                        <div className="cell-clamp">
-                          <strong>{payerName(c)}</strong>
-                          {c.payer?.username && (
-                            <div className="muted small-note">
-                              @{c.payer.username}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td data-label="Type">
-                        {CHARGE_TYPE_LABELS[c.charge_type] || c.charge_type}
-                      </td>
-                      <td data-label="For">
-                        {chargeSubject(c).main}
-                        {/* A fine's second line is the household address,
-                            which can run long: two lines, then an ellipsis,
-                            with the full address on hover. A rental's
-                            schedule is never cut. */}
-                        {chargeSubject(c).note && (
-                          <div
-                            className={
-                              c.charge_type === "FINE"
-                                ? "muted small-note two-line-clamp"
-                                : "muted small-note"
-                            }
-                            title={
-                              c.charge_type === "FINE"
-                                ? chargeSubject(c).note
-                                : undefined
-                            }
-                          >
-                            {chargeSubject(c).note}
-                          </div>
-                        )}
-                      </td>
-                      <td className="num">₱{Number(c.amount).toFixed(2)}</td>
-                      <td
-                        className="muted col-declared"
-                        data-label="Declared payment"
+        <div className="table-wrap">
+          <table className="data-table stack-narrow payments-table">
+            <thead>
+              <tr>
+                <th className="pay-resident">Resident</th>
+                <th className="pay-for">For</th>
+                <th className="num">Amount</th>
+                <th className="pay-declared">Declared</th>
+                <th>Status</th>
+                <th className="col-billed">Billed</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {charges.map((c) => {
+                const name = payerName(c);
+                const subject = chargeSubject(c);
+                return (
+                  <tr key={c.charge_id}>
+                    <td className="pay-fluid" data-label="Resident">
+                      <span className="pay-cut" title={name}>
+                        <strong>{name}</strong>
+                      </span>
+                    </td>
+                    <td className="pay-fluid" data-label="For">
+                      <span className="pay-cut" title={subject.main}>
+                        {subject.main}
+                      </span>
+                    </td>
+                    <td className="num" data-label="Amount">
+                      ₱{Number(c.amount).toFixed(2)}
+                    </td>
+                    <td className="muted pay-declared" data-label="Declared">
+                      {declaredMarker(c)}
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        className={`badge ${chargeMeta(c.status).className}`}
                       >
-                        <span className="cell-clamp">
-                          {declaredInfo(c) || "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${chargeMeta(c.status).className}`}
-                        >
-                          {chargeMeta(c.status).label}
-                        </span>
-                      </td>
-                      <td className="muted col-billed" data-label="Billed">
-                        {/* The date over the time, so the column is only as
-                            wide as the date. Phone cards put them back on one
-                            line (index.css). */}
-                        {formatDateOnly(c.created_at)}{" "}
-                        <div className="small-note">
-                          {formatTimeOnly(c.created_at)}
-                        </div>
-                      </td>
-                      <td className="row-actions">
-                        {/* Short labels keep both buttons on one line in the
-                            200px action column. The full wording stays on
-                            hover, and is what a screen reader announces. */}
-                        {c.status === "UNPAID" && (
-                          <button
-                            className="btn secondary"
-                            onClick={() => setSelected(c)}
-                            title="Verify / record"
-                            aria-label="Verify / record"
-                          >
-                            Verify
-                          </button>
-                        )}
-                        {c.status === "UNPAID" && c.paymongo_session_id && (
-                          <button
-                            className="btn secondary"
-                            disabled={recheckingId === c.charge_id}
-                            onClick={() => handleRecheck(c)}
-                            title="Re-check with PayMongo: ask whether this online payment went through"
-                            aria-label={
-                              recheckingId === c.charge_id
-                                ? undefined
-                                : "Re-check with PayMongo"
-                            }
-                          >
-                            {recheckingId === c.charge_id
-                              ? "Checking…"
-                              : "Re-check"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                        {chargeMeta(c.status).label}
+                      </span>
+                    </td>
+                    <td className="muted col-billed" data-label="Billed">
+                      {formatDateOnly(c.created_at)}
+                    </td>
+                    <td className="row-actions">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        onClick={(e) => openPanel(c, e.currentTarget)}
+                        aria-label={`View charge for ${name}: ${subject.main}`}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && (
+        <ChargePanel
+          key={selected.charge_id}
+          charge={selected}
+          panelRef={panelRef}
+          flash={flash}
+          busy={busy}
+          verifying={verifying}
+          setVerifying={setVerifying}
+          rechecking={recheckingId === selected.charge_id}
+          onRecheck={() => handleRecheck(selected)}
+          onRecorded={handleRecorded}
+          onClose={closePanel}
+        />
       )}
     </>
   );

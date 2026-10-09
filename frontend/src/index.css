@@ -1122,17 +1122,19 @@ a {
 
   /* As the 1fr item of the .dash grid this box would otherwise take
      min-width: auto, and a grid item's automatic minimum is its min-content
-     width — the widest thing the screen holds. The payments table asks for
+     width — the widest thing the screen holds. The payments table asked for
      1084.5px with its column floors against the 1018px this column has at
      1280, so the column grew to the table rather than the table scrolling
      inside .table-wrap: the whole page scrolled sideways, sticky sidebar
      included, at every width above the 1045px breakpoint and on a fresh
-     load. The wrapper's own overflow-x: auto does not excuse it — that
-     automatic minimum is skipped only when the grid ITEM is the scroll
-     container, never when a descendant is. Delete this line and the
-     page-wide scroll returns, and .table-wrap never gets to scroll at all,
-     because the column grows to the table instead of the wrapper ever
-     being the narrower box. */
+     load. (Since 9 Oct 2026 that table's rows are one line and it fits from
+     641px up; the line stays for any table wider than this column.) The
+     wrapper's own overflow-x: auto does not excuse it — that automatic
+     minimum is skipped only when the grid ITEM is the scroll container,
+     never when a descendant is. Delete this line and a table wider than the
+     column scrolls the whole page again, and .table-wrap never gets to
+     scroll at all, because the column grows to the table instead of the
+     wrapper ever being the narrower box. */
   min-width: 0;
 }
 
@@ -1538,8 +1540,8 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* Action cells size themselves from their buttons, so they must be able to
-   wrap. A cell holding two buttons — the payments queue has
-   "Verify" next to "Re-check" — otherwise demands the
+   wrap. A cell holding two buttons — Document types has "Edit" next to
+   "Deactivate" — otherwise demands the
    full width of both on one line and REFUSES to shrink (flex items default to
    min-width: auto), starving every text column in the same table. Wrapping
    drops that demand to the widest single button.
@@ -1555,10 +1557,9 @@ button.link-button:hover:not(:disabled) {
      the table algorithm happily allots less than two buttons need and they
      stack even when the table has hundreds of pixels spare (measured on
      Document types: 282.9px surplus, actions still stacked). This floor asks
-     for enough to keep two ordinary buttons on one line. The payments queue
-     now sits exactly on it — that column measures 200. Two tables opt out,
-     My requests and My rentals, whose cells only ever hold one button (see
-     .my-requests-table below). */
+     for enough to keep two ordinary buttons on one line. Three tables opt
+     out, My requests, My rentals and Payments, whose cells only ever hold one
+     button (see .my-requests-table below). */
   min-width: 200px;
 }
 
@@ -1592,18 +1593,22 @@ button.link-button:hover:not(:disabled) {
   display: inline-flex;
 }
 
-/* My requests and My rentals only: no 200px floor. Their actions cell only
-   ever holds ONE button, "Pay ▾" (or "Cancel" on a pending request), so the
-   shared floor above only took width from the text columns; the reference
-   form is wider than 200 on its own and is unaffected. Measured: the column
-   goes from 200 to about 105px (My requests) and 99px (My rentals). My
-   requests' rows total 119px shorter at 1280; My rentals stops scrolling
-   sideways at 641-700 and its rows total 76-169px shorter between 700 and
-   1100. Scoped by each table's own class, so the protected .row-actions rule
-   is unchanged for every other table; at (0,2,1) this beats it on
-   specificity, with no !important. */
+/* My requests, My rentals and Payments only: no 200px floor. Their actions
+   cell only ever holds ONE button — "Pay ▾" (or "Cancel" on a pending
+   request) on the first two, and "View" on Payments since 9 Oct 2026 — so
+   the shared floor above only took width from the text columns; the
+   reference form is wider than 200 on its own and is unaffected. Measured:
+   the column goes from 200 to about 105px (My requests), 99px (My rentals)
+   and 93.5px (Payments). My requests' rows total 119px shorter at 1280; My
+   rentals stops scrolling sideways at 641-700 and its rows total 76-169px
+   shorter between 700 and 1100; with the floor, Payments' one-line table
+   scrolls sideways by 58px at 641 and 5px at 1046, and without it fits at
+   every width from 641 to 1920. Scoped by each table's own class, so the
+   protected .row-actions rule is unchanged for every other table; at
+   (0,2,1) this beats it on specificity, with no !important. */
 .my-requests-table td.row-actions,
-.my-rentals-table td.row-actions {
+.my-rentals-table td.row-actions,
+.payments-table td.row-actions {
   min-width: 0;
 }
 
@@ -2039,6 +2044,244 @@ button.link-button:hover:not(:disabled) {
   margin-bottom: 16px;
 }
 
+/* PAYMENTS VIEW PANEL (PaymentsPage.jsx, 9 Oct 2026). The overlay is the
+   /login modals' .modal-overlay, reused unchanged: fixed, inset 0, z-index
+   50, the rung the drawer and the other modals share, above the sticky
+   header (30), the Pay menu (35), the drawer backdrop (40) and the account
+   menu (45). Every rule here is scoped to the panel's own classes, so
+   nothing reaches the login modals.
+
+   ONE WIDTH FOR EVERY CHARGE, ONE COLUMN: 600px at every width above 640,
+   paid and unpaid alike. Three bands in a flex column: the header (charge,
+   type, status, payer, Close), the details, which scroll when the panel is
+   short, and for an unpaid charge the actions, pinned under the details so
+   Record is on screen without a scroll (measured from 1046x768 and 1280x720
+   up, a Re-check message included). Text stays at the table's size or
+   below: values 0.95rem like a table cell, labels 0.85rem in #64748b,
+   4.76:1 on white. */
+.pay-panel {
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* The container takes focus only so focus lands inside the dialog, as
+   .dash-drawer does, and it drops the ring the same way: it is not a control,
+   and Chrome's default ring drew a thin accent-coloured line along its top
+   and right edges. Every button and field inside keeps its own ring. */
+.pay-panel:focus {
+  outline: none;
+}
+
+.pay-panel-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 14px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pay-panel-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pay-panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* The payer's name at the size and weight the table gives it, so the panel
+   reads as the row it was opened from. */
+.pay-panel h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.pay-panel-user {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* The corner Close. Two classes, because the base button rule paints every
+   button blue and button:hover:not(:disabled) is (0,2,1). It keeps the
+   browser's focus ring. */
+.pay-panel .pay-panel-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  font-size: 0.95rem;
+  color: #475569;
+  background: none;
+  border-radius: 8px;
+}
+
+.pay-panel .pay-panel-x:hover:not(:disabled) {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.pay-panel-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* min-height: 0 lets the details shrink below their content and scroll,
+   which is what keeps the actions under them on screen. */
+.pay-panel-details {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.pay-panel-note {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* Label beside value. Amount and Billed, and Declared payment and Declared
+   on, share a row; every other pair runs across (.pay-wide). The second value
+   column is the wider one because it holds the timestamps. Digits are
+   tabular so amounts, dates and references line up. */
+.pay-panel-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 0.8fr) max-content minmax(0, 1.2fr);
+  align-items: baseline;
+  gap: 10px 12px;
+  margin: 0;
+}
+
+.pay-panel-list dt {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.pay-panel-list dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.pay-panel-list .pay-pair {
+  padding-left: 8px;
+}
+
+.pay-panel-list .pay-wide {
+  grid-column: span 3;
+}
+
+.pay-panel-list .pay-amount {
+  font-weight: 700;
+}
+
+/* The actions: one block, set apart by a rule and a faint fill. */
+.pay-panel-actions {
+  flex: none;
+  padding: 14px 24px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.pay-panel-section + .pay-panel-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pay-panel h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.pay-panel-section > .alert {
+  margin: 0 0 10px;
+}
+
+.pay-panel-recheck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+/* Helper text: the shared .hint is #94a3b8 (2.56:1); this is #64748b. */
+.pay-help {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.pay-panel-recheck .pay-help {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+.pay-panel-message .alert {
+  margin: 10px 0 0;
+}
+
+/* Both labels are one line and both fields the same height, so the two
+   fields share their top edge. */
+.pay-panel-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.pay-field label {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.pay-field select,
+.pay-field input {
+  height: 40px;
+  margin-top: 0;
+  padding: 0 12px;
+  font-size: 0.95rem;
+}
+
+.pay-panel .pay-record {
+  margin-top: 12px;
+}
+
+/* The full-width Close at the foot exists for phones only (the 640px block
+   below shows it); above that, Close is the corner button. */
+.pay-panel-footer {
+  display: none;
+}
+
 /* Households: an ended membership is history — visible but de-emphasised,
    so it never reads as a current member. */
 .data-table tr.row-ended td {
@@ -2299,11 +2542,12 @@ button.link-button:hover:not(:disabled) {
    Both are scoped by their own class, not nth-child, so reordering a column
    cannot silently move the rule to a different one. */
 
-/* Payments queue: the billed date and the billed time each read on one line.
-   Since 7 Oct 2026 the time sits under the date (PaymentsPage.jsx), so the
-   column is only as wide as the date: 113.2px, against 180.6 for the one-line
-   timestamp, measured. The format itself is unchanged — the short form was
-   measured as worse (89.8 vs 73.2 min-content). */
+/* Payments queue: the billed date reads on one line. Since 9 Oct 2026 the row
+   shows the date alone and the full timestamp is in the View panel
+   (PaymentsPage.jsx), so the column is only as wide as the date: 113.2px,
+   against 180.6 for the one-line timestamp, measured on 7 Oct when the time
+   first moved under the date. The format itself is unchanged — the short
+   form was measured as worse (89.8 vs 73.2 min-content). */
 .data-table .col-billed {
   white-space: nowrap;
 }
@@ -2333,15 +2577,15 @@ button.link-button:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-/* Payments queue. Both columns carry structural tokens that cannot be broken
-   at a space: usernames (26 chars measured) and PayMongo payment ids, which
-   are always 28 chars. Unbounded they demanded 204.3 and 266.3, pushing the
-   "All charges" view to 1285.1 against a 1130 container. These floors were
-   derived by sweeping candidate values: 140 + 130 lands the table at 1084.5,
-   leaving 45.5px of margin. Sized for a real PayMongo id, NOT for the current
-   demo rows — deleting the gwtest_* accounts does not make this unnecessary,
-   because the first genuine verified GCash payment puts the column straight
-   back where it was. */
+/* .col-resident is the Notifications Recipient column: a name with the
+   contact line under it. Its floor was derived for the Payments queue, whose
+   Resident column carried a 26-character username under the name and whose
+   Declared payment column (.col-declared, 130px) carried a 28-character
+   PayMongo id: unbounded they demanded 204.3 and 266.3, and 140 + 130 landed
+   that table at 1084.5. Since 9 Oct 2026 Payments uses neither — its rows are
+   one line (.payments-table below) — so .col-declared was deleted and this
+   floor serves Notifications alone. The 170px clamp is one of the six
+   protected desktop rules. */
 .data-table .col-resident {
   min-width: 140px;
 }
@@ -2350,24 +2594,54 @@ button.link-button:hover:not(:disabled) {
   max-width: 170px;
 }
 
-.data-table .col-declared {
-  min-width: 130px;
+/* PAYMENTS: EVERY ROW IS ONE LINE (9 Oct 2026). Resident and For are fluid:
+   the two columns share whatever Amount, Declared, Status, Billed and View
+   leave, split 35 / 45 by the header cells, and their text is cut with an
+   ellipsis — the full text is the element's title, and in the View panel.
+   Measured on All charges: rows 64.5-65px and no sideways scroll at every
+   width from 641 to 1920; Resident and For take 224 and 259px at 1280, 285
+   and 343 at 1920, and about 109 and 88 at 641.
+
+   max-width: 0 on the cell is what lets a column shrink below its text.
+   Chrome reads a cell's max-width as a limit on the width the cell DEMANDS,
+   not on the width it gets: at 150px the columns still grew to 223 and 260
+   at 1280 but would not go below 150, and with no max-width the table asked
+   for 1420px and scrolled by 419 at 1280. */
+.payments-table th.pay-resident {
+  width: 35%;
 }
 
-.data-table .col-declared .cell-clamp {
-  max-width: 200px;
+.payments-table th.pay-for {
+  width: 45%;
 }
 
-/* Payments queue, For column: a fine's second line is the household address,
-   which can run long. Two lines, then an ellipsis; the full address is the
-   element's title. The column's width is unchanged — only the row stops
-   growing. */
-.data-table .two-line-clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+.payments-table td.pay-fluid {
+  max-width: 0;
+}
+
+.payments-table .pay-cut {
+  display: block;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The Declared marker ("GCash ref", "Online started", "Onsite", "Paid
+   online" or a dash) never wraps; the column measures 121.8px. It is hidden
+   from 641 to 1045px, where the drawer is the navigation and the column did
+   not fit: shown there, it scrolled the table sideways by 73px at 641 and
+   14px at 700. Above 1045 it fits, sidebar and all (1046: Resident 130px,
+   For 119). Phone cards show it as a labelled line, and the View panel always
+   has the full method and reference. The range reuses the 641 and 1045
+   values already in this file; it adds no breakpoint. */
+.payments-table .pay-declared {
+  white-space: nowrap;
+}
+
+@media (min-width: 641px) and (max-width: 1045px) {
+  .payments-table .pay-declared {
+    display: none;
+  }
 }
 
 /* Events stage 3c: the resident's household QR code. The code is the only
@@ -3237,8 +3511,8 @@ button.link-button:hover:not(:disabled) {
 
    The verified desktop rules are still untouched by this block: .dash-main's
    1180px, the 720px form cap and its :has(.table-wrap) exclusion,
-   .row-actions min-width, .col-billed nowrap and the Purpose/Resident/Declared
-   cell bounds are not referenced here at all.
+   .row-actions min-width, .col-billed nowrap and the Purpose/Resident cell
+   bounds are not referenced here at all.
    ========================================================================== */
 
 .dash-menu-btn,
@@ -3622,9 +3896,10 @@ button.tab:hover:not(:disabled) {
    inside 170px, which is right. A username is a single unbreakable token and
    should be cut with an ellipsis instead.
 
-   Scoped to .small-note inside a clamped cell, which today is exactly the
-   username line under the payer's name — the name itself is a direct child
-   and keeps wrapping normally. */
+   Scoped to .small-note inside a clamped cell — the name itself is a direct
+   child and keeps wrapping normally. Since 9 Oct 2026 the Payments username
+   line it was written for is in the View panel, and the one clamped cell
+   with a .small-note is the Notifications recipient's contact line. */
 .data-table .cell-clamp .small-note {
   overflow-wrap: normal;
   white-space: nowrap;
@@ -3723,8 +3998,9 @@ button.tab:hover:not(:disabled) {
    from 728.9px to 340, Address from 97px wide / 144.5px tall to 314 / 24.
 
    SCOPED TO A MODIFIER, NOT TO .data-table. Twenty tables across fifteen files
-   carry .data-table. Stacking all of them would make the payments queue's
-   measured column budget inert, and would change report PDFs — exportPdf.js
+   carry .data-table. Stacking all of them would have made the payments
+   queue's measured column budget inert (that budget is gone: Payments' rows
+   are one line since 9 Oct 2026), and would change report PDFs — exportPdf.js
    runs html2canvas over the LIVE DOM with no forced width, so an export from a
    narrow window would capture stacked, header-less tables. .stack-narrow is
    named for the behaviour rather than the screen (unlike .roster-table), so a
@@ -3886,10 +4162,11 @@ button.tab:hover:not(:disabled) {
 
   /* Width caps that are correct in a column and wrong in a 314px card.
      Measured against the card: .col-resident held a resident's name to 170px
-     and .col-declared a GCash reference to 200px, both leaving most of the
-     card empty; .truncate cut the text at 240px with an ellipsis while 74px
-     sat unused, which is the worst of the three because it destroys content
-     rather than just wrapping it.
+     and .col-declared a GCash reference to 200px (deleted 9 Oct 2026, with
+     Payments' one-line rows), both leaving most of the card empty; .truncate
+     cut the text at 240px with an ellipsis while 74px sat unused, which is
+     the worst of the three because it destroys content rather than just
+     wrapping it.
 
      THE PROTECTED RULES ARE NOT EDITED. `.data-table.stack-narrow .col-… .cell-clamp`
      is (0,4,0) against `.data-table .col-… .cell-clamp` at (0,3,0), so it wins
@@ -3899,8 +4176,7 @@ button.tab:hover:not(:disabled) {
      fits in 314px), .col-purpose .cell-clamp (caps at 300 in a 314 cell, a
      14px difference not worth a rule) and .col-message .cell-clamp (its 420px
      cap already exceeds the cell, so it never binds). */
-  .data-table.stack-narrow .col-resident .cell-clamp,
-  .data-table.stack-narrow .col-declared .cell-clamp {
+  .data-table.stack-narrow .col-resident .cell-clamp {
     max-width: none;
   }
 
@@ -3913,12 +4189,131 @@ button.tab:hover:not(:disabled) {
     text-overflow: clip;
   }
 
-  /* Payments queue: Billed puts the time under the date so the column stays
-     narrow. A card has room, so the time goes back on the date's line at the
-     date's size, and the card does not grow. */
-  .data-table.stack-narrow .col-billed .small-note {
-    display: inline;
-    font-size: inherit;
+  /* Payments queue (9 Oct 2026). A card has room, so the one-line cut is
+     undone: Resident and For wrap in full, like every other card's text. */
+  .payments-table td.pay-fluid {
+    max-width: none;
+  }
+
+  .payments-table .pay-cut {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Payments' cards label EVERY row, the label on the left and the value on
+     the right, so a card reads as a short list. The shared card label above
+     (#94a3b8, 2.56:1 on white, uppercase) stays as it is for every other
+     table; here it is #64748b, 4.76:1, in sentence case. (0,4,1) beats the
+     shared (0,3,1) rules without !important. */
+  .data-table.stack-narrow.payments-table td[data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    text-align: right;
+  }
+
+  .data-table.stack-narrow.payments-table td[data-label]::before {
+    flex: none;
+    font-size: 0.8rem;
+    text-transform: none;
+    letter-spacing: normal;
+    color: #64748b;
+  }
+
+  .data-table.stack-narrow.payments-table td[data-label] > * {
+    min-width: 0;
+  }
+
+  /* The View panel on a phone fills the screen. Everything under the header
+     scrolls as one, details then actions, inside the panel; the page behind
+     is locked. Close is a full-width button pinned at the foot, as on the
+     legal modals, in place of the corner one, and Record and Re-check go
+     full width to match. The two fields stay 16px, because iOS Safari zooms
+     into any field smaller than that when it takes focus. */
+  .pay-panel-overlay {
+    padding: 0;
+  }
+
+  .pay-panel {
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .pay-panel .pay-panel-x {
+    display: none;
+  }
+
+  .pay-panel-head {
+    padding: 16px 20px 12px;
+  }
+
+  /* A desktop browser this narrow draws a 15px scrollbar in the scroll area;
+     reserving the same gutter on the footer keeps Close exactly as wide as
+     Record (measured 335 against 350 without it). A phone's scrollbar
+     overlays the content and reserves nothing. */
+  .pay-panel-main {
+    display: block;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .pay-panel-details {
+    overflow: visible;
+    padding: 14px 20px;
+  }
+
+  /* White on a phone: the actions scroll with the details here, and a fill
+     would stop short of the scrollbar gutter as a visible strip. The rule
+     above them still sets them apart. */
+  .pay-panel-actions {
+    padding: 14px 20px 16px;
+    background: none;
+  }
+
+  .pay-panel-list {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .pay-panel-list .pay-wide {
+    grid-column: auto;
+  }
+
+  .pay-panel-list .pay-pair {
+    padding-left: 0;
+  }
+
+  .pay-panel-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pay-field select,
+  .pay-field input {
+    font-size: 1rem;
+  }
+
+  .pay-panel .pay-record,
+  .pay-panel-recheck .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
+
+  .pay-panel-footer {
+    display: block;
+    flex: none;
+    padding: 12px 20px;
+    border-top: 1px solid #e2e8f0;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+
+  .pay-panel-footer .btn {
+    width: 100%;
+    padding: 14px 20px;
   }
 }
 
