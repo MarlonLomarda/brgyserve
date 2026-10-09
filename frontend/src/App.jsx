@@ -50,7 +50,7 @@ const ROLE_PAGES = {
   secretary: (
     <PageLayout
       dashTitle={"Resident review"}
-      dashSubtitle={"Manage accounts and review pending residents"}
+      dashSubtitle={"Review pending resident registrations"}
       navItems={SECRETARY_NAV}
     >
       <SecretaryReviewPage />

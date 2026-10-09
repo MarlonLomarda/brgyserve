@@ -9,7 +9,6 @@ import {
   rejectionReasonRequiresNote,
 } from "../constants/registration";
 import { formatDateTime } from "../utils/formatDateTime";
-import { StaffAccountsSection } from "./StaffAccountsPage";
 
 function fullName(p) {
   const name = [p.first_name, p.middle_name, p.last_name]
@@ -530,8 +529,6 @@ export default function SecretaryReviewPage() {
           <main className="dash-main"> around this, and a document should
           have only one. No CSS selects main by tag; capped-column is a class. */}
       <div className="capped-column">
-        <StaffAccountsSection />
-
         {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
 
         {/* The filter sits OUTSIDE the empty check on purpose: switching to

@@ -23,6 +23,9 @@
 // Section J is the Secretary's Staff accounts page: its route, the account
 // menu item that opens it, and that no other role gets either.
 //
+// Section K is Resident review without the staff section: no staff list, no
+// request for one, and the residents' queue still all there.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -759,6 +762,76 @@ const root = () => dom.window.document.getElementById('root');
       && !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
     JSON.stringify(forcedStaff.query('h1')?.textContent ?? null));
   await forcedStaff.unmount();
+
+  // =========================================================================
+  // K. Resident review is the residents' queue only
+  // =========================================================================
+  // The staff section has its own page (section J), so Resident review neither
+  // shows it nor asks for the staff list. The queue must still be all there:
+  // the page gets two pending accounts, one unlinked and one linked, in the
+  // real shape of GET /secretary/pending-residents, so a removal that took the
+  // queue with it fails here instead of passing as "no staff section".
+  console.log('\n--- Resident review: the residents\' queue only ---');
+  const queueRow = (over) => ({
+    user_id: 0, username: '', email: '', is_rejected: false, rejection_reason: null, rejection_note: null,
+    rejected_at: null, rejected_by_user_id: null, rejected_by_username: null, linked_record: null, ...over,
+  });
+  const queueProfile = (over) => ({
+    resident_id: null, first_name: '', middle_name: null, last_name: '', suffix: null, birthdate: null,
+    address: null, phone_number: null, resident_records: null, ...over,
+  });
+  const QUEUE = { status: 'pending', pending: [
+    queueRow({ user_id: 31, username: 'queue_unlinked', email: 'queue.unlinked@example.invalid',
+      profiles: queueProfile({ first_name: 'Una', last_name: 'Queue', birthdate: '1990-01-02', address: 'Purok 1' }) }),
+    queueRow({ user_id: 32, username: 'queue_linked', email: 'queue.linked@example.invalid',
+      profiles: queueProfile({ resident_id: 77, first_name: 'Lino', last_name: 'Queue',
+        resident_records: { resident_id: 77, masterlist_registered_on: null } }),
+      linked_record: { resident_id: 77, masterlist_registered_on: null, residency: null } }),
+  ] };
+  // The queue and the unlinked account's suggestions; everything else as in
+  // section H. Suggestions first: their URL also contains pending-residents.
+  const queueAnswer = (url, method) => {
+    if (url.endsWith('/secretary/pending-residents/31/match-suggestions')) {
+      return { claimed: QUEUE.pending[0].profiles, suggestions: [] };
+    }
+    if (url.includes('/secretary/pending-residents?status=pending')) return QUEUE;
+    return answer(STAFF_PROFILE)(url, method);
+  };
+  const buttonsIn = (card) => (card ? [...card.querySelectorAll('button')].map((b) => b.textContent) : []);
+
+  seedSession(VALID);
+  resetNet(200, queueAnswer);
+  const review = await globalThis.mountInteractive(root(), '/secretary');
+  await review.settle();
+  const subtitles = [review.query('.page-title span')?.textContent, review.query('.dash-header-section p')?.textContent];
+  check('Resident review keeps its title, and its subtitle is "Review pending resident registrations" in both headers',
+    pageTitle(review) === 'Resident review' && subtitles.every((s) => s === 'Review pending resident registrations'),
+    JSON.stringify(subtitles));
+  check('  no "New staff account" button',
+    !review.queryAll('button').some((b) => b.textContent === 'New staff account'));
+  const staffHeadings = review.queryAll('h1, h2, h3, h4, h5, h6').map((h) => h.textContent).filter((t) => /Staff accounts/.test(t));
+  check('  no "Staff accounts" heading', staffHeadings.length === 0, staffHeadings.join(' / '));
+  check('  and no request for the staff list',
+    !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+    net.calls.map((c) => c.url.replace(/^https?:\/\/[^/]+\/api/, '')).join(', '));
+
+  const queueCards = review.queryAll('.pending-list > .pending-card');
+  const cardNames = queueCards.map((c) => c.querySelector('h3')?.textContent).join(' | ');
+  check("the residents' queue still renders: both stubbed accounts, under \"2 accounts awaiting review\"",
+    review.query('.list-head h2')?.textContent === '2 accounts awaiting review' && cardNames === 'Una Queue | Lino Queue',
+    `${JSON.stringify(review.query('.list-head h2')?.textContent ?? null)}: ${cardNames}`);
+  const statusFilter = review.query('.list-head select');
+  check('  with the status filter and Refresh',
+    statusFilter?.value === 'pending'
+      && [...(statusFilter?.options || [])].map((o) => o.textContent).join(' | ') === 'Awaiting review | Rejected | All'
+      && review.queryAll('.list-head button').some((b) => b.textContent === 'Refresh'));
+  check('  and each card\'s actions: Create & link, Link by ID and Reject when unlinked; Activate and Reject when linked',
+    ['Create new resident record & link', 'Link by ID', 'Reject registration'].every((t) => buttonsIn(queueCards[0]).includes(t))
+      && ['Activate account', 'Reject registration'].every((t) => buttonsIn(queueCards[1]).includes(t)),
+    `${buttonsIn(queueCards[0]).join(', ')} / ${buttonsIn(queueCards[1]).join(', ')}`);
+  check('  and the unlinked account\'s match suggestions were asked for',
+    net.calls.some((c) => c.url.endsWith('/secretary/pending-residents/31/match-suggestions')));
+  await review.unmount();
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
