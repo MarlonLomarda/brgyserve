@@ -15,6 +15,11 @@
 // Section G adds a third: a wrong current password on the change-password
 // screen must leave the session alone and show the server's message.
 //
+// Section I is the /set-password page's check of its link: what it shows
+// while the check is out, for a usable link, a dead one, and a check that
+// could not be made, and that the check sends the token in its body, with no
+// session header, and leaves a signed-in session alone.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -77,21 +82,36 @@ dom.window.localStorage = localStorageStub;
 // is the body sent with that status; otherwise a 401 carries the token error.
 // A `reply` that is a function is asked per request, (url, method), so one
 // mount can answer two endpoints differently; returning undefined falls back.
-const net = { calls: [], status: 200, body: { ok: true }, reply: null };
+// Each call also records the body it was sent. `fail` makes fetch reject, the
+// way a browser does when the server cannot be reached. `hold` keeps every
+// answer back until the test calls `net.held[i](status, reply)`, so a test can
+// choose the order answers arrive in.
+const net = { calls: [], status: 200, body: { ok: true }, reply: null, fail: false, hold: false, held: [] };
 global.fetch = async (url, options = {}) => {
   const auth = options.headers?.Authorization || null;
-  net.calls.push({ url: String(url), method: options.method || 'GET', token: auth ? auth.replace('Bearer ', '') : null });
+  net.calls.push({
+    url: String(url),
+    method: options.method || 'GET',
+    token: auth ? auth.replace('Bearer ', '') : null,
+    body: options.body ?? null,
+  });
+  if (net.fail) throw new TypeError('Failed to fetch');
+  const answer = (status, reply) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => reply ?? (status === 401 ? { error: 'Invalid or expired token' } : net.body),
+  });
+  if (net.hold) return new Promise((resolve) => net.held.push((status, reply) => resolve(answer(status, reply))));
   const reply = typeof net.reply === 'function' ? net.reply(String(url), options.method || 'GET') : net.reply;
-  return {
-    ok: net.status >= 200 && net.status < 300,
-    status: net.status,
-    json: async () => reply ?? (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
-  };
+  return answer(net.status, reply);
 };
 function resetNet(status = 200, reply = null) {
   net.calls = [];
   net.status = status;
   net.reply = reply;
+  net.fail = false;
+  net.hold = false;
+  net.held = [];
 }
 function seedSession(token, user = USER) {
   store.data.clear();
@@ -452,9 +472,194 @@ const root = () => dom.window.document.getElementById('root');
   check('  and the session is kept', store.removes === 0 && store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
   await voluntaryPage.unmount();
 
+  // =========================================================================
+  // I. /set-password checks its link before it shows the form
+  // =========================================================================
+  // The page asks POST /auth/set-password/check as soon as it opens. Only the
+  // server's dead-link code makes it call the link dead; a check that could
+  // not be made (no network, a server still waking, a 429, a 500) gets "Try
+  // again" and never a verdict. The page reads its token from
+  // window.location, not from the router, so each mount sets jsdom's address
+  // first. LINK stands in for a token; it is not one.
+  console.log('\n--- /set-password: the link is checked before the form shows ---');
+  const LINK = 'stand-in-for-a-set-password-link-token-01';
+  const DEAD_LINK = {
+    error: 'This set-password link is no longer valid. Links work only once and expire after 72 hours, so this happens most often when the link has already been used or an older email was opened. Please ask the Barangay Office to send you a new link.',
+    code: 'SET_PASSWORD_TOKEN_INVALID',
+  };
+  const CHECK_FAILED =
+    'We could not check this link just now. The system may still be starting up, which can take up to a minute. Checking does not use the link up.';
+  const TOO_MANY = {
+    error: 'Too many link checks from this connection. Please wait 15 minutes and try again. Checking a link does not use it up.',
+  };
+  const SET_OK = {
+    message: 'Your password is set. You can now sign in with your username and this password. Your username is in the email that brought you here.',
+  };
+  const NEW_PASSWORD = 'Brand-New-Set-2026!';
+  const openSetPassword = (search, options) => {
+    dom.window.history.replaceState(null, '', `/set-password${search}`);
+    return globalThis.mountInteractive(root(), `/set-password${search}`, options);
+  };
+  const sentBody = (call) => {
+    try { return JSON.parse(call?.body || ''); } catch { return null; }
+  };
+  const isCheck = (call) => call?.method === 'POST' && call.url.endsWith('/auth/set-password/check');
+  const passwordFields = (page) => page.queryAll('input[autocomplete="new-password"]');
+  const tryAgainButton = (page) => page.queryAll('button').find((b) => b.textContent === 'Try again');
+  const deadPanel = (page) => page.query('h1')?.textContent === 'This link no longer works';
+  // Answers the i-th held request. A request that was never sent fails the
+  // checks that need it instead of crashing the run before the rest.
+  const release = (i, status, reply) => {
+    if (typeof net.held[i] === 'function') net.held[i](status, reply);
+  };
+
+  seedSession(null);
+  resetNet(200);
+  const noToken = await openSetPassword('');
+  await noToken.settle();
+  check('no token in the address: the no-code panel, and no request at all',
+    deadPanel(noToken) && /has no set-password code in it/.test(noToken.html()) && net.calls.length === 0,
+    `${net.calls.length} call(s)`);
+  await noToken.unmount();
+
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const setPage = await openSetPassword(`?token=${LINK}`);
+  const checkingSubtitle = setPage.query('.subtitle')?.textContent;
+  check('while the check is out: "Checking your link…" under the usual heading, and no form',
+    setPage.query('h1')?.textContent === 'Set your password' && !!checkingSubtitle
+      && setPage.query('p.muted[role="status"]')?.textContent === 'Checking your link…'
+      && passwordFields(setPage).length === 0 && !deadPanel(setPage));
+  check('  one request: POST /auth/set-password/check, with the token in its BODY',
+    net.calls.length === 1 && isCheck(net.calls[0]) && sentBody(net.calls[0])?.token === LINK,
+    `${net.calls.length} call(s)`);
+  check('  not in its URL, and with no session header',
+    !net.calls[0]?.url.includes(LINK) && net.calls[0]?.token === null);
+  check('  and the address bar was cleaned, as before',
+    dom.window.location.pathname === '/set-password' && dom.window.location.search === '');
+  release(0, 200, { usable: true });
+  await setPage.settle();
+  check("a usable answer shows today's form under the same heading, and the checking line is gone",
+    passwordFields(setPage).length === 2 && setPage.query('form h1')?.textContent === 'Set your password'
+      && setPage.query('.subtitle')?.textContent === checkingSubtitle && !setPage.query('[role="status"]'));
+  await setPage.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 0);
+  await setPage.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 1);
+  await setPage.submit();
+  check('submitting sends POST /auth/set-password with the same token and the password, no session header',
+    net.calls.length === 2 && net.calls[1].method === 'POST' && net.calls[1].url.endsWith('/auth/set-password')
+      && sentBody(net.calls[1])?.token === LINK && sentBody(net.calls[1])?.new_password === NEW_PASSWORD
+      && net.calls[1].token === null, `${net.calls.length} call(s)`);
+  release(1, 200, SET_OK);
+  await setPage.settle();
+  check("  and a success shows \"Password set\" with the server's message",
+    setPage.query('h1')?.textContent === 'Password set' && setPage.query('.alert.success')?.textContent === SET_OK.message);
+  await setPage.unmount();
+
+  seedSession(null);
+  resetNet(400, DEAD_LINK);
+  const deadOnOpen = await openSetPassword(`?token=${LINK}`);
+  await deadOnOpen.settle();
+  check("a dead answer shows the dead-link panel with the server's message, and no form",
+    deadPanel(deadOnOpen) && deadOnOpen.query('.alert.error')?.textContent === DEAD_LINK.error
+      && !deadOnOpen.query('input') && !!deadOnOpen.query('a[href="/login"]'));
+  await deadOnOpen.unmount();
+
+  seedSession(null);
+  resetNet(400, { error: 'Invalid JSON in request body' });
+  const otherBadRequest = await openSetPassword(`?token=${LINK}`);
+  await otherBadRequest.settle();
+  check('a 400 WITHOUT the dead-link code is not a verdict: the could-not-check note',
+    !deadPanel(otherBadRequest) && otherBadRequest.query('.alert.info')?.textContent === CHECK_FAILED
+      && !otherBadRequest.query('input'));
+  await otherBadRequest.unmount();
+
+  seedSession(null);
+  resetNet(200, { usable: true });
+  net.fail = true;
+  const offline = await openSetPassword(`?token=${LINK}`);
+  await offline.settle();
+  check('no network: the could-not-check note in blue, "Try again" and "Back to sign in"',
+    offline.query('.alert.info')?.textContent === CHECK_FAILED && !!tryAgainButton(offline)
+      && !!offline.query('a[href="/login"]') && offline.query('h1')?.textContent === 'Set your password');
+  check('  and NOT the dead-link panel, and no form', !deadPanel(offline) && !offline.query('input'));
+  net.fail = false;
+  if (tryAgainButton(offline)) await offline.click(tryAgainButton(offline));
+  check('"Try again" asks once more, and a usable answer then shows the form',
+    net.calls.length === 2 && isCheck(net.calls[1]) && sentBody(net.calls[1])?.token === LINK
+      && passwordFields(offline).length === 2, `${net.calls.length} call(s)`);
+  await offline.unmount();
+
+  seedSession(null);
+  resetNet(429, TOO_MANY);
+  const limited = await openSetPassword(`?token=${LINK}`);
+  await limited.settle();
+  check("a 429 shows the limiter's own message, with \"Try again\", and not the dead-link panel",
+    limited.query('.alert.info')?.textContent === TOO_MANY.error && !!tryAgainButton(limited) && !deadPanel(limited),
+    JSON.stringify(limited.query('.alert.info')?.textContent ?? null));
+  await limited.unmount();
+
+  seedSession(null);
+  resetNet(500, { error: 'Internal server error' });
+  const broken = await openSetPassword(`?token=${LINK}`);
+  await broken.settle();
+  check("a 500 shows the page's own sentence, never \"Internal server error\", and not the dead-link panel",
+    broken.query('.alert.info')?.textContent === CHECK_FAILED && !/Internal server error/.test(broken.html())
+      && !deadPanel(broken));
+  await broken.unmount();
+
+  seedSession(VALID);
+  resetNet(200, { usable: true });
+  const signedIn = await openSetPassword(`?token=${LINK}`);
+  await signedIn.settle();
+  check('signed in: the check still carries no session header, and the form shows',
+    net.calls.length === 1 && isCheck(net.calls[0]) && net.calls[0].token === null
+      && passwordFields(signedIn).length === 2, `${net.calls.length} call(s)`);
+  check('  and the signed-in session is left alone',
+    store.removes === 0 && store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
+  await signedIn.unmount();
+
+  // The accepted trade-off: a link can die between the check and the submit.
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const diesLater = await openSetPassword(`?token=${LINK}`);
+  release(0, 200, { usable: true });
+  await diesLater.settle();
+  await diesLater.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 0);
+  await diesLater.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 1);
+  await diesLater.submit();
+  release(1, 400, DEAD_LINK);
+  await diesLater.settle();
+  check('a link that dies between the check and the submit still lands on the dead-link panel',
+    deadPanel(diesLater) && diesLater.query('.alert.error')?.textContent === DEAD_LINK.error
+      && !diesLater.query('input'));
+  await diesLater.unmount();
+
+  // StrictMode runs the effect twice on mount, as the dev server does: the
+  // first check is cleaned up, and its answer must be ignored however late
+  // it arrives. Here it arrives last, and dead.
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const strict = await openSetPassword(`?token=${LINK}`, { strict: true });
+  check('under StrictMode two checks go out, and both carry the token',
+    net.calls.length === 2 && net.calls.every((c) => isCheck(c) && sentBody(c)?.token === LINK),
+    `${net.calls.length} call(s)`);
+  release(1, 200, { usable: true });
+  await strict.settle();
+  release(0, 400, DEAD_LINK);
+  await strict.settle();
+  check('  the late answer to the cleaned-up first check is ignored: the form stays',
+    passwordFields(strict).length === 2 && !deadPanel(strict));
+  await strict.unmount();
+  dom.window.history.replaceState(null, '', '/');
+
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
 })().catch((e) => {
-  console.error('FAILED:', e.stack || e.message);
+  // console.error is silenced while the checks run, so a crash is written to
+  // stderr directly; through console.error it vanished without a word.
+  process.stderr.write(`FAILED: ${e.stack || e.message}\n`);
   process.exitCode = 1;
 });

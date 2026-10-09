@@ -4,7 +4,7 @@
 // between the stored session and the first request, which no API-level test
 // can see.
 import { createRoot } from 'react-dom/client';
-import { act, useEffect } from 'react';
+import { act, StrictMode, useEffect } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
@@ -33,17 +33,20 @@ globalThis.mountApp = async (container, route) => {
 
 // Mount the whole app at `route` and KEEP it mounted, so the test can fill in
 // a form and submit it the way a person would, then read what is on screen.
-globalThis.mountInteractive = async (container, route) => {
+// `strict` wraps it in StrictMode, which runs every effect twice on mount, as
+// the dev server does (main.jsx).
+globalThis.mountInteractive = async (container, route, { strict = false } = {}) => {
   const win = container.ownerDocument.defaultView;
   const root = createRoot(container);
+  const app = (
+    <AuthProvider>
+      <MemoryRouter initialEntries={[route]}>
+        <App />
+      </MemoryRouter>
+    </AuthProvider>
+  );
   await act(async () => {
-    root.render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <App />
-        </MemoryRouter>
-      </AuthProvider>
-    );
+    root.render(strict ? <StrictMode>{app}</StrictMode> : app);
   });
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   return {

@@ -339,6 +339,7 @@ const fakeFrom = (table) => {
   const MUST_NOT_LOG = [
     ['auth.js', "router.post('/login'"],
     ['auth.js', "router.post('/forgot-password'"],
+    ['auth.js', "router.post('/set-password/check'"],
     ['payments.js', "router.post('/gcash/checkout'"],
     ['payments.js', 'async function webhookHandler'],
     ['payments.js', 'async function settlePaidCharge'],

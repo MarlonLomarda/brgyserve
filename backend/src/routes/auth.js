@@ -12,6 +12,7 @@ const {
   registerLimiter,
   forgotPasswordLimiter,
   setPasswordLimiter,
+  setPasswordCheckLimiter,
 } = require('../middleware/rateLimit');
 const { validatePassword } = require('../constants/passwordPolicy');
 const { validateUsername } = require('../constants/usernamePolicy');
@@ -787,6 +788,58 @@ router.post('/reset-password', async (req, res) => {
   res.json({ message: RESET_SUCCESS_MESSAGE });
 });
 
+// ===========================================================================
+// SET-PASSWORD LINKS — what /set-password and /set-password/check share
+//
+// The two routes must never disagree about a link, so the token is read by
+// one function, a link is judged by one function, and a dead link is
+// answered with one object. The check asks exactly the question /set-password
+// asks before it spends a link, and nothing more.
+// ===========================================================================
+
+// The token as both routes read it: a string, trimmed, or ''.
+const tokenFromBody = (body) => (typeof body?.token === 'string' ? body.token.trim() : '');
+
+// The one answer for every dead link, byte for byte the same from both routes.
+const SET_PASSWORD_DEAD = Object.freeze({
+  error: SET_PASSWORD_INVALID_MESSAGE,
+  code: 'SET_PASSWORD_TOKEN_INVALID',
+});
+
+// The link a token names, with its account, when the link can still be
+// spent: unused, unexpired, and for an active staff-type account. Otherwise
+// null, for every dead case alike. A failed query THROWS, and the error
+// handler answers 500: it is never reported as a dead link, because a person
+// told their working link is dead has nowhere to go but the Barangay Office.
+async function usableSetPasswordLink(token) {
+  const { data: link, error: lookupError } = await supabase
+    .from('password_resets')
+    .select('reset_id, user_id, expires_at, used_at')
+    .eq('token_hash', hashToken(token))
+    .maybeSingle();
+  if (lookupError) {
+    throw new Error(`Set-password lookup failed: ${lookupError.message}`);
+  }
+  if (!link || link.used_at || new Date(link.expires_at).getTime() <= Date.now()) {
+    return null;
+  }
+
+  // As in /reset-password, `username` is read for the password blocklist and
+  // `password_hash` for the reuse check, and neither is ever sent back.
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('user_id, username, password_hash, role, is_active')
+    .eq('user_id', link.user_id)
+    .maybeSingle();
+  if (userError) {
+    throw new Error(`Set-password user lookup failed: ${userError.message}`);
+  }
+  if (!user || !STAFF_TYPE_ROLES.includes(user.role) || !user.is_active) {
+    return null;
+  }
+  return { link, user };
+}
+
 // POST /api/auth/set-password — UNAUTHENTICATED. The token is the authority.
 //
 // Where an official chooses their password, from the link the Secretary had
@@ -811,12 +864,15 @@ router.post('/reset-password', async (req, res) => {
 //     address proves the official controls it. This is the first code to set
 //     that column true; it was reserved for exactly this.
 //
+// THE LOOKUPS ARE usableSetPasswordLink() above, shared with the read-only
+// /set-password/check below, so the page's check and this route cannot
+// disagree about a link.
+//
 // RATE LIMITED, unlike /reset-password: see setPasswordLimiter.
 router.post('/set-password', setPasswordLimiter, async (req, res) => {
-  const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+  const token = tokenFromBody(req.body);
   const newPassword = req.body?.new_password;
-  const deadLink = () =>
-    res.status(400).json({ error: SET_PASSWORD_INVALID_MESSAGE, code: 'SET_PASSWORD_TOKEN_INVALID' });
+  const deadLink = () => res.status(400).json(SET_PASSWORD_DEAD);
 
   if (!token) return deadLink();
   // Presence only; the policy needs the account's username, as in
@@ -825,31 +881,9 @@ router.post('/set-password', setPasswordLimiter, async (req, res) => {
     return res.status(400).json({ error: 'A new password is required.' });
   }
 
-  const { data: link, error: lookupError } = await supabase
-    .from('password_resets')
-    .select('reset_id, user_id, expires_at, used_at')
-    .eq('token_hash', hashToken(token))
-    .maybeSingle();
-  if (lookupError) {
-    throw new Error(`Set-password lookup failed: ${lookupError.message}`);
-  }
-  if (!link || link.used_at || new Date(link.expires_at).getTime() <= Date.now()) {
-    return deadLink();
-  }
-
-  // As in /reset-password, `username` is read for the password blocklist and
-  // `password_hash` for the reuse check, and neither leaves this handler.
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('user_id, username, password_hash, role, is_active')
-    .eq('user_id', link.user_id)
-    .maybeSingle();
-  if (userError) {
-    throw new Error(`Set-password user lookup failed: ${userError.message}`);
-  }
-  if (!user || !STAFF_TYPE_ROLES.includes(user.role) || !user.is_active) {
-    return deadLink();
-  }
+  const usable = await usableSetPasswordLink(token);
+  if (!usable) return deadLink();
+  const { link, user } = usable;
 
   // Before the claim, so a refused password costs a retry, not the link.
   const passwordCheck = validatePassword(newPassword, { username: user.username });
@@ -912,6 +946,41 @@ router.post('/set-password', setPasswordLimiter, async (req, res) => {
   });
 
   res.json({ message: SET_PASSWORD_SUCCESS_MESSAGE });
+});
+
+// POST /api/auth/set-password/check — UNAUTHENTICATED, and READ-ONLY.
+//
+// The /set-password page asks this the moment it opens, so a dead link is
+// shown as dead before anyone types a password. It asks the question
+// /set-password asks before it spends a link, through usableSetPasswordLink(),
+// and answers with nothing but the verdict: { usable: true }, or
+// SET_PASSWORD_DEAD, byte for byte what /set-password sends. No name,
+// username, email, role or expiry.
+//
+// IT MUST NEVER WRITE. No claim, no sweep, no log row, no notification, and
+// the token is never printed. Some mail scanners open emailed links and run
+// the page's script; a check that wrote anything would let them disturb an
+// official's link before the official had opened it.
+//
+// POST, WITH THE TOKEN IN THE BODY: a token in a URL ends up in request logs
+// and browser history, and a request body does not.
+//
+// A DEAD LINK IS A 400, NOT A 200 { usable: false }. setPasswordCheckLimiter
+// counts by status, so dead answers count against a caller and usable ones
+// are refunded. A failed query is neither: usableSetPasswordLink() throws,
+// the error handler answers 500, and the page offers "Try again" rather than
+// calling a working link dead.
+//
+// The check is advice, not a promise. A link can still die between the check
+// and the submit (it expires, is used in another tab, or is retired by a
+// newer email), and /set-password, which decides again, answers that with
+// the same dead-link panel.
+router.post('/set-password/check', setPasswordCheckLimiter, async (req, res) => {
+  const token = tokenFromBody(req.body);
+  if (!token || !(await usableSetPasswordLink(token))) {
+    return res.status(400).json(SET_PASSWORD_DEAD);
+  }
+  res.json({ usable: true });
 });
 
 module.exports = router;
