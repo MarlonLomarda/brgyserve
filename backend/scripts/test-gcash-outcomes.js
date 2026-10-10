@@ -22,10 +22,14 @@
 // total, so a list cut short by Supabase's 1,000-row cap can be told apart
 // from a complete one.
 //
+// Section 8 sweeps that list's whole payload for contact data: no email and
+// no phone number, under any key or in any value, while the names, usernames,
+// addresses and head names the Payments page shows are all still there.
+//
 // Makes NO network calls — no database, no PayMongo, no tunnel, and the API
 // does not need to be running. The Supabase URL and key below are dead values
 // set BEFORE .env loads (dotenv never overrides a variable that is already
-// set), fetch throws if anything calls it, and sections 6 and 7 replace
+// set), fetch throws if anything calls it, and sections 6, 7 and 8 replace
 // supabase.from with in-memory tables. The live behaviour of the three
 // triggers is exercised separately against the sandbox.
 //
@@ -726,20 +730,22 @@ async function chargesListChecks() {
       bad.status === 400 && /Unknown status 'PENDING'/.test(bad.body?.error || '') && bad.db.ran.length === 0,
       `${bad.status} ${bad.body?.error || ''} (${bad.db.ran.length} quer${bad.db.ran.length === 1 ? 'y' : 'ies'} ran)`);
 
-    // What fines:test reads off the list, which this file cannot run.
+    // What fines:test reads off the list, which this file cannot run. The
+    // head is named, never contacted: section 8 requires that no contact
+    // number is sent.
     const fine = (id) => {
       const c = byId.get(id);
       return c && { title: c.events?.title, address: c.household_records?.address,
-        head_name: c.household_records?.head_name, head_contact: c.household_records?.head_contact };
+        head_name: c.household_records?.head_name };
     };
     check("each fine keeps its event title and household address, and names the household's CURRENT head",
       isDeepStrictEqual(fine(9006), { title: 'General Assembly', address: 'Purok 1, Ubujan',
-        head_name: 'Hermogenes Pacana Bulawan, Jr.', head_contact: '09170009401' })
+        head_name: 'Hermogenes Pacana Bulawan, Jr.' })
         && isDeepStrictEqual(fine(9007), { title: 'General Assembly', address: 'Purok 2, Ubujan',
-          head_name: 'Natividad Sarabia', head_contact: null }),
+          head_name: 'Natividad Sarabia' }),
       `${shown(fine(9006))} ${shown(fine(9007))}`);
     check('a household whose only head has left has no head name',
-      isDeepStrictEqual(fine(9008), { title: 'General Assembly', address: 'Purok 3, Ubujan', head_name: null, head_contact: null }),
+      isDeepStrictEqual(fine(9008), { title: 'General Assembly', address: 'Purok 3, Ubujan', head_name: null }),
       shown(fine(9008)));
 
     // More unpaid charges than one response may carry.
@@ -765,9 +771,115 @@ async function chargesListChecks() {
   }
 }
 
+// 8. GET /api/charges sends no contact numbers and no emails. The Payments page
+//    shows names, usernames, addresses and amounts and reads no contact field,
+//    so the list carries none (data minimisation, CLAUDE.md). The real handler
+//    runs on section 7's tables with a contact in every place one can occur:
+//    the payer's and the recorder's email and profile phone, the resident
+//    record on a document request and on a booking, a guest's contact and the
+//    household head's, in each form the system accepts (09..., 639...,
+//    +639...), and an email with no dot after the @, as one live account has.
+//    The sweep covers every key and every value at every depth, so a contact
+//    arriving through an embed nothing here names is caught too. The names
+//    around the contacts must survive, so trimming too much fails as well.
+const PERSONAL_KEY = /email|phone|mobile|contact|password/i;
+const EMAIL_SHAPED = /[^\s@"]+@[^\s@"]+/;
+// Spaces or dashes inside the number are allowed, so an older record typed
+// that way is caught too.
+const PH_MOBILE = /(?<![\d+])(?:\+?63[\s-]?|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}(?!\d)/;
+
+// Where the payload holds anything personal: each key path whose name looks
+// like one, and each value path holding an email or a mobile number, counted.
+function personalData(body) {
+  const found = { keys: new Set(), emails: {}, phones: {} };
+  const walk = (v, at) => {
+    if (Array.isArray(v)) {
+      v.forEach((x) => walk(x, `${at}[]`));
+      return;
+    }
+    if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        if (PERSONAL_KEY.test(k)) found.keys.add(`${at}.${k}`);
+        walk(x, `${at}.${k}`);
+      }
+      return;
+    }
+    if (typeof v !== 'string' && typeof v !== 'number') return;
+    if (EMAIL_SHAPED.test(String(v))) found.emails[at] = (found.emails[at] || 0) + 1;
+    if (PH_MOBILE.test(String(v))) found.phones[at] = (found.phones[at] || 0) + 1;
+  };
+  walk(body, 'body');
+  return found;
+}
+
+async function chargesListContactChecks() {
+  console.log('\n--- 8. GET /api/charges: no contact numbers or emails, real handler, fake tables ---');
+  const realFrom = supabase.from;
+  try {
+    const handler = handlerFor(chargesRouter, 'get', '/');
+    const db = listDb();
+    const edit = (table, idColumn, id, patch) => Object.assign(db[table].find((r) => r[idColumn] === id), patch);
+    edit('users', 'user_id', 7302, { email: 'ramon@payer' });
+    edit('resident_records', 'resident_id', 9412, { contact_number: '+639170009412' });
+    edit('rental_requests', 'request_id', 9702, { outside_borrower_contact: '639181234567' });
+    supabase.from = listFrom(db);
+    const r = await invoke(handler, { user: LIST_CALLER, query: { status: 'all' } });
+    const byId = new Map((r.body?.charges || []).map((c) => [c.charge_id, c]));
+    const shown = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
+    const listed = (counts) => Object.entries(counts).map(([at, n]) => `${at} x${n}`).join(', ') || 'none';
+    const found = personalData(r.body);
+
+    // Without this, an empty or failed list would pass the sweep below.
+    check('the list loads: 200 with all 9 charges', r.status === 200 && byId.size === 9, `${r.status}, ${byId.size} charge(s)`);
+    check('no key named like email, phone, mobile, contact or password, at any depth',
+      found.keys.size === 0, [...found.keys].join(', ') || 'none');
+    check('no email-shaped value anywhere, one with no dot after the @ included',
+      Object.keys(found.emails).length === 0, listed(found.emails));
+    check('no Philippine mobile number anywhere, in any form the system accepts',
+      Object.keys(found.phones).length === 0, listed(found.phones));
+
+    // What the page shows must still arrive.
+    const names = (p) => p && { resident_id: p.resident_id, first_name: p.first_name, middle_name: p.middle_name,
+      last_name: p.last_name, suffix: p.suffix };
+    const payer = byId.get(9001)?.payer;
+    check("the payer's username and name parts are still sent",
+      payer?.username === 'payer_pacita' && byId.get(9002)?.payer?.username === 'payer_ramon'
+        && isDeepStrictEqual(payer?.profiles, { first_name: 'Pacita', middle_name: 'Ramos', last_name: 'Dumaguete', suffix: null }),
+      shown(payer));
+    const documentResident = byId.get(9001)?.document_requests?.resident_records;
+    check('the resident on a document request is still named',
+      isDeepStrictEqual(names(documentResident),
+        { resident_id: 9411, first_name: 'Pacita', middle_name: 'Ramos', last_name: 'Dumaguete', suffix: null }),
+      shown(documentResident));
+    const booking = byId.get(9002)?.rental_requests;
+    check('the resident on a booking is still named, with its resident_id',
+      booking?.resident_id === 9412 && isDeepStrictEqual(names(booking?.resident_records),
+        { resident_id: 9412, first_name: 'Ramon', middle_name: null, last_name: 'Villaflor', suffix: null }),
+      shown(booking?.resident_records));
+    check("a guest borrower's name is still sent",
+      byId.get(9005)?.rental_requests?.outside_borrower_name === 'Dolores Pacquiao',
+      shown(byId.get(9005)?.rental_requests?.outside_borrower_name));
+    const household = (id) => byId.get(id)?.household_records;
+    check('each fine still carries its household address and head name',
+      household(9006)?.address === 'Purok 1, Ubujan' && household(9006)?.head_name === 'Hermogenes Pacana Bulawan, Jr.'
+        && household(9007)?.address === 'Purok 2, Ubujan' && household(9007)?.head_name === 'Natividad Sarabia',
+      `${shown(household(9006))} ${shown(household(9007))}`);
+    const recorder = byId.get(9001)?.payments?.[0]?.recorder;
+    check("a payment's recorder is still named",
+      recorder?.username === 'treasurer_probe' && recorder?.role === 'treasurer'
+        && isDeepStrictEqual(recorder?.profiles, { first_name: 'Teresita', middle_name: 'Lim', last_name: 'Ocampo', suffix: null }),
+      shown(recorder));
+  } catch (err) {
+    check('the contact-data section ran to the end', false, err.message);
+  } finally {
+    supabase.from = realFrom;
+  }
+}
+
 (async () => {
   await declareRouteChecks();
   await chargesListChecks();
+  await chargesListContactChecks();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exitCode = fail ? 1 : 0;
 })();

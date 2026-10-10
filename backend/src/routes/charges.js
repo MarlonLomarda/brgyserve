@@ -23,9 +23,9 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // payer's profile name covers them). A booking now carries EITHER a
 // resident_id — a registered resident, whether they booked it themselves or
 // the Secretary encoded a walk-in — OR an outside_borrower_name/contact pair
-// for a guest from another barangay. Both are embedded here because the payer
-// link no longer covers either case: a walk-in resident may never have
-// registered online, and a guest CANNOT have an account at all, so
+// for a guest from another barangay. Both are embedded here, by name, because
+// the payer link no longer covers either case: a walk-in resident may never
+// have registered online, and a guest CANNOT have an account at all, so
 // charges.user_id is null on both and the payer embed comes back null with
 // it.
 //
@@ -42,19 +42,25 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // payment was received by nobody, so its received_by_user_id and recorder are
 // both null. The recorder is named, never contacted: username, role and
 // profile name only, no email or phone number.
+//
+// NO CONTACT DATA. The list names people and never says how to reach them: no
+// email, and no contact number from a resident record, a guest's booking or a
+// household head. The Payments page reads none of them, so none is sent (data
+// minimisation, CLAUDE.md). The verify route below still reads contact
+// numbers, server-side, for the SMS it records; none reaches the client.
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
   paymongo_session_id, paymongo_payment_id, household_id,
-  payer:users ( user_id, username, email,
+  payer:users ( user_id, username,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   document_requests ( request_id, purpose, status,
     document_types ( name ),
-    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix ) ),
   rental_requests ( request_id, quantity_requested, start_datetime, end_datetime, status,
-    resident_id, outside_borrower_name, outside_borrower_contact,
+    resident_id, outside_borrower_name,
     rental_items ( name ),
-    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix ) ),
   events ( event_id, title, start_datetime, end_datetime ),
   household_records ( household_id, address ),
   payments ( payment_id, payment_method, reference_no, created_at, received_by_user_id,
@@ -72,7 +78,7 @@ async function attachHouseholdHeads(charges) {
 
   const { data: heads, error } = await supabase
     .from('household_members')
-    .select('household_id, resident_records ( first_name, middle_name, last_name, suffix, contact_number )')
+    .select('household_id, resident_records ( first_name, middle_name, last_name, suffix )')
     .eq('role', 'Head')
     .is('date_ended', null)
     .in('household_id', ids);
@@ -89,7 +95,6 @@ async function attachHouseholdHeads(charges) {
     const r = byHousehold.get(c.household_id);
     const name = r ? [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ') : null;
     c.household_records.head_name = r?.suffix && name ? `${name}, ${r.suffix}` : name || null;
-    c.household_records.head_contact = r?.contact_number || null;
   }
 }
 
