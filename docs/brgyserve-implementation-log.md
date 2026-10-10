@@ -1081,3 +1081,16 @@ The `diffFields` comment, which called an empty result "an honest compared, no d
   - the now-inert `.dash-user .btn` rule;
   - `RoleLandingPage.jsx`'s own Log out button;
   - two spacing nits on `/profile`.
+
+### Staff accounts page and trimmed Resident review, 9-10 Oct 2026
+
+- **Why:** the staff list and the "New staff account" form sat on Resident review above the residents' queue, so the page grew with every official and mixed two jobs.
+- **Decisions (the owner's):** staff accounts get their own Secretary-only page, `/secretary/staff-accounts`; the link is in the account menu, not the sidebar (13 items, full); Resident review gets no hint or link to it, and its subtitle is now "Review pending resident registrations".
+- **`06a9556`:** the page, its route and the menu item, with the code moved, not rewritten; the menu is built from one filtered list so the arrow keys wrap for every role; `formatDateTime` moved to `utils/formatDateTime.js`; 24 new checks.
+- **`eb58840`:** Resident review shows only the residents' queue and no longer asks for the staff list; `test:auth` section K.
+- **`aaa4c60`:** one heading, two-line rows and a search box; section L, including 11 checks that pin create, send, the in-row confirmation and the 15-minute cooldown, which had no frontend checks before.
+- **The search** matches the @username, the role label and the email (the list has no names), over the list already loaded, with no request. It hides non-matching rows instead of removing them: a removed row is mounted again when it matches, and its open "send a link?" question then took the focus from the box (Cancel has autoFocus).
+- **`test:auth`:** 81 → 105 → 113 → 138.
+- **Measured** in headless Chrome with the real stylesheet: a row is 71px on desktop instead of 96; a row still waiting for its password is 94px, because its status chip wraps under the name. No horizontal scroll at 390px.
+- **The sidebar:** with 13 items it fits a 768px-high viewport with 28.4px to spare, and a 14th item would use all of it. It scrolls below a 713.59px viewport, and a browser on a 1366×768 laptop leaves less than that once its own toolbars are counted (estimated, not measured), so there it already scrolls. That is why the link went into the account menu.
+- **Then (batch 4):** CLAUDE.md, this entry, and the stale comments in `index.css` and `usernamePolicy.js`.

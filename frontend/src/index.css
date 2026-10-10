@@ -867,15 +867,15 @@ a {
    carries margin-top: auto, which bottom-anchors it while there is free
    space and resolves to 0 once there is not — at which point it sits
    directly under the last link and overflow: hidden cuts whatever hangs
-   past the viewport. Measured as Secretary, whose 12 items are the longest
-   nav in the app: 63px logo row + 12 x 44px links + 64.59px footer =
-   655.59px, so below that height the footer starts disappearing and below
-   591px it is gone entirely. 44, not the links' resting 46, because they
-   are 0 1 auto and shrink to their own min-height first — that squeeze is
-   worth 24px on this nav and is the whole reason the threshold is not 679.
-   Those are the numbers FROM THE BUG: the logo row measures 82px now, not
-   63, because the collapse control below became a 44px tap target. The
-   threshold itself no longer exists — the nav scrolls instead.
+   past the viewport. Measured as Secretary, whose 12 items were then the
+   longest nav in the app: 63px logo row + 12 x 44px links + 64.59px footer
+   = 655.59px, so below that height the footer started disappearing and
+   below 591px it was gone entirely. 44, not the links' resting 46, because
+   they are 0 1 auto and shrink to their own min-height first — that squeeze
+   was worth 24px on that nav and is why the threshold was not 679.
+   Those are the numbers FROM THE BUG. Re-measured 9 Oct 2026: 13 items, a
+   73px logo row (the collapse control below is a 44px tap target) and a
+   68.59px footer, so below a 713.59px window the nav scrolls instead.
 
    The drawer has solved this since it was built (.dash-drawer-nav is
    flex: 1 1 auto; overflow-y: auto with head and foot at flex: none) and
@@ -1151,11 +1151,11 @@ a {
 }
 
 /* A screen whose whole content is one narrow column, not a table page.
-   .capped-column is a LAYOUT INTENT, not a page name, and is currently on
-   exactly one <main> (Secretary Resident review).
+   .capped-column is a LAYOUT INTENT, not a page name, and is on two page
+   wrappers: Resident review and the Staff accounts page.
 
    The cards there are already capped by the rule above, but .list-head, the
-   alerts and the empty state are direct children of .dash-main — a React
+   alerts and the empty state are direct children of the column — a React
    fragment wraps two of them in the JSX but produces no DOM node, so they sit
    at the same level. Left alone they span the full 1132px while the cards stop
    at 720, which put the Refresh button 412px to the right of the cards it
