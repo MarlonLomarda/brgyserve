@@ -33,6 +33,15 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // most households have no linked account (charges.user_id is nullable for
 // exactly this reason). Its household and event are embedded so the queue can
 // still say who owes what; the head's name is resolved separately below.
+//
+// EACH CHARGE CARRIES ITS PAYMENT RECORD as `payments`, an ARRAY: nothing in
+// the schema stops a second row (payments.charge_id has no UNIQUE
+// constraint), so it is never flattened to one object. A charge with no
+// payment row has an empty array: every unpaid or void charge, and any paid
+// one that has none. `recorder` is whoever received the payment. A PayMongo
+// payment was received by nobody, so its received_by_user_id and recorder are
+// both null. The recorder is named, never contacted: username, role and
+// profile name only, no email or phone number.
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
@@ -47,7 +56,10 @@ const CHARGE_FIELDS = `
     rental_items ( name ),
     resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
   events ( event_id, title, start_datetime, end_datetime ),
-  household_records ( household_id, address )
+  household_records ( household_id, address ),
+  payments ( payment_id, payment_method, reference_no, created_at, received_by_user_id,
+    recorder:users ( username, role,
+      profiles ( first_name, middle_name, last_name, suffix ) ) )
 `;
 
 // The head's name lives two joins away from a charge (household_members ->
@@ -86,12 +98,17 @@ async function attachHouseholdHeads(charges) {
 // GCash reference a resident declared before 10 Oct 2026). Newest
 // first, under every filter, so the most recent transactions are at the top
 // of the Payments page; charge_id breaks a tie on created_at, newest first.
+//
+// `total` is the number of charges the filter matches, counted by the same
+// query. The list has no range, so once Supabase's cap of 1,000 rows per
+// response is reached it would be cut silently; a total larger than the list
+// is how the page can tell.
 router.get('/', async (req, res) => {
   const status = String(req.query.status || CHARGE_STATUS.UNPAID).toUpperCase();
 
   let query = supabase
     .from('charges')
-    .select(CHARGE_FIELDS)
+    .select(CHARGE_FIELDS, { count: 'exact' })
     .order('created_at', { ascending: false })
     .order('charge_id', { ascending: false });
 
@@ -104,12 +121,12 @@ router.get('/', async (req, res) => {
     query = query.eq('status', status);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) {
     throw new Error(`Failed to load charges: ${error.message}`);
   }
   await attachHouseholdHeads(data || []);
-  res.json({ charges: data });
+  res.json({ charges: data, total: count });
 });
 
 // POST /api/charges/:id/verify — record/verify a payment: create the payments
