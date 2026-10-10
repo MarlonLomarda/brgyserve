@@ -1,12 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 // The resident's "Pay ▾" button on an unpaid row of My rentals and My
-// requests, in place of three side-by-side buttons that made the actions
-// column the widest in both tables and still wrapped onto two lines.
+// requests. It replaced three side-by-side buttons that made the actions
+// column the widest in both tables and still wrapped onto two lines, and
+// since 10 Oct 2026 it holds two items, "Pay online via GCash" and "Pay
+// onsite": "I already paid via GCash" was removed, and the declare routes now
+// refuse a GCash reference.
 // PRESENTATION ONLY: each page keeps its own pay logic (the two flows are
 // duplicated on purpose; see the back-button comment in each page) and passes
-// in the three handlers and its busy flag. The three options keep their
-// wording and their order, and the gateway one leads, set in bold blue.
+// in the two handlers and its busy flag. The gateway option leads, set in
+// bold blue.
 //
 // A menu, not a dialog, so it follows AccountMenu: no focus trap and no
 // scroll lock. It closes on Escape (focus goes back to the button), on a press
@@ -28,12 +31,7 @@ const EDGE = 8; // the closest the list comes to the viewport's edge
 const isFloating = (list) =>
   !!list && getComputedStyle(list).position === "fixed";
 
-export default function PayMenu({
-  busy,
-  onPayOnline,
-  onPayOnsite,
-  onAlreadyPaid,
-}) {
+export default function PayMenu({ busy, onPayOnline, onPayOnsite }) {
   const [open, setOpen] = useState(false);
   // Where the list sits: null until measured, {} in flow, { top, left } floating.
   const [place, setPlace] = useState(null);
@@ -225,15 +223,6 @@ export default function PayMenu({
             onClick={() => choose("onsite", onPayOnsite)}
           >
             Pay onsite
-          </button>
-          <button
-            ref={(el) => { itemRefs.current[2] = el; }}
-            type="button"
-            role="menuitem"
-            className="pay-menu-item"
-            onClick={() => choose("reference", onAlreadyPaid)}
-          >
-            I already paid via GCash
           </button>
         </div>
       )}

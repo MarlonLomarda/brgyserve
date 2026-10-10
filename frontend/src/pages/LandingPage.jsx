@@ -24,9 +24,12 @@ import barangayImage from "../assets/brgy-hall.jpeg";
 // EVERY CLAIM ON THIS PAGE MUST MATCH A FEATURE THAT WORKS. In particular:
 // SMS notification is a stub that only console-logs, so nothing here may say
 // a resident will be told about anything — every answer about status says to
-// sign in and check. Online card/e-wallet checkout runs against the PayMongo
-// SANDBOX, so payment is described as cash or a GCash reference verified by
-// the Treasurer, which is what actually happens.
+// sign in and check. Payment is described the way the Help Center describes
+// it (components/legal/HelpCenter.jsx): at the Barangay Office, or online by
+// GCash through PayMongo's hosted checkout, which runs against the PayMongo
+// SANDBOX in this deployment. Until 10 Oct 2026 this page described a GCash
+// reference verified by the Treasurer instead; residents can no longer
+// submit one.
 
 // Icons are DECORATIVE — every card already says what it is in words, so they
 // are hidden from screen readers rather than described twice.
@@ -97,7 +100,7 @@ const FAQS = [
   },
   {
     q: "How do I pay the fee?",
-    a: "You can pay in cash at the Barangay Office, or by GCash. If you pay by GCash, enter the reference number from your receipt when you record the payment, and the Barangay Treasurer will verify it before your document is released.",
+    a: "You can pay in cash at the Barangay Office, or online by GCash. Once your request is approved, tap Pay beside it in My requests or My rentals and choose Pay online via GCash.",
   },
   {
     q: "How do I know when my document is ready?",

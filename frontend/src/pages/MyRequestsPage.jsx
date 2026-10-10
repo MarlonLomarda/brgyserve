@@ -78,10 +78,7 @@ export default function MyRequestsPage() {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [load]);
 
-  const [payTarget, setPayTarget] = useState(null); // request_id entering a GCash ref
-  const [gcashRef, setGcashRef] = useState("");
-
-  async function handleDeclare(r, method, reference) {
+  async function handleDeclare(r, method) {
     setFlash(null);
     setBusyId(r.request_id);
     try {
@@ -89,12 +86,10 @@ export default function MyRequestsPage() {
         `/document-requests/mine/${r.request_id}/pay`,
         {
           method: "POST",
-          body: { method, reference_no: reference },
+          body: { method },
         },
       );
       setFlash({ type: "success", text: data.message });
-      setPayTarget(null);
-      setGcashRef("");
       await load();
     } catch (err) {
       setFlash({ type: "error", text: err.message });
@@ -132,9 +127,9 @@ export default function MyRequestsPage() {
   // /pay route, which records the new method and sets the reference to null,
   // and "Pay online via GCash" can collect a second payment for a charge the
   // resident has already paid by hand. So both ask first, and Cancel sends
-  // nothing. "I already paid via GCash" does not ask: it only replaces the
-  // reference, which is how a mistyped one is fixed. With no GCash reference
-  // on file nothing asks.
+  // nothing. Residents can no longer submit a GCash reference (removed
+  // 10 Oct 2026), so only a charge that kept one from before then asks. With
+  // no GCash reference on file nothing asks.
   //
   // MyRentalsPage.jsx carries the identical checks and wording.
   // IF ONE CHANGES, CHECK THE OTHER.
@@ -322,49 +317,13 @@ export default function MyRequestsPage() {
                           </button>
                         )}
                         {r.status === "approved" &&
-                          charge?.status === "UNPAID" &&
-                          (payTarget === r.request_id ? (
-                            <form
-                              className="inline-form"
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                handleDeclare(r, "gcash", gcashRef.trim());
-                              }}
-                            >
-                              <input
-                                value={gcashRef}
-                                onChange={(e) => setGcashRef(e.target.value)}
-                                placeholder="GCash reference no."
-                                maxLength={100}
-                                required
-                                autoFocus
-                              />
-                              <button
-                                className="btn secondary"
-                                type="submit"
-                                disabled={busyId === r.request_id}
-                              >
-                                Submit
-                              </button>
-                              <button
-                                className="btn secondary"
-                                type="button"
-                                onClick={() => setPayTarget(null)}
-                              >
-                                Cancel
-                              </button>
-                            </form>
-                          ) : (
+                          charge?.status === "UNPAID" && (
                             <PayMenu
                               busy={busyId === r.request_id}
                               onPayOnline={() => payOnline(r, charge)}
                               onPayOnsite={() => payOnsite(r, charge)}
-                              onAlreadyPaid={() => {
-                                setPayTarget(r.request_id);
-                                setGcashRef("");
-                              }}
                             />
-                          ))}
+                          )}
                       </td>
                     </tr>
                   );

@@ -452,12 +452,15 @@ router.post("/mine/:id/cancel", async (req, res) => {
   res.json({ message: "Request cancelled", request });
 });
 
-// POST /api/document-requests/mine/:id/pay — the resident declares HOW they
-// are paying: 'onsite' (cash at the barangay hall) or 'gcash' (submits a
-// reference number). This does NOT mark the charge paid — the declaration is
-// stored on the charge (declared_*), and only Treasurer/Secretary
-// verification creates a payments row and flips the charge to PAID.
-// Declarations can be re-submitted while UNPAID (e.g. mistyped reference).
+// POST /api/document-requests/mine/:id/pay — the resident declares that they
+// will pay in cash at the barangay hall ('onsite', the only method accepted).
+// This does NOT mark the charge paid — the declaration is stored on the
+// charge (declared_*), and only Treasurer/Secretary verification creates a
+// payments row and flips the charge to PAID. Re-declarable while UNPAID.
+// Until 10 Oct 2026 a resident could also declare 'gcash' with a reference
+// number ("I already paid via GCash"); that is now refused with a 400, and an
+// onsite declaration still clears a reference left from before then.
+// rentalRequests.js carries the same route for bookings.
 router.post("/mine/:id/pay", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -465,21 +468,14 @@ router.post("/mine/:id/pay", async (req, res) => {
   }
 
   const method = String(req.body?.method ?? "").toLowerCase();
-  const reference = String(req.body?.reference_no ?? "").trim();
-  if (method !== PAYMENT_METHOD.ONSITE && method !== PAYMENT_METHOD.GCASH) {
-    return res
-      .status(400)
-      .json({ error: "method must be 'onsite' or 'gcash'" });
+  if (method === PAYMENT_METHOD.GCASH) {
+    return res.status(400).json({
+      error:
+        "Submitting a GCash reference is no longer available. Choose Pay online via GCash, or pay at the Barangay Office.",
+    });
   }
-  if (method === PAYMENT_METHOD.GCASH && !reference) {
-    return res
-      .status(400)
-      .json({ error: "A GCash reference number is required" });
-  }
-  if (reference.length > 100) {
-    return res
-      .status(400)
-      .json({ error: "Reference number must be 100 characters or fewer" });
+  if (method !== PAYMENT_METHOD.ONSITE) {
+    return res.status(400).json({ error: "method must be 'onsite'" });
   }
 
   // Scoped by resident_id like GET /mine and the cancel route: the charge on a
@@ -522,7 +518,9 @@ router.post("/mine/:id/pay", async (req, res) => {
     .from("charges")
     .update({
       declared_method: method,
-      declared_reference: method === PAYMENT_METHOD.GCASH ? reference : null,
+      // Always null, which also clears a GCash reference declared before
+      // 10 Oct 2026.
+      declared_reference: null,
       declared_at: new Date().toISOString(),
     })
     .eq("charge_id", charge.charge_id)
@@ -551,9 +549,7 @@ router.post("/mine/:id/pay", async (req, res) => {
 
   res.json({
     message:
-      method === PAYMENT_METHOD.GCASH
-        ? "GCash reference submitted — awaiting verification by the barangay."
-        : "Noted — please pay in cash at the barangay hall treasurer's desk.",
+      "Noted — please pay in cash at the barangay hall treasurer's desk.",
     charge: updated,
   });
 });
