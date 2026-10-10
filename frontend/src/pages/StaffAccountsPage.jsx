@@ -82,6 +82,13 @@ function accountStatus(account) {
   return { label: "Active", className: "status-claimed" };
 }
 
+// What the search box looks in, as each row shows it: the @username, the
+// role's label and the email. Not names: this list has none to search.
+function accountMatches(account, term) {
+  return [`@${account.username}`, ROLE_LABELS[account.role] || account.role, account.email]
+    .some((field) => String(field ?? "").toLowerCase().includes(term));
+}
+
 // The staff accounts list: Punong Barangay, Treasurer and Staff accounts,
 // with a button that emails each a new set-password link. For an account
 // still waiting, that is the resend; for an active one it is a password
@@ -90,8 +97,14 @@ function accountStatus(account) {
 // Reuses the match-suggestion row styles: a bordered row whose button wraps
 // under the details on a phone, inside a card the 720px form cap still
 // governs, because there is no table in it. The adjustments for this list are
-// scoped under .staff-accounts in index.css, so the match suggestions above
-// it are untouched.
+// scoped under .staff-accounts and .staff-accounts-page in index.css, so the
+// match suggestions on Resident review are untouched.
+//
+// The search box filters the list already loaded, so typing sends no
+// request. It HIDES the rows that do not match rather than leaving them out:
+// a row left out is mounted again when it matches again, and an open "send a
+// link?" question in it would take the focus from the box, because Cancel
+// has autoFocus.
 function StaffAccountList({ reloadToken }) {
   const { authFetch } = useAuth();
   const [accounts, setAccounts] = useState(null); // null = loading, or failed
@@ -103,6 +116,9 @@ function StaffAccountList({ reloadToken }) {
   // Each row's "Send set-password link" button, so Cancel can hand focus back
   // to it instead of dropping it to the page.
   const sendButtons = useRef({});
+  // The search box's text, as typed.
+  const [query, setQuery] = useState("");
+  const searchBox = useRef(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -179,6 +195,18 @@ function StaffAccountList({ reloadToken }) {
     }
   }
 
+  // "Clear search" goes away once used, so the focus goes back to the box
+  // rather than dropping to the page.
+  function clearSearch() {
+    setQuery("");
+    searchBox.current?.focus();
+  }
+
+  const term = query.trim().toLowerCase();
+  const searching = term !== "";
+  const matches = (account) => !searching || accountMatches(account, term);
+  const shownCount = accounts ? accounts.filter(matches).length : 0;
+
   return (
     <div className="suggest-section staff-accounts">
       <h4>Punong Barangay, Treasurer and Staff accounts</h4>
@@ -196,82 +224,123 @@ function StaffAccountList({ reloadToken }) {
       ) : accounts.length === 0 ? (
         <p className="muted">No staff accounts yet.</p>
       ) : (
-        <ul className="suggestions">
-          {accounts.map((a) => {
-            const status = accountStatus(a);
-            const notice = notices[a.user_id];
-            const sending = sendingId === a.user_id;
-            const confirming = confirmingId === a.user_id;
-            return (
-              <li key={a.user_id} className="suggestion">
-                <div className="suggestion-info">
-                  <strong>
-                    @{a.username}{" "}
-                    <span className="muted">
-                      · {ROLE_LABELS[a.role] || a.role}
-                    </span>
-                  </strong>
-                  <span className="muted">{a.email}</span>
-                  <div className="account-status">
-                    <span className={`badge ${status.className}`}>
-                      {status.label}
-                    </span>
-                    <span className="muted">
-                      {a.last_link_sent_at ? (
-                        <>
-                          Last link sent{" "}
-                          <span className="account-when">
-                            {formatDateTime(a.last_link_sent_at)}
-                          </span>
-                        </>
-                      ) : (
-                        "No set-password link sent"
-                      )}
-                    </span>
-                  </div>
-                  {confirming && (
-                    <div className="alert info">
-                      Send @{a.username} a link to set a new password? Their
-                      current password keeps working until they use the link.
-                      <div className="actions">
-                        <button
-                          className="btn"
-                          type="button"
-                          disabled={sending}
-                          onClick={() => sendLink(a)}
-                        >
-                          Send link
-                        </button>
-                        <button
-                          className="btn secondary"
-                          type="button"
-                          autoFocus
-                          onClick={() => cancelSend(a)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
+        <>
+          <label className="account-search">
+            Search accounts{" "}
+            <span className="hint">(username, role or email)</span>
+            <input
+              ref={searchBox}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          {/* Always in the page, empty until a search is on, so a screen
+              reader hears the count change. */}
+          <p className="muted account-search-status" role="status">
+            {searching
+              ? `Showing ${shownCount} of ${accounts.length} ${
+                  accounts.length === 1 ? "account" : "accounts"
+                }`
+              : ""}
+          </p>
+          {/* Its own words: "No staff accounts yet." is only ever the claim
+              that there are none at all. */}
+          {searching && shownCount === 0 && (
+            <div className="account-search-empty">
+              <p className="muted">No staff accounts match "{query.trim()}".</p>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={clearSearch}
+              >
+                Clear search
+              </button>
+            </div>
+          )}
+          <ul className="suggestions" hidden={shownCount === 0}>
+            {accounts.map((a) => {
+              const status = accountStatus(a);
+              const notice = notices[a.user_id];
+              const sending = sendingId === a.user_id;
+              const confirming = confirmingId === a.user_id;
+              return (
+                <li key={a.user_id} className="suggestion" hidden={!matches(a)}>
+                  <div className="suggestion-info">
+                    {/* Two lines: who it is, with the status; then where the
+                        links go, and when one last went. */}
+                    <div className="account-line">
+                      <strong>
+                        @{a.username}{" "}
+                        <span className="muted">
+                          · {ROLE_LABELS[a.role] || a.role}
+                        </span>
+                      </strong>
+                      <span className={`badge ${status.className}`}>
+                        {status.label}
+                      </span>
                     </div>
-                  )}
-                  {notice && (
-                    <div className={`alert ${notice.type}`}>{notice.text}</div>
-                  )}
-                </div>
-                <button
-                  ref={(el) => {
-                    sendButtons.current[a.user_id] = el;
-                  }}
-                  className="btn secondary"
-                  type="button"
-                  disabled={sending || !a.is_active}
-                  onClick={() => startSend(a)}
-                >
-                  {sending ? "Sending…" : "Send set-password link"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                    <div className="account-line muted">
+                      <span>{a.email}</span>
+                      <span>
+                        ·{" "}
+                        {a.last_link_sent_at ? (
+                          <>
+                            Last link sent{" "}
+                            <span className="account-when">
+                              {formatDateTime(a.last_link_sent_at)}
+                            </span>
+                          </>
+                        ) : (
+                          "No set-password link sent"
+                        )}
+                      </span>
+                    </div>
+                    {confirming && (
+                      <div className="alert info">
+                        Send @{a.username} a link to set a new password? Their
+                        current password keeps working until they use the link.
+                        <div className="actions">
+                          <button
+                            className="btn"
+                            type="button"
+                            disabled={sending}
+                            onClick={() => sendLink(a)}
+                          >
+                            Send link
+                          </button>
+                          <button
+                            className="btn secondary"
+                            type="button"
+                            autoFocus
+                            onClick={() => cancelSend(a)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {notice && (
+                      <div className={`alert ${notice.type}`}>{notice.text}</div>
+                    )}
+                  </div>
+                  <button
+                    ref={(el) => {
+                      sendButtons.current[a.user_id] = el;
+                    }}
+                    className="btn secondary"
+                    type="button"
+                    disabled={sending || !a.is_active}
+                    onClick={() => startSend(a)}
+                  >
+                    {sending ? "Sending…" : "Send set-password link"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );
@@ -319,10 +388,9 @@ export function StaffAccountsSection() {
     <div className="pending-card section-card">
       <div className="pending-head">
         <div>
-          <h3>Staff accounts</h3>
           <p className="muted">
             Create accounts for barangay officials, who set their own password
-            from an emailed link. Residents register themselves.
+            from an emailed link.
           </p>
         </div>
         <button
@@ -481,10 +549,11 @@ export function StaffAccountsSection() {
 
 // The Secretary's Staff accounts page, /secretary/staff-accounts, opened from
 // the account menu. A div, not a <main>: PageLayout already renders the
-// page's one <main className="dash-main"> around this.
+// page's one <main className="dash-main"> around this. staff-accounts-page
+// scopes this page's own rules in index.css.
 export default function StaffAccountsPage() {
   return (
-    <div className="capped-column">
+    <div className="capped-column staff-accounts-page">
       <StaffAccountsSection />
     </div>
   );

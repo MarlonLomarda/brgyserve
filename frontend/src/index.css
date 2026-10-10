@@ -1394,29 +1394,18 @@ button.link-button:hover:not(:disabled) {
   font-style: italic;
 }
 
-/* The staff accounts list on the Secretary's review screen (StaffAccountList
-   in SecretaryReviewPage.jsx). It borrows the match-suggestion row above, so
-   everything here is scoped under .staff-accounts and the match suggestions
-   are untouched.
+/* The staff accounts list on the Staff accounts page (StaffAccountList in
+   StaffAccountsPage.jsx). It borrows the match-suggestion row above, so
+   everything here is scoped under .staff-accounts, the list's own class, and
+   the page's other rules under .staff-accounts-page further down; the match
+   suggestions are untouched.
 
-   Three lines per account, each its own line box 4px apart: @username and
-   role, the email, and the status. A username is up to 100 characters and an
-   email address has no spaces, so both may break anywhere rather than push
-   the row past its card (measured at 390px: 141px past it). */
+   Each line of a row is its own line box, 4px apart. A username is up to 100
+   characters and an email address has no spaces, so both may break anywhere
+   rather than push the row past its card (measured at 390px: 141px past it). */
 .staff-accounts .suggestion-info {
   gap: 4px;
   overflow-wrap: anywhere;
-}
-
-/* The status line is a wrapping flex row, so the pill's own padding is part
-   of the line. As an inline span inside the text, the pill's 4px top padding
-   painted over the email line above it. If "Last link sent ..." does not fit
-   beside the pill it moves under it whole. */
-.staff-accounts .account-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
 }
 
 /* A timestamp never breaks inside itself ("11:16:43" / "AM"). */
@@ -1428,6 +1417,67 @@ button.link-button:hover:not(:disabled) {
    sentence, inside the blue notice. */
 .staff-accounts .alert .actions {
   margin-top: 8px;
+}
+
+/* THE STAFF ACCOUNTS PAGE (pages/StaffAccountsPage.jsx). Scoped under
+   .staff-accounts-page, the class on the page's own wrapper, so none of it
+   reaches another screen. .staff-accounts above was already taken, by the
+   list inside it.
+
+   Two lines per account, each a wrapping flex row, so the status pill's own
+   padding is part of its line: "@username · Role" with the status, then the
+   email with the link status. Where a line does not fit, the pill or the link
+   status moves under the rest whole, and on a phone the button goes under
+   the row as before. */
+.staff-accounts-page .account-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+/* The second line's two parts are joined by "· ", so the gap before the dot
+   is about a space, as on the first line. */
+.staff-accounts-page .account-line.muted {
+  column-gap: 4px;
+}
+
+/* The search HIDES what does not match rather than leaving it out, so a row's
+   open "send a link?" question survives typing (see StaffAccountList). The
+   hidden attribute alone loses to the display: flex on .suggestions and
+   .suggestion, which is why it is restated here. */
+.staff-accounts-page .suggestions[hidden],
+.staff-accounts-page .suggestion[hidden] {
+  display: none;
+}
+
+/* The hint names what can be searched. .hint's own grey is too faint to read
+   on white (2.56:1); this is the .muted grey (4.76:1). */
+.staff-accounts-page .account-search .hint {
+  color: #64748b;
+}
+
+/* "Showing 2 of 6 accounts". The line is always in the page, empty until a
+   search is on, so a screen reader hears the count change; it only takes
+   room when it has something to say. */
+.staff-accounts-page .account-search-status:not(:empty) {
+  margin-bottom: 10px;
+}
+
+/* No match: the sentence and "Clear search" on one line where they fit. A
+   long search breaks rather than push the card wider. */
+.staff-accounts-page .account-search-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  overflow-wrap: anywhere;
+}
+
+/* "New staff account" keeps to one line beside the explanation, which wraps
+   instead. It used to share the squeeze and break as "New staff / account". */
+.staff-accounts-page .pending-head > .btn {
+  white-space: nowrap;
 }
 
 .empty {

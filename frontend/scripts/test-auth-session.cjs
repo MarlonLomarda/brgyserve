@@ -26,6 +26,10 @@
 // Section K is Resident review without the staff section: no staff list, no
 // request for one, and the residents' queue still all there.
 //
+// Section L is the Staff accounts page itself: one heading, two-line rows,
+// the search box, and the create, send and confirmation behaviour the page
+// must keep.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -832,6 +836,239 @@ const root = () => dom.window.document.getElementById('root');
   check('  and the unlinked account\'s match suggestions were asked for',
     net.calls.some((c) => c.url.endsWith('/secretary/pending-residents/31/match-suggestions')));
   await review.unmount();
+
+  // =========================================================================
+  // L. The Staff accounts page: one heading, two-line rows, a search box
+  // =========================================================================
+  // The card no longer repeats the page title, each account is two lines, and
+  // a search box filters the list already loaded, without a request. The
+  // search HIDES rows rather than removing them, so a row's open "send a
+  // link?" question, and the focus, survive typing. A search with no match
+  // says so in its own words and never claims there are no accounts.
+  //
+  // The behaviour around the list is pinned here too: the in-row question,
+  // sending, the 15-minute cooldown, and creating an account by email or with
+  // a temporary password. There were no frontend checks for any of it; these
+  // pass on the page as it was and must still pass on the page as it is.
+  console.log('\n--- Staff accounts page: one heading, two-line rows, search, same actions ---');
+  // The real GET /secretary/staff-accounts row: newest first, every status.
+  const STAFF_LIST = [
+    { user_id: 64, username: 'staff_old', role: 'staff', email: 'old.staff@example.invalid', is_active: false, must_change_password: false, last_link_sent_at: null },
+    { user_id: 63, username: 'staff_mabini', role: 'staff', email: 'Mabini.Office@Example.invalid', is_active: true, must_change_password: false, last_link_sent_at: '2026-10-05T01:30:00Z' },
+    { user_id: 62, username: 'treasurer_dela_cruz', role: 'treasurer', email: 'tdc@example.invalid', is_active: true, must_change_password: true, last_link_sent_at: '2026-10-08T03:00:00Z' },
+    { user_id: 61, username: 'kap_reyes', role: 'punong_barangay', email: 'kap.reyes@example.invalid', is_active: true, must_change_password: false, last_link_sent_at: null },
+  ];
+  const ROLE_TEXT = { punong_barangay: 'Punong Barangay', treasurer: 'Barangay Treasurer', staff: 'Barangay Staff' };
+  const SEARCH = '.staff-accounts input[type="search"]';
+  // The staff list for GETs, `extra` for anything a check posts, section H's
+  // answers for the rest.
+  const staffAnswer = (list, extra = () => undefined) => (url, method) => extra(url, method)
+    ?? (method === 'GET' && url.endsWith('/secretary/staff-accounts') ? { accounts: list } : answer(STAFF_PROFILE)(url, method));
+  const listRows = (page) => page.queryAll('.staff-accounts li.suggestion');
+  const shownRows = (page) => listRows(page).filter((li) => !li.hidden && !li.parentElement?.hidden);
+  const userOf = (li) => (li.querySelector('strong')?.textContent || '').trim().split(/\s/)[0];
+  const shownUsers = (page) => shownRows(page).map(userOf).join(' ');
+  const rowOf = (page, username) => listRows(page).find((li) => userOf(li) === `@${username}`);
+  const sendButtonOf = (page, username) => [...(rowOf(page, username)?.children || [])].find((c) => c.tagName === 'BUTTON');
+  const buttonNamed = (scope, label) => [...scope.querySelectorAll('button')].find((b) => b.textContent === label);
+  const questionIn = (page, username) => rowOf(page, username)?.querySelector('.alert.info') ?? null;
+  const searchStatus = (page) => page.query('.staff-accounts [role="status"]')?.textContent ?? null;
+  const typeSearch = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
+  const yetShown = (page) => page.queryAll('.staff-accounts p').some((p) => p.textContent === 'No staff accounts yet.');
+  const clickIf = async (page, el) => { if (el) await page.click(el); };
+
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST));
+  const staffPage = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await staffPage.settle();
+  const titled = staffPage.queryAll('main.dash-main h1, main.dash-main h2, main.dash-main h3, main.dash-main h4, main.dash-main h5, main.dash-main h6')
+    .filter((h) => h.textContent.trim() === 'Staff accounts');
+  check('"Staff accounts" is a heading once on the page, the page title, not again in the card',
+    titled.length === 1 && !!titled[0].closest('.page-title'), titled.map((h) => h.tagName.toLowerCase()).join(', '));
+  check('  the card\'s explanation reads word for word, "Residents register themselves" is nowhere on the page, '
+      + 'and "New staff account" and the list label stay',
+    staffPage.query('.pending-head p')?.textContent
+      === 'Create accounts for barangay officials, who set their own password from an emailed link.'
+      && !/Residents register themselves/i.test(staffPage.html())
+      && staffPage.query('.pending-head button')?.textContent === 'New staff account'
+      && staffPage.query('.staff-accounts h4')?.textContent === 'Punong Barangay, Treasurer and Staff accounts',
+    JSON.stringify(staffPage.query('.pending-head p')?.textContent ?? null));
+  const twoLines = STAFF_LIST.map((a) => {
+    const lines = [...(rowOf(staffPage, a.username)?.querySelector('.suggestion-info')?.children || [])];
+    return lines.length === 2 && !!lines[0].querySelector('.badge') && lines[0].textContent.startsWith(`@${a.username} · ${ROLE_TEXT[a.role]}`)
+      && lines[1].textContent.includes(a.email)
+      && lines[1].textContent.includes(a.last_link_sent_at ? 'Last link sent' : 'No set-password link sent');
+  });
+  check('each account is two lines: "@username · Role" with its status chip, then the email and the link status',
+    twoLines.every(Boolean), STAFF_LIST.map((a, i) => `${a.username} ${twoLines[i] ? 'ok' : 'not two lines'}`).join(', '));
+
+  const box = staffPage.query(SEARCH);
+  const boxName = box ? (box.labels?.[0]?.textContent || box.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim() : '';
+  const listEl = staffPage.query('.staff-accounts ul');
+  check('a search box with a label sits above the list',
+    !!box && /search/i.test(boxName) && !!listEl && (box.compareDocumentPosition(listEl) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    JSON.stringify(boxName));
+  const callsBeforeTyping = net.calls.length;
+  await typeSearch(staffPage, 'dela_cruz');
+  check('"dela_cruz" finds the account by username, and says "Showing 1 of 4 accounts"',
+    shownUsers(staffPage) === '@treasurer_dela_cruz' && searchStatus(staffPage) === 'Showing 1 of 4 accounts',
+    `${shownUsers(staffPage)} | ${JSON.stringify(searchStatus(staffPage))}`);
+  await typeSearch(staffPage, 'punong');
+  check('  "punong" finds the Punong Barangay by role label', shownUsers(staffPage) === '@kap_reyes', shownUsers(staffPage));
+  await typeSearch(staffPage, 'tdc@');
+  check('  "tdc@" finds the Treasurer by email', shownUsers(staffPage) === '@treasurer_dela_cruz', shownUsers(staffPage));
+  await typeSearch(staffPage, 'MABINI.OFFICE');
+  const upperEmail = shownUsers(staffPage);
+  await typeSearch(staffPage, 'KAP_REYES');
+  check('  and case does not matter: "MABINI.OFFICE" and "KAP_REYES"',
+    upperEmail === '@staff_mabini' && shownUsers(staffPage) === '@kap_reyes', `${upperEmail} / ${shownUsers(staffPage)}`);
+  await typeSearch(staffPage, 'zzz');
+  const noMatch = staffPage.queryAll('.staff-accounts p').find((p) => p.textContent.startsWith('No staff accounts match'));
+  const clearButton = buttonNamed(root(), 'Clear search');
+  check('a search with no match says so in its own words, with "Clear search"',
+    shownRows(staffPage).length === 0 && noMatch?.textContent === 'No staff accounts match "zzz".' && !!clearButton
+      && searchStatus(staffPage) === 'Showing 0 of 4 accounts', JSON.stringify(noMatch?.textContent ?? null));
+  check('  and never as "No staff accounts yet."', !yetShown(staffPage));
+  await clickIf(staffPage, clearButton);
+  check('"Clear search" brings every account back, empties the box and puts the focus in it',
+    shownRows(staffPage).length === 4 && staffPage.query(SEARCH)?.value === '' && staffPage.active() === staffPage.query(SEARCH)
+      && !searchStatus(staffPage), `${shownRows(staffPage).length} shown`);
+  check('no request went out while searching', net.calls.length === callsBeforeTyping,
+    `${net.calls.length - callsBeforeTyping} request(s) while typing`);
+
+  await clickIf(staffPage, sendButtonOf(staffPage, 'kap_reyes'));
+  const openedFirst = !!questionIn(staffPage, 'kap_reyes');
+  const searchBox = staffPage.query(SEARCH);
+  searchBox?.focus();
+  await typeSearch(staffPage, 'kap');
+  const keptWhileShown = !!questionIn(staffPage, 'kap_reyes') && shownUsers(staffPage) === '@kap_reyes';
+  await typeSearch(staffPage, 'zzz');
+  await typeSearch(staffPage, '');
+  check('an open "send a link?" question survives typing, even after its row is filtered out and back',
+    openedFirst && keptWhileShown && !!questionIn(staffPage, 'kap_reyes') && !!searchBox && staffPage.active() === searchBox,
+    `opened ${openedFirst}, kept ${keptWhileShown}, back ${!!questionIn(staffPage, 'kap_reyes')}, `
+      + `focus on ${JSON.stringify(staffPage.active()?.textContent || staffPage.active()?.tagName || null)}`);
+  await staffPage.unmount();
+
+  seedSession(VALID);
+  resetNet(200, staffAnswer([]));
+  const noStaff = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await noStaff.settle();
+  check('with no staff accounts at all: "No staff accounts yet." and no search box',
+    yetShown(noStaff) && !noStaff.query(SEARCH) && !noStaff.query('.staff-accounts [role="status"]'));
+  await noStaff.unmount();
+
+  // The behaviour the layout change must not touch.
+  const sentReply = (url, method) => {
+    const sent = method === 'POST' && url.match(/\/secretary\/staff-accounts\/(\d+)\/send-set-password-link$/);
+    return sent ? { message: 'A set-password link was emailed.', user_id: Number(sent[1]), set_password_email: { ok: true, status: 'SENT' } } : undefined;
+  };
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST, sentReply));
+  const actions = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await actions.settle();
+  let callsSoFar = net.calls.length;
+  await clickIf(actions, sendButtonOf(actions, 'kap_reyes'));
+  check('an active account is asked about first, in its row, and nothing is sent yet',
+    /Send @kap_reyes a link to set a new password\? Their current password keeps working until they use the link\./
+      .test(questionIn(actions, 'kap_reyes')?.textContent || '') && net.calls.length === callsSoFar,
+    `${net.calls.length - callsSoFar} request(s)`);
+  check('  with the focus on Cancel', actions.active()?.textContent === 'Cancel');
+  await clickIf(actions, questionIn(actions, 'kap_reyes') && buttonNamed(questionIn(actions, 'kap_reyes'), 'Cancel'));
+  check('  Cancel closes it and hands the focus back to that row\'s button',
+    !questionIn(actions, 'kap_reyes') && !!sendButtonOf(actions, 'kap_reyes') && actions.active() === sendButtonOf(actions, 'kap_reyes'));
+  await clickIf(actions, sendButtonOf(actions, 'kap_reyes'));
+  callsSoFar = net.calls.length;
+  await clickIf(actions, questionIn(actions, 'kap_reyes') && buttonNamed(questionIn(actions, 'kap_reyes'), 'Send link'));
+  await actions.settle();
+  const sendCalls = net.calls.slice(callsSoFar);
+  check('  "Send link" posts once, shows the email result in the row, and reloads the list',
+    sendCalls.length === 2 && sendCalls[0].method === 'POST' && sendCalls[0].url.endsWith('/secretary/staff-accounts/61/send-set-password-link')
+      && sendCalls[1].method === 'GET' && sendCalls[1].url.endsWith('/secretary/staff-accounts')
+      && rowOf(actions, 'kap_reyes')?.querySelector('.alert.success')?.textContent
+        === 'Set-password link emailed to kap.reyes@example.invalid. It works once and lasts 72 hours.',
+    sendCalls.map((c) => `${c.method} ${c.url.replace(/^https?:\/\/[^/]+\/api/, '')}`).join(', '));
+  callsSoFar = net.calls.length;
+  await clickIf(actions, sendButtonOf(actions, 'treasurer_dela_cruz'));
+  await actions.settle();
+  check('an account still waiting for its password is sent the link straight away, with no question',
+    !questionIn(actions, 'treasurer_dela_cruz') && net.calls[callsSoFar]?.method === 'POST'
+      && !!net.calls[callsSoFar]?.url.endsWith('/secretary/staff-accounts/62/send-set-password-link'));
+  check('an inactive account\'s button is disabled', sendButtonOf(actions, 'staff_old')?.disabled === true);
+  await actions.unmount();
+
+  const COOLDOWN = {
+    error: 'A set-password link was sent to @kap_reyes less than 15 minutes ago. Ask them to check their inbox and spam folder, or send another in 12 minutes.',
+    code: 'SET_PASSWORD_LINK_COOLDOWN',
+    retry_after_minutes: 12,
+  };
+  seedSession(VALID);
+  resetNet(200);
+  net.hold = true;
+  const cooldown = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  release(0, 200, { accounts: STAFF_LIST });
+  await cooldown.settle();
+  await clickIf(cooldown, sendButtonOf(cooldown, 'kap_reyes'));
+  await clickIf(cooldown, questionIn(cooldown, 'kap_reyes') && buttonNamed(questionIn(cooldown, 'kap_reyes'), 'Send link'));
+  release(1, 429, COOLDOWN);
+  await cooldown.settle();
+  check('the 15-minute cooldown shows the server\'s own sentence in the row, as information, not an error',
+    rowOf(cooldown, 'kap_reyes')?.querySelector('.alert.info')?.textContent === COOLDOWN.error
+      && !rowOf(cooldown, 'kap_reyes')?.querySelector('.alert.error'));
+  await cooldown.unmount();
+
+  const CREATED_BY_EMAIL = {
+    message: 'Account created. A set-password link was emailed to the address you entered. It works once and expires in 72 hours.',
+    user: { user_id: 71, username: 'new_official', email: 'new.official@example.invalid', role: 'staff' },
+    set_password_email: { ok: true, status: 'SENT' },
+  };
+  const CREATED_WITH_TEMP = {
+    message: 'Account created. Hand over the temporary password below; it must be changed at first sign-in.',
+    user: { user_id: 72, username: 'temp_official', email: 'temp.official@example.invalid', role: 'treasurer' },
+    temporary_password: 'Fixture-Temp-Pass-0',
+  };
+  let createdReply = CREATED_BY_EMAIL;
+  const fillAccount = async (page, username, email) => {
+    for (const [name, value] of [['first_name', 'New'], ['last_name', 'Official'], ['email', email], ['username', username]]) {
+      if (page.query(`input[name="${name}"]`)) await page.fill(`input[name="${name}"]`, value);
+    }
+  };
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST, (url, method) => (method === 'POST' && url.endsWith('/secretary/accounts') ? createdReply : undefined)));
+  const create = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await create.settle();
+  await clickIf(create, buttonNamed(root(), 'New staff account'));
+  await fillAccount(create, 'new_official', 'new.official@example.invalid');
+  callsSoFar = net.calls.length;
+  if (create.query('form')) await create.submit();
+  await create.settle();
+  const createCall = net.calls[callsSoFar];
+  check('creating an account by email posts the form once with delivery "email", and shows the email result',
+    createCall?.method === 'POST' && createCall.url.endsWith('/secretary/accounts') && sentBody(createCall)?.delivery === 'email'
+      && sentBody(createCall)?.username === 'new_official'
+      && !!create.query('.created-panel .alert.success')?.textContent
+        .startsWith('Account created. A set-password link was emailed to new.official@example.invalid.'),
+    JSON.stringify(create.query('.created-panel .alert')?.textContent ?? null));
+  check('  and the list reloads', net.calls.slice(callsSoFar + 1).some((c) => c.method === 'GET' && c.url.endsWith('/secretary/staff-accounts')));
+  createdReply = CREATED_WITH_TEMP;
+  await clickIf(create, buttonNamed(root(), 'Create another'));
+  await fillAccount(create, 'temp_official', 'temp.official@example.invalid');
+  const delivery = create.query('select[name="delivery"]');
+  if (delivery) {
+    delivery.value = 'temporary_password';
+    delivery.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  }
+  await create.settle();
+  check('  choosing the temporary-password fallback shows its warning first',
+    /Use this only if email is not working\./.test(create.query('.account-form .alert.info')?.textContent || ''));
+  callsSoFar = net.calls.length;
+  if (create.query('form')) await create.submit();
+  await create.settle();
+  check('a temporary password is shown once, in its own panel, when the server sends one',
+    sentBody(net.calls[callsSoFar])?.delivery === 'temporary_password'
+      && create.queryAll('.created-panel dt').some((d) => d.textContent === 'Temporary password (shown only once)')
+      && create.query('.created-panel code.temp-pass')?.textContent === CREATED_WITH_TEMP.temporary_password);
+  await create.unmount();
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
