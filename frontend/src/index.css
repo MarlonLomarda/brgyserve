@@ -1646,8 +1646,7 @@ button.link-button:hover:not(:disabled) {
 /* My requests, My rentals and Payments only: no 200px floor. Their actions
    cell only ever holds ONE button — "Pay ▾" (or "Cancel" on a pending
    request) on the first two, and "View" on Payments since 9 Oct 2026 — so
-   the shared floor above only took width from the text columns; the
-   reference form is wider than 200 on its own and is unaffected. Measured:
+   the shared floor above only took width from the text columns. Measured:
    the column goes from 200 to about 105px (My requests), 99px (My rentals)
    and 93.5px (Payments). My requests' rows total 119px shorter at 1280; My
    rentals stops scrolling sideways at 641-700 and its rows total 76-169px
@@ -1663,9 +1662,10 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* The resident's "Pay ▾" menu (components/PayMenu.jsx) on My rentals and My
-   requests: one button in the actions cell in place of three. The wrapper is
-   the cell's direct child, so it takes the inline-box margins above and the
-   button inside it sits exactly where a lone button would.
+   requests: one button in the actions cell where three buttons used to sit,
+   holding two items since 10 Oct 2026. The wrapper is the cell's direct
+   child, so it takes the inline-box margins above and the button inside it
+   sits exactly where a lone button would.
 
    Above 640px the list FLOATS. It is position: fixed and the component places
    it from the button's rectangle, because the table card is overflow-x: auto
@@ -1712,7 +1712,7 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* The gateway option leads and reads strongest, as the primary button did,
-   so the three stay clearly distinguished. */
+   so the two stay clearly distinguished. */
 .pay-menu .pay-menu-online {
   font-weight: 600;
   color: #1d4ed8;

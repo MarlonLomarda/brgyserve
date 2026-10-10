@@ -2,9 +2,9 @@
 //
 // Scope: GCash through PayMongo CHECKOUT SESSIONS — PayMongo hosts the payment
 // page, so no card/e-wallet credentials ever touch BrgyServe. This is an
-// ADDITIONAL payment option; the manual flow (cash onsite, or a resident-
-// declared GCash reference verified by the Treasurer) is untouched and remains
-// the fallback.
+// ADDITIONAL payment option; the manual flow (cash onsite, or a GCash payment
+// the Treasurer records by its reference) is untouched and remains the
+// fallback.
 //
 // PAYMONGO_SECRET_KEY is server-only: it is read from the environment here,
 // never logged, and never sent to the frontend. The frontend only ever

@@ -82,8 +82,8 @@ async function attachHouseholdHeads(charges) {
 }
 
 // GET /api/charges?status=UNPAID|PAID|VOID|all — defaults to UNPAID (the
-// verification queue: plain unpaid charges plus those with a submitted-but-
-// unverified GCash reference, which stay UNPAID until verified). Newest
+// verification queue: every unpaid charge, including any that still carry a
+// GCash reference a resident declared before 10 Oct 2026). Newest
 // first, under every filter, so the most recent transactions are at the top
 // of the Payments page; charge_id breaks a tie on created_at, newest first.
 router.get('/', async (req, res) => {
@@ -116,7 +116,9 @@ router.get('/', async (req, res) => {
 // row (the verified financial record, with the verifier in
 // received_by_user_id) and mark the charge PAID. payment_method/reference_no
 // default from the resident's declaration but the verifier can override
-// (e.g. resident declared GCash but showed up with cash).
+// (e.g. a resident who declared onsite but paid by GCash, whose reference the
+// verifier types). A declared GCash reference exists only on charges from
+// before 10 Oct 2026, when residents could still submit one.
 router.post('/:id/verify', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {

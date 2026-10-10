@@ -19,8 +19,9 @@ const {
 const router = express.Router();
 
 // The GCash gateway is an ADDITIONAL option on top of the manual flow, not a
-// replacement: a resident can still pay cash at the barangay hall, or declare
-// a GCash reference for the Treasurer to verify. Nothing here changes the
+// replacement: a resident can still pay cash at the barangay hall, and the
+// Treasurer can still record a GCash payment by its reference; residents
+// stopped declaring references on 10 Oct 2026. Nothing here changes the
 // charges/payments model — a gateway payment produces exactly the same kind of
 // `payments` row a verified manual payment does, so it lands on the Treasurer's
 // normal screen. The only difference is received_by_user_id, which stays NULL

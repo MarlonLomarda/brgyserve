@@ -1094,3 +1094,21 @@ The `diffFields` comment, which called an empty result "an honest compared, no d
 - **Measured** in headless Chrome with the real stylesheet: a row is 71px on desktop instead of 96; a row still waiting for its password is 94px, because its status chip wraps under the name. No horizontal scroll at 390px.
 - **The sidebar:** with 13 items it fits a 768px-high viewport with 28.4px to spare, and a 14th item would use all of it. It scrolls below a 713.59px viewport, and a browser on a 1366×768 laptop leaves less than that once its own toolbars are counted (estimated, not measured), so there it already scrolls. That is why the link went into the account menu.
 - **Then (batch 4):** CLAUDE.md, this entry, and the stale comments in `index.css` and `usernamePolicy.js`.
+
+### Resident GCash reference option removed, 10 Oct 2026
+
+- **Why:** at the Chapter 3 check a panelist suggested removing "I already paid via GCash" from the resident's Pay ▾ menu, since "Pay online via GCash" and "Pay onsite" already cover paying.
+- **Option B of three.** A removed only the menu item and left the API taking `gcash`, so a tab opened before the deploy or a direct call could still declare one. C also cleared the old declarations by SQL, which would erase the only record of what a resident claimed (the activity log keeps the method, never the reference). B removes the item and refuses `gcash` on the server.
+- **What changed:**
+  - `PayMenu.jsx` has two items, and My requests and My rentals lost the inline reference form with its `payTarget` and `gcashRef` state. The arrow keys still wrap: the removed item held the last of the menu's three fixed ref slots.
+  - Both `POST /mine/:id/pay` routes accept only `onsite`. `gcash` gets a 400, "Submitting a GCash reference is no longer available. Choose Pay online via GCash, or pay at the Barangay Office."; a missing or unknown method gets "method must be 'onsite'". The update still writes `onsite`, a null reference and the time, guarded by `status = 'UNPAID'`, so Pay onsite still clears an old reference.
+  - Staff recording is unchanged: `/charges/:id/verify` takes the method and reference the Treasurer enters, so a GCash payment made outside the gateway is still recorded at the office.
+  - The landing page FAQ told residents to "enter the reference number from your receipt"; it now says what the Help Center says: at the Barangay Office, or online by GCash.
+  - Stale comments in both routes, `constants/charges.js`, `payments.js`, `services/paymongo.js`, `charges.js`, `PaymentsPage.jsx` and `index.css`; CLAUDE.md; Tables 15 and 16 in the schema doc. No migration.
+- **Legacy rows kept:** charges 35 and 141 (RENTAL, UNPAID, no checkout session) still hold a GCash reference. They were left alone, and so were the confirm boxes before Pay onsite and Pay online, the row text, the "GCash ref" marker and the panel rows, until no unpaid charge holds one.
+- **Dropped:** the double-payment guard planned for `/gcash/checkout`, since no new GCash reference can exist. **Deferred to their own commit:** the two checkout fixes found in the same diagnosis, a settle failure swallowed by `catch {}` that opens a new checkout, and a session save that never checks a row matched.
+- **Verified:**
+  - `gateway:test` 24 → 54: section 6 runs both declare handlers from `router.stack` against in-memory tables, with a dead Supabase address set before `.env` loads and `fetch` stubbed. On the old code 8 checks were red, all in its cases 1 and 2 (`gcash` with and without a reference).
+  - The scratch B3 harness: 44 → 32 cases, now judged against expected results, plus 36 keyboard checks on the two-item menu at 1280 and 390, all passing.
+  - Unchanged: `activity:test` 76, `roles:test` 158, `test:auth` 138; lint 7 warnings; the build is clean. `reset:test` was not run: it writes to the live database.
+  - Three deliberate breaks each turned checks red and were restored by checksum: a route accepting `gcash` again (5 red), onsite not clearing the reference (1 red), the third menu item put back (16 red keyboard checks).

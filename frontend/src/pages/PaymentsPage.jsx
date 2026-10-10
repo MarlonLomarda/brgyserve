@@ -97,9 +97,10 @@ function chargeSubject(charge) {
 // The Declared column: one short label, so the queue still shows at a glance
 // what each charge is waiting on. The full method, reference and times are in
 // the View panel. The first that applies wins: a payment PayMongo confirmed; a
-// GCash reference to check against GCash (the declare routes refuse a GCash
-// declaration without one); an online checkout started but not confirmed,
-// which is what Re-check is for; a resident who said they would pay onsite.
+// GCash reference to check against GCash (only on a charge declared before
+// 10 Oct 2026: the declare routes now refuse every GCash declaration); an
+// online checkout started but not confirmed, which is what Re-check is for; a
+// resident who said they would pay onsite.
 function declaredMarker(c) {
   if (c.paymongo_payment_id) return "Paid online";
   if (c.declared_method === "gcash") return "GCash ref";
