@@ -406,11 +406,22 @@ function ChargePanel({
   );
 }
 
+// Why a load failed, for "Could not load the charges: …". The server's own
+// message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function PaymentsPage() {
   const { authFetch } = useAuth();
   const [filter, setFilter] = useState("UNPAID");
-  const [charges, setCharges] = useState(null); // null = loading
-  const [listError, setListError] = useState("");
+  const [charges, setCharges] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
   const [selected, setSelected] = useState(null); // charge open in the View panel
   const [recheckingId, setRecheckingId] = useState(null);
@@ -423,6 +434,8 @@ export default function PaymentsPage() {
   // Set when the panel closes because its charge was just paid: focus then
   // goes to the message rather than back to the View button.
   const toMessageRef = useRef(false);
+  // Numbers each load, so only the newest one may change the page.
+  const loadSeq = useRef(0);
 
   // Safety net for the GCash gateway: PayMongo disables a webhook endpoint
   // after repeated delivery failures and never replays what was missed, so a
@@ -448,14 +461,23 @@ export default function PaymentsPage() {
     }
   }
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the page said "0 charges" and "No charges awaiting
+  // verification" while it knew nothing, which reads as nobody owing
+  // anything. charges now stays null and the error takes the place of the
+  // rows, the count and the empty text (CLAUDE.md: a list that failed to
+  // load). Every load starts from the loading state, and an older answer that
+  // arrives late (the status changed twice, Refresh pressed during a reload)
+  // is dropped rather than shown over a newer one.
   const load = useCallback(async () => {
-    setListError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setCharges(null);
     try {
       const data = await authFetch(`/charges?status=${filter}`);
-      setCharges(data.charges);
+      if (seq === loadSeq.current) setCharges(data.charges);
     } catch (err) {
-      setListError(err.message);
-      setCharges([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
   }, [authFetch, filter]);
 
@@ -521,16 +543,20 @@ export default function PaymentsPage() {
   // The panel shows the charge as it was when View was pressed. When a reload
   // shows that charge is no longer unpaid — Re-check has just settled it, or
   // found it already paid — the panel has nothing left to offer, so it closes
-  // and focus goes to the message, as after Record. It waits until nothing is
-  // in flight, because handleRecheck reloads before it clears its busy state.
+  // and focus goes to the message, as after Record. A reload that FAILS closes
+  // it too, so the load error behind it shows: Re-check reloads only once it
+  // has found the charge paid. It waits until nothing is in flight, because
+  // handleRecheck reloads before it clears its busy state, and while a load is
+  // still out.
   useEffect(() => {
-    if (!selected || selected.status !== "UNPAID" || busy || !charges) return;
-    const now = charges.find((c) => c.charge_id === selected.charge_id);
+    if (!selected || selected.status !== "UNPAID" || busy) return;
+    if (charges === null && !loadError) return;
+    const now = charges?.find((c) => c.charge_id === selected.charge_id);
     if (!now || now.status !== "UNPAID") {
       toMessageRef.current = true;
       setSelected(null);
     }
-  }, [charges, selected, busy]);
+  }, [charges, loadError, selected, busy]);
 
   // Focus to the message after a payment: the row that held the View button
   // has usually left the list (Needs verification shows unpaid charges only),
@@ -548,8 +574,6 @@ export default function PaymentsPage() {
           {flash.text}
         </div>
       )}
-      {listError && <div className="alert error">{listError}</div>}
-
       <div className="list-head">
         <h2>
           {charges === null
@@ -570,7 +594,19 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {charges === null ? (
+      {/* The error first, then loading, then empty, then rows: a load that
+          failed shows neither a count nor the empty text. Try again repeats
+          the same load, as Refresh does. The markup is Staff accounts'. */}
+      {loadError ? (
+        <>
+          <div className="alert error" role="alert">
+            Could not load the charges: {loadError}
+          </div>
+          <button type="button" className="btn secondary" onClick={load}>
+            Try again
+          </button>
+        </>
+      ) : charges === null ? (
         <p className="muted">Loading charges…</p>
       ) : charges.length === 0 ? (
         <div className="empty">

@@ -30,6 +30,11 @@
 // the search box, and the create, send and confirmation behaviour the page
 // must keep.
 //
+// Section M is the Payments page's charges list: a load that fails says so,
+// with Try again, and never shows an empty list; every way of loading again
+// starts from the loading state; and an older answer that arrives late cannot
+// replace a newer one.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -1069,6 +1074,263 @@ const root = () => dom.window.document.getElementById('root');
       && create.queryAll('.created-panel dt').some((d) => d.textContent === 'Temporary password (shown only once)')
       && create.query('.created-panel code.temp-pass')?.textContent === CREATED_WITH_TEMP.temporary_password);
   await create.unmount();
+
+  // =========================================================================
+  // M. Payments: a failed load is an error, never an empty list
+  // =========================================================================
+  // A charges request that failed (a server asleep, a dropped connection, a
+  // 500) used to leave "0 charges" and "No charges awaiting verification" on
+  // the screen, which reads as nobody owing anything. A failed load must say
+  // so, with Try again, and show no rows, no count and no empty text. Every
+  // request below is answered by the fetch stub, the Record and Re-check
+  // POSTs included, so nothing reaches a server.
+  console.log('\n--- Payments: a failed load is an error, never an empty list ---');
+  {
+    const LIST = '/charges?status=';
+    const isList = (call) => call?.method === 'GET' && call.url.includes(LIST);
+    // A charge in the list's real shape: a document fee, named by its resident.
+    const payCharge = (id, first, last, documentType, extra = {}) => ({
+      charge_id: id, charge_type: 'DOCUMENT', amount: 100, status: 'UNPAID', created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: { user_id: 900 + id, username: `res_${id}`, profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      document_requests: { request_id: 700 + id, purpose: 'Employment', status: 'approved', document_types: { name: documentType },
+        resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null } },
+      rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    const UNPAID_TWO = [
+      payCharge(41, 'Ana', 'Cruz', 'Barangay Clearance', { paymongo_session_id: 'cs_test_41' }),
+      payCharge(42, 'Ben', 'Reyes', 'Certificate of Residency'),
+    ];
+    const PAID_TWO = [
+      payCharge(43, 'Carla', 'Santos', 'Barangay Clearance', { status: 'PAID' }),
+      payCharge(44, 'Dino', 'Tan', 'Certificate of Residency', { status: 'PAID' }),
+    ];
+    const VOID_ONE = [payCharge(45, 'Elsa', 'Uy', 'Barangay Clearance', { status: 'VOID' })];
+    const listBody = (charges) => ({ charges, total: charges.length });
+    const listOf = (charges) => (url) => (url.includes(LIST) ? listBody(charges) : undefined);
+    const openPayments = async () => {
+      const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+      await page.settle();
+      return page;
+    };
+    const viewButton = (page, name) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${name}:`));
+    // The status dropdown, changed the way the Staff accounts form's is.
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // What the list area says, read the way a person would.
+    const listView = (page) => {
+      const text = root().textContent;
+      return {
+        heading: page.query('.list-head h2')?.textContent ?? null,
+        error: page.queryAll('[role="alert"]').map((el) => el.textContent)
+          .find((t) => t.startsWith('Could not load the charges')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.payments-table tbody tr').map((tr) => tr.querySelector('strong')?.textContent),
+        zero: text.includes('0 charges'),
+        empty: /No charges (awaiting verification|here)/.test(text),
+        loading: text.includes('Loading charges…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing to
+    // verify": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Charges' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Charges' && v.rows.length === 0
+      && !v.zero && !v.empty;
+    const said = (v) => JSON.stringify(v);
+    const callsSaid = () => net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`).join(', ');
+    let paySoFar;
+
+    // a. A failure with the server's own message.
+    seedSession(VALID);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    const down = await openPayments();
+    const downView = listView(down);
+    check('a failed load shows "Could not load the charges: Network down", with a Try again button',
+      downView.error === 'Could not load the charges: Network down' && downView.tryAgain, said(downView));
+    check('  and no rows, no "0 charges", no "No charges awaiting verification": it cannot read as nothing to verify',
+      errorOnly(downView), said(downView));
+    await down.unmount();
+
+    // b. No message from the server: unreachable, or an answer without one.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const unreachable = await openPayments();
+    const unreachableView = listView(unreachable);
+    check('a server that cannot be reached gets the plain fallback, "Could not load the charges: the server did not respond"',
+      unreachableView.error === 'Could not load the charges: the server did not respond' && errorOnly(unreachableView)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachableView));
+    await unreachable.unmount();
+
+    seedSession(VALID);
+    resetNet(502);
+    const bare = await openPayments();
+    const bareView = listView(bare);
+    check('  so does an error answer with no message in it, never "Request failed (502)"',
+      bareView.error === 'Could not load the charges: the server did not respond' && errorOnly(bareView)
+        && !/Request failed/.test(root().textContent), said(bareView));
+    await bare.unmount();
+
+    // c. Try again repeats the SAME load: here the Paid list, which failed.
+    seedSession(VALID);
+    resetNet(200, listOf(UNPAID_TWO));
+    const again = await openPayments();
+    net.fail = true;
+    await choose(again, 'PAID');
+    const failedPaid = listView(again);
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await clickIf(again, tryAgainButton(again));
+    const retrying = listView(again);
+    const retryCall = net.calls[paySoFar];
+    release(0, 200, listBody(PAID_TWO));
+    await again.settle();
+    const retried = listView(again);
+    check('Try again repeats the same load (status=PAID), showing the loading state, not the error, while it is out',
+      errorOnly(failedPaid) && net.calls.length === paySoFar + 1 && isList(retryCall)
+        && retryCall.url.endsWith('status=PAID') && loadingOnly(retrying),
+      `${said(failedPaid)} then ${retryCall?.url ?? 'no request'} ${said(retrying)}`);
+    check('  and when it answers with 2 charges the error is gone: "2 charges" and both rows',
+      !retried.error && !retried.tryAgain && retried.heading === '2 charges'
+        && retried.rows.join('|') === 'Carla Santos|Dino Tan', said(retried));
+    await again.unmount();
+
+    // d. Zero charges, loaded successfully, is a real empty state.
+    seedSession(VALID);
+    resetNet(200, listOf([]));
+    const none = await openPayments();
+    const noneView = listView(none);
+    check('a successful load of no charges still shows "0 charges" and "No charges awaiting verification.", and no error',
+      noneView.heading === '0 charges' && /No charges awaiting verification\./.test(root().textContent)
+        && !noneView.error && !noneView.tryAgain && noneView.rows.length === 0, said(noneView));
+    await none.unmount();
+
+    // e. Changing the status after a failure, and Refresh after one.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const switched = await openPayments();
+    const beforeSwitch = listView(switched);
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await choose(switched, 'PAID');
+    const switching = listView(switched);
+    const switchCall = net.calls[paySoFar];
+    release(0, 200, listBody(PAID_TWO));
+    await switched.settle();
+    const switchedView = listView(switched);
+    check('changing the status after a failure loads that status and clears the error: the loading state shows',
+      errorOnly(beforeSwitch) && isList(switchCall) && switchCall.url.endsWith('status=PAID') && loadingOnly(switching),
+      `${switchCall?.url ?? 'no request'} ${said(switching)}`);
+    check('  and its answer replaces it', switchedView.heading === '2 charges' && !switchedView.error
+      && switchedView.rows.join('|') === 'Carla Santos|Dino Tan', said(switchedView));
+    await switched.unmount();
+
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const refreshed = await openPayments();
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await clickIf(refreshed, buttonNamed(root(), 'Refresh'));
+    const refreshing = listView(refreshed);
+    const refreshCall = net.calls[paySoFar];
+    release(0, 200, listBody(UNPAID_TWO));
+    await refreshed.settle();
+    const refreshedView = listView(refreshed);
+    check('Refresh after a failure clears the error, shows the loading state, then the list',
+      isList(refreshCall) && refreshCall.url.endsWith('status=UNPAID') && loadingOnly(refreshing)
+        && refreshedView.heading === '2 charges' && !refreshedView.error, `${said(refreshing)} then ${said(refreshedView)}`);
+    await refreshed.unmount();
+
+    // f. A reload that fails after Record payment, then after Re-check. The
+    // stub answers the POST and makes the reload after it fail.
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'GET' && url.includes(LIST)) return listBody(UNPAID_TWO);
+      if (method === 'POST' && url.endsWith('/charges/41/verify')) {
+        net.fail = true;
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 77 } };
+      }
+      return undefined;
+    });
+    const recorded = await openPayments();
+    await clickIf(recorded, viewButton(recorded, 'Ana Cruz'));
+    if (recorded.query('form')?.closest('.pay-panel')) await recorded.submit();
+    await recorded.settle();
+    const recordedView = listView(recorded);
+    check('a reload that fails after Record payment shows the load error: not the old list, not "0 charges"',
+      errorOnly(recordedView) && !recorded.query('.pay-panel'), said(recordedView));
+    check('  the Record message above it is unchanged, and the stub answered every request',
+      recorded.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #77)'
+        && callsSaid() === 'GET /charges?status=UNPAID, POST /charges/41/verify, GET /charges?status=UNPAID',
+      `${JSON.stringify(recorded.query('.alert.success')?.textContent ?? null)}; ${callsSaid()}`);
+    await recorded.unmount();
+
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'GET' && url.includes(LIST)) return listBody(UNPAID_TWO);
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/41')) {
+        net.fail = true;
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return undefined;
+    });
+    const rechecked = await openPayments();
+    await clickIf(rechecked, viewButton(rechecked, 'Ana Cruz'));
+    await clickIf(rechecked, buttonNamed(root(), 'Re-check with PayMongo'));
+    await rechecked.settle();
+    const recheckedView = listView(rechecked);
+    check('a reload that fails after Re-check shows the load error, and the panel closes as before',
+      errorOnly(recheckedView) && !rechecked.query('.pay-panel'), said(recheckedView));
+    check('  the Re-check message above it is unchanged, and the stub answered every request',
+      rechecked.query('.alert.success')?.textContent === 'PayMongo confirmed the payment. The charge is now paid.'
+        && callsSaid() === 'GET /charges?status=UNPAID, POST /payments/gcash/reconcile/41, GET /charges?status=UNPAID',
+      `${JSON.stringify(rechecked.query('.alert.success')?.textContent ?? null)}; ${callsSaid()}`);
+    await rechecked.unmount();
+
+    // g. An older answer that arrives last must not replace a newer one.
+    seedSession(VALID);
+    resetNet(200);
+    net.hold = true;
+    const raced = await openPayments();
+    release(0, 200, listBody(UNPAID_TWO));
+    await raced.settle();
+    await choose(raced, 'PAID');
+    await choose(raced, 'VOID');
+    release(2, 200, listBody(VOID_ONE));
+    await raced.settle();
+    release(1, 200, listBody(PAID_TWO));
+    await raced.settle();
+    const racedView = listView(raced);
+    check('an older answer that arrives last cannot replace the newer list: Void keeps its one charge',
+      raced.query('.list-head select')?.value === 'VOID' && racedView.heading === '1 charge'
+        && racedView.rows.join('|') === 'Elsa Uy', said(racedView));
+    await choose(raced, 'all');
+    await choose(raced, 'UNPAID');
+    release(4, 200, listBody(UNPAID_TWO));
+    await raced.settle();
+    release(3, 500, { error: 'boom' });
+    await raced.settle();
+    const racedLater = listView(raced);
+    check('  nor can an older load that fails last put its error over the newer list',
+      racedLater.heading === '2 charges' && racedLater.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedLater.error,
+      said(racedLater));
+    await raced.unmount();
+  }
 
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
