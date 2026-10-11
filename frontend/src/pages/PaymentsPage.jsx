@@ -9,7 +9,12 @@ import {
   METHOD_LABELS,
 } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
-import { isAutomatic, latestPayment, methodOf } from "../utils/chargeMethod";
+import {
+  isAutomatic,
+  isZeroFee,
+  latestPayment,
+  methodOf,
+} from "../utils/chargeMethod";
 
 // Payment verification queue for ALL charge types (document fees since stage
 // 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
@@ -298,9 +303,10 @@ function ChargePanel({
                 payload (the latest row, as the Method column reads it): when
                 it was paid, in Manila time; the column's Method label; the
                 reference; and who recorded it. A paid charge with no payment
-                row says so instead, and a void one says "Void.". What the
-                resident declared still shows below, on any charge that has
-                a declaration. */}
+                row says why instead: no payment was needed when its amount
+                is 0, otherwise no record is on file. A void one says
+                "Void.". What the resident declared still shows below, on any
+                charge that has a declaration. */}
             <dl className="pay-panel-list">
               <dt>For</dt>
               <dd>{subject.main}</dd>
@@ -341,7 +347,11 @@ function ChargePanel({
               {paid && !payment && (
                 <>
                   <dt>Payment</dt>
-                  <dd>No payment record on file.</dd>
+                  <dd>
+                    {isZeroFee(c)
+                      ? "No payment needed (no fee)."
+                      : "No payment record on file."}
+                  </dd>
                 </>
               )}
               {!unpaid && !paid && (

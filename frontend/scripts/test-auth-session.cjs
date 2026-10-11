@@ -1343,13 +1343,16 @@ const root = () => dom.window.document.getElementById('root');
   // or that a checkout had started, which says nothing about how a paid charge
   // was actually paid. It now reads the charge's payment record: "Paid online"
   // for a payment nobody received, which only PayMongo makes; "Cash" or
-  // "GCash" for one a staff member recorded; "No record" for a paid charge
-  // with no payment row. An unpaid or void charge shows "Online pending" while
-  // a PayMongo checkout is open, otherwise a dash. methodOf is checked on its
-  // own, case by case, then through the real page, whose View panel shows the
-  // record itself. The clock is UTC for this section, so "Paid on" must be
-  // Manila time by the page's own doing, not because this machine is in
-  // Manila. Every request is answered by the fetch stub.
+  // "GCash" for one a staff member recorded. A paid charge with no payment row
+  // is "No fee" when its amount is 0, because approval marks a PHP 0 charge
+  // paid without one, and "No record" otherwise. The amount may arrive as a
+  // number or a numeric string, and a missing, null or blank one is never 0.
+  // An unpaid or void charge shows "Online pending" while a PayMongo checkout
+  // is open, otherwise a dash. methodOf is checked on its own, case by case,
+  // then through the real page, whose View panel shows the record itself. The
+  // clock is UTC for this section, so "Paid on" must be Manila time by the
+  // page's own doing, not because this machine is in Manila. Every request is
+  // answered by the fetch stub.
   console.log('\n--- Payments: the Method column says how each paid charge was paid ---');
   {
     const previousTZ = process.env.TZ;
@@ -1376,6 +1379,11 @@ const root = () => dom.window.document.getElementById('root');
       rental_requests: null, events: null, household_records: null, payments: [],
       ...extra,
     });
+    // The same charge with no amount key at all.
+    const withoutAmount = (c) => {
+      delete c.amount;
+      return c;
+    };
     // Every case, with the label it must get, written by hand.
     const CASES = [
       { name: 'a PayMongo payment (no recorder)', want: 'Paid online', c: charge(51, 'Lorna', 'Abad', {
@@ -1387,7 +1395,7 @@ const root = () => dom.window.document.getElementById('root');
       { name: 'GCash recorded by a staff member', want: 'GCash', c: charge(53, 'Nena', 'Cortez', {
         declared_method: 'gcash', declared_reference: '1029384756', declared_at: '2026-10-05T04:00:00+00:00',
         payments: [payment(503, 'gcash', 3, NO_PROFILE, '2026-10-07T01:05:00+00:00', '1029384756')] }) },
-      { name: 'PAID with no payment row', want: 'No record', c: charge(54, 'Oscar', 'Dizon') },
+      { name: 'PAID with no payment row, amount 100', want: 'No record', c: charge(54, 'Oscar', 'Dizon') },
       { name: 'UNPAID with an open PayMongo session', want: 'Online pending', c: charge(55, 'Pilar', 'Estrada', {
         status: 'UNPAID', paymongo_session_id: 'cs_test_55' }) },
       { name: 'UNPAID with no session', want: '—', c: charge(56, 'Quintin', 'Fajardo', { status: 'UNPAID' }) },
@@ -1407,6 +1415,28 @@ const root = () => dom.window.document.getElementById('root');
         payments: [payment(620, 'cheque', 12, TREASURER, '2026-10-06T01:00:00+00:00', 'CHK-0042')] }) },
       { name: 'an empty method, never blank', want: '—', c: charge(63, 'Xavier', 'Manalo', {
         payments: [payment(630, '', 12, TREASURER, '2026-10-06T01:30:00+00:00')] }) },
+      // Approval creates a PHP 0 charge PAID with no payment row, so it had no
+      // fee to pay. Only a paid charge with an amount above 0 and no row is
+      // missing its record, and an amount that is not a number is never 0.
+      { name: 'PAID, no payment row, amount 0', want: 'No fee', c: charge(64, 'Yolanda', 'Navarro', { amount: 0 }) },
+      { name: 'PAID, no payment row, amount "0.00" (a string)', want: 'No fee', c: charge(65, 'Zaldy', 'Ortega', { amount: '0.00' }) },
+      { name: 'PAID, no payment row, amount "0" (a string)', want: 'No fee', c: charge(66, 'Alma', 'Pascual', { amount: '0' }) },
+      { name: 'PAID, no payment row, amount 0.01', want: 'No record', c: charge(67, 'Bernie', 'Quiambao', { amount: 0.01 }) },
+      { name: 'PAID, no payment row, amount null', want: 'No record', c: charge(68, 'Carmen', 'Ramos', { amount: null }) },
+      { name: 'PAID, no payment row, no amount at all', want: 'No record', c: withoutAmount(charge(69, 'Danilo', 'Salcedo')) },
+      { name: 'PAID, no payment row, amount "" (blank, which Number() reads as 0)', want: 'No record',
+        c: charge(70, 'Edna', 'Tolentino', { amount: '' }) },
+      { name: 'PAID, amount 0, a PayMongo payment row', want: 'Paid online', c: charge(71, 'Fely', 'Umali', {
+        amount: 0, paymongo_session_id: 'cs_test_71', paymongo_payment_id: 'pay_test_71',
+        payments: [payment(710, 'gcash', null, null, '2026-10-06T03:00:00+00:00', 'pay_test_71')] }) },
+      { name: 'PAID, amount 0, cash a staff member recorded', want: 'Cash', c: charge(72, 'Gardo', 'Villanueva', {
+        amount: 0, payments: [payment(720, 'onsite', 12, TREASURER, '2026-10-06T04:00:00+00:00')] }) },
+      { name: 'PAID, amount 0, GCash a staff member recorded', want: 'GCash', c: charge(73, 'Hilda', 'Yap', {
+        amount: 0, payments: [payment(730, 'gcash', 12, TREASURER, '2026-10-06T05:00:00+00:00', '3141592653')] }) },
+      { name: 'UNPAID, amount 0, no session (a dash, not "No fee")', want: '—', c: charge(74, 'Isko', 'Zamora', {
+        status: 'UNPAID', amount: 0 }) },
+      { name: 'VOID, amount 0, no session (a dash, not "No fee")', want: '—', c: charge(75, 'Jun', 'Aquino', {
+        status: 'VOID', amount: 0 }) },
     ];
     const caseOf = (id) => CASES.find((k) => k.c.charge_id === id);
 
@@ -1492,6 +1522,13 @@ const root = () => dom.window.document.getElementById('root');
     check('  and the phone card labels that line "Method", never "Declared"',
       cardLabels.filter((l) => l === 'Method').length === CASES.length && !cardLabels.includes('Declared'),
       `${cardLabels.filter((l) => l === 'Method').length} "Method", ${cardLabels.filter((l) => l === 'Declared').length} "Declared"`);
+    // One row's Method cell, found by its resident.
+    const methodCell = (c) => page.queryAll('table.payments-table tbody tr')
+      .find((tr) => tr.querySelector('strong')?.textContent === nameOf(c))
+      ?.querySelector('td[data-label="Method"]')?.textContent ?? null;
+    check('All charges: a paid PHP 0 charge with no payment row reads "No fee" under Method, a paid PHP 100 one "No record"',
+      methodCell(caseOf(64).c) === 'No fee' && methodCell(caseOf(54).c) === 'No record',
+      `${JSON.stringify(methodCell(caseOf(64).c))}, ${JSON.stringify(methodCell(caseOf(54).c))}`);
 
     // c. The View panel of each kind of charge.
     const openFor = async (id) => {
@@ -1530,9 +1567,25 @@ const root = () => dom.window.document.getElementById('root');
     await closeIt();
 
     rows = await openFor(54);
-    check('a paid charge with no payment row: "No payment record on file." in place of the record, still read-only',
-      panelText(page).includes('No payment record on file.') && noRecordRows(rows) && !('Online payment' in rows) && readOnly(page),
+    check('a paid PHP 100 charge with no payment row: "Payment: No payment record on file." in place of the record, still read-only',
+      rows.Payment === 'No payment record on file.' && noRecordRows(rows) && !('Online payment' in rows) && readOnly(page),
       said(rows));
+    await closeIt();
+
+    rows = await openFor(64);
+    check('a paid PHP 0 charge with no payment row: "Payment: No payment needed (no fee).", no record rows, still read-only',
+      rows.Payment === 'No payment needed (no fee).' && !panelText(page).includes('No payment record on file.')
+        && noRecordRows(rows) && readOnly(page), said(rows));
+    await closeIt();
+
+    rows = await openFor(65);
+    check('  the same when the amount arrives as the string "0.00"',
+      rows.Payment === 'No payment needed (no fee).' && noRecordRows(rows), said(rows));
+    await closeIt();
+
+    rows = await openFor(72);
+    check('a paid PHP 0 charge WITH a payment row shows that record (Method "Cash") and no "Payment" line',
+      rows.Method === 'Cash' && rows['Recorded by'] === 'Teresa Lim Ocampo' && !('Payment' in rows), said(rows));
     await closeIt();
 
     rows = await openFor(57);

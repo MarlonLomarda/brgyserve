@@ -4,9 +4,12 @@
 // A PAID charge is labelled from its payment record, never from what the
 // resident declared. A payment nobody received was made through PayMongo:
 // received_by_user_id is what tells the two kinds apart (Table 16), and a
-// staff member who records a payment is always its receiver. Any other charge
-// is still waiting: "Online pending" while a PayMongo checkout is open and
-// unpaid, otherwise a dash.
+// staff member who records a payment is always its receiver. A PAID charge
+// with no payment row is "No fee" when its amount is 0, because approval
+// creates every PHP 0 document or rental charge PAID with no row, and "No
+// record" otherwise, which would be a real gap. Any other charge is still
+// waiting: "Online pending" while a PayMongo checkout is open and unpaid,
+// otherwise a dash.
 
 // The methods a staff member records (backend/src/constants/charges.js).
 // Anything else is shown as it is, so a new method is visible, never blank.
@@ -34,10 +37,23 @@ export function latestPayment(charge) {
   return latest;
 }
 
+// Whether the charge's amount is 0. It arrives as a number or as a numeric
+// string such as "0.00", so it is compared as a number. A missing, null,
+// blank or non-numeric amount is never 0: Number() reads null and "" as 0,
+// which would call a malformed charge free.
+export function isZeroFee(charge) {
+  const amount = charge.amount;
+  if (typeof amount === "number") return amount === 0;
+  if (typeof amount === "string" && amount.trim() !== "") {
+    return Number(amount) === 0;
+  }
+  return false;
+}
+
 export function methodOf(charge) {
   if (charge.status === "PAID") {
     const payment = latestPayment(charge);
-    if (!payment) return "No record";
+    if (!payment) return isZeroFee(charge) ? "No fee" : "No record";
     if (isAutomatic(payment)) return "Paid online";
     return (
       RECORDED_METHOD_LABELS[payment.payment_method] ||
