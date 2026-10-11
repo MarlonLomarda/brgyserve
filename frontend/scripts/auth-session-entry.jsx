@@ -9,9 +9,12 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
+import { methodOf } from '../src/utils/chargeMethod.js';
 
 globalThis.isTokenExpired = isTokenExpired;
 globalThis.decodeJwtPayload = decodeJwtPayload;
+// The Payments page's Method label, checked on its own in section N.
+globalThis.methodOf = methodOf;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.

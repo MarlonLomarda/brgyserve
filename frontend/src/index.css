@@ -2638,12 +2638,13 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* PAYMENTS: EVERY ROW IS ONE LINE (9 Oct 2026). Resident and For are fluid:
-   the two columns share whatever Amount, Declared, Status, Billed and View
+   the two columns share whatever Amount, Method, Status, Billed and View
    leave, split 35 / 45 by the header cells, and their text is cut with an
    ellipsis — the full text is the element's title, and in the View panel.
-   Measured on All charges: rows 64.5-65px and no sideways scroll at every
-   width from 641 to 1920; Resident and For take 224 and 259px at 1280, 285
-   and 343 at 1920, and about 109 and 88 at 641.
+   Measured on All charges (11 Oct 2026, with the Method column): rows
+   64.5-65px and no sideways scroll at every width from 641 to 1920; Resident
+   and For take 220 and 252px at 1280, 281 and 337 at 1920, and about 108 and
+   86 at 641.
 
    max-width: 0 on the cell is what lets a column shrink below its text.
    Chrome reads a cell's max-width as a limit on the width the cell DEMANDS,
@@ -2669,20 +2670,21 @@ button.link-button:hover:not(:disabled) {
   text-overflow: ellipsis;
 }
 
-/* The Declared marker ("GCash ref", "Online started", "Onsite", "Paid
-   online" or a dash) never wraps; the column measures 121.8px. It is hidden
-   from 641 to 1045px, where the drawer is the navigation and the column did
-   not fit: shown there, it scrolled the table sideways by 73px at 641 and
-   14px at 700. Above 1045 it fits, sidebar and all (1046: Resident 130px,
-   For 119). Phone cards show it as a labelled line, and the View panel always
-   has the full method and reference. The range reuses the 641 and 1045
-   values already in this file; it adds no breakpoint. */
-.payments-table .pay-declared {
+/* The Method label ("Paid online", "Cash", "GCash", "No record", "Online
+   pending" or a dash; utils/chargeMethod.js) never wraps; the column measures
+   130.4px when "Online pending" is in it. It is hidden from 641 to 1045px,
+   where the drawer is the navigation and the column does not fit: shown
+   there, it scrolls the table sideways by 84px at 641 and 25px at 700 (from
+   about 800 it would fit). Above 1045 it fits, sidebar and all (1046:
+   Resident 126px, For 113). Phone cards show it as a labelled line, and the
+   View panel always has the payment record. The range reuses the 641 and
+   1045 values already in this file; it adds no breakpoint. */
+.payments-table .pay-method {
   white-space: nowrap;
 }
 
 @media (min-width: 641px) and (max-width: 1045px) {
-  .payments-table .pay-declared {
+  .payments-table .pay-method {
     display: none;
   }
 }

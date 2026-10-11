@@ -9,6 +9,7 @@ import {
   METHOD_LABELS,
 } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
+import { isAutomatic, latestPayment, methodOf } from "../utils/chargeMethod";
 
 // Payment verification queue for ALL charge types (document fees since stage
 // 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
@@ -16,7 +17,8 @@ import { formatSchedule } from "../constants/rentals";
 // title and nav.
 //
 // ONE LINE PER ROW (9 Oct 2026). A row shows who, what for, the amount, a
-// one-word Declared marker, the status, the billed date and one View button.
+// one-word Method label (utils/chargeMethod.js), the status, the billed date
+// and one View button.
 // Everything else, and both money actions (Record and Re-check), is in the
 // View panel, which copies the /login modal: see "Overlays follow one
 // pattern" in CLAUDE.md.
@@ -94,21 +96,6 @@ function chargeSubject(charge) {
   };
 }
 
-// The Declared column: one short label, so the queue still shows at a glance
-// what each charge is waiting on. The full method, reference and times are in
-// the View panel. The first that applies wins: a payment PayMongo confirmed; a
-// GCash reference to check against GCash (only on a charge declared before
-// 10 Oct 2026: the declare routes now refuse every GCash declaration); an
-// online checkout started but not confirmed, which is what Re-check is for; a
-// resident who said they would pay onsite.
-function declaredMarker(c) {
-  if (c.paymongo_payment_id) return "Paid online";
-  if (c.declared_method === "gcash") return "GCash ref";
-  if (c.paymongo_session_id && c.status === "UNPAID") return "Online started";
-  if (c.declared_method === "onsite") return "Onsite";
-  return "—";
-}
-
 // What the resident declared, for the panel. "Walk-in" only where no account
 // is behind the charge — a walk-in encoded at the counter, a guest, most
 // household fines; with an account the resident can still declare from home.
@@ -121,12 +108,35 @@ function declaredText(c) {
 // The gateway's part, which is not a declaration: a charge paid through it
 // arrived already confirmed. The panel shows this BESIDE any declared GCash
 // reference; the old one-line summary hid the reference once a checkout had
-// been started.
+// been started. Not on a paid charge, whose panel shows the payment record
+// instead: a PayMongo payment's reference is this same id.
 function onlineNote(c) {
   if (c.paymongo_payment_id) return `GCash online · ${c.paymongo_payment_id}`;
   if (c.paymongo_session_id && c.status === "UNPAID")
     return "GCash online — started, not yet confirmed";
   return null;
+}
+
+// formatDate's style, in Manila time whatever clock the viewer's computer
+// keeps: when a payment was made is a fact about the barangay's day.
+function formatManila(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila",
+  });
+}
+
+// Who recorded a payment: PayMongo when nobody did, otherwise the staff
+// member's name, or their username when their profile has no name.
+function recordedBy(payment) {
+  if (isAutomatic(payment)) return "PayMongo (automatic)";
+  const recorder = payment.recorder;
+  return (
+    fullName(recorder?.profiles) ||
+    (recorder?.username ? `@${recorder.username}` : "—")
+  );
 }
 
 // The Record section of the View panel. `busy` and `setBusy` belong to the
@@ -241,6 +251,8 @@ function ChargePanel({
   const subject = chargeSubject(c);
   const online = onlineNote(c);
   const unpaid = c.status === "UNPAID";
+  const paid = c.status === "PAID";
+  const payment = paid ? latestPayment(c) : null;
   const meta = chargeMeta(c.status);
   return (
     <div className="modal-overlay pay-panel-overlay" onClick={onClose}>
@@ -282,11 +294,13 @@ function ChargePanel({
             {!unpaid && <p className="pay-panel-note">Read-only</p>}
 
             {/* One label column, one value column: every field on its own
-                row. Paid and void charges say so in place of a declaration
-                they no longer wait on. A paid one says only "Paid.": the
-                payload has no payments data, and no screen shows a payment's
-                method or reference (the Collections report totals them by
-                method), so there is nowhere to point to. */}
+                row. A paid charge shows its payment record from the list
+                payload (the latest row, as the Method column reads it): when
+                it was paid, in Manila time; the column's Method label; the
+                reference; and who recorded it. A paid charge with no payment
+                row says so instead, and a void one says "Void.". What the
+                resident declared still shows below, on any charge that has
+                a declaration. */}
             <dl className="pay-panel-list">
               <dt>For</dt>
               <dd>{subject.main}</dd>
@@ -312,10 +326,28 @@ function ChargePanel({
               <dd className="pay-amount">₱{Number(c.amount).toFixed(2)}</dd>
               <dt>Billed</dt>
               <dd>{formatDate(c.created_at)}</dd>
-              {!unpaid && (
+              {payment && (
+                <>
+                  <dt>Paid on</dt>
+                  <dd>{formatManila(payment.created_at)}</dd>
+                  <dt>Method</dt>
+                  <dd>{methodOf(c)}</dd>
+                  <dt>Reference</dt>
+                  <dd>{payment.reference_no || "—"}</dd>
+                  <dt>Recorded by</dt>
+                  <dd>{recordedBy(payment)}</dd>
+                </>
+              )}
+              {paid && !payment && (
                 <>
                   <dt>Payment</dt>
-                  <dd>{c.status === "PAID" ? "Paid." : "Void."}</dd>
+                  <dd>No payment record on file.</dd>
+                </>
+              )}
+              {!unpaid && !paid && (
+                <>
+                  <dt>Payment</dt>
+                  <dd>Void.</dd>
                 </>
               )}
               {(unpaid || c.declared_method) && (
@@ -338,7 +370,7 @@ function ChargePanel({
                   <dd>{c.declared_reference}</dd>
                 </>
               )}
-              {online && (
+              {online && !paid && (
                 <>
                   <dt>Online payment</dt>
                   <dd>{online}</dd>
@@ -623,7 +655,7 @@ export default function PaymentsPage() {
                 <th className="pay-resident">Resident</th>
                 <th className="pay-for">For</th>
                 <th className="num">Amount</th>
-                <th className="pay-declared">Declared</th>
+                <th className="pay-method">Method</th>
                 <th>Status</th>
                 <th className="col-billed">Billed</th>
                 <th></th>
@@ -648,8 +680,8 @@ export default function PaymentsPage() {
                     <td className="num" data-label="Amount">
                       ₱{Number(c.amount).toFixed(2)}
                     </td>
-                    <td className="muted pay-declared" data-label="Declared">
-                      {declaredMarker(c)}
+                    <td className="muted pay-method" data-label="Method">
+                      {methodOf(c)}
                     </td>
                     <td data-label="Status">
                       <span

@@ -35,6 +35,10 @@
 // starts from the loading state; and an older answer that arrives late cannot
 // replace a newer one.
 //
+// Section N is the Payments page's Method column: how each paid charge was
+// paid, read from its payment record; what an unpaid or void charge shows
+// instead; and the paid charge's View panel, which shows the record itself.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -1330,6 +1334,227 @@ const root = () => dom.window.document.getElementById('root');
       racedLater.heading === '2 charges' && racedLater.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedLater.error,
       said(racedLater));
     await raced.unmount();
+  }
+
+  // =========================================================================
+  // N. Payments: the Method column says how each paid charge was paid
+  // =========================================================================
+  // The column used to show what a RESIDENT declared ("Onsite", "GCash ref")
+  // or that a checkout had started, which says nothing about how a paid charge
+  // was actually paid. It now reads the charge's payment record: "Paid online"
+  // for a payment nobody received, which only PayMongo makes; "Cash" or
+  // "GCash" for one a staff member recorded; "No record" for a paid charge
+  // with no payment row. An unpaid or void charge shows "Online pending" while
+  // a PayMongo checkout is open, otherwise a dash. methodOf is checked on its
+  // own, case by case, then through the real page, whose View panel shows the
+  // record itself. The clock is UTC for this section, so "Paid on" must be
+  // Manila time by the page's own doing, not because this machine is in
+  // Manila. Every request is answered by the fetch stub.
+  console.log('\n--- Payments: the Method column says how each paid charge was paid ---');
+  {
+    const previousTZ = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const LIST = '/charges?status=';
+    // Recorders in the payload's real shape: username, role and profile name.
+    const TREASURER = { username: 'treasurer_one', role: 'treasurer',
+      profiles: { first_name: 'Teresa', middle_name: 'Lim', last_name: 'Ocampo', suffix: null } };
+    const NO_PROFILE = { username: 'secretary_one', role: 'secretary', profiles: null };
+    const payment = (id, method, recorderId, recorder, createdAt, reference = null) => ({
+      payment_id: id, payment_method: method, reference_no: reference, created_at: createdAt,
+      received_by_user_id: recorderId, recorder,
+    });
+    const PAY_ID = 'pay_tEsT51aBcDeFgHiJkLmNoPqR'; // 28 characters, as a real PayMongo id is
+    // A document fee in the list's real shape, as in section M, paid unless
+    // `extra` says otherwise.
+    const charge = (id, first, last, extra = {}) => ({
+      charge_id: id, charge_type: 'DOCUMENT', amount: 100, status: 'PAID', created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: { user_id: 900 + id, username: `res_${id}`, profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      document_requests: { request_id: 700 + id, purpose: 'Employment', status: 'approved', document_types: { name: 'Barangay Clearance' },
+        resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null } },
+      rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    // Every case, with the label it must get, written by hand.
+    const CASES = [
+      { name: 'a PayMongo payment (no recorder)', want: 'Paid online', c: charge(51, 'Lorna', 'Abad', {
+        paymongo_session_id: 'cs_test_51', paymongo_payment_id: PAY_ID,
+        payments: [payment(501, 'gcash', null, null, '2026-10-06T02:15:00+00:00', PAY_ID)] }) },
+      { name: 'cash recorded by a staff member', want: 'Cash', c: charge(52, 'Mario', 'Bautista', {
+        declared_method: 'onsite', declared_at: '2026-10-05T03:00:00+00:00',
+        payments: [payment(502, 'onsite', 12, TREASURER, '2026-10-06T06:40:00+00:00')] }) },
+      { name: 'GCash recorded by a staff member', want: 'GCash', c: charge(53, 'Nena', 'Cortez', {
+        declared_method: 'gcash', declared_reference: '1029384756', declared_at: '2026-10-05T04:00:00+00:00',
+        payments: [payment(503, 'gcash', 3, NO_PROFILE, '2026-10-07T01:05:00+00:00', '1029384756')] }) },
+      { name: 'PAID with no payment row', want: 'No record', c: charge(54, 'Oscar', 'Dizon') },
+      { name: 'UNPAID with an open PayMongo session', want: 'Online pending', c: charge(55, 'Pilar', 'Estrada', {
+        status: 'UNPAID', paymongo_session_id: 'cs_test_55' }) },
+      { name: 'UNPAID with no session', want: '—', c: charge(56, 'Quintin', 'Fajardo', { status: 'UNPAID' }) },
+      { name: 'UNPAID declared onsite (a dash, not "Cash")', want: '—', c: charge(57, 'Rosa', 'Gomez', {
+        status: 'UNPAID', declared_method: 'onsite', declared_at: '2026-10-08T00:30:00+00:00' }) },
+      { name: 'VOID with an open PayMongo session', want: 'Online pending', c: charge(58, 'Santi', 'Hizon', {
+        status: 'VOID', paymongo_session_id: 'cs_test_58' }) },
+      { name: 'VOID with no session', want: '—', c: charge(59, 'Tess', 'Ilagan', { status: 'VOID' }) },
+      { name: 'two payment rows, the latest second', want: 'Cash', c: charge(60, 'Ugo', 'Jacinto', {
+        paymongo_session_id: 'cs_test_60', paymongo_payment_id: 'pay_test_60',
+        payments: [payment(600, 'gcash', null, null, '2026-10-02T01:00:00+00:00', 'pay_test_60'),
+          payment(601, 'onsite', 12, TREASURER, '2026-10-03T01:00:00+00:00')] }) },
+      { name: 'two payment rows, the latest first', want: 'GCash', c: charge(61, 'Vilma', 'Katigbak', {
+        payments: [payment(611, 'gcash', 12, TREASURER, '2026-10-04T01:00:00+00:00', '5647382910'),
+          payment(610, 'onsite', 12, TREASURER, '2026-10-01T01:00:00+00:00')] }) },
+      { name: 'an unknown method, shown as it is', want: 'cheque', c: charge(62, 'Wena', 'Lacson', {
+        payments: [payment(620, 'cheque', 12, TREASURER, '2026-10-06T01:00:00+00:00', 'CHK-0042')] }) },
+      { name: 'an empty method, never blank', want: '—', c: charge(63, 'Xavier', 'Manalo', {
+        payments: [payment(630, '', 12, TREASURER, '2026-10-06T01:30:00+00:00')] }) },
+    ];
+    const caseOf = (id) => CASES.find((k) => k.c.charge_id === id);
+
+    // a. methodOf on its own.
+    const methodOf = globalThis.methodOf;
+    for (const { name, want, c } of CASES) {
+      let got;
+      try { got = typeof methodOf === 'function' ? methodOf(c) : 'methodOf is not exported'; } catch (e) { got = `threw: ${e.message}`; }
+      check(`methodOf: ${name} = "${want}"`, got === want, String(JSON.stringify(got)));
+    }
+
+    // b. The real page. The list answer holds the cases of the status asked
+    // for, as the server's does.
+    const listAnswer = (url) => {
+      if (!url.includes(LIST)) return undefined;
+      const status = url.split(LIST)[1].toUpperCase();
+      const charges = CASES.map((k) => k.c).filter((c) => status === 'ALL' || c.status === status);
+      return { charges, total: charges.length };
+    };
+    const nameOf = (c) => `${c.document_requests.resident_records.first_name} ${c.document_requests.resident_records.last_name}`;
+    const viewButton = (page, c) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${nameOf(c)}:`));
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // Each case's row, found by its resident, must show `want` in the cell the
+    // phone card labels "Method", and the list must hold exactly those rows.
+    const labelsMatch = (page, cases) => {
+      const rows = page.queryAll('table.payments-table tbody tr').map((tr) => ({
+        name: tr.querySelector('strong')?.textContent ?? null,
+        method: tr.querySelector('td[data-label="Method"]')?.textContent ?? null,
+        fourth: tr.children[3]?.textContent ?? null,
+      }));
+      const wrong = cases.flatMap(({ want, c }) => {
+        const row = rows.find((r) => r.name === nameOf(c));
+        if (row?.method === want) return [];
+        const got = !row ? 'no row' : row.method === null ? `no Method cell, fourth column "${row.fourth}"` : `"${row.method}"`;
+        return [`${nameOf(c)}: ${got}, want "${want}"`];
+      });
+      return {
+        ok: rows.length === cases.length && wrong.length === 0,
+        detail: `${rows.length} row(s) for ${cases.length} case(s)${wrong.length ? `; ${wrong.join('; ')}` : ''}`,
+      };
+    };
+    // The View panel's rows as label → value, any run of whitespace as one
+    // space (the time has a narrow no-break space before AM and PM).
+    const panelRows = (page) => {
+      const out = {};
+      let label = null;
+      for (const el of page.query('.pay-panel dl.pay-panel-list')?.children || []) {
+        if (el.tagName === 'DT') label = el.textContent;
+        else if (label !== null) {
+          out[label] = el.textContent.replace(/\s+/g, ' ').trim();
+          label = null;
+        }
+      }
+      return out;
+    };
+    const RECORD = ['Paid on', 'Method', 'Reference', 'Recorded by'];
+    const noRecordRows = (rows) => RECORD.every((label) => !(label in rows));
+    const panelText = (page) => page.query('.pay-panel')?.textContent ?? '';
+    const readOnly = (page) => page.query('.pay-panel .pay-panel-note')?.textContent === 'Read-only' && !page.query('.pay-panel form');
+    const said = (rows) => JSON.stringify(rows);
+
+    seedSession(VALID);
+    resetNet(200, listAnswer);
+    const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+    await page.settle();
+    const headers = page.queryAll('table.payments-table thead th').map((th) => th.textContent);
+    check('the column header reads "Method", and no header reads "Declared"',
+      headers.includes('Method') && !headers.includes('Declared'), headers.join(' | '));
+    const needs = labelsMatch(page, CASES.filter((k) => k.c.status === 'UNPAID'));
+    check('Needs verification: each unpaid row shows "Online pending" or "—" under Method', needs.ok, needs.detail);
+    await choose(page, 'all');
+    const everyRow = labelsMatch(page, CASES);
+    check('All charges: each row shows its own label under Method', everyRow.ok, everyRow.detail);
+    const cardLabels = page.queryAll('table.payments-table tbody td[data-label]').map((td) => td.getAttribute('data-label'));
+    check('  and the phone card labels that line "Method", never "Declared"',
+      cardLabels.filter((l) => l === 'Method').length === CASES.length && !cardLabels.includes('Declared'),
+      `${cardLabels.filter((l) => l === 'Method').length} "Method", ${cardLabels.filter((l) => l === 'Declared').length} "Declared"`);
+
+    // c. The View panel of each kind of charge.
+    const openFor = async (id) => {
+      await clickIf(page, viewButton(page, caseOf(id).c));
+      return panelRows(page);
+    };
+    const closeIt = () => clickIf(page, page.query('.pay-panel button[aria-label="Close"]'));
+
+    let rows = await openFor(51);
+    check('a PayMongo payment\'s panel: Paid on in Manila time (02:15 UTC is 10:15 AM), Method "Paid online", '
+        + 'its pay_ id as the reference, recorded by "PayMongo (automatic)"',
+      rows['Paid on'] === 'Oct 6, 2026, 10:15 AM' && rows.Method === 'Paid online' && rows.Reference === PAY_ID
+        && rows['Recorded by'] === 'PayMongo (automatic)', said(rows));
+    check('  the old "Payment: Paid." and "Online payment" rows are gone, and the panel stays read-only',
+      !('Payment' in rows) && !('Online payment' in rows) && readOnly(page), said(rows));
+    await closeIt();
+
+    rows = await openFor(52);
+    check('cash a staff member recorded: Method "Cash", Reference "—", recorded by the staff member\'s full name',
+      rows['Paid on'] === 'Oct 6, 2026, 2:40 PM' && rows.Method === 'Cash' && rows.Reference === '—'
+        && rows['Recorded by'] === 'Teresa Lim Ocampo' && readOnly(page), said(rows));
+    check('  and what the resident declared still shows beside it', rows['Declared payment'] === 'Cash (on-site)'
+      && 'Declared on' in rows, said(rows));
+    await closeIt();
+
+    rows = await openFor(53);
+    check('GCash a staff member recorded: Method "GCash", the typed reference, and @username when there is no profile name',
+      rows['Paid on'] === 'Oct 7, 2026, 9:05 AM' && rows.Method === 'GCash' && rows.Reference === '1029384756'
+        && rows['Recorded by'] === '@secretary_one', said(rows));
+    await closeIt();
+
+    rows = await openFor(60);
+    check('two payment rows: the panel shows the latest, as the column does',
+      rows['Paid on'] === 'Oct 3, 2026, 9:00 AM' && rows.Method === 'Cash' && rows.Reference === '—'
+        && rows['Recorded by'] === 'Teresa Lim Ocampo', said(rows));
+    await closeIt();
+
+    rows = await openFor(54);
+    check('a paid charge with no payment row: "No payment record on file." in place of the record, still read-only',
+      panelText(page).includes('No payment record on file.') && noRecordRows(rows) && !('Online payment' in rows) && readOnly(page),
+      said(rows));
+    await closeIt();
+
+    rows = await openFor(57);
+    check('an unpaid charge\'s panel is unchanged: "Declared payment: Cash (on-site)", "Declared on" and the Record form',
+      rows['Declared payment'] === 'Cash (on-site)' && 'Declared on' in rows && !!page.query('.pay-panel form')
+        && noRecordRows(rows) && !page.query('.pay-panel .pay-panel-note'), said(rows));
+    await closeIt();
+
+    rows = await openFor(55);
+    check('  one with an open checkout still says "GCash online — started, not yet confirmed" and offers Re-check',
+      rows['Online payment'] === 'GCash online — started, not yet confirmed' && noRecordRows(rows)
+        && !!buttonNamed(root(), 'Re-check with PayMongo'), said(rows));
+    await closeIt();
+
+    rows = await openFor(59);
+    check('a void charge\'s panel still says "Void.", with no payment record',
+      rows.Payment === 'Void.' && noRecordRows(rows) && readOnly(page), said(rows));
+    await closeIt();
+    await page.unmount();
+
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
   }
 
   console.error = origError;
