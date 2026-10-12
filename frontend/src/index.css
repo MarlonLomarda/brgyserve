@@ -1911,6 +1911,24 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.95rem;
 }
 
+/* Report table headers may wrap. The shared `.data-table .num` rule sets
+   nowrap on every numeric cell, header cells included, so a long numeric
+   header could not break: the Collections report's Monthly header,
+   "Collected (by billed month)", made that table 54px wider than its card at
+   390px (124px at 320), and it scrolled sideways inside it. Now that header
+   wraps, to two lines at 390 and three at 320, and the table fits. Only the
+   header is released: the numbers in td.num keep nowrap, and a header breaks
+   only between words, so one-word headers never move. The one other two-word
+   numeric header, Facility utilization's "Units booked", wraps too: By item
+   scrolls 59px at 390 instead of 100, and not at all from 450px, but at 510
+   and 520 the header wraps in a table that already fit, 16px taller.
+   Measured on live data, 12 Oct 2026: on a phone nothing changes from 530px
+   up, and nothing changed at 768, 1280 or 1920. Scoped to reports on purpose:
+   never edit the shared rule, which every table in the app uses. */
+.report-sheet .data-table th.num {
+  white-space: normal;
+}
+
 .chart-area {
   width: 100%;
 }
