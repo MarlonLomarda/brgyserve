@@ -3431,6 +3431,110 @@ const root = () => dom.window.document.getElementById('root');
       said({ refreshNames, requests: listGets() - getsAtError }));
     await page.unmount();
 
+    // =======================================================================
+    // S. Payments: the type tabs on a narrow phone
+    // =======================================================================
+    // Where the four tabs do not fit (below about 360px), the strip scrolls
+    // inside itself, with no scrollbar drawn, and fades the edge that has
+    // more tabs past it: data-fade on the strip names those edges, "start",
+    // "end" or "start end", and is absent while the tabs fit. It is measured
+    // after every render, on the strip's own scroll and on a resize. A tab
+    // chosen while part of it is out of view is scrolled fully into view,
+    // clear of the fade, by moving the strip and never the page. jsdom lays
+    // nothing out, so the strip's widths, its scroll position and the tabs'
+    // boxes are set by hand: a 300px strip holding 411px of tabs, 79, 135,
+    // 108 and 89 wide. Drawing the fade and hiding the scrollbar are
+    // index.css's, and the layout harness's to measure.
+    console.log('\n--- Payments: the type tabs on a narrow phone ---');
+    const FADE = 24; // the width of the faded edge in index.css
+    const TAB_WIDTHS = [79, 135, 108, 89];
+    // Lays the strip out by hand: its client and scroll widths, a scrollLeft
+    // held within them as a browser holds it, and each tab's box from where
+    // it sits in the strip.
+    const layOutStrip = (pg_, clientWidth, widths = TAB_WIDTHS) => {
+      const strip = pg_.query('.pay-tabs');
+      if (!strip) return null;
+      const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0));
+      const scrollWidth = Math.max(widths.reduce((a, b) => a + b, 0), clientWidth);
+      let left = 0;
+      const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+      Object.defineProperty(strip, 'clientWidth', { configurable: true, get: () => clientWidth });
+      Object.defineProperty(strip, 'scrollWidth', { configurable: true, get: () => scrollWidth });
+      Object.defineProperty(strip, 'scrollLeft', {
+        configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, scrollWidth - clientWidth)); },
+      });
+      strip.getBoundingClientRect = () => rect(0, clientWidth);
+      [...strip.querySelectorAll('.pay-tab')].forEach((b, i) => {
+        b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + widths[i] - left);
+      });
+      return strip;
+    };
+    const strip = () => page.query('.pay-tabs');
+    const fade = () => strip()?.getAttribute('data-fade') ?? null;
+    // The strip moved by hand, and the scroll event a browser then sends.
+    const scrollStripTo = async (x) => {
+      if (!strip()) return;
+      strip().scrollLeft = x;
+      strip().dispatchEvent(new dom.window.Event('scroll'));
+      await page.settle();
+    };
+    // Where a tab sits in the 300px strip, and whether all of it shows.
+    const tabBox = (label) => {
+      const b = tabNamed(page, label)?.getBoundingClientRect();
+      return b ? { left: b.left, right: b.right } : null;
+    };
+
+    page = await openQ();
+    const fitting = fade();
+    layOutStrip(page, 300);
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
+    await page.settle();
+    check('the tabs mark no edge while they fit, and "end" once the strip is narrower than they are (here on a resize)',
+      fitting === null && fade() === 'end', said({ fitting, narrow: fade() }));
+    const marks = [];
+    for (const x of [60, 111, 0]) {
+      await scrollStripTo(x);
+      marks.push(fade());
+    }
+    check('scrolling the strip moves the mark: "start end" partway, "start" at the end, "end" back at the start',
+      said(marks) === said(['start end', 'start', 'end']), said(marks));
+
+    const scrollsBefore = scrolled.length;
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    const rentals = { at: strip()?.scrollLeft ?? null, box: tabBox('Rentals'), fade: fade() };
+    check('choosing a tab partly out of view scrolls the strip until all of it shows, clear of the faded edges: Rentals, '
+        + 'and the page itself does not scroll',
+      rentals.at > 0 && !!rentals.box && rentals.box.left >= FADE && rentals.box.right <= 300 - FADE && rentals.fade === 'start end'
+        && scrolled.length === scrollsBefore, said({ rentals, pageScrolls: scrolled.length - scrollsBefore }));
+    await clickIf(page, tabNamed(page, 'Fines'));
+    const fines = { at: strip()?.scrollLeft ?? null, box: tabBox('Fines'), fade: fade() };
+    check('  Fines, the last, scrolls it to its end, where nothing is past it and that edge is not faded',
+      fines.at === 111 && !!fines.box && fines.box.left >= 0 && fines.box.right <= 300 && fines.fade === 'start', said(fines));
+    await clickIf(page, tabNamed(page, 'All'));
+    const all = { at: strip()?.scrollLeft ?? null, box: tabBox('All'), fade: fade() };
+    check('  and All scrolls it back to its start',
+      all.at === 0 && !!all.box && all.box.left === 0 && all.fade === 'end' && scrolled.length === scrollsBefore, said(all));
+    // A browser scrolls a focused element into view only when none of it
+    // shows; a tab half under the faded end stays there unless the page
+    // moves it (measured in Chrome 155).
+    tabNamed(page, 'Rentals')?.focus();
+    await page.settle();
+    const focused = { at: strip()?.scrollLeft ?? null, box: tabBox('Rentals'), pressed: look(page).pressed };
+    check('a tab that takes keyboard focus while partly out of view is brought fully into view too, without being chosen',
+      page.active() === tabNamed(page, 'Rentals') && focused.at > 0 && !!focused.box && focused.box.left >= FADE
+        && focused.box.right <= 300 - FADE && said(focused.pressed) === said(['All 8']), said(focused));
+    await clickIf(page, tabNamed(page, 'All'));
+
+    layOutStrip(page, 420);
+    await type(page, 'flores');
+    const widened = fade();
+    layOutStrip(page, 300);
+    await type(page, '');
+    check('the mark follows the strip after any render, not only a scroll or a resize: widened to fit, a search drops it; '
+        + 'narrowed again, clearing the search brings "end" back',
+      widened === null && fade() === 'end', said({ widened, narrowed: fade() }));
+    await page.unmount();
+
     if (F.clock && realNow) F.clock.now = realNow;
     if (previousTZQ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZQ;

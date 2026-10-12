@@ -2644,7 +2644,7 @@ button.link-button:hover:not(:disabled) {
    Measured on All charges (11 Oct 2026, with the Method column): rows
    64.5-65px and no sideways scroll at every width from 641 to 1920; Resident
    and For take 220 and 252px at 1280, 281 and 337 at 1920, and about 108 and
-   86 at 641.
+   86 at 641 (102 and 76 since batch 8 shows Method there instead of Billed).
 
    max-width: 0 on the cell is what lets a column shrink below its text.
    Chrome reads a cell's max-width as a limit on the width the cell DEMANDS,
@@ -2672,19 +2672,27 @@ button.link-button:hover:not(:disabled) {
 
 /* The Method label ("Paid online", "Cash", "GCash", "No record", "Online
    pending" or a dash; utils/chargeMethod.js) never wraps; the column measures
-   130.4px when "Online pending" is in it. It is hidden from 641 to 1045px,
-   where the drawer is the navigation and the column does not fit: shown
-   there, it scrolls the table sideways by 84px at 641 and 25px at 700 (from
-   about 800 it would fit). Above 1045 it fits, sidebar and all (1046:
-   Resident 126px, For 113). Phone cards show it as a labelled line, and the
-   View panel always has the payment record. The range reuses the 641 and
-   1045 values already in this file; it adds no breakpoint. */
+   130.4px when "Online pending" is in it.
+
+   FROM 641 TO 1045px BILLED MAKES WAY FOR METHOD (12 Oct 2026, batch 8).
+   Method used to be the one hidden there, so a Method filter's rows did not
+   show their method. The two do not fit together: with both, the table
+   scrolls sideways by 84px at 641 and 25px at 700, and where it fits, from
+   768, it cuts far more names (all 89 live charges, 100 a page: 81 names and
+   43 For texts cut at 900, against 4 and 0 with one of the two). Method is
+   130.4px to Billed's 115.5, so the swap costs Resident and For 15px between
+   them: from 800 up the same names and For texts are cut as before, at 641
+   to 768 one or two more names, and at 768, 60 For texts against 22. Rows
+   stay one line, 64.5-65px, and the table fits at every width. The billed
+   date is still on a phone's card and in the View panel, and above 1045
+   both columns show, sidebar and all. The range reuses the 641 and 1045
+   values already in this file; it adds no breakpoint. */
 .payments-table .pay-method {
   white-space: nowrap;
 }
 
 @media (min-width: 641px) and (max-width: 1045px) {
-  .payments-table .pay-method {
+  .payments-table .col-billed {
     display: none;
   }
 }
@@ -2848,16 +2856,65 @@ button.pay-filters-clear:hover:not(:disabled) {
 /* The type tabs: toggle buttons, each with its count in a pill (#e2e8f0,
    because the page behind is body's #f1f5f9 and a pill of that would vanish;
    the hover is white for the same reason). The strip scrolls sideways inside
-   itself when the four do not fit, so the page never does. The underline is
-   an inset shadow and the focus ring is drawn inside the button, because the
-   strip's overflow would clip anything outside it. */
+   itself when the four do not fit, so the page never does: by touch, by
+   trackpad, and from the keyboard, as a tab that takes focus is scrolled
+   into view. It draws no scrollbar (batch 8: a phone showed a thin bar under
+   a cut-off "Fine..."); an end with tabs past it fades instead, marked by
+   PaymentsPage in data-fade. The underline is an inset shadow and the focus
+   ring is drawn inside the button, because the strip's overflow would clip
+   anything outside it. */
 .pay-tabs {
   display: flex;
   gap: 4px;
   margin: 2px 0 14px;
   border-bottom: 1px solid #e2e8f0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+/* Scoped to the strip, as .slider's is: a bare ::-webkit-scrollbar rule would
+   take the scrollbar from every scrolling box in the app. */
+.pay-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* The fades: across the last 24px of an end with tabs past it, the tabs go
+   from solid to nothing. A mask, so there is no colour to match the page
+   and no z-index. COUPLED to TAB_FADE in PaymentsPage.jsx, which scrolls a
+   chosen tab that far clear of them. */
+.pay-tabs[data-fade="end"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.pay-tabs[data-fade="start"] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+}
+
+.pay-tabs[data-fade="start end"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
 }
 
 .pay-tabs .pay-tab {
@@ -4905,6 +4962,25 @@ button.tab:hover:not(:disabled) {
   /* The hint, under the fields; empty, it still takes no room. */
   .pay-filters-panel .pay-filters-hint:not(:empty) {
     margin: 10px 0 0;
+  }
+
+  /* The type tabs (batch 8): less room around each, so All, Documents,
+     Rentals and Fines with their counts fit on one line from 360px up,
+     measured with two-digit counts: 3.9px to spare at 360, 18.9 at 375 and
+     33.9 at 390, where they overflowed by 96, 81 and 66. Narrower, the strip
+     scrolls and fades. The words stay 0.9rem, the counts 0.75rem as at every
+     width, and the tabs 40px tall. */
+  .pay-tabs {
+    gap: 0;
+  }
+
+  .pay-tabs .pay-tab {
+    gap: 4px;
+    padding: 9px 5px 11px;
+  }
+
+  .pay-tabs .pay-tab-count {
+    padding: 1px 5px;
   }
 
   /* The pager on a phone: the count on one line, Rows per page on the next,

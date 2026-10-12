@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { IoIosClose } from "react-icons/io";
 import {
   IoChevronBack,
@@ -92,6 +98,11 @@ const FILTER_LABELS = {
   VOID: "Void",
   all: "All charges",
 };
+
+// The width of the faded ends of the type tab strip on a narrow phone. A
+// chosen tab is scrolled this far clear of a faded end. COUPLED to the 24px
+// in index.css's .pay-tabs[data-fade] masks, which no CSS variable binds.
+const TAB_FADE = 24;
 
 // Re-check outcomes that mean the charge is ALREADY paid although this call
 // recorded nothing (SETTLE_OUTCOME in backend/src/routes/payments.js). The
@@ -551,6 +562,7 @@ export default function PaymentsPage() {
   const methodRef = useRef(null);
   const dateRef = useRef(null);
   const filtersButtonRef = useRef(null);
+  const tabsRef = useRef(null);
   const headingRef = useRef(null);
   // The View button that opened the panel, captured from the click, so a
   // close can give focus back to it (closeModal in LoginPage.jsx).
@@ -696,6 +708,53 @@ export default function PaymentsPage() {
     toMessageRef.current = false;
     flashRef.current?.focus();
   }, [selected, flash]);
+
+  // On a narrow phone the type tabs scroll inside their strip. This brings a
+  // tab fully into view there, clear of a faded end. Only the strip moves:
+  // scrollIntoView would scroll the page as well.
+  const revealTab = useCallback((button) => {
+    const strip = tabsRef.current;
+    if (!strip || !button) return;
+    const s = strip.getBoundingClientRect();
+    const t = button.getBoundingClientRect();
+    const start = s.left + (strip.scrollLeft > 0 ? TAB_FADE : 0);
+    const more = strip.scrollLeft + strip.clientWidth < strip.scrollWidth;
+    const end = s.right - (more ? TAB_FADE : 0);
+    if (t.left < start) strip.scrollLeft -= start - t.left;
+    else if (t.right > end) strip.scrollLeft += t.right - end;
+  }, []);
+
+  // The chosen tab, when it changes and when the strip comes back after a
+  // reload; before paint, so nothing jumps. A tab that takes focus is
+  // revealed too (its onFocus): a browser scrolls a focused element into
+  // view only when none of it shows, and leaves one half under the fade.
+  const listed = charges !== null;
+  useLayoutEffect(() => {
+    revealTab(tabsRef.current?.querySelector('[aria-pressed="true"]'));
+  }, [tab, listed, revealTab]);
+
+  // Which ends of the tab strip have tabs past them, for index.css to fade:
+  // "start", "end", both, or "" while the tabs fit. Measured after every
+  // render (a search changes the counts, and so the tabs' widths), on the
+  // strip's own scroll and on a resize; stored only when it changes.
+  const [tabFade, setTabFade] = useState("");
+  const measureTabFade = useCallback(() => {
+    const strip = tabsRef.current;
+    if (!strip) return;
+    const ends = [];
+    if (strip.scrollLeft > 1) ends.push("start");
+    if (strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1) {
+      ends.push("end");
+    }
+    setTabFade(ends.join(" "));
+  }, []);
+  useLayoutEffect(() => {
+    measureTabFade();
+  });
+  useEffect(() => {
+    window.addEventListener("resize", measureTabFade);
+    return () => window.removeEventListener("resize", measureTabFade);
+  }, [measureTabFade]);
 
   // What is in view: the charges that match the search, then those that
   // match the method and the date, then those of the selected tab, then one
@@ -1018,9 +1077,17 @@ export default function PaymentsPage() {
       {/* The tabs count what matches the search, the method and the date,
           whatever tab is selected. A tab with nothing in it is dimmed, never
           disabled. No page here uses role="tab", so these are toggle
-          buttons. */}
+          buttons. data-fade names the ends with tabs past them, which
+          index.css fades where the strip scrolls (a narrow phone). */}
       {charges !== null && (
-        <div className="pay-tabs" role="group" aria-label="Charge type">
+        <div
+          ref={tabsRef}
+          className="pay-tabs"
+          role="group"
+          aria-label="Charge type"
+          data-fade={tabFade || undefined}
+          onScroll={measureTabFade}
+        >
           {TYPE_TABS.map((t) => (
             <button
               key={t.key}
@@ -1028,6 +1095,7 @@ export default function PaymentsPage() {
               className={`pay-tab${counts[t.key] === 0 ? " pay-tab-empty" : ""}`}
               aria-pressed={tab === t.key}
               onClick={() => chooseTab(t.key)}
+              onFocus={(e) => revealTab(e.currentTarget)}
             >
               {t.label}{" "}
               <span className="pay-tab-count">
