@@ -125,7 +125,7 @@ So the **Secretary applies the rule and records `RESIDENCY_TOO_SHORT`** when it 
 
 **This sidesteps the open question rather than answering it.** It is still unknown **whether the barangay's masterlist carries a per-resident registration date at all.** If it does not, there is nothing to backfill from and the column stays fabricated-or-empty in any real deployment. That question is unchanged by stage 2 having been built.
 
-**Four seeded records are boundary cases pinned to the 12 October 2026 defense date**, not to the date they were written: #19 just over six months, #45 exactly on it (which is what makes the `>=` choice observable), #20 under, #47 clearly under. **They will drift.** If the demo slips much past October, re-seed #20 and #47 later or the under-six-months case disappears and the badge stops appearing anywhere.
+**Four seeded records are boundary cases pinned to 12 October 2026, then the planned defense date (the defense is now later, date to be confirmed)**, not to the date they were written: #19 just over six months, #45 exactly on it (which is what makes the `>=` choice observable), #20 under, #47 clearly under. **They will drift.** If the demo slips much past October, re-seed #20 and #47 later or the under-six-months case disappears and the badge stops appearing anywhere.
 
 ### Client-side session handling
 
@@ -393,6 +393,53 @@ The login redesign around the image slider changed **`label`, `.card` and `.subt
 **Verified with a CDP harness on the real page**, with fetch stubbed and no server or database. The first build ran 35 tests: 29 failed on `ba33a4b`, and all 35 passed after. The six that pass on both are the guards: page overflow, the six protected rules by stylesheet text and computed value, no dialogs, the filters' requests, newest-first order, no page errors. The walkthrough round added eight measuring tests (form alignment, one panel width, text sizes, phone button widths and scroll, the container's focus ring, the wording per kind of charge, the phone card labels, alignment) and a twelfth stub charge. Of the resulting 43 tests, the first build failed 10. The second walkthrough added one more, that every label shares one left edge and every value another, at 1280 and 390 for every kind of charge. It and the "Paid." wording check failed on the committed panel (`10b2d57`); all 44 pass now. 85 other page states (17 pages at 390, 641, 1280, 1366 and 1920) measured identical to `ba33a4b` after both rounds. `route-order-check.cjs` still sees `created_at.desc,charge_id.desc`. Lint shows the 7 baseline warnings, and the build passes.
 
 **Found on the way, not changed:** the `.cell-clamp` comment in `index.css` says `max-width` on a `<td>` is ignored by table layout. In Chrome it is not ignored, but it is not a cap either: it limits the width the cell demands. At 150px the two fluid columns would not go below 150, yet still grew to 223 and 260 at 1280.
+
+### Payments: No fee for zero-amount charges, 12 Oct 2026 (`9197329`)
+
+- **Why:** approval creates every PHP 0 document or rental charge already PAID with no payment row, so the Method column (`5573374`) called all of them "No record", the label meant for a real gap.
+- **What changed:** `methodOf()` gives a PAID charge with no payment row "No fee" when its amount is 0 and "No record" only above 0. `isZeroFee()` compares the amount as a number, since it arrives as `0` or `"0.00"`; a missing, null, blank or non-numeric amount is never 0, because `Number()` reads null and `""` as 0. The View panel says "Payment: No payment needed (no fee)." for those charges.
+- **Tested:** `test:auth` section N covers 0, `"0.00"`, `"0"`, 0.01, null, missing and blank amounts, PHP 0 charges that do have a payment row, and the panel text (section N is 43 checks at `62af41f`).
+
+### Payments: search, type tabs, totals and pages, 12 Oct 2026 (`a962b64`)
+
+- **Why:** the page listed every charge of a status in one long table, with no way to find one charge or see what a view adds up to.
+- **What changed:** a search box, type tabs, a totals line that is the list's `h2`, and pages of 25 with Previous and Next. All of it works on the list already loaded and sends no request.
+  - **Search** filters as you type, ignoring case and accents, every word required in any order, over the payer name and For text as the row shows them (the page passes both in, so the search cannot disagree with the row), the @username, `#` and the charge number, and every reference the View panel can show. Never the purpose.
+  - **Tabs** All, Documents, Rentals, Fines are toggle buttons with counts that follow the search, not the tab; an empty tab is dimmed, never disabled.
+  - **Totals** are summed in whole centavos over every match, not the page on screen, and formatted "₱1,500.00"; the rows keep "₱1500.00". Under All the detail line sums paid, unpaid and void; under Paid it splits by Method label.
+  - **The 1,000-row cap:** `GET /api/charges` now returns a `total` (`ee4e681`); when it is larger than the list, a notice says only the newest rows are listed and the counts cover only those.
+  - **State:** the search, tab and page start fresh on every visit (the hall's PC is shared, so nothing is kept in the browser) and survive Refresh, Record payment and Re-check. The View panel and its close-when-paid effect keep using the whole list, so a charge the filters hide can neither close an open panel nor stop it closing once paid.
+  - **When nothing matches**, the empty state says so and offers "Clear search and filters".
+  - **A page change scrolls the totals heading into view**, so `.pay-totals h2` got a `scroll-margin-top`: 16px, and 126px at 1045px and below, where the sticky header is.
+- **New helpers, no React:** `utils/chargeSearch.js`, `chargeTotals.js`, `paging.js`. `test:auth` section O checks them case by case, then the real page against 64 stubbed charges (88 checks at `62af41f`); section M's heading checks now expect the totals wording.
+
+### Payments: the pager with page numbers and rows per page, 12 Oct 2026 (`19f84b6`)
+
+- **What changed:** one bar under the list: "Showing 1 to 25 of 89 results", **Rows per page** (10, 25, 50 or 100, 25 to start, never stored), then Previous, the page numbers and Next. The current page is filled and marked `aria-current="page"`. Above 7 pages there are exactly 7 slots, first and last always among them, with "…" (text, never a button) for the rest, so a gap always stands for at least two pages (`pageItems` in `utils/paging.js`).
+- **The bar shows from 11 matches**, even when they fit on one page, so Rows per page stays within reach; at 10 or fewer every choice shows the whole list and the bar is hidden. A new rows per page goes back to page 1 and brings the heading into view, as a page change does.
+- **End buttons stay `aria-disabled`, not `disabled`** (as Previous and Next were in `a962b64`), so the one just pressed keeps focus when it reaches the end; the page ignores a press on it.
+- **Layout:** where the column is too narrow the bar wraps one way only: the count and Rows per page on the first line, the buttons at the right of the second. No breakpoint decides it. On a phone, Previous and Next are 44px tall with "Page 2 of 4" between them in place of the numbers.
+- **Tested:** `test:auth` re-words section O's pager checks and adds section P against 89 stubbed charges (21 checks at `62af41f`).
+
+### Payments: Method and date filters, 12 Oct 2026 (`9ebe3f0`)
+
+- **What changed:** a second toolbar row with **Method** and a **date** select, plus a quiet "Clear filters" while either is on.
+- **Method mirrors the Method column.** A charge matches when `methodOf()` gives it the chosen label, never by its raw `payment_method`: a PayMongo payment's is `gcash` too, so filtering on that would put every "Paid online" charge under "GCash". Each status view offers only labels it can show; Void offers none, so the select is disabled there, and a status change drops a Method the new view does not offer.
+- **The date** is "Billed date", or "Paid date" under Paid: the latest payment row's `created_at`, the row the panel's "Paid on" shows, or the billed date for a paid charge with no row (approval creates PHP 0 charges already paid). Choices: Any date, Today, Last 7 days (today and the 6 before), This month, Choose dates (From and To).
+- **Days are Manila days**, whatever the viewer's computer clock: `Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' })` gives `YYYY-MM-DD`, compared as strings, both ends included. "Today" comes from one injectable `clock.now`, which only `test:auth` replaces. **From after To** shows a hint (`role="status"`) and matches nothing; it is never swapped.
+- **Composition:** the filters work with the status, search and tabs; tab counts follow them; the totals line ends with the date and range it counts ("billed in the last 7 days", "paid Oct 1 to Oct 12"), so it is not read as the Collections report; any change goes back to page 1; nothing is kept in the browser.
+- **New helper:** `utils/chargeFilters.js`; `chargeTotals.js` takes the date phrase.
+- **Tested:** `test:auth` section Q, 76 checks, against 23 stubbed charges, with "today" fixed at 12 Oct 2026, 12:00 in Manila, and the machine on Los Angeles time, where that moment is still 11 Oct, so every Manila day has to be the code's own doing.
+
+### Payments: the phone toolbar, tab strip and tablet columns, 12 Oct 2026 (`50dd3a7`, `62af41f`)
+
+- **`50dd3a7`, the Filters button.** At 640px and below the search keeps its own line, and one row under it holds the status, a "Filters" button and Refresh as an icon (still named "Refresh"), all 44px tall. Method, the date, From and To and Clear filters move into a panel that the button opens **in place**, in the page's flow with no z-index; "Filters (n)" counts the Method and date filters, never the search or the tab. The panel starts closed on every visit, stays as it was left through Refresh and Record payment, and Escape inside it closes it, returns focus to the button and goes no further. Above 640px nothing changes; tablet and desktop measured identical.
+  - **Measured on the way:** without `min-width: 0` on the row, the status select kept "Needs verification" whole and pushed Refresh off a 320px screen. From and To share a line until a date field would go below 128px, where it cuts off its own year (123px at 320); `nowrap` on the panel's column fixed a gap measured above and below them at 360.
+  - **Tested:** `test:auth` section R, 11 checks.
+- **`62af41f`, the tab strip.** On a phone the tabs have less padding, so All, Documents, Rentals and Fines with two-digit counts fit on one line from 360px up: 3.9px to spare at 360, 18.9 at 375 and 33.9 at 390, where they had overflowed by 96, 81 and 66. Narrower, the strip scrolls inside itself with no scrollbar (a phone had shown a thin bar under a cut-off tab), and a 24px mask fades each end with tabs past it, named in `data-fade` and measured after every render, on the strip's scroll and on a resize. A tab that is chosen, or takes focus, is scrolled fully clear of the fade by moving the strip, never the page: `scrollIntoView` would scroll the page too. The 24px is coupled to `TAB_FADE` in `PaymentsPage.jsx`. **Tested:** `test:auth` section S, 7 checks.
+- **`62af41f`, the tablet columns.** From 641 to 1045px Method used to be the hidden column, so a Method filter's rows did not show their method. The two do not fit together: with both, the table scrolled sideways by 84px at 641 and 25px at 700, and where it fit, from 768, it cut far more names (all 89 live charges, 100 a page: 81 names and 43 For texts cut at 900, against 4 and 0 with one of the two). Billed is hidden there instead. Method is 130.4px to Billed's 115.5, so Resident and For lose 15px between them: from 800 up the same text is cut as before, at 641 to 768 one or two more names, and at 768, 60 For texts against 22. Rows stay one line and the table fits at every width; desktop measured identical.
+- **Layout was measured in headless Chrome** with the real app bundled for `file://` and the real `index.css`; the harness lives in session scratchpads, not the repo.
+- **`test:auth` is 400 checks at `62af41f`.**
 
 ## Document Requests
 
