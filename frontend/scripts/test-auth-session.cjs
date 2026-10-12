@@ -60,6 +60,10 @@
 // PAID PHP 0 charge says "No fee" instead of "₱0.00 — Paid", and a billed
 // request shows the fee it was charged, not its type's fee today.
 //
+// Section U is the Collections report: the "No-fee charges" tile beside
+// "Payments recorded", and the monthly series named "Collected (by billed
+// month)" in the chart's legend and the Monthly table.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -3803,6 +3807,132 @@ const root = () => dom.window.document.getElementById('root');
     await page.unmount();
     check('section T sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
       `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+  }
+
+  // =========================================================================
+  // U. The Collections report: the No-fee charges tile, and "by billed month"
+  // =========================================================================
+  // Paid charges counted more than Payments recorded (69 against 67 on the
+  // live data, 12 Oct 2026) with nothing on screen to say why: the PHP 0
+  // charges approval marks paid have no payment row. The report's totals now
+  // carry no_fee_charges, shown as a "No-fee charges" tile after "Payments
+  // recorded". The monthly "Collected" series counts each paid charge in the
+  // month it was billed, and is now named "Collected (by billed month)" in
+  // the chart's legend and the Monthly table; the by-type chart and table
+  // keep "Collected". The figure and the CSV are the server's
+  // (routes/reports.js); this is the page. jsdom has no ResizeObserver and
+  // lays nothing out, so for this section a stub one, and the chart box's
+  // getBoundingClientRect, report 800 by 260, and recharts draws the charts
+  // and their legends. Every request is answered by the fetch stub.
+  console.log('\n--- Collections report: the No-fee charges tile, and "by billed month" ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const TREASURER_USER = { user_id: 16, username: 'treasurer1', role: 'treasurer', must_change_password: false };
+    const TREASURER_TOKEN = makeToken({ sub: '16', role: 'treasurer', exp: VALID_EXP });
+    // The live report's totals on 12 Oct 2026, before no_fee_charges.
+    const TOTALS = { total_collected: 10549, total_outstanding: 2350, total_billed: 12899, voided_amount: 2637,
+      paid_charges: 69, unpaid_charges: 14, payments_recorded: 67 };
+    const report = (totals) => ({
+      range: { from: '2025-11-01', to: '2026-10-12' }, generated_at: '2026-10-12T11:00:00.000Z', totals,
+      by_type: [
+        { charge_type: 'DOCUMENT', charges: 50, collected: 1000, outstanding: 100 },
+        { charge_type: 'RENTAL', charges: 30, collected: 9000, outstanding: 2000 },
+        { charge_type: 'FINE', charges: 3, collected: 549, outstanding: 250 },
+      ],
+      by_payment_method: [
+        { payment_method: 'onsite', payments: 40, amount: 6000 },
+        { payment_method: 'gcash', payments: 27, amount: 4549 },
+      ],
+      monthly: [
+        { month: '2026-09', collected: 4000, billed: 5000 },
+        { month: '2026-10', collected: 6549, billed: 7899 },
+      ],
+    });
+    // recharts reads its box with getBoundingClientRect, then watches it with
+    // a ResizeObserver; both are put back at the end of the section.
+    const CHART_BOX = { width: 800, height: 260, top: 0, left: 0, right: 800, bottom: 260, x: 0, y: 0 };
+    class BoxObserver {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { this.callback([{ target, contentRect: CHART_BOX }]); }
+      unobserve() {}
+      disconnect() {}
+    }
+    const previousObserver = global.ResizeObserver;
+    global.ResizeObserver = BoxObserver;
+    const elementProto = dom.window.HTMLElement.prototype;
+    const realRect = elementProto.getBoundingClientRect;
+    elementProto.getBoundingClientRect = function rect() {
+      return this.classList?.contains('recharts-responsive-container') ? { ...CHART_BOX } : realRect.call(this);
+    };
+    // A drawn line animates, and asks for animation frames, which this jsdom
+    // does not provide: unanswered, the line stays at its first frame, which
+    // nothing here reads, and the legend is drawn all the same.
+    const previousFrame = global.requestAnimationFrame;
+    const previousCancel = global.cancelAnimationFrame;
+    global.requestAnimationFrame = () => 0;
+    global.cancelAnimationFrame = () => {};
+    // The tiles as "label value", each chart's legend and each table's header.
+    const readReport = (page) => {
+      const cardOf = (title) => page.queryAll('.chart-card').find((c) => text(c.querySelector('h4')) === title);
+      const legend = (title) => [...(cardOf(title)?.querySelectorAll('.recharts-legend-item-text') || [])].map(text);
+      const head = (title) => {
+        const block = page.queryAll('.report-sheet [data-pdf-block]')
+          .find((b) => b.querySelector('table') && text(b.querySelector('h4')) === title);
+        return [...(block?.querySelectorAll('thead th') || [])].map(text);
+      };
+      return {
+        tiles: page.queryAll('.stat-row .stat-tile')
+          .map((t) => `${text(t.querySelector('.stat-label'))} ${text(t.querySelector('.stat-value'))}`),
+        monthlyLegend: legend('Collected vs billed per month'),
+        byTypeLegend: legend('Collected vs outstanding by charge type'),
+        monthlyHead: head('Monthly'),
+        byTypeHead: head('By charge type'),
+        failed: /could not be displayed/i.test(root().textContent),
+      };
+    };
+
+    seedSession(TREASURER_TOKEN, TREASURER_USER);
+    resetNet(200, (url) => (url.includes('/reports/collections?') ? report({ ...TOTALS, no_fee_charges: 2 }) : undefined));
+    let page = await globalThis.mountInteractive(root(), '/treasurer/reports');
+    await page.settle();
+    let seen = readReport(page);
+    check('the Collections report shows a "No-fee charges" tile reading 2 right after "Payments recorded 67", so Paid '
+        + 'charges 69 = 67 + 2 reads off the tiles',
+      seen.tiles.includes('Paid charges 69') && seen.tiles.includes('No-fee charges 2')
+        && seen.tiles.indexOf('No-fee charges 2') === seen.tiles.indexOf('Payments recorded 67') + 1, said(seen.tiles));
+    check('  the seven tiles before it are unchanged and in their order; it is the eighth and last',
+      said(seen.tiles) === said(['Total collected ₱10,549.00', 'Total outstanding ₱2,350.00', 'Total billed ₱12,899.00',
+        'Voided amount ₱2,637.00', 'Paid charges 69', 'Unpaid charges 14', 'Payments recorded 67', 'No-fee charges 2']),
+      said(seen.tiles));
+    check('the monthly chart\'s legend names its series "Collected (by billed month)" and "Billed"',
+      said([...seen.monthlyLegend].sort()) === said(['Billed', 'Collected (by billed month)']), said(seen.monthlyLegend));
+    check('  and the Monthly table\'s header reads "Month | Collected (by billed month) | Billed"',
+      said(seen.monthlyHead) === said(['Month', 'Collected (by billed month)', 'Billed']), said(seen.monthlyHead));
+    check('the by-type chart and table, which are not by month, keep plain "Collected", and the report renders',
+      said([...seen.byTypeLegend].sort()) === said(['Collected', 'Outstanding'])
+        && said(seen.byTypeHead) === said(['Charge type', 'Charges', 'Collected', 'Outstanding']) && !seen.failed,
+      said({ legend: seen.byTypeLegend, head: seen.byTypeHead, failed: seen.failed }));
+    await page.unmount();
+
+    // A server without the change (one deployed behind this page) sends no
+    // no_fee_charges: no tile for it, and no blank one.
+    seedSession(TREASURER_TOKEN, TREASURER_USER);
+    resetNet(200, (url) => (url.includes('/reports/collections?') ? report({ ...TOTALS }) : undefined));
+    page = await globalThis.mountInteractive(root(), '/treasurer/reports');
+    await page.settle();
+    seen = readReport(page);
+    check('an answer without no_fee_charges shows the seven tiles as before, with no "No-fee charges" tile and no blank one',
+      seen.tiles.length === 7 && seen.tiles.every((t) => !/^No.fee/.test(t) && !/ $/.test(t)) && !seen.failed, said(seen.tiles));
+    await page.unmount();
+
+    if (previousObserver === undefined) delete global.ResizeObserver;
+    else global.ResizeObserver = previousObserver;
+    if (previousFrame === undefined) delete global.requestAnimationFrame;
+    else global.requestAnimationFrame = previousFrame;
+    if (previousCancel === undefined) delete global.cancelAnimationFrame;
+    else global.cancelAnimationFrame = previousCancel;
+    elementProto.getBoundingClientRect = realRect;
   }
 
   console.error = origError;

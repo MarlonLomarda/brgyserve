@@ -338,6 +338,13 @@ router.get('/facility-utilization', requireRole(...ADMIN_ROLES), async (req, res
 // Charges are the billing record; payments are the verified money received.
 // "Collected" is measured from PAID charges in the range; the payment-method
 // split comes from the payments table, which only ever holds verified rows.
+//
+// Charges are bucketed by created_at, the date they were BILLED, so the
+// monthly "Collected" series puts a charge billed in September and paid in
+// October in September, and its CSV column says "by billed month".
+// no_fee_charges counts the PAID charges of PHP 0, which approval and booking
+// create already paid with no payment row: they are why paid_charges can be
+// more than payments_recorded.
 // ---------------------------------------------------------------------------
 router.get('/collections', requireRole(...FINANCE_ROLES), async (req, res) => {
   const range = parseRange(req);
@@ -399,6 +406,7 @@ router.get('/collections', requireRole(...FINANCE_ROLES), async (req, res) => {
       paid_charges: paid.length,
       unpaid_charges: unpaid.length,
       payments_recorded: payments.length,
+      no_fee_charges: paid.filter((c) => Number(c.amount) === 0).length,
     },
     by_type: byType,
     by_payment_method: byMethod,
@@ -410,7 +418,7 @@ router.get('/collections', requireRole(...FINANCE_ROLES), async (req, res) => {
       { title: 'Totals', columns: ['Metric', 'Value'], rows: Object.entries(report.totals).map(([k, v]) => [k, v]) },
       { title: 'By charge type', columns: ['Charge type', 'Charges', 'Collected', 'Outstanding'], rows: byType.map((r) => [r.charge_type, r.charges, r.collected, r.outstanding]) },
       { title: 'By payment method', columns: ['Method', 'Payments', 'Amount'], rows: byMethod.map((r) => [r.payment_method, r.payments, r.amount]) },
-      { title: 'Monthly', columns: ['Month', 'Collected', 'Billed'], rows: monthly.map((r) => [r.month, r.collected, r.billed]) },
+      { title: 'Monthly', columns: ['Month', 'Collected (by billed month)', 'Billed'], rows: monthly.map((r) => [r.month, r.collected, r.billed]) },
     ]);
   }
   res.json(report);
