@@ -10,6 +10,7 @@ import {
 } from "../constants/requestStatus";
 import PayMenu from "../components/PayMenu";
 import TableSkeleton from "../components/TableSkeleton";
+import { isNoFeeCharge } from "../utils/chargeMethod";
 
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
@@ -245,6 +246,11 @@ export default function MyRequestsPage() {
                 requests.map((r) => {
                   const meta = statusMeta(r.status);
                   const charge = chargeOf(r);
+                  const noFee = isNoFeeCharge(charge);
+                  // Once approval has billed the request, the fee is what it
+                  // charged, not the document type's fee today, which can
+                  // have changed since.
+                  const fee = charge?.amount ?? r.document_types?.fee ?? 0;
                   return (
                     <tr key={r.request_id}>
                       <td>
@@ -253,9 +259,7 @@ export default function MyRequestsPage() {
                       <td className="muted col-purpose" data-label="Purpose">
                         <span className="cell-clamp">{r.purpose}</span>
                       </td>
-                      <td className="num">
-                        ₱{Number(r.document_types?.fee ?? 0).toFixed(2)}
-                      </td>
+                      <td className="num">₱{Number(fee).toFixed(2)}</td>
                       <td>
                         <span className={`badge ${meta.className}`}>
                           {meta.label}
@@ -276,7 +280,10 @@ export default function MyRequestsPage() {
                             Claimed on {formatDate(r.claimed_at)}.
                           </div>
                         )}
-                        {charge && (
+                        {noFee && (
+                          <div className="muted reason-note">No fee</div>
+                        )}
+                        {charge && !noFee && (
                           <div className="muted reason-note">
                             Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
                             <strong

@@ -9,7 +9,8 @@
 // creates every PHP 0 document or rental charge PAID with no row, and "No
 // record" otherwise, which would be a real gap. Any other charge is still
 // waiting: "Online pending" while a PayMongo checkout is open and unpaid,
-// otherwise a dash.
+// otherwise a dash. isNoFeeCharge is the same zero test for My requests, My
+// rentals and the request detail, which say "No fee" too.
 
 // The methods a staff member records (backend/src/constants/charges.js).
 // Anything else is shown as it is, so a new method is visible, never blank.
@@ -48,6 +49,15 @@ export function isZeroFee(charge) {
     return Number(amount) === 0;
   }
   return false;
+}
+
+// Whether the charge is a PAID one of PHP 0: approval creates a PHP 0
+// document charge already paid, and a booking a PHP 0 rental charge, so there
+// was no fee to pay. The request and rental pages say "No fee" for it rather
+// than "₱0.00 — Paid". An unpaid or void PHP 0 charge is not one, and neither
+// is no charge at all (null).
+export function isNoFeeCharge(charge) {
+  return charge?.status === "PAID" && isZeroFee(charge);
 }
 
 export function methodOf(charge) {

@@ -56,6 +56,10 @@
 // and Refresh, which keeps its name. Against section Q's 23 charges, inside
 // section O's block.
 //
+// Section T is "No fee" on My requests, My rentals and the request detail: a
+// PAID PHP 0 charge says "No fee" instead of "₱0.00 — Paid", and a billed
+// request shows the fee it was charged, not its type's fee today.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -3541,6 +3545,264 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousScroll === undefined) delete proto.scrollIntoView;
     else proto.scrollIntoView = previousScroll;
+  }
+
+  // =========================================================================
+  // T. No fee: PHP 0 charges on the request and rental pages
+  // =========================================================================
+  // Approval creates a PHP 0 document charge already PAID, with no payment
+  // row, and a booking does the same for a PHP 0 rental; the Payments page
+  // calls that "No fee" (section N). My requests and My rentals said "Amount
+  // due: ₱0.00 — Paid", and the request detail the Secretary, Staff and the
+  // Punong Barangay open said "Charge ₱0.00 Paid", which reads as a payment
+  // someone made. All three now say "No fee". An unpaid or void PHP 0 charge
+  // keeps its old wording, and so does every charge above 0. The Fee of My
+  // requests and of the detail showed the document type's fee as it is
+  // today; once approval has billed a request they show the charge's amount,
+  // the fee taken then (request 11's type costs PHP 20.00 now, but it was
+  // charged PHP 0). isNoFeeCharge is checked on its own, case by case, then
+  // through the three real pages and the Punong Barangay's read-only detail.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- No fee: PHP 0 charges on the request and rental pages ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // a. isNoFeeCharge on its own. The amount arrives as a number or as a
+    // numeric string; a missing, null or blank one is never 0 (isZeroFee,
+    // section N), and only a PAID charge is "No fee".
+    const NO_FEE_CASES = [
+      { name: 'PAID, amount 0', want: true, c: { status: 'PAID', amount: 0 } },
+      { name: 'PAID, amount "0.00" (a string)', want: true, c: { status: 'PAID', amount: '0.00' } },
+      { name: 'PAID, amount "0" (a string)', want: true, c: { status: 'PAID', amount: '0' } },
+      { name: 'PAID, amount 20', want: false, c: { status: 'PAID', amount: 20 } },
+      { name: 'PAID, amount "20.00"', want: false, c: { status: 'PAID', amount: '20.00' } },
+      { name: 'PAID, amount 0.01', want: false, c: { status: 'PAID', amount: 0.01 } },
+      { name: 'PAID, amount null', want: false, c: { status: 'PAID', amount: null } },
+      { name: 'PAID, no amount at all', want: false, c: { status: 'PAID' } },
+      { name: 'PAID, amount "" (blank, which Number() reads as 0)', want: false, c: { status: 'PAID', amount: '' } },
+      { name: 'UNPAID, amount 0', want: false, c: { status: 'UNPAID', amount: 0 } },
+      { name: 'VOID, amount "0.00"', want: false, c: { status: 'VOID', amount: '0.00' } },
+      { name: 'no charge at all (null)', want: false, c: null },
+    ];
+    const isNoFee = globalThis.isNoFeeCharge;
+    for (const { name, want, c } of NO_FEE_CASES) {
+      let got;
+      try { got = typeof isNoFee === 'function' ? isNoFee(c) : 'isNoFeeCharge is not exported'; } catch (e) { got = `threw: ${e.message}`; }
+      check(`isNoFeeCharge: ${name} = ${want}`, got === want, said(got));
+    }
+
+    // The pages' data, in each list's real shape. Every request names its own
+    // document type and every booking its own item, so a row is found by the
+    // name in its first cell; each detail is opened by its resident's name.
+    const docRequest = (id, status, name, typeFee, charge) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-01T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-05T03:00:00+00:00' : null, rejection_reason: null,
+      document_types: { document_type_id: 500 + id, name, fee: typeFee },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+    });
+    const MINE = [
+      // Request 91: a First-time Jobseeker certificate, a PHP 0 type, claimed.
+      docRequest(91, 'claimed', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }),
+      // Request 11: its type costs PHP 20.00 now; it cost nothing when approved.
+      docRequest(11, 'claimed', 'Certificate of Indigency', '20.00', { amount: 0, status: 'PAID' }),
+      docRequest(120, 'ready_for_release', 'Barangay Clearance', '20.00', { amount: '20.00', status: 'PAID' }),
+      // Billed at PHP 50.00; the type has cost PHP 75.00 since.
+      docRequest(121, 'approved', 'Certificate of Residency', '75.00', { amount: '50.00', status: 'UNPAID' }),
+      docRequest(122, 'pending', 'Barangay ID', '30.00', null),
+      docRequest(123, 'approved', 'Certificate of Good Moral Character', '0.00', { amount: '0', status: 'PAID' }),
+      docRequest(124, 'approved', 'Business Clearance', '0.00', { amount: 0, status: 'UNPAID' }),
+      docRequest(125, 'claimed', 'Certificate of Low Income', '20.00', { amount: null, status: 'PAID' }),
+      docRequest(126, 'claimed', 'Solo Parent Certificate', '20.00', { status: 'PAID' }),
+    ];
+    const booking = (id, name, itemFee, status, charge) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-10-20T01:00:00+00:00', end_datetime: '2026-10-20T05:00:00+00:00',
+      purpose: `Purpose ${id}`, status, return_note: null, returned_at: null,
+      rental_items: { item_id: 600 + id, name, type: 'equipment', fee: itemFee },
+      charges: charge && { charge_id: 950 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+    });
+    const RENTALS = [
+      booking(301, 'Monobloc Chairs', '0.00', 'confirmed', { amount: '0.00', status: 'PAID' }),
+      booking(302, 'Sound System', '25.00', 'confirmed', { amount: '25.00', status: 'PAID' }),
+      booking(303, 'Covered Court', '300.00', 'confirmed', { amount: '300.00', status: 'UNPAID' }),
+      booking(304, 'Folding Tables', '0.00', 'confirmed', { amount: 0, status: 'UNPAID' }),
+      booking(305, 'Event Tent', '0.00', 'cancelled', { amount: '0.00', status: 'VOID' }),
+    ];
+    // The detail's shape: the list's, with the resident record, the requester,
+    // who decided it, and the charge's billed date and payment rows.
+    const detailRequest = (id, status, name, typeFee, charge, first, last) => ({
+      ...docRequest(id, status, name, typeFee, charge && { created_at: '2026-10-02T02:00:00+00:00', payments: [], ...charge }),
+      processed_at: status === 'pending' ? null : '2026-10-02T02:00:00+00:00',
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        birthdate: '1990-01-01', birthplace: 'Tagbilaran City', address: 'Purok 2, Ubujan', sex: null, civil_status: null,
+        contact_number: null, date_registered: '2026-07-01T00:00:00+00:00', account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: null },
+      processed_by: status === 'pending' ? null : { user_id: 1, username: 'secretary1' },
+    });
+    const DETAIL = [
+      detailRequest(91, 'claimed', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }, 'Liza', 'Bantilan'),
+      detailRequest(11, 'claimed', 'Certificate of Indigency', '20.00', { amount: 0, status: 'PAID' }, 'Mario', 'Dagohoy'),
+      detailRequest(130, 'approved', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }, 'Nora', 'Escabas'),
+      detailRequest(131, 'approved', 'Certificate of Residency', '75.00', { amount: '50.00', status: 'UNPAID' }, 'Oscar', 'Fuentes'),
+      detailRequest(132, 'ready_for_release', 'Barangay Clearance', '20.00', { amount: '20.00', status: 'PAID' }, 'Pia', 'Gallego'),
+      detailRequest(133, 'pending', 'Barangay ID', '30.00', null, 'Quino', 'Hontanosas'),
+    ];
+    const answer = (url) => {
+      if (url.includes('/document-requests/mine')) return { requests: MINE };
+      if (url.includes('/rental-requests/mine')) return { requests: RENTALS };
+      const one = url.match(/\/document-requests\/(\d+)$/);
+      if (one) {
+        const found = DETAIL.find((r) => r.request_id === Number(one[1]));
+        return found ? { request: found } : undefined;
+      }
+      if (url.includes('/document-requests?')) return { requests: DETAIL };
+      return undefined;
+    };
+    const methodsSent = [];
+    // A row's charge line is the one that says "No fee" or "Amount due …";
+    // the status cell's other notes ("Claimed on …") are not it.
+    const chargeLine = (cell) => [...(cell?.querySelectorAll('.reason-note') || [])].map(text)
+      .find((l) => l === 'No fee' || l.startsWith('Amount due')) ?? null;
+    const requestRow = (page, name) => {
+      const tr = page.queryAll('table.my-requests-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      if (!tr) return null;
+      const statusCell = tr.children[3];
+      return {
+        fee: text(tr.querySelector('td.num')),
+        charge: chargeLine(statusCell),
+        statusText: text(statusCell),
+        pay: !!tr.querySelector('.pay-menu'),
+        cancel: !!buttonNamed(tr, 'Cancel'),
+      };
+    };
+    const rentalRow = (page, name) => {
+      const tr = page.queryAll('table.my-rentals-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      if (!tr) return null;
+      return { charge: chargeLine(tr), rowText: text(tr), pay: !!tr.querySelector('.pay-menu') };
+    };
+
+    // b. My requests, as the resident who made them.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answer);
+    let page = await globalThis.mountInteractive(root(), '/resident');
+    await page.settle();
+    const r91 = requestRow(page, 'First-time Jobseeker Certificate');
+    check('My requests, request 91 (PAID ₱0.00): the charge line says "No fee", not "Amount due: ₱0.00 — Paid", with no '
+        + 'Pay menu; the Fee column shows the charge\'s ₱0.00',
+      r91?.charge === 'No fee' && !r91.statusText.includes('₱0.00') && !r91.statusText.includes('Amount due') && !r91.pay
+        && r91.fee === '₱0.00', said(r91));
+    const r11 = requestRow(page, 'Certificate of Indigency');
+    check('My requests, request 11 (its type costs ₱20.00 now, it was charged ₱0): Fee shows the charge\'s ₱0.00, not '
+        + '₱20.00, and the charge line says "No fee"',
+      r11?.fee === '₱0.00' && r11.charge === 'No fee' && !r11.pay, said(r11));
+    const r120 = requestRow(page, 'Barangay Clearance');
+    check('My requests, a PAID ₱20.00 charge still reads "Amount due: ₱20.00 — Paid", Fee ₱20.00',
+      r120?.charge === 'Amount due: ₱20.00 — Paid' && r120.fee === '₱20.00' && !r120.pay, said(r120));
+    const r121 = requestRow(page, 'Certificate of Residency');
+    check('My requests, an UNPAID ₱50.00 charge still reads "Amount due: ₱50.00 — Unpaid", with the Pay menu',
+      r121?.charge === 'Amount due: ₱50.00 — Unpaid' && r121.pay, said(r121));
+    check('  and its Fee is the ₱50.00 it was billed, not the ₱75.00 its type costs today', r121?.fee === '₱50.00', said(r121));
+    const r122 = requestRow(page, 'Barangay ID');
+    check('My requests, a pending request with no charge yet shows its type\'s ₱30.00 and no charge line',
+      r122?.fee === '₱30.00' && r122.charge === null && r122.cancel && !r122.pay, said(r122));
+    const r123 = requestRow(page, 'Certificate of Good Moral Character');
+    check('My requests, a PAID charge whose amount is the string "0" says "No fee" too',
+      r123?.charge === 'No fee' && !r123.pay, said(r123));
+    const r124 = requestRow(page, 'Business Clearance');
+    check('My requests, an UNPAID ₱0.00 charge keeps "Amount due: ₱0.00 — Unpaid" and the Pay menu, never "No fee"',
+      r124?.charge === 'Amount due: ₱0.00 — Unpaid' && r124.pay, said(r124));
+    const r125 = requestRow(page, 'Certificate of Low Income');
+    const r126 = requestRow(page, 'Solo Parent Certificate');
+    check('My requests, a PAID charge with a null amount, or with no amount at all, is never "No fee"',
+      !!r125 && !!r126 && r125.charge !== null && r125.charge !== 'No fee' && r126.charge !== null && r126.charge !== 'No fee',
+      said({ r125, r126 }));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // c. My rentals, as the same resident.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const chairs = rentalRow(page, 'Monobloc Chairs');
+    check('My rentals, a PAID ₱0.00 booking: the charge line says "No fee", no "₱0.00" anywhere in the row, and no Pay menu',
+      chairs?.charge === 'No fee' && !chairs.rowText.includes('₱0.00') && !chairs.rowText.includes('Amount due') && !chairs.pay,
+      said(chairs));
+    const sound = rentalRow(page, 'Sound System');
+    check('My rentals, a PAID ₱25.00 booking still reads "Amount due: ₱25.00 — Paid"',
+      sound?.charge === 'Amount due: ₱25.00 — Paid' && !sound.pay, said(sound));
+    const court = rentalRow(page, 'Covered Court');
+    check('My rentals, an UNPAID ₱300.00 booking still reads "Amount due: ₱300.00 — Unpaid", with the Pay menu',
+      court?.charge === 'Amount due: ₱300.00 — Unpaid' && court.pay, said(court));
+    const tables = rentalRow(page, 'Folding Tables');
+    check('My rentals, an UNPAID ₱0.00 booking keeps "Amount due: ₱0.00 — Unpaid" and the Pay menu, never "No fee"',
+      tables?.charge === 'Amount due: ₱0.00 — Unpaid' && tables.pay, said(tables));
+    const tent = rentalRow(page, 'Event Tent');
+    check('My rentals, a cancelled booking\'s VOID ₱0.00 charge keeps "Amount due: ₱0.00 — Void", never "No fee"',
+      tent?.charge === 'Amount due: ₱0.00 — Void' && !tent.pay, said(tent));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // d. The request detail, as the Secretary. Opened from the list's Review
+    // (View for the Punong Barangay) and left by Back to list; the workflow
+    // buttons are read, never pressed.
+    const detailOf = async (pg, first, last) => {
+      const row = pg.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === `${first} ${last}`);
+      const opener = row && [...row.querySelectorAll('button')].find((b) => /^(Review|View)$/.test(b.textContent));
+      if (!opener) return { fields: {}, missing: `${first} ${last}` };
+      await pg.click(opener);
+      await pg.settle();
+      const grid = pg.query('.pending-card dl.info-grid');
+      const out = {
+        fields: Object.fromEntries([...(grid?.children || [])].map((div) => [text(div.querySelector('dt')), text(div.querySelector('dd'))])),
+        release: !!buttonNamed(root(), 'Mark ready for release'),
+        claim: !!buttonNamed(root(), 'Mark as claimed'),
+        awaiting: root().textContent.includes('Awaiting payment'),
+      };
+      await clickIf(pg, buttonNamed(root(), '← Back to list'));
+      return out;
+    };
+    seedSession(VALID);
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    let d = await detailOf(page, 'Liza', 'Bantilan');
+    check('Request detail, request 91 (PAID ₱0.00): Charge says "No fee", not "₱0.00 Paid"; Fee is the charge\'s ₱0.00',
+      d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00', said(d.fields));
+    d = await detailOf(page, 'Mario', 'Dagohoy');
+    check('Request detail, request 11 (its type costs ₱20.00 now, it was charged ₱0): Fee shows the charge\'s ₱0.00, not '
+        + '₱20.00, and Charge says "No fee"',
+      d.fields.Fee === '₱0.00' && d.fields.Charge === 'No fee', said(d.fields));
+    d = await detailOf(page, 'Nora', 'Escabas');
+    check('Request detail, an approved request with a PAID ₱0.00 charge says "No fee" and still offers "Mark ready for '
+        + 'release": the release rule is unchanged',
+      d.fields.Charge === 'No fee' && d.release && !d.awaiting, said(d));
+    d = await detailOf(page, 'Oscar', 'Fuentes');
+    check('Request detail, an approved request with an UNPAID ₱50.00 charge: Charge "₱50.00 Unpaid", Fee the ₱50.00 it was '
+        + 'billed (not the type\'s ₱75.00 today), and it still awaits payment',
+      d.fields.Charge === '₱50.00 Unpaid' && d.fields.Fee === '₱50.00' && d.awaiting && !d.release, said(d));
+    d = await detailOf(page, 'Pia', 'Gallego');
+    check('Request detail, a PAID ₱20.00 charge still reads "₱20.00 Paid", Fee ₱20.00, and "Mark as claimed" is offered',
+      d.fields.Charge === '₱20.00 Paid' && d.fields.Fee === '₱20.00' && d.claim, said(d));
+    d = await detailOf(page, 'Quino', 'Hontanosas');
+    check('Request detail, a pending request with no charge: Fee is its type\'s ₱30.00, Charge "No charge (billed on approval)"',
+      d.fields.Fee === '₱30.00' && d.fields.Charge === 'No charge (billed on approval)', said(d.fields));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // e. The same detail, read-only, as the Punong Barangay.
+    seedSession(makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+      { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false });
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/punong-barangay/requests');
+    await page.settle();
+    d = await detailOf(page, 'Nora', 'Escabas');
+    check('the Punong Barangay\'s read-only detail says "No fee" too, Fee ₱0.00, with no release button',
+      d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00' && !d.release, said(d));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    check('section T sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
   }
 
   console.error = origError;

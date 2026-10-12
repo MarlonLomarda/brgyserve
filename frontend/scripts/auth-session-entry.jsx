@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
-import { methodOf } from '../src/utils/chargeMethod.js';
+import * as chargeMethod from '../src/utils/chargeMethod.js';
 import * as chargeFilters from '../src/utils/chargeFilters.js';
 import * as chargeSearch from '../src/utils/chargeSearch.js';
 import * as chargeTotals from '../src/utils/chargeTotals.js';
@@ -18,7 +18,10 @@ import * as paging from '../src/utils/paging.js';
 globalThis.isTokenExpired = isTokenExpired;
 globalThis.decodeJwtPayload = decodeJwtPayload;
 // The Payments page's Method label, checked on its own in section N.
-globalThis.methodOf = methodOf;
+globalThis.methodOf = chargeMethod.methodOf;
+// The "No fee" test of My requests, My rentals and the request detail,
+// checked on its own in section T.
+globalThis.isNoFeeCharge = chargeMethod.isNoFeeCharge;
 // The Payments page's search, totals and paging helpers, checked on their
 // own in section O.
 globalThis.chargeSearch = chargeSearch;

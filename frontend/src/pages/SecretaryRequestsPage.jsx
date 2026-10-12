@@ -8,6 +8,7 @@ import {
   formatDate,
   STATUS_META,
 } from "../constants/requestStatus";
+import { isNoFeeCharge } from "../utils/chargeMethod";
 
 // Document request processing. Shared by three roles: the Secretary passes
 // canManage and gets the four workflow actions; Staff and the Punong Barangay
@@ -114,6 +115,10 @@ function RequestDetail({ id, canManage, onBack }) {
   const r = request;
   const resident = r?.resident_records;
   const charge = chargeOf(r);
+  const noFee = isNoFeeCharge(charge);
+  // Once approval has billed the request, the fee is what it charged, not the
+  // document type's fee today, which can have changed since.
+  const fee = charge?.amount ?? r?.document_types?.fee ?? 0;
 
   return (
     <div className="pending-card">
@@ -146,7 +151,7 @@ function RequestDetail({ id, canManage, onBack }) {
             </div>
             <div>
               <dt>Fee</dt>
-              <dd>₱{Number(r.document_types?.fee ?? 0).toFixed(2)}</dd>
+              <dd>₱{Number(fee).toFixed(2)}</dd>
             </div>
             <div>
               <dt>Status</dt>
@@ -157,7 +162,9 @@ function RequestDetail({ id, canManage, onBack }) {
             <div>
               <dt>Charge</dt>
               <dd>
-                {charge ? (
+                {noFee ? (
+                  "No fee"
+                ) : charge ? (
                   <>
                     ₱{Number(charge.amount).toFixed(2)}{" "}
                     <span

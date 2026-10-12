@@ -8,6 +8,7 @@ import {
   formatSchedule,
   rentalMeta,
 } from "../constants/rentals";
+import { isNoFeeCharge } from "../utils/chargeMethod";
 
 export default function MyRentalsPage() {
   const { authFetch } = useAuth();
@@ -186,6 +187,7 @@ export default function MyRentalsPage() {
                 {requests.map((r) => {
                   const meta = rentalMeta(displayStatus(r));
                   const charge = chargeOf(r);
+                  const noFee = isNoFeeCharge(charge);
                   return (
                     <tr key={r.request_id}>
                       <td>
@@ -209,7 +211,10 @@ export default function MyRentalsPage() {
                             Note: {r.return_note}
                           </div>
                         )}
-                        {charge && (
+                        {noFee && (
+                          <div className="muted reason-note">No fee</div>
+                        )}
+                        {charge && !noFee && (
                           <div className="muted reason-note">
                             Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
                             <strong
