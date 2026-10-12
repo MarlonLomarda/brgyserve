@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IoIosClose } from "react-icons/io";
-import { IoClose, IoSearch } from "react-icons/io5";
+import {
+  IoChevronBack,
+  IoChevronForward,
+  IoClose,
+  IoSearch,
+} from "react-icons/io5";
 import { useAuth } from "../auth/AuthContext";
 import {
   chargeMeta,
@@ -25,7 +30,14 @@ import {
   TYPE_TABS,
 } from "../utils/chargeSearch";
 import { totalsLine } from "../utils/chargeTotals";
-import { pageOf, pagerText } from "../utils/paging";
+import {
+  GAP,
+  PAGE_SIZE,
+  PAGE_SIZES,
+  pageItems,
+  pageOf,
+  pagerText,
+} from "../utils/paging";
 
 // Payment verification queue for ALL charge types (document fees since stage
 // 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
@@ -41,9 +53,11 @@ import { pageOf, pagerText } from "../utils/paging";
 //
 // SEARCH, TYPE TABS, TOTALS AND PAGES (12 Oct 2026). Above the rows: a search
 // box (utils/chargeSearch.js), the status and Refresh; the type tabs; and the
-// totals line (utils/chargeTotals.js), which is the list's h2. Below them, a
-// pager of 25 rows a page (utils/paging.js). All of it works on the list
-// already loaded: nothing here sends a request.
+// totals line (utils/chargeTotals.js), which is the list's h2. Below them,
+// the pager (utils/paging.js): "Showing 1 to 25 of 89 results", Rows per
+// page (10, 25, 50 or 100, 25 to start), then Previous, the page numbers and
+// Next. All of it works on the list already loaded: nothing here sends a
+// request.
 const FILTERS = ["UNPAID", "PAID", "VOID", "all"];
 const FILTER_LABELS = {
   UNPAID: "Needs verification",
@@ -485,14 +499,15 @@ export default function PaymentsPage() {
   const [selected, setSelected] = useState(null); // charge open in the View panel
   const [recheckingId, setRecheckingId] = useState(null);
   const [verifying, setVerifying] = useState(false);
-  // The search, the type tab and the page. All three start fresh on every
-  // visit (the barangay hall's PC is shared, so nothing is kept in the
-  // browser) and live through Refresh, Record payment and Re-check, which
-  // reload the list without touching them. A new status keeps the search and
-  // the tab and goes back to page 1.
+  // The search, the type tab, the page and the rows per page. All four start
+  // fresh on every visit (the barangay hall's PC is shared, so nothing is
+  // kept in the browser) and live through Refresh, Record payment and
+  // Re-check, which reload the list without touching them. A new status keeps
+  // the search, the tab and the rows per page and goes back to page 1.
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   // How many charges the server says the status has. More than it sent means
   // its 1,000-row cap cut the list (routes/charges.js).
   const [total, setTotal] = useState(null);
@@ -661,7 +676,7 @@ export default function PaymentsPage() {
   );
   const counts = tabCounts(searched);
   const shown = searched.filter((c) => inTab(c, tab));
-  const paging = pageOf(shown.length, page);
+  const paging = pageOf(shown.length, page, pageSize);
   const pager = pagerText(paging);
   const rows = shown.slice(paging.start, paging.end);
   // A reload that shrank the list lands on its last page, and stays there.
@@ -704,13 +719,21 @@ export default function PaymentsPage() {
     searchRef.current?.focus();
   }
 
-  // Previous and Next. The list heading is brought into view, and nothing
-  // else moves: focus stays on the button. An end button is aria-disabled,
-  // not disabled, so it keeps focus when the page reaches it; a press on it
-  // does nothing here.
+  // Previous, Next and the page numbers. The list heading is brought into
+  // view, and nothing else moves: focus stays on the button. An end button is
+  // aria-disabled, not disabled, so it keeps focus when the page reaches it;
+  // a press on it, or on the current page, does nothing here.
   function goToPage(n) {
     if (n < 1 || n > paging.pages || n === paging.page) return;
     setPage(n);
+    headingRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
+  // Rows per page: back to page 1, and the heading into view, as for a page
+  // change. Focus stays on the select.
+  function changePageSize(value) {
+    setPageSize(PAGE_SIZES.includes(value) ? value : PAGE_SIZE);
+    setPage(1);
     headingRef.current?.scrollIntoView({ block: "nearest" });
   }
 
@@ -915,28 +938,73 @@ export default function PaymentsPage() {
         </div>
       )}
 
+      {/* The pager, from 11 matches (utils/paging.js): the count, Rows per
+          page, then Previous, the page numbers and Next. The count is
+          announced when it changes, because a press moves no focus. A phone
+          draws "Page 2 of 4" between Previous and Next in place of the
+          numbers (index.css), so both are in the markup at every width. */}
       {paging.show && (
-        <nav className="pay-pager" aria-label="Pages of charges">
-          <button
-            type="button"
-            className="btn secondary"
-            aria-disabled={paging.page === 1}
-            onClick={() => goToPage(paging.page - 1)}
-          >
-            Previous
-          </button>
-          <p className="pay-pager-status" aria-live="polite">
-            <strong>{pager.page}</strong>
-            <span>{pager.range}</span>
+        <nav className="pay-pager" aria-label="Pagination">
+          <p className="pay-pager-count" aria-live="polite">
+            Showing <strong>{pager.from}</strong> to{" "}
+            <strong>{pager.to}</strong> of <strong>{pager.of}</strong> results
           </p>
-          <button
-            type="button"
-            className="btn secondary"
-            aria-disabled={paging.page === paging.pages}
-            onClick={() => goToPage(paging.page + 1)}
-          >
-            Next
-          </button>
+          <div className="pay-pager-size">
+            <label htmlFor="pay-page-size">Rows per page</label>
+            <select
+              id="pay-page-size"
+              value={pageSize}
+              onChange={(e) => changePageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="pay-pager-pages">
+            <button
+              type="button"
+              className="btn secondary pay-pager-step"
+              aria-disabled={paging.page === 1}
+              onClick={() => goToPage(paging.page - 1)}
+            >
+              <IoChevronBack aria-hidden="true" />
+              Previous
+            </button>
+            <ul className="pay-pager-numbers">
+              {pageItems(paging.page, paging.pages).map((item, i) =>
+                item === GAP ? (
+                  <li key={`gap-${i}`} className="pay-pager-gap">
+                    …
+                  </li>
+                ) : (
+                  <li key={item}>
+                    <button
+                      type="button"
+                      className="pay-page"
+                      aria-label={`Page ${item}`}
+                      aria-current={item === paging.page ? "page" : undefined}
+                      onClick={() => goToPage(item)}
+                    >
+                      {item}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+            <p className="pay-pager-short">{pager.page}</p>
+            <button
+              type="button"
+              className="btn secondary pay-pager-step"
+              aria-disabled={paging.page === paging.pages}
+              onClick={() => goToPage(paging.page + 1)}
+            >
+              Next
+              <IoChevronForward aria-hidden="true" />
+            </button>
+          </div>
         </nav>
       )}
 

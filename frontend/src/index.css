@@ -2860,20 +2860,88 @@ button.pay-tab:hover:not(:disabled) {
   }
 }
 
-/* The pager: Previous, where you are, Next; hidden when everything fits on
-   one page. An end button is aria-disabled rather than disabled, so the one
-   just pressed keeps focus when it reaches the end (a disabled button drops
-   it); the page ignores a press on it. (0,5,0) beats .btn.secondary's hover. */
+/* The pager (batch 6b): one bar under the rows, a card like the table's. The
+   count on the left; Rows per page, Previous, the page numbers and Next on
+   the right. Where the column is too narrow for one line it wraps, and only
+   one way: the count and Rows per page stay on the first line, the buttons
+   go to the second, at its right end (the select's auto left margin takes
+   the first line's slack; justify-content places the buttons, alone on
+   theirs). No breakpoint decides this, so the same holds wherever the
+   column narrows, sidebar or not. Hidden at 10 matches or fewer
+   (utils/paging.js). An end button is aria-disabled rather than disabled,
+   so the one just pressed keeps focus when it reaches the end (a disabled
+   button drops it); the page ignores a press on it. (0,5,0) beats
+   .btn.secondary's hover. */
 .pay-pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 14px;
+  justify-content: flex-end;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.pay-pager .btn {
-  min-width: 96px;
+/* The count reserves the widest it can read, "Showing 991 to 1,000 of 1,000
+   results" (234px measured), and a "…" takes a number's 36px: so the bar is
+   as wide on every page of a list, and a press never moves the buttons
+   between one line and two. Without these, 89 charges at 1046px fit one
+   line on page 1 and wrapped on page 2 (762.8 against 770.6 in a 769 bar). */
+.pay-pager-count {
+  min-width: 16rem;
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-pager-count strong {
+  font-weight: 600;
+  color: #334155;
+}
+
+.pay-pager-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* (0,1,1) beats the base label and select rules: no block label, no 14px
+   under it, and the select only as wide as "100". */
+.pay-pager-size label {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.pay-pager-size select {
+  width: auto;
+  height: 36px;
+  margin-top: 0;
+  padding: 0 8px;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+.pay-pager-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-pager .pay-pager-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px;
 }
 
 .pay-pager .btn[aria-disabled="true"] {
@@ -2885,20 +2953,63 @@ button.pay-tab:hover:not(:disabled) {
   background: #fff;
 }
 
-.pay-pager-status {
+.pay-pager-numbers {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 6px;
   margin: 0;
-  font-size: 0.85rem;
-  color: #64748b;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+  padding: 0;
+  list-style: none;
 }
 
-.pay-pager-status strong {
+/* A page number: (0,2,0) beats the base button rule. The hover is (0,4,1),
+   to beat button:hover:not(:disabled), which would paint it blue, and to
+   leave the current page alone. The ring sits outside the button, because
+   inside the filled current page it would not show. */
+.pay-pager-numbers .pay-page {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 0.875rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: #334155;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+button.pay-page:not([aria-current="page"]):hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* The current page, filled in the accent. A press on it does nothing. */
+.pay-pager-numbers .pay-page[aria-current="page"] {
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+  cursor: default;
+}
+
+.pay-pager-numbers .pay-page:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* The "…" for the pages left out: text, not a button. #64748b is 4.76:1 on
+   white; the paler #94a3b8 would fail AA. */
+.pay-pager-gap {
+  min-width: 36px;
+  font-size: 0.875rem;
+  color: #64748b;
+  text-align: center;
+  user-select: none;
+}
+
+/* "Page 2 of 4": a phone's, in place of the numbers (the 640px block). */
+.pay-pager-short {
+  display: none;
 }
 
 /* Events stage 3c: the resident's household QR code. The code is the only
@@ -4563,8 +4674,7 @@ button.tab:hover:not(:disabled) {
 
   /* The Payments search on a phone takes its own full-width row, with the
      status and Refresh on the row under it (.list-head wraps at this width).
-     The field stays 16px, so iOS Safari does not zoom into it. The pager's
-     buttons are 44px tall, a finger's width. */
+     The field stays 16px, so iOS Safari does not zoom into it. */
   .pay-search {
     flex: 1 1 100%;
     max-width: none;
@@ -4574,9 +4684,64 @@ button.tab:hover:not(:disabled) {
     font-size: 1rem;
   }
 
-  .pay-pager .btn {
-    min-width: 88px;
-    min-height: 44px;
+  /* The pager on a phone: the count on one line, Rows per page on the next,
+     then Previous and Next, 44px tall, a finger's width, with "Page 2 of 4"
+     between them in place of the numbers. The middle column is auto between
+     two equal ones, so "Page 2 of 4" sits at the centre whatever the two
+     buttons measure. The select is 16px, so iOS Safari does not zoom. */
+  .pay-pager {
+    padding: 12px 14px;
+  }
+
+  .pay-pager-count,
+  .pay-pager-size,
+  .pay-pager-pages {
+    flex: 1 1 100%;
+  }
+
+  /* Each part has its own line here, so the count needs no reserve. */
+  .pay-pager-count {
+    min-width: 0;
+  }
+
+  .pay-pager-size {
+    margin-left: 0;
+  }
+
+  .pay-pager-size select {
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .pay-pager-pages {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .pay-pager-pages > .pay-pager-step:first-child {
+    justify-self: start;
+  }
+
+  .pay-pager-pages > .pay-pager-step:last-child {
+    justify-self: end;
+  }
+
+  .pay-pager .pay-pager-step {
+    height: 44px;
+  }
+
+  .pay-pager-numbers {
+    display: none;
+  }
+
+  .pay-pager-short {
+    display: block;
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 }
 

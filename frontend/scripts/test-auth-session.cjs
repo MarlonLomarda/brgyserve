@@ -42,6 +42,10 @@
 // Section O is the Payments page's search, type tabs, totals and paging: the
 // pure helpers case by case, then the real page against 64 stubbed charges.
 //
+// Section P is the Payments pager itself: the count line, Rows per page, the
+// numbered page buttons and Previous and Next, against 89 stubbed charges. It
+// sits inside section O's block, to use the same charges and helpers.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -1624,8 +1628,9 @@ const root = () => dom.window.document.getElementById('root');
   // charge number, the references the View panel can show and the "For" text,
   // but never the purpose; type tabs whose counts follow the search; a totals
   // line over EVERY matching charge, summed in whole centavos, not just the
-  // page shown; and pages of 25. Filters start fresh on every visit and live
-  // through Refresh, Record payment and Re-check. The pure helpers
+  // page shown; and pages, 25 a page unless Rows per page says otherwise (the
+  // pager itself is section P, below). Filters start fresh on every visit and
+  // live through Refresh, Record payment and Re-check. The pure helpers
   // (utils/chargeSearch.js, chargeTotals.js, paging.js) are checked case by
   // case, then the real page against 64 stubbed charges: 30 waiting, 26 paid
   // and 8 void. Every request is answered by the fetch stub.
@@ -1826,29 +1831,100 @@ const root = () => dom.window.document.getElementById('root');
     check('  counts get thousands separators too: "1,000 charges · ₱1,000.00 unpaid"',
       got?.heading === '1,000 charges · ₱1,000.00 unpaid', said(got));
 
-    // c. Paging, on its own.
-    const pg = (count, pageNo) => attempt(() => P.pageOf(count, pageNo));
+    // c. Paging, on its own: 25 a page unless Rows per page says otherwise,
+    // the count line ("Showing 1 to 25 of 88 results"), the phone's "Page 1
+    // of 4", and which page numbers the pager draws.
+    const pg = (count, pageNo, size) => attempt(() => P.pageOf(count, pageNo, size));
     const words = (p) => attempt(() => P.pagerText(p));
-    check('paging: 25 a page', P.PAGE_SIZE === 25, String(P.PAGE_SIZE));
+    // The count line as the page writes it, from pagerText's three numbers.
+    const showing = (p) => {
+      const w = words(p);
+      return w && typeof w === 'object' ? `Showing ${w.from} to ${w.to} of ${w.of} results` : String(w);
+    };
+    check('paging: 25 a page unless chosen otherwise, and the choices are 10, 25, 50 and 100',
+      P.PAGE_SIZE === 25 && said(P.PAGE_SIZES) === '[10,25,50,100]', said([P.PAGE_SIZE, P.PAGE_SIZES]));
     let p = pg(88, 1);
-    check('paging: 88 charges, page 1: rows 1-25 of 4 pages, "Page 1 of 4", "Showing 1–25 of 88", pager shown',
+    check('paging: 88 charges, page 1: rows 1-25 of 4 pages, "Showing 1 to 25 of 88 results", "Page 1 of 4", pager shown',
       p?.page === 1 && p.pages === 4 && p.start === 0 && p.end === 25 && p.show === true
-        && words(p)?.page === 'Page 1 of 4' && words(p)?.range === 'Showing 1–25 of 88', said([p, words(p)]));
+        && showing(p) === 'Showing 1 to 25 of 88 results' && words(p)?.page === 'Page 1 of 4', said([p, words(p)]));
     p = pg(88, 2);
-    check('  page 2: rows 26-50, "Showing 26–50 of 88"', p?.start === 25 && p.end === 50 && words(p)?.range === 'Showing 26–50 of 88', said(p));
+    check('  page 2: rows 26-50, "Showing 26 to 50 of 88 results"',
+      p?.start === 25 && p.end === 50 && showing(p) === 'Showing 26 to 50 of 88 results', said([p, words(p)]));
     p = pg(88, 4);
-    check('  the last page holds what is left: rows 76-88, "Page 4 of 4", "Showing 76–88 of 88"',
-      p?.page === 4 && p.start === 75 && p.end === 88 && words(p)?.page === 'Page 4 of 4' && words(p)?.range === 'Showing 76–88 of 88', said(p));
-    check('paging clamps: page 9 of 88 is page 4; page 4 of a list shrunk to 60 is page 3 ("Showing 51–60 of 60"); 0, -2 and NaN are page 1',
-      pg(88, 9)?.page === 4 && pg(60, 4)?.page === 3 && words(pg(60, 4))?.range === 'Showing 51–60 of 60'
+    check('  the last page holds what is left: rows 76-88, "Page 4 of 4", "Showing 76 to 88 of 88 results"',
+      p?.page === 4 && p.start === 75 && p.end === 88 && words(p)?.page === 'Page 4 of 4'
+        && showing(p) === 'Showing 76 to 88 of 88 results', said([p, words(p)]));
+    check('paging clamps: page 9 of 88 is page 4; page 4 of a list shrunk to 60 is page 3 ("Showing 51 to 60 of 60 results"); 0, -2 and NaN are page 1',
+      pg(88, 9)?.page === 4 && pg(60, 4)?.page === 3 && showing(pg(60, 4)) === 'Showing 51 to 60 of 60 results'
         && pg(10, 0)?.page === 1 && pg(10, -2)?.page === 1 && pg(10, NaN)?.page === 1,
       said([pg(88, 9)?.page, pg(60, 4)?.page, pg(10, 0)?.page, pg(10, -2)?.page, pg(10, NaN)?.page]));
-    check('paging hides the pager when everything fits: 25 is one page, 26 is two, none is one',
-      pg(25, 1)?.show === false && pg(25, 1).pages === 1 && pg(26, 1)?.show === true && pg(26, 1).pages === 2
-        && pg(0, 3)?.page === 1 && pg(0, 3).pages === 1 && pg(0, 3).show === false, said([pg(25, 1), pg(26, 1), pg(0, 3)]));
+    check('the pager shows from 11 matches, even when they fit on one page: 10 hides it, 11 and 25 show it with one page, '
+        + '26 makes two, none hides it',
+      pg(10, 1)?.show === false && pg(11, 1)?.show === true && pg(11, 1).pages === 1 && pg(25, 1)?.show === true
+        && pg(25, 1).pages === 1 && pg(26, 1)?.show === true && pg(26, 1).pages === 2
+        && pg(0, 3)?.page === 1 && pg(0, 3).pages === 1 && pg(0, 3).show === false,
+      said([pg(10, 1), pg(11, 1), pg(25, 1), pg(26, 1), pg(0, 3)]));
     p = pg(1000, 40);
-    check('  with thousands separators: "Page 40 of 40", "Showing 976–1,000 of 1,000"',
-      words(p)?.page === 'Page 40 of 40' && words(p)?.range === 'Showing 976–1,000 of 1,000', said(words(p)));
+    check('  with thousands separators: "Page 40 of 40", "Showing 976 to 1,000 of 1,000 results"',
+      words(p)?.page === 'Page 40 of 40' && showing(p) === 'Showing 976 to 1,000 of 1,000 results', said(words(p)));
+    p = pg(89, 9, 10);
+    const firstOfTen = pg(89, 1, 10);
+    check('paging at 10 a page: 89 charges make 9 pages; page 1 is rows 1-10, page 9 rows 81-89, "Showing 81 to 89 of 89 results"',
+      firstOfTen?.pages === 9 && firstOfTen.start === 0 && firstOfTen.end === 10 && p?.page === 9 && p.start === 80 && p.end === 89
+        && showing(p) === 'Showing 81 to 89 of 89 results' && words(p)?.page === 'Page 9 of 9', said([firstOfTen, p, words(p)]));
+    check('  at 50 a page 89 charges make 2 pages, at 100 one page ("Showing 1 to 89 of 89 results")',
+      pg(89, 2, 50)?.pages === 2 && pg(89, 2, 50).start === 50 && pg(89, 1, 100)?.pages === 1
+        && showing(pg(89, 1, 100)) === 'Showing 1 to 89 of 89 results', said([pg(89, 2, 50), pg(89, 1, 100)]));
+    check('  a size that is not a whole number above 0 is 25: 0, -10, 2.5 and NaN all make 89 charges 4 pages',
+      [0, -10, 2.5, NaN].every((size) => pg(89, 1, size)?.pages === 4), said([0, -10, 2.5, NaN].map((size) => pg(89, 1, size)?.pages)));
+
+    // Which page numbers the pager draws: up to 7 pages, every number; above
+    // 7, exactly 7 slots, "…" standing for the pages left out.
+    const drawn = (current, pages) => {
+      const items = attempt(() => P.pageItems(current, pages));
+      return Array.isArray(items) ? items.map((it) => (it === P.GAP ? '…' : String(it))).join(' ') : String(items);
+    };
+    check('page numbers, 1 page: "1"', drawn(1, 1) === '1', drawn(1, 1));
+    check('page numbers, 7 pages: every number whatever the page; 1, 4 and 7 all draw "1 2 3 4 5 6 7"',
+      [1, 4, 7].every((c) => drawn(c, 7) === '1 2 3 4 5 6 7'), said([1, 4, 7].map((c) => drawn(c, 7))));
+    check('page numbers, 8 pages: 1 and 4 draw "1 2 3 4 5 … 8", 5 and 8 draw "1 … 4 5 6 7 8"',
+      drawn(1, 8) === '1 2 3 4 5 … 8' && drawn(4, 8) === '1 2 3 4 5 … 8' && drawn(5, 8) === '1 … 4 5 6 7 8'
+        && drawn(8, 8) === '1 … 4 5 6 7 8', said([1, 4, 5, 8].map((c) => drawn(c, 8))));
+    const TWENTY_ONE = {
+      1: '1 2 3 4 5 … 21', 2: '1 2 3 4 5 … 21', 4: '1 2 3 4 5 … 21', 5: '1 … 4 5 6 … 21', 11: '1 … 10 11 12 … 21',
+      17: '1 … 16 17 18 … 21', 18: '1 … 17 18 19 20 21', 21: '1 … 17 18 19 20 21',
+    };
+    const wrong21 = Object.entries(TWENTY_ONE).filter(([c, want]) => drawn(Number(c), 21) !== want)
+      .map(([c, want]) => `page ${c}: "${drawn(Number(c), 21)}", want "${want}"`);
+    check('page numbers, 21 pages: 1, 2 and 4 draw "1 2 3 4 5 … 21"; 5 "1 … 4 5 6 … 21"; 11, the middle, "1 … 10 11 12 … 21"; '
+        + '17 "1 … 16 17 18 … 21"; 18, the last but 3, and 21, the last, "1 … 17 18 19 20 21"',
+      wrong21.length === 0, said(wrong21));
+    // Every page of every list from 1 to 40 pages, against the rules the
+    // numbers keep whatever the window looks like.
+    const broken = [];
+    for (let pages = 1; pages <= 40; pages += 1) {
+      for (let current = 1; current <= pages; current += 1) {
+        const items = attempt(() => P.pageItems(current, pages));
+        const why = [];
+        if (!Array.isArray(items)) why.push(String(items));
+        else {
+          const nums = items.filter((it) => it !== P.GAP);
+          if (items.length > 7) why.push(`${items.length} slots`);
+          if (pages > 7 && items.length !== 7) why.push('not exactly 7 slots');
+          if (pages <= 7 && items.length !== pages) why.push('not every number');
+          if (items.some((it, i) => it === P.GAP && items[i + 1] === P.GAP)) why.push('two … in a row');
+          if (items[0] !== 1 || items[items.length - 1] !== pages) why.push('first or last page missing');
+          if (!items.includes(current)) why.push('current page missing');
+          if (nums.some((n) => !Number.isInteger(n))) why.push('a slot that is neither a page number nor …');
+          if (nums.some((n, i) => i > 0 && n <= nums[i - 1])) why.push('out of order');
+          if (items.some((it, i) => it === P.GAP && items[i + 1] - items[i - 1] < 3)) why.push('… for a single page');
+        }
+        if (why.length) broken.push(`page ${current} of ${pages}: ${why.join(', ')}`);
+      }
+    }
+    check('page numbers, every page of lists of 1 to 40 pages: at most 7 slots, exactly 7 above 7 pages, never two "…" in a row, '
+        + 'always the first, the last and the current page, in order, and every "…" stands for at least two pages',
+      broken.length === 0, `${broken.length} broken${broken.length ? `: ${said(broken.slice(0, 4))}` : ''}`);
 
     // d. The real page, against 64 charges. 30 waiting: 18 documents at PHP
     // 50, 8 rentals at 300, 4 fines at 100 (PHP 3,700). 26 paid: 14
@@ -1910,7 +1986,10 @@ const root = () => dom.window.document.getElementById('root');
       return mountPayments();
     };
     const listHeading = (page) => page.queryAll('h2').find((h) => !h.closest('.pay-panel')) ?? null;
-    // What the page says, read the way a person would.
+    // What the page says, read the way a person would. The pager's parts are
+    // read one by one: the count line, the page number marked current, the
+    // numbers drawn ("…" for a gap), the phone's "Page 2 of 4" and the Rows
+    // per page choice.
     const look = (page) => ({
       heading: listHeading(page)?.textContent ?? null,
       detail: page.query('.pay-totals-detail')?.textContent ?? null,
@@ -1918,11 +1997,21 @@ const root = () => dom.window.document.getElementById('root');
       pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map((b) => b.textContent),
       rows: page.queryAll('table.payments-table tbody tr').map((tr) => tr.querySelector('strong')?.textContent ?? null),
       pager: page.query('.pay-pager')?.textContent ?? null,
+      showing: page.query('.pay-pager-count')?.textContent ?? null,
+      current: page.queryAll('.pay-pager [aria-current="page"]').map((b) => b.textContent),
+      numbers: page.queryAll('.pay-pager-numbers li').map((li) => li.textContent).join(' '),
+      short: page.query('.pay-pager-short')?.textContent ?? null,
+      size: page.query('#pay-page-size')?.value ?? null,
       cap: page.query('.pay-cap')?.textContent ?? null,
       search: page.query(SEARCH)?.value ?? null,
       noMatch: root().textContent.includes('No charges match your search or filters.'),
     });
-    const pagerSays = (v, pageText, range) => typeof v.pager === 'string' && v.pager.includes(pageText) && v.pager.includes(range);
+    // The pager is on page n of m, which three parts must agree on: the count
+    // line, the one number marked aria-current="page", and "Page n of m".
+    const pagerSays = (v, short, showingText) => {
+      const n = /^Page (\d+) of /.exec(short)?.[1];
+      return v.short === short && v.showing === showingText && said(v.current) === said([n]);
+    };
     const type = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
     const tabNamed = (page, label) => page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
     const viewFor = (page, name) =>
@@ -1947,9 +2036,9 @@ const root = () => dom.window.document.getElementById('root');
     check('Payments opens on Needs verification: "30 charges · ₱3,700.00 unpaid", tabs All 30 · Documents 18 · Rentals 8 · Fines 4, All pressed',
       page.query('.list-head select')?.value === 'UNPAID' && v.heading === '30 charges · ₱3,700.00 unpaid' && v.detail === null
         && v.tabs === 'All 30 · Documents 18 · Rentals 8 · Fines 4' && said(v.pressed) === said(['All 30']), said(v));
-    check('  the first 25 rows in the order sent, and the pager reads "Page 1 of 2" and "Showing 1–25 of 30"',
-      said(v.rows) === said(namesOf(UNPAID.slice(0, 25))) && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30'),
-      said({ rows: v.rows.length, first: v.rows[0], pager: v.pager }));
+    check('  the first 25 rows in the order sent, and the pager reads "Showing 1 to 25 of 30 results", page 1 of 2',
+      said(v.rows) === said(namesOf(UNPAID.slice(0, 25))) && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results'),
+      said({ rows: v.rows.length, first: v.rows[0], showing: v.showing, current: v.current, short: v.short }));
     const box = page.query(SEARCH);
     check('  the search box is labelled "Search charges", reads "Search name, charge no. or reference" and starts empty; no Clear button, no cap notice',
       !!box && box.getAttribute('placeholder') === 'Search name, charge no. or reference' && box.value === ''
@@ -2020,42 +2109,43 @@ const root = () => dom.window.document.getElementById('root');
     await clickIf(page, buttonNamed(root(), 'Next'));
     v = look(page);
     const nextButton = buttonNamed(root(), 'Next');
-    check('Next: page 2 holds the last 5 rows, "Page 2 of 2", "Showing 26–30 of 30", and Next is no longer available',
-      said(v.rows) === said(namesOf(UNPAID.slice(25))) && pagerSays(v, 'Page 2 of 2', 'Showing 26–30 of 30')
+    check('Next: page 2 holds the last 5 rows, "Showing 26 to 30 of 30 results", page 2 of 2, and Next is no longer available',
+      said(v.rows) === said(namesOf(UNPAID.slice(25))) && pagerSays(v, 'Page 2 of 2', 'Showing 26 to 30 of 30 results')
         && nextButton?.getAttribute('aria-disabled') === 'true', said(v));
     check('  it scrolls the list heading into view and moves nothing else: focus stays where it was',
       scrolled.length === 1 && scrolled[0].el === listHeading(page) && page.active() === focusBefore,
       `${scrolled.length} scroll(s), onto ${scrolled[0]?.el?.tagName ?? 'nothing'}`);
     await clickIf(page, nextButton);
-    check('  pressing the unavailable Next does nothing', pagerSays(look(page), 'Page 2 of 2', 'Showing 26–30 of 30') && scrolled.length === 1);
+    check('  pressing the unavailable Next does nothing',
+      pagerSays(look(page), 'Page 2 of 2', 'Showing 26 to 30 of 30 results') && scrolled.length === 1);
     await clickIf(page, buttonNamed(root(), 'Previous'));
     v = look(page);
     check('  Previous goes back to page 1, where Previous is the one not available',
-      pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30') && buttonNamed(root(), 'Previous')?.getAttribute('aria-disabled') === 'true'
-        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true', said(v.pager));
+      pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results') && buttonNamed(root(), 'Previous')?.getAttribute('aria-disabled') === 'true'
+        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true', said([v.showing, v.current]));
 
     await clickIf(page, buttonNamed(root(), 'Next'));
     await choose(page, 'all');
     v = look(page);
-    check('a status change returns to page 1: page 2 of Needs verification, then All charges, reads "Page 1 of 3"',
-      pagerSays(v, 'Page 1 of 3', 'Showing 1–25 of 64'), said(v.pager));
+    check('a status change returns to page 1: page 2 of Needs verification, then All charges, reads page 1 of 3',
+      pagerSays(v, 'Page 1 of 3', 'Showing 1 to 25 of 64 results'), said([v.showing, v.current, v.short]));
     check('All charges: "64 charges", then "₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void"; tabs All 64 · Documents 33 · Rentals 24 · Fines 7',
       v.heading === '64 charges' && v.detail === '₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void'
         && v.tabs === 'All 64 · Documents 33 · Rentals 24 · Fines 7', said(v));
     await clickIf(page, buttonNamed(root(), 'Next'));
     await clickIf(page, tabNamed(page, 'Documents'));
     v = look(page);
-    check('a tab change returns to page 1: page 2 of All charges, then Documents, reads "Page 1 of 2" and "33 of 64 charges match"',
-      pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 33') && v.heading === '33 of 64 charges match', said(v));
+    check('a tab change returns to page 1: page 2 of All charges, then Documents, reads page 1 of 2 and "33 of 64 charges match"',
+      pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 33 results') && v.heading === '33 of 64 charges match', said(v));
     await clickIf(page, tabNamed(page, 'All'));
     await clickIf(page, buttonNamed(root(), 'Next'));
     await clickIf(page, buttonNamed(root(), 'Next'));
     const onThird = look(page);
     await type(page, 'clearance');
     v = look(page);
-    check('a search change returns to page 1: page 3 of All charges, then "clearance", reads "Page 1 of 2" of 31',
-      pagerSays(onThird, 'Page 3 of 3', 'Showing 51–64 of 64') && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 31'),
-      said([onThird.pager, v.pager]));
+    check('a search change returns to page 1: page 3 of All charges, then "clearance", reads page 1 of 2 of 31',
+      pagerSays(onThird, 'Page 3 of 3', 'Showing 51 to 64 of 64 results') && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 31 results'),
+      said([onThird.showing, v.showing]));
 
     await clickIf(page, tabNamed(page, 'Documents'));
     await clickIf(page, buttonNamed(root(), 'Next'));
@@ -2064,9 +2154,10 @@ const root = () => dom.window.document.getElementById('root');
     await clickIf(page, buttonNamed(root(), 'Refresh'));
     v = look(page);
     check('Refresh keeps the search, the tab and the page: "clearance", Documents and page 2 of All charges, before and after the reload',
-      pagerSays(beforeRefresh, 'Page 2 of 2', 'Showing 26–31 of 31') && net.calls.length === callsBefore + 1
-        && v.search === 'clearance' && said(v.pressed) === said(['Documents 31']) && pagerSays(v, 'Page 2 of 2', 'Showing 26–31 of 31'),
-      said({ before: beforeRefresh.pager, after: v }));
+      pagerSays(beforeRefresh, 'Page 2 of 2', 'Showing 26 to 31 of 31 results') && net.calls.length === callsBefore + 1
+        && v.search === 'clearance' && said(v.pressed) === said(['Documents 31'])
+        && pagerSays(v, 'Page 2 of 2', 'Showing 26 to 31 of 31 results'),
+      said({ before: beforeRefresh.showing, after: v }));
 
     await type(page, '');
     await clickIf(page, tabNamed(page, 'All'));
@@ -2076,7 +2167,7 @@ const root = () => dom.window.document.getElementById('root');
       v.heading === '26 charges · ₱4,500.00 paid' && v.detail === 'Cash ₱1,300.00 · GCash ₱100.00 · Paid online ₱3,100.00', said(v));
     await choose(page, 'VOID');
     v = look(page);
-    check('Void: "8 charges · ₱3,150.00 void", no second line, and one page, so no pager',
+    check('Void: "8 charges · ₱3,150.00 void", no second line, and 10 or fewer, so no pager',
       v.heading === '8 charges · ₱3,150.00 void' && v.detail === null && v.pager === null, said(v));
 
     await choose(page, 'UNPAID');
@@ -2104,10 +2195,11 @@ const root = () => dom.window.document.getElementById('root');
     Object.assign(shrinking, fresh());
     await clickIf(page, buttonNamed(root(), 'Refresh'));
     const regrown = look(page);
-    check('a reload that shrinks the list moves to its last page: page 3 of 3, then 48 charges, reads "Page 2 of 2", "Showing 26–48 of 48"',
-      pagerSays(third, 'Page 3 of 3', 'Showing 51–64 of 64') && pagerSays(shrunk, 'Page 2 of 2', 'Showing 26–48 of 48')
-        && shrunk.rows.length === 23, said([third.pager, shrunk.pager]));
-    check('  and stays there when the list grows back: "Page 2 of 3"', pagerSays(regrown, 'Page 2 of 3', 'Showing 26–50 of 64'), said(regrown.pager));
+    check('a reload that shrinks the list moves to its last page: page 3 of 3, then 48 charges, reads page 2 of 2, "Showing 26 to 48 of 48 results"',
+      pagerSays(third, 'Page 3 of 3', 'Showing 51 to 64 of 64 results') && pagerSays(shrunk, 'Page 2 of 2', 'Showing 26 to 48 of 48 results')
+        && shrunk.rows.length === 23, said([third.showing, shrunk.showing]));
+    check('  and stays there when the list grows back: page 2 of 3',
+      pagerSays(regrown, 'Page 2 of 3', 'Showing 26 to 50 of 64 results'), said([regrown.showing, regrown.current]));
     await page.unmount();
 
     // Filters reset on every visit and are never kept in the browser. The
@@ -2124,7 +2216,7 @@ const root = () => dom.window.document.getElementById('root');
     v = look(page);
     check('filters start fresh each time the page opens: after "juan", Rentals and Paid, a new visit shows Needs verification, an empty box and All',
       v.search === '' && said(v.pressed) === said(['All 30']) && page.query('.list-head select')?.value === 'UNPAID'
-        && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30'), said(v));
+        && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results'), said(v));
     check('  and nothing about them was stored in the browser: no localStorage write, sessionStorage empty',
       writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0,
       `${writesAfter - writesAtOpen} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
@@ -2218,6 +2310,260 @@ const root = () => dom.window.document.getElementById('root');
     v = look(page);
     check('a status view with no charges at all keeps its own text: Void with none says "No charges here.", not the no-match text, search or not',
       root().textContent.includes('No charges here.') && !v.noMatch && v.heading === '0 charges' && v.rows.length === 0, said(v));
+    await page.unmount();
+
+    // =======================================================================
+    // P. Payments: the pager, its page numbers and rows per page
+    // =======================================================================
+    // The pager was Previous, "Page 2 of 4" over "Showing 26–50 of 88", and
+    // Next, always 25 a page. It is one bar now: "Showing 26 to 50 of 89
+    // results", a Rows per page select (10, 25, 50 or 100, 25 to start), then
+    // Previous, the page numbers and Next. The current page is a filled
+    // button marked aria-current="page"; above 7 pages there are exactly 7
+    // slots, "…" standing for the pages left out, and a "…" is text, never a
+    // button. The bar shows from 11 matches, even when they fit on one page,
+    // so Rows per page stays within reach; at 10 or fewer it is not drawn. A
+    // new rows per page goes back to page 1 and brings the list heading into
+    // view, as a page change does. Refresh, Record payment and Re-check keep
+    // the rows per page and the page; a tab, status or search change keeps the
+    // rows per page and goes back to page 1; nothing is kept in the browser.
+    // A phone draws "Page 2 of 4" in place of the numbers (index.css decides
+    // which shows), so both are in the markup, and checked, at every width.
+    console.log('\n--- Payments: the pager, its page numbers and rows per page ---');
+    const SIZE = '#pay-page-size';
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const setRows = async (page, value) => {
+      const select = page.query(SIZE);
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // Focus first, as a press does in a browser: a dispatched click in jsdom
+    // moves no focus, and these checks are about where focus ends up.
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    // n document charges named "Res 001" onwards, from position `first` of
+    // All charges, so a row's name says where it sits in the list.
+    const bulk = (first, n, status) => Array.from({ length: n }, (_, i) => {
+      const k = first + i;
+      return docOf(2000 + k, status, 50, ['Res', null, String(k).padStart(3, '0')], 'Barangay Clearance');
+    });
+    const names = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => `Res ${String(from + i).padStart(3, '0')}`);
+    // 89 charges, as the live list held on 12 Oct 2026: 14 waiting, 60 paid
+    // and 15 void, "Res 001" to "Res 089" in All charges' order.
+    const EIGHTY_NINE = () => ({ UNPAID: bulk(1, 14, 'UNPAID'), PAID: bulk(15, 60, 'PAID'), VOID: bulk(75, 15, 'VOID') });
+
+    page = await openWith(EIGHTY_NINE());
+    const writesAtOpen89 = store.sets;
+    await choose(page, 'all');
+    v = look(page);
+    const sizeSelect = page.query(SIZE);
+    const sizeLabel = sizeSelect ? page.query(`label[for="${sizeSelect.id}"]`)?.textContent ?? null : null;
+    const sizeOptions = sizeSelect ? [...sizeSelect.options].map((o) => o.textContent) : null;
+    check('Rows per page: a select labelled "Rows per page" offering 10, 25, 50 and 100, with 25 chosen',
+      sizeLabel === 'Rows per page' && said(sizeOptions) === said(['10', '25', '50', '100']) && v.size === '25',
+      said({ label: sizeLabel, options: sizeOptions, size: v.size }));
+    const nav = page.query('nav.pay-pager');
+    check('All charges with 89: a nav named "Pagination" reads "Showing 1 to 25 of 89 results", with pages 1 2 3 4 and 1 the current page',
+      nav?.getAttribute('aria-label') === 'Pagination' && v.showing === 'Showing 1 to 25 of 89 results' && v.numbers === '1 2 3 4'
+        && said(v.current) === said(['1']) && v.short === 'Page 1 of 4' && said(v.rows) === said(names(1, 25)),
+      said({ label: nav?.getAttribute('aria-label') ?? null, showing: v.showing, numbers: v.numbers, current: v.current, short: v.short }));
+    const numberButtons = page.queryAll('.pay-pager-numbers button')
+      .map((b) => `${b.getAttribute('type')}:${b.getAttribute('aria-label')}:${b.getAttribute('aria-current')}`);
+    check('  each number is a button named "Page N", and only the current one carries aria-current="page"',
+      said(numberButtons) === said(['button:Page 1:page', 'button:Page 2:null', 'button:Page 3:null', 'button:Page 4:null']),
+      said(numberButtons));
+
+    scrolled.length = 0;
+    const three = numberButton(page, 3);
+    await press(page, three);
+    v = look(page);
+    check('clicking 3: rows 51 to 75 ("Res 051" to "Res 075"), "Showing 51 to 75 of 89 results", 3 the current page; '
+        + 'the list heading is brought into view, and focus stays on 3',
+      said(v.rows) === said(names(51, 75)) && v.showing === 'Showing 51 to 75 of 89 results' && said(v.current) === said(['3'])
+        && v.short === 'Page 3 of 4' && scrolled.length === 1 && scrolled[0].el === listHeading(page)
+        && !!three && page.active() === three && three.getAttribute('aria-current') === 'page',
+      said({ showing: v.showing, current: v.current, rows: [v.rows[0], v.rows.at(-1)], scrolls: scrolled.length,
+        focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    scrolled.length = 0;
+    await press(page, numberButton(page, 3));
+    check('  pressing the current page again does nothing: no scroll, still 51 to 75',
+      look(page).showing === 'Showing 51 to 75 of 89 results' && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+
+    scrolled.length = 0;
+    await setRows(page, 10);
+    v = look(page);
+    check('Rows per page 10, from page 3: back to page 1 with 10 rows ("Res 001" to "Res 010"), "Showing 1 to 10 of 89 results", '
+        + 'pages 1 2 3 4 5 … 9, and the list heading brought into view as for a page change',
+      v.size === '10' && said(v.rows) === said(names(1, 10)) && v.showing === 'Showing 1 to 10 of 89 results'
+        && v.numbers === '1 2 3 4 5 … 9' && said(v.current) === said(['1']) && v.short === 'Page 1 of 9'
+        && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+      said({ size: v.size, showing: v.showing, numbers: v.numbers, current: v.current, rows: v.rows.length, scrolls: scrolled.length }));
+    const gaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+    check('  the "…" is plain text: not a button, and nothing in it can take focus',
+      gaps.length === 1 && gaps.every((li) => !li.matches('[tabindex]') && !li.querySelector('button, a, input, select, [tabindex]')),
+      gaps.map((li) => li.outerHTML).join(' ') || 'no "…" drawn');
+
+    await press(page, numberButton(page, 5));
+    v = look(page);
+    check('clicking 5 of 9: "1 … 4 5 6 … 9", "Showing 41 to 50 of 89 results", and focus stays on the button for page 5',
+      v.numbers === '1 … 4 5 6 … 9' && v.showing === 'Showing 41 to 50 of 89 results' && said(v.current) === said(['5'])
+        && page.active()?.getAttribute('aria-label') === 'Page 5',
+      said({ numbers: v.numbers, showing: v.showing, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    await press(page, numberButton(page, 9));
+    v = look(page);
+    const nextAtEnd = buttonNamed(root(), 'Next');
+    check('clicking 9: the last page, its 9 rows ("Res 081" to "Res 089"), "Showing 81 to 89 of 89 results", "1 … 5 6 7 8 9", and Next unavailable',
+      v.showing === 'Showing 81 to 89 of 89 results' && said(v.rows) === said(names(81, 89)) && v.numbers === '1 … 5 6 7 8 9'
+        && said(v.current) === said(['9']) && v.short === 'Page 9 of 9' && nextAtEnd?.getAttribute('aria-disabled') === 'true'
+        && page.active()?.getAttribute('aria-label') === 'Page 9',
+      said({ showing: v.showing, numbers: v.numbers, next: nextAtEnd?.getAttribute('aria-disabled') ?? null }));
+    scrolled.length = 0;
+    await press(page, nextAtEnd);
+    v = look(page);
+    check('  pressing the unavailable Next does nothing and focus stays on it: aria-disabled, never disabled',
+      v.showing === 'Showing 81 to 89 of 89 results' && scrolled.length === 0 && !!nextAtEnd && page.active() === nextAtEnd
+        && nextAtEnd.disabled === false && nextAtEnd.getAttribute('aria-disabled') === 'true',
+      said({ showing: v.showing, scrolls: scrolled.length, focusOnNext: !!nextAtEnd && page.active() === nextAtEnd,
+        disabled: nextAtEnd?.disabled ?? null }));
+    await press(page, numberButton(page, 1));
+    const prevAtStart = buttonNamed(root(), 'Previous');
+    scrolled.length = 0;
+    await press(page, prevAtStart);
+    v = look(page);
+    check('on page 1, Previous is unavailable the same way: pressing it does nothing and focus stays on it; Next is available',
+      v.showing === 'Showing 1 to 10 of 89 results' && scrolled.length === 0 && !!prevAtStart && page.active() === prevAtStart
+        && prevAtStart.disabled === false && prevAtStart.getAttribute('aria-disabled') === 'true'
+        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true',
+      said({ showing: v.showing, scrolls: scrolled.length, focusOnPrevious: !!prevAtStart && page.active() === prevAtStart }));
+
+    await press(page, numberButton(page, 5));
+    const callsBeforeRefresh = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('Refresh keeps the rows per page and the page: 10 a page on page 5, and after the reload still "Showing 41 to 50 of 89 results"',
+      net.calls.length === callsBeforeRefresh + 1 && v.size === '10' && v.showing === 'Showing 41 to 50 of 89 results'
+        && said(v.current) === said(['5']), said({ size: v.size, showing: v.showing, current: v.current }));
+
+    await clickIf(page, tabNamed(page, 'Documents'));
+    const afterTab = look(page);
+    await press(page, numberButton(page, 3));
+    await choose(page, 'PAID');
+    const afterStatus = look(page);
+    await press(page, numberButton(page, 2));
+    await type(page, 'res');
+    const afterSearch = look(page);
+    check('a tab, a status or a search change keeps 10 a page and goes back to page 1: page 5, then Documents, "Showing 1 to 10 of 89 results"; '
+        + 'page 3, then Paid, "Showing 1 to 10 of 60 results"; page 2, then "res", "Showing 1 to 10 of 60 results"',
+      [afterTab, afterStatus, afterSearch].every((x) => x.size === '10' && said(x.current) === said(['1']))
+        && afterTab.showing === 'Showing 1 to 10 of 89 results' && afterStatus.showing === 'Showing 1 to 10 of 60 results'
+        && afterSearch.showing === 'Showing 1 to 10 of 60 results',
+      said([afterTab, afterStatus, afterSearch].map((x) => `${x.size} a page: ${x.showing} (${x.current})`)));
+    check('nothing about the pager is kept in the browser: no localStorage write, sessionStorage empty, no cookie',
+      store.sets === writesAtOpen89 && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+      `${store.sets - writesAtOpen89} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}, `
+        + `cookie ${JSON.stringify(dom.window.document.cookie)}`);
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(EIGHTY_NINE()));
+    page = await mountPayments();
+    await choose(page, 'all');
+    v = look(page);
+    check('  and a new visit starts again at 25 a page, page 1: "Showing 1 to 25 of 89 results"',
+      v.size === '25' && v.showing === 'Showing 1 to 25 of 89 results' && said(v.current) === said(['1']),
+      said({ size: v.size, showing: v.showing, current: v.current }));
+    await page.unmount();
+
+    // Needs verification holds 14: the bar with one page, then Record payment
+    // and Re-check at 10 a page, on page 2.
+    const settling = EIGHTY_NINE();
+    settling.UNPAID.find((c) => c.charge_id === 2013).paymongo_session_id = 'cs_test_2013';
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/2012/verify')) {
+        settling.UNPAID = settling.UNPAID.filter((c) => c.charge_id !== 2012);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 89 } };
+      }
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/2013')) {
+        settling.UNPAID = settling.UNPAID.filter((c) => c.charge_id !== 2013);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(settling)(url, method);
+    });
+    page = await mountPayments();
+    v = look(page);
+    const prev14 = buttonNamed(root(), 'Previous');
+    const next14 = buttonNamed(root(), 'Next');
+    check('14 charges at 25 a page (Needs verification): the bar still shows, "Showing 1 to 14 of 14 results", Rows per page 25, '
+        + 'a single "1" as the current page, and Previous and Next both unavailable',
+      v.showing === 'Showing 1 to 14 of 14 results' && v.size === '25' && v.numbers === '1' && said(v.current) === said(['1'])
+        && v.short === 'Page 1 of 1' && v.rows.length === 14
+        && prev14?.getAttribute('aria-disabled') === 'true' && next14?.getAttribute('aria-disabled') === 'true',
+      said({ showing: v.showing, size: v.size, numbers: v.numbers, previous: prev14?.getAttribute('aria-disabled') ?? null,
+        next: next14?.getAttribute('aria-disabled') ?? null }));
+    await setRows(page, 10);
+    await press(page, numberButton(page, 2));
+    const pageTwo = look(page);
+    await clickIf(page, viewFor(page, 'Res 012'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = look(page);
+    check('Record payment keeps the rows per page and the page: 10 a page, page 2 ("Res 011" to "Res 014"), Record on Res 012, '
+        + 'and the reload still shows page 2, "Showing 11 to 13 of 13 results"',
+      pageTwo.showing === 'Showing 11 to 14 of 14 results' && said(pageTwo.rows) === said(names(11, 14))
+        && v.size === '10' && v.showing === 'Showing 11 to 13 of 13 results' && said(v.current) === said(['2'])
+        && said(v.rows) === said(['Res 011', 'Res 013', 'Res 014']) && !page.query('.pay-panel')
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #89)',
+      said({ before: pageTwo.showing, after: v.showing, rows: v.rows, size: v.size }));
+    await clickIf(page, viewFor(page, 'Res 013'));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = look(page);
+    check('  and so does Re-check: it settles Res 013, and the reload shows page 2, "Showing 11 to 12 of 12 results", still 10 a page',
+      v.size === '10' && v.showing === 'Showing 11 to 12 of 12 results' && said(v.current) === said(['2'])
+        && said(v.rows) === said(['Res 011', 'Res 014']) && !page.query('.pay-panel'),
+      said({ showing: v.showing, rows: v.rows, size: v.size, panel: !!page.query('.pay-panel') }));
+    await page.unmount();
+
+    // A reload that shrinks the list under the page, at 10 a page.
+    const shrinkingTen = EIGHTY_NINE();
+    page = await openWith(shrinkingTen);
+    await choose(page, 'all');
+    await setRows(page, 10);
+    await press(page, numberButton(page, 9));
+    const ninth = look(page);
+    shrinkingTen.PAID = shrinkingTen.PAID.slice(0, 31);
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('a reload that shrinks the list under the page lands on its last page at any rows per page: page 9 of 89 at 10 a page, '
+        + 'then 60 charges, page 6, "Showing 51 to 60 of 60 results", pages 1 2 3 4 5 6',
+      ninth.showing === 'Showing 81 to 89 of 89 results' && v.size === '10' && v.showing === 'Showing 51 to 60 of 60 results'
+        && said(v.current) === said(['6']) && v.numbers === '1 2 3 4 5 6',
+      said({ before: ninth.showing, after: v.showing, numbers: v.numbers }));
+    await page.unmount();
+
+    // 10 matches or fewer: no bar at all. 11: the bar, one page.
+    page = await openWith({ UNPAID: bulk(1, 10, 'UNPAID'), PAID: [], VOID: [] });
+    const ten = look(page);
+    await page.unmount();
+    page = await openWith({ UNPAID: bulk(1, 11, 'UNPAID'), PAID: [], VOID: [] });
+    const eleven = look(page);
+    await page.unmount();
+    check('10 charges: no pager at all, not even Rows per page; 11: the bar, "Showing 1 to 11 of 11 results", one page',
+      ten.rows.length === 10 && ten.pager === null && ten.size === null
+        && eleven.rows.length === 11 && eleven.showing === 'Showing 1 to 11 of 11 results' && eleven.numbers === '1' && eleven.size === '25',
+      said({ ten: { rows: ten.rows.length, pager: ten.pager }, eleven: { rows: eleven.rows.length, showing: eleven.showing } }));
+    page = await openWith(EIGHTY_NINE());
+    await choose(page, 'all');
+    await type(page, 'zzzz');
+    v = look(page);
+    check('no matches: no pager, only "No charges match your search or filters."',
+      v.noMatch && v.pager === null && v.rows.length === 0, said({ noMatch: v.noMatch, pager: v.pager }));
     await page.unmount();
 
     if (previousScroll === undefined) delete proto.scrollIntoView;
