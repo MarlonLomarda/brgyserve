@@ -485,6 +485,20 @@ Neither has been measured against the other screens it reaches.
 
 **A browser walkthrough against the local site confirmed both halves.** The filter was tried on all six statuses and "All Requests": each sent its own `?status=` request and showed the right rows, and the skeleton rows appeared under a throttled network. The restored rules held on screen: Edit and Deactivate on Document types sat side by side, and the Fee header was right-aligned over its values.
 
+### No fee on My requests, My rentals and the request detail, 12 Oct 2026 (`367229f`)
+
+- **Why:** the read-only zero-fee audit of 12 Oct 2026, findings 2 to 4. Approval creates a PHP 0 document charge already PAID with no payment row, and a booking does the same for a PHP 0 rental; the Payments page has said "No fee" for those since `9197329`. My requests and My rentals still said "Amount due: ₱0.00 — Paid", and the request detail the Secretary, Staff and the Punong Barangay open said "Charge ₱0.00 Paid", which reads as a payment someone made. Live, that is charge #161 (request 91, First-time jobseeker) and charge #2 (request 11, Certificate of Indigency), the only two PHP 0 charges.
+- **Finding 4, the Fee:** My requests and the request detail showed the document type's fee as it is today. Request 11 was approved while its type was free, so its charge is PHP 0, but the type costs PHP 20.00 now, and both screens said ₱20.00.
+- **What changed:**
+  - `isNoFeeCharge()` in `utils/chargeMethod.js`: a PAID charge whose amount `isZeroFee()` reads as 0. It reuses that zero test instead of writing a second one, so a null, missing or blank amount is never 0 here either. An UNPAID or VOID PHP 0 charge is not "No fee", and neither is no charge.
+  - My requests, My rentals and the request detail say "No fee" for such a charge, in place of the "Amount due" line, or the amount and its Paid badge. Every other charge keeps its wording, the Pay menu shows exactly when it did, and the release buttons are unchanged: a PAID charge, PHP 0 included, still offers "Mark ready for release".
+  - The Fee on My requests and on the request detail is the charge's amount once approval has billed the request (`charge?.amount ?? document_types.fee`), and the type's fee before that.
+  - No CSS. The rental bookings pages show no charge, so there was nothing to change there.
+- **Checked, not changed:** the request confirmation and both document-type pickers show the type's fee before any charge exists, which is right; the approval SMS uses the fee at approval, the amount it bills; the booking confirmation computes the item's fee × quantity at booking, which is what it bills. **One backend path does reprice:** editing an unpaid booking's quantity recomputes its charge from the item's fee today (`routes/rentalRequests.js`), so an item repriced since the booking is billed at the new price.
+- **Open, from the same audit:** two rental items cost less than PHP 20 and still offer "Pay online via GCash", while PayMongo's minimum amount is unverified; see Outstanding work in CLAUDE.md.
+- **Tested:** `test:auth` section T, 34 checks: `isNoFeeCharge` case by case (0, "0.00", "0", 20, "20.00", 0.01, null, missing, blank, UNPAID 0, VOID 0, no charge), then the real My requests, My rentals and request detail against stubbed lists, and the Punong Barangay's read-only detail; only GETs are sent. On the old code 22 were red (the 12 helper checks, 4 on My requests, 1 on My rentals, 5 on the detail) and the 12 checks of unchanged wording were green. Ten in-memory mutations each turned checks red, with every source file's sha256 unchanged: the zero test dropped on My requests (3 red) or My rentals (1); a second zero test that takes null as 0 (3), or `isZeroFee` taking null as 0 (4); the Fee back to the type's fee on My requests (2) or the detail (2); "No fee" for an UNPAID PHP 0 charge (3); the detail losing both fixes (5); every PAID charge "No fee" (10). A control mutation stayed at 434 of 434.
+- **`test:auth` is 434 checks at `367229f`.**
+
 ## Facility Rentals
 
 ### Design & implementation
@@ -737,6 +751,24 @@ How the box got unticked on event 71 is not proven. One way was measured: the `.
 - **`scan:test` gained 14 checks** in a new section that calls the real create and edit handlers: a fine with attendance off or absent is a 400; `"true"`, `1` and `null` are 400s; none of the refusals writes an event; attendance on with a fine is stored as sent; attendance off with no fine saves; an edit adding a fine with attendance off is a 400 and leaves the row unchanged; an edit turning attendance on with a fine saves. The events it creates are deleted along with their activity log rows, and it now passes 50 of 50.
 - **Mutation-checked on a scratch copy of the backend.** Without the fine rule, the six checks for it failed, and the refused edit stored exactly event 71's state. Without the boolean rule, its four checks failed.
 - **The form, mounted in jsdom from the real component:** before the fix, re-ticking showed the old fine and an unticked submit sent `false` with `"100"`; after it, the field is empty and the submit sends no fine.
+
+## Reporting
+
+### The Collections report counts no-fee charges, 12 Oct 2026 (`3b2aa75`)
+
+- **Why:** the same audit, finding 1. On the live data the report showed 69 paid charges against 67 payments recorded, with nothing on screen to say why: the two PHP 0 charges have no payment row. Its monthly "Collected" series also put each paid charge in the month it was billed (`charges.created_at`), not the month it was paid, without saying so.
+- **Decided by the owner (12 Oct, 7:25 PM):** add the count; for the monthly series only rename its label, keeping the bucketing, so that no number changes.
+- **What changed:**
+  - `GET /api/reports/collections` totals gain `no_fee_charges`, the PAID charges in the range whose `Number(amount)` is 0, appended after `payments_recorded`. Every other figure and key is unchanged, and the CSV's Totals section gains the row through the same `Object.entries`.
+  - The monthly series is named "Collected (by billed month)" in the chart's legend, the Monthly table and the CSV's Monthly header; its key stays `collected`. The by-type chart and table keep "Collected".
+  - The tile reads "No-fee charges", a label in `CollectionsReport`, since `humanize()` would give "No fee charges". It is the eighth tile, after "Payments recorded"; "Unpaid charges" still sits between that and "Paid charges", as it always has. A server without the key gives seven tiles and no blank one.
+- **Live, read-only:** the real handler, with every write method on the Supabase client replaced by a guard that throws, read the default range (1 Nov 2025 to 12 Oct 2026): `paid_charges` 69, `payments_recorded` 67, `no_fee_charges` 2. Against the same read before the change, the JSON differs only by that key, and the CSV only by that row and the Monthly header.
+- **Tested:**
+  - **No backend test covers `routes/reports.js`.** A scratch check, not committed, ran the real handler on in-memory tables beside the version before the change: `no_fee_charges` counts PAID at 0 and "0.00" only (not UNPAID 0, VOID 0, PAID 0.01, or a PAID 0 billed before the range), and the rest of the JSON and CSV is byte-identical. 6 of its 11 checks were red before the change; four mutations each turned it red (counting UNPAID PHP 0 charges, counting PAID ones above 0, dropping the CSV row, the old CSV header).
+  - `test:auth` section U, 6 checks: the real Reports page as the Treasurer against a stubbed report. jsdom has no `ResizeObserver` and lays nothing out, so a stub observer, the chart box's size and an animation frame that never fires let recharts draw its legends; all three are restored after the section. 4 were red before the change; six in-memory mutations each turned checks red (the tile not drawn, its label from `humanize()`, the old name for the whole series, for the legend only, for the table only, the new name on the by-type chart).
+  - `test:reports` checks the tile and the Monthly header on live data. It was not run: it needs the backend on :5000 and two accounts. Its expression was run on a server render of the live payload above instead: false before the change, true after.
+- **Layout,** headless Chrome with the real app on `file://`, tiles per row before → after: 390 (phone) 1 → 1, seven rows then eight; 768 as a desktop window with a 15px scrollbar 3, 3, 1 → 3, 3, 2; 768 as a touch tablet 4, 3 → 4, 4; 1280 5, 2 → 5, 3. No sideways page scroll, no overlap, no clipped tile text. **At 390 the Monthly table now scrolls inside its card by 54px** (0 before): its "Collected (by billed month)" header cannot wrap, because `.data-table .num { white-space: nowrap }` reaches numeric headers too. "By charge type" already scrolled 78px there. No CSS was changed; see Outstanding work in CLAUDE.md.
+- **`test:auth` is 440 checks at `3b2aa75`.**
 
 ## GCash Payment Gateway (PayMongo) — implemented
 
