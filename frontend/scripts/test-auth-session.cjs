@@ -51,6 +51,11 @@
 // then the real page against 23 stubbed charges, with "today" fixed at 12 Oct
 // 2026 by the helpers' one clock. It sits inside section O's block too.
 //
+// Section R is the Payments toolbar on a phone: the "Filters" button and the
+// panel it opens in place, holding the one set of Method and date controls,
+// and Refresh, which keeps its name. Against section Q's 23 charges, inside
+// section O's block.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -3228,6 +3233,202 @@ const root = () => dom.window.document.getElementById('root');
       root().textContent.includes('Could not load the charges: Network down') && !!errMethod && !errMethod.disabled && !!errDate
         && v.method === 'Online pending' && v.date === 'Today' && v.heading === 'Charges' && !page.query('.pay-tabs') && v.detail === null
         && v.pager === null && v.rows.length === 0 && !v.noMatch, said(v));
+    await page.unmount();
+
+    // =======================================================================
+    // R. Payments: the Filters button and panel on a phone
+    // =======================================================================
+    // On a phone the toolbar is the search, then one row of the status, a
+    // "Filters" button and Refresh; Method, the date, From and To and Clear
+    // filters sit in a panel under that row, which the button opens and
+    // closes in place. "Filters (n)" counts the Method and date filters that
+    // are on, never the search or the tab; aria-expanded says whether the
+    // panel is open, and aria-controls names it. The panel holds the one set
+    // of those controls, not a copy; Escape inside it closes it and gives
+    // focus back to the button; it starts closed on every visit, stays as it
+    // was left through Refresh and Record payment, and nothing about it is
+    // kept in the browser. Refresh is an icon on a phone and keeps "Refresh"
+    // as its name. Which of these shows at which width is index.css's to
+    // decide (above 640px the button is hidden and the row always shown), and
+    // the layout harness's to measure: here the markup and the behaviour are
+    // checked, which are the same at every width.
+    console.log('\n--- Payments: the Filters button and panel on a phone ---');
+    const TOOLBAR = '.list-head.pay-toolbar';
+    // The toolbar's button whose text starts "Filters". "Clear filters" is a
+    // different button, in the panel.
+    const filtersButton = (pg_) => pg_.queryAll(`${TOOLBAR} button`).find((b) => b.textContent.startsWith('Filters')) ?? null;
+    // Refresh, found by where it is rather than by its name, so a check can
+    // see the name go missing: the last button in the status row.
+    const refreshButton = (pg_) => pg_.queryAll(`${TOOLBAR} .head-actions button`).at(-1) ?? null;
+    const panelOf = (pg_) => {
+      const id = filtersButton(pg_)?.getAttribute('aria-controls');
+      return id ? dom.window.document.getElementById(id) : null;
+    };
+    // The name a screen reader gives an element: its aria-label, else its
+    // aria-labelledby, else the text inside it, leaving out anything
+    // aria-hidden (an icon).
+    const accName = (el) => {
+      if (!el) return null;
+      if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+      const by = el.getAttribute('aria-labelledby');
+      if (by) return by.split(/\s+/).map((id) => dom.window.document.getElementById(id)?.textContent ?? '').join(' ').trim();
+      const text = (node) => {
+        if (node.nodeType === 3) return node.textContent;
+        if (node.nodeType !== 1 || node.getAttribute('aria-hidden') === 'true' || node.hidden) return '';
+        return [...node.childNodes].map(text).join('');
+      };
+      return text(el).replace(/\s+/g, ' ').trim();
+    };
+    // Whether the panel is open, as the button says it and as the panel is
+    // marked for index.css.
+    const panelState = () => {
+      const b = filtersButton(page);
+      const p = panelOf(page);
+      return { expanded: b?.getAttribute('aria-expanded') ?? null, open: p ? p.classList.contains('is-open') : null };
+    };
+    const OPEN = said({ expanded: 'true', open: true });
+    const CLOSED = said({ expanded: 'false', open: false });
+    const listGets = () => net.calls.filter((c) => c.method === 'GET' && c.url.includes(LIST)).length;
+    const follows = (a, b) => !!a && !!b && (a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    page = await openQ();
+    const writesAtOpenR = store.sets;
+    const toolbarR = page.query(TOOLBAR);
+    const panelR = panelOf(page);
+    const buttonR = filtersButton(page);
+    check('the toolbar has a "Filters" button between the status and Refresh, with aria-expanded="false" and aria-controls naming the panel, '
+        + 'which sits under the row and holds the Method and date selects',
+      !!buttonR && buttonR.type === 'button' && buttonR.getAttribute('aria-expanded') === 'false' && !!panelR && !toolbarR.contains(panelR)
+        && follows(toolbarR, panelR) && follows(page.query('.list-head select'), buttonR) && follows(buttonR, refreshButton(page))
+        && panelR.contains(methodSelect(page)) && panelR.contains(dateSelect(page)),
+      said({ button: buttonR?.outerHTML.slice(0, 160) ?? null, controls: buttonR?.getAttribute('aria-controls') ?? null, panel: panelR?.id ?? null }));
+
+    const filtersName = () => accName(filtersButton(page));
+    const named = { none: filtersName() };
+    await pickMethod(page, 'Online pending');
+    named.method = filtersName();
+    await pickDate(page, 'Today');
+    named.both = filtersName();
+    named.bothText = filtersButton(page)?.textContent ?? null;
+    await pickMethod(page, 'Any method');
+    named.date = filtersName();
+    check('it reads "Filters" with nothing on, "Filters (1)" with a method, "Filters (2)" with a method and a date, and "Filters (1)" with the date alone',
+      named.none === 'Filters' && named.method === 'Filters (1)' && named.both === 'Filters (2)' && named.bothText === 'Filters (2)'
+        && named.date === 'Filters (1)', said(named));
+    await type(page, 'flores');
+    named.search = filtersName();
+    await clickIf(page, tabNamed(page, 'Documents'));
+    named.tab = filtersName();
+    await press(page, buttonNamed(root(), 'Clear filters'));
+    named.cleared = filtersName();
+    v = lookQ(page);
+    check('  a search and a tab are not filters: "flores" and the Documents tab leave it at "Filters (1)", '
+        + 'and Clear filters takes it back to "Filters" with both still on',
+      named.search === 'Filters (1)' && named.tab === 'Filters (1)' && named.cleared === 'Filters' && v.search === 'flores'
+        && v.pressed.length === 1 && v.pressed[0].startsWith('Documents '), said({ named, search: v.search, pressed: v.pressed }));
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+
+    const toggled = [panelState()];
+    await clickIf(page, filtersButton(page));
+    toggled.push(panelState());
+    await clickIf(page, filtersButton(page));
+    toggled.push(panelState());
+    check('pressing Filters opens the panel (aria-expanded="true", the panel marked open) and pressing it again closes it',
+      said(toggled[0]) === CLOSED && said(toggled[1]) === OPEN && said(toggled[2]) === CLOSED, said(toggled));
+
+    await clickIf(page, filtersButton(page));
+    await pickDate(page, 'Choose dates');
+    const inPanel = (el) => !!el && !!panelOf(page) && panelOf(page).contains(el);
+    // Labels outside the View panel, whose own form has a "Payment method".
+    const labelsReading = (text) => page.queryAll('label').filter((l) => l.textContent === text && !l.closest('.pay-panel')).length;
+    const ids = page.queryAll('[id]').map((e) => e.id);
+    const one = {
+      method: labelsReading('Method'), date: labelsReading('Billed date') + labelsReading('Paid date'), from: labelsReading('From'),
+      to: labelsReading('To'), clear: page.queryAll('button').filter((b) => b.textContent === 'Clear filters').length,
+      doubledIds: [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))],
+    };
+    check('the panel holds the one set of controls, not a copy: one Method select, one date select, From and To under Choose dates '
+        + 'and one Clear filters, all inside it, and no id is used twice on the page',
+      one.method === 1 && one.date === 1 && one.from === 1 && one.to === 1 && one.clear === 1 && one.doubledIds.length === 0
+        && inPanel(methodSelect(page)) && inPanel(dateSelect(page)) && inPanel(labelled(page, 'From')) && inPanel(labelled(page, 'To'))
+        && inPanel(buttonNamed(root(), 'Clear filters')), said(one));
+    await typeDate(page, 'From', '2026-10-08');
+    await typeDate(page, 'To', '2026-10-05');
+    const hintR = hintEl(page);
+    check('  "The start date is after the end date." is inside the panel, in its polite status region',
+      !!hintR && inPanel(hintR) && hintR.getAttribute('role') === 'status', hintR?.outerHTML ?? 'no hint');
+
+    const fromR = labelled(page, 'From');
+    fromR?.focus();
+    const beforeEscape = panelState();
+    if (fromR) await page.key('Escape', fromR);
+    check('Escape inside the open panel closes it and puts focus back on the Filters button',
+      said(beforeEscape) === OPEN && said(panelState()) === CLOSED && !!filtersButton(page) && page.active() === filtersButton(page),
+      said({ beforeEscape, after: panelState(), focus: page.active()?.textContent || page.active()?.tagName }));
+
+    await clickIf(page, filtersButton(page));
+    const refreshNames = { open: accName(refreshButton(page)) };
+    const getsBeforeR = listGets();
+    await clickIf(page, refreshButton(page));
+    check('the panel stays open through Refresh, which reloads the list (one more request)',
+      listGets() === getsBeforeR + 1 && said(panelState()) === OPEN, said({ requests: listGets() - getsBeforeR, state: panelState() }));
+    await clickIf(page, filtersButton(page));
+    refreshNames.closed = accName(refreshButton(page));
+    await pickMethod(page, 'Online pending');
+    refreshNames.two = `${filtersName()}: ${accName(refreshButton(page))}`;
+    await clickIf(page, filtersButton(page));
+    const openAtLeave = panelState();
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(qFresh()));
+    page = await mountPayments();
+    const openAtReturn = panelState();
+    check('it starts closed on every visit, and nothing about it is kept in the browser: left open, a new visit shows it closed; '
+        + 'no localStorage write, sessionStorage empty',
+      said(openAtLeave) === OPEN && said(openAtReturn) === CLOSED && store.sets === writesAtOpenR && dom.window.sessionStorage.length === 0,
+      said({ openAtLeave, openAtReturn, writes: store.sets - writesAtOpenR, session: dom.window.sessionStorage.length }));
+    await page.unmount();
+
+    // Record payment: the reload after it leaves the panel as it was.
+    const rRecord = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/4003/verify')) {
+        rRecord.UNPAID = rRecord.UNPAID.filter((c) => c.charge_id !== 4003);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 91 } };
+      }
+      return answerFrom(rRecord)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, filtersButton(page));
+    const openBeforeRecord = panelState();
+    await clickIf(page, viewFor(page, 'Cora Flores'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    check('  and through Record payment: opened, Record on Cora Flores, and after the reload it is still open',
+      said(openBeforeRecord) === OPEN && said(panelState()) === OPEN && !page.query('.pay-panel') && lookQ(page).rows.length === 7
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #91)',
+      said({ openBeforeRecord, now: panelState(), rows: lookQ(page).rows.length }));
+    await page.unmount();
+
+    // A load error: Refresh keeps its name, the panel still opens, and
+    // pressing Refresh loads again.
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    refreshNames.error = accName(refreshButton(page));
+    await clickIf(page, filtersButton(page));
+    refreshNames.errorOpen = `${panelState().expanded}: ${accName(refreshButton(page))}`;
+    const getsAtError = listGets();
+    await clickIf(page, refreshButton(page));
+    check('Refresh is named "Refresh" in every state: the panel open and closed, with "Filters (2)", and after a load error with the panel open, '
+        + 'where pressing it loads again',
+      said(refreshNames) === said({ open: 'Refresh', closed: 'Refresh', two: 'Filters (2): Refresh', error: 'Refresh', errorOpen: 'true: Refresh' })
+        && listGets() === getsAtError + 1 && root().textContent.includes('Could not load the charges: Network down'),
+      said({ refreshNames, requests: listGets() - getsAtError }));
     await page.unmount();
 
     if (F.clock && realNow) F.clock.now = realNow;

@@ -2754,11 +2754,22 @@ button.pay-search-clear:hover:not(:disabled) {
   background: #f1f5f9;
 }
 
+/* The phone's status row (batch 8; the 640px block): a Filters button
+   between the status and Refresh opens the second row as a panel, and
+   Refresh is an icon. Above 640px neither is drawn: the second row is
+   always shown, and Refresh is the word alone, as before. */
+.pay-toolbar .pay-filters-toggle,
+.pay-toolbar .pay-refresh-icon {
+  display: none;
+}
+
 /* The second row (batch 7): Method and the date, each a select with its
    label beside it, as Rows per page is; From and To under "Choose dates",
    which wrap as one pair; and a quiet Clear filters. The fields match the
    status select: 40px tall, 0.9rem. The row wraps where the column is too
-   narrow, and a phone stacks it (the 640px block). */
+   narrow; on a phone it is the Filters panel, which a button opens (the
+   640px block). Its wrapper, .pay-filters-panel, has no rules up here, so
+   the row lays out exactly as it did before it had one. */
 .pay-filters {
   display: flex;
   flex-wrap: wrap;
@@ -4753,8 +4764,8 @@ button.tab:hover:not(:disabled) {
   }
 
   /* The Payments search on a phone takes its own full-width row, with the
-     status and Refresh on the row under it (.list-head wraps at this width).
-     The field stays 16px, so iOS Safari does not zoom into it. */
+     status row under it (.list-head wraps at this width). The field stays
+     16px, so iOS Safari does not zoom into it. */
   .pay-search {
     flex: 1 1 100%;
     max-width: none;
@@ -4764,19 +4775,136 @@ button.tab:hover:not(:disabled) {
     font-size: 1rem;
   }
 
-  /* The second row on a phone: each control on a line of its own, its label
-     beside it and the field taking the rest of the line. The selects and
-     date inputs are 16px, so iOS Safari does not zoom into them. */
-  .pay-filter,
-  .pay-filter-range {
+  /* The status row (batch 8): the status takes what the Filters button and
+     Refresh leave, all three 44px tall, a finger's height, and the row never
+     wraps: the status gives up width first. The select is 16px, so iOS
+     Safari does not zoom into it. (0,2,0) beats the shared .head-actions
+     wrap above, which is unchanged. min-width: 0 lets the row itself be
+     narrower than its contents' widest, which for a select is its longest
+     option: without it the row kept "Needs verification" whole and pushed
+     Refresh off a 320px screen. */
+  .pay-toolbar .head-actions {
     flex: 1 1 100%;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .pay-toolbar .head-actions select {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .pay-toolbar .pay-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    height: 44px;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+
+  /* Open, it keeps its hover fill, as the account menu's button does. */
+  .pay-toolbar .pay-filters-toggle[aria-expanded="true"] {
+    background: #eff6ff;
+  }
+
+  .pay-toolbar .pay-refresh {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .pay-toolbar .pay-refresh-icon {
+    display: block;
+    font-size: 1.25rem;
+  }
+
+  /* The word, out of sight but still the button's name. */
+  .pay-toolbar .pay-refresh-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* The second row is the Filters panel here. Closed, it is not drawn, so
+     nothing in it can be tabbed to or read out; open, it is a card under the
+     status row and pushes the tabs and the list down. No z-index: it is in
+     the page's flow, not over it. */
+  .pay-filters-panel {
+    display: none;
+  }
+
+  .pay-filters-panel.is-open {
+    display: block;
+    margin-bottom: 12px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  /* In the panel every label sits above its field. Method and the date take
+     a line each; From and To share one, side by side, which leaves a date
+     field too narrow for its label beside it. Below 128px a date field cuts
+     off its own year (123px at 320), so where two of those do not fit, about
+     330px, From and To take a line each instead; no breakpoint decides it.
+     The fields are 44px tall and 16px, so iOS Safari does not zoom into
+     them. */
+  /* nowrap matters: in a flex container that may wrap, a stretched item's
+     width is not final while its height is worked out, so the From and To
+     grid measured itself as two rows (stacked) and then drew one, with the
+     difference left as empty space above and below them (measured at 360). */
+  .pay-filters {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 0;
+  }
+
+  .pay-filter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .pay-filter-range {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 12px;
   }
 
   .pay-filter select,
   .pay-filter input {
-    flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
+    height: 44px;
     font-size: 1rem;
+  }
+
+  /* Clear filters keeps its quiet look, its words in line with the labels. */
+  .pay-filters .pay-filters-clear {
+    align-self: flex-start;
+    margin-left: -10px;
+  }
+
+  /* The hint, under the fields; empty, it still takes no room. */
+  .pay-filters-panel .pay-filters-hint:not(:empty) {
+    margin: 10px 0 0;
   }
 
   /* The pager on a phone: the count on one line, Rows per page on the next,

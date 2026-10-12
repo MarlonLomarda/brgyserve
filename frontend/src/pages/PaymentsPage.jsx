@@ -4,6 +4,7 @@ import {
   IoChevronBack,
   IoChevronForward,
   IoClose,
+  IoRefresh,
   IoSearch,
 } from "react-icons/io5";
 import { useAuth } from "../auth/AuthContext";
@@ -78,6 +79,12 @@ import {
 // (utils/chargeFilters.js). Days are Manila days. Both compose with the
 // status, the search and the tabs, and the totals line names the date and
 // the range it counts, so it is never read as the Collections report's.
+//
+// ON A PHONE (12 Oct 2026, batch 8). The search keeps its own line; under it,
+// one row holds the status, a "Filters" button and Refresh, an icon there.
+// The second row becomes a panel under that row, which the button opens and
+// closes in place; "Filters (2)" counts the Method and date filters that are
+// on. Above 640px the button is hidden and the row always shows (index.css).
 const FILTERS = ["UNPAID", "PAID", "VOID", "all"];
 const FILTER_LABELS = {
   UNPAID: "Needs verification",
@@ -534,12 +541,16 @@ export default function PaymentsPage() {
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // Whether the phone's Filters panel is open. Closed on every visit, and,
+  // like the filters, left as it is by Refresh, Record payment and Re-check.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // How many charges the server says the status has. More than it sent means
   // its 1,000-row cap cut the list (routes/charges.js).
   const [total, setTotal] = useState(null);
   const searchRef = useRef(null);
   const methodRef = useRef(null);
   const dateRef = useRef(null);
+  const filtersButtonRef = useRef(null);
   const headingRef = useRef(null);
   // The View button that opened the panel, captured from the click, so a
   // close can give focus back to it (closeModal in LoginPage.jsx).
@@ -735,7 +746,10 @@ export default function PaymentsPage() {
         });
   const methodChoices = methodOptions(filter);
   const reversed = backwards(range);
-  const filtersOn = method !== ANY || dateChoice !== ANY;
+  // How many of the Method and date filters are on: the "(n)" on the phone's
+  // Filters button, and whether Clear filters is offered. The search and the
+  // tab are not filters here.
+  const filterCount = (method !== ANY ? 1 : 0) + (dateChoice !== ANY ? 1 : 0);
 
   // A new status keeps the search, the tab and the date. The method stays
   // only where the new view offers it: Cash means nothing on Needs
@@ -768,6 +782,16 @@ export default function PaymentsPage() {
     setPage(1);
     const methodSelect = methodRef.current;
     (methodSelect?.disabled ? dateRef.current : methodSelect)?.focus();
+  }
+
+  // Escape inside the open Filters panel closes it and gives focus back to
+  // the button that opened it. It goes no further, so a View panel open
+  // behind it is left alone, as the search box's Escape does.
+  function closeFiltersOnEscape(e) {
+    if (e.key !== "Escape" || !filtersOpen) return;
+    e.stopPropagation();
+    setFiltersOpen(false);
+    filtersButtonRef.current?.focus();
   }
 
   function changeQuery(value) {
@@ -868,8 +892,27 @@ export default function PaymentsPage() {
               </option>
             ))}
           </select>
-          <button className="btn secondary" onClick={load}>
-            Refresh
+          {/* A phone's way to the second row, which is a panel there. Hidden
+              above 640px, where the row is always shown (index.css). */}
+          <button
+            ref={filtersButtonRef}
+            type="button"
+            className="btn secondary pay-filters-toggle"
+            aria-expanded={filtersOpen}
+            aria-controls="pay-filters-panel"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            {filterCount > 0 ? `Filters (${filterCount})` : "Filters"}
+          </button>
+          {/* An icon on a phone, where the word is out of sight but is still
+              the button's name; the word alone above 640px (index.css). */}
+          <button
+            type="button"
+            className="btn secondary pay-refresh"
+            onClick={load}
+          >
+            <IoRefresh className="pay-refresh-icon" aria-hidden="true" />
+            <span className="pay-refresh-label">Refresh</span>
           </button>
         </div>
       </div>
@@ -878,81 +921,90 @@ export default function PaymentsPage() {
           labels; From and To under "Choose dates"; and Clear filters while
           either is on. Method offers what the status view can show, so Void,
           with Any method alone, has it disabled. The date names itself:
-          "Paid date" under Paid, "Billed date" everywhere else. */}
-      <div className="pay-filters">
-        <div className="pay-filter">
-          <label htmlFor="pay-method-filter">Method</label>
-          <select
-            id="pay-method-filter"
-            ref={methodRef}
-            value={method}
-            onChange={(e) => narrowBy(setMethod, e.target.value)}
-            disabled={methodChoices.length === 1}
-          >
-            {methodChoices.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="pay-filter">
-          <label htmlFor="pay-date-filter">
-            {kind === "paid" ? "Paid date" : "Billed date"}
-          </label>
-          <select
-            id="pay-date-filter"
-            ref={dateRef}
-            value={dateChoice}
-            onChange={(e) => narrowBy(setDateChoice, e.target.value)}
-          >
-            {DATE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {dateChoice === "custom" && (
-          <div className="pay-filter-range">
-            <div className="pay-filter">
-              <label htmlFor="pay-date-from">From</label>
-              <input
-                id="pay-date-from"
-                type="date"
-                value={from}
-                onChange={(e) => narrowBy(setFrom, e.target.value)}
-                aria-describedby="pay-date-hint"
-              />
-            </div>
-            <div className="pay-filter">
-              <label htmlFor="pay-date-to">To</label>
-              <input
-                id="pay-date-to"
-                type="date"
-                value={to}
-                onChange={(e) => narrowBy(setTo, e.target.value)}
-                aria-describedby="pay-date-hint"
-              />
-            </div>
+          "Paid date" under Paid, "Billed date" everywhere else.
+          On a phone the row and its hint are the Filters panel, under the
+          status row, which the Filters button opens and closes in place;
+          above 640px the panel is always shown, as the row (index.css). */}
+      <div
+        id="pay-filters-panel"
+        className={`pay-filters-panel${filtersOpen ? " is-open" : ""}`}
+        onKeyDown={closeFiltersOnEscape}
+      >
+        <div className="pay-filters">
+          <div className="pay-filter">
+            <label htmlFor="pay-method-filter">Method</label>
+            <select
+              id="pay-method-filter"
+              ref={methodRef}
+              value={method}
+              onChange={(e) => narrowBy(setMethod, e.target.value)}
+              disabled={methodChoices.length === 1}
+            >
+              {methodChoices.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-        {filtersOn && (
-          <button
-            type="button"
-            className="pay-filters-clear"
-            onClick={clearMethodAndDate}
-          >
-            Clear filters
-          </button>
-        )}
+          <div className="pay-filter">
+            <label htmlFor="pay-date-filter">
+              {kind === "paid" ? "Paid date" : "Billed date"}
+            </label>
+            <select
+              id="pay-date-filter"
+              ref={dateRef}
+              value={dateChoice}
+              onChange={(e) => narrowBy(setDateChoice, e.target.value)}
+            >
+              {DATE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {dateChoice === "custom" && (
+            <div className="pay-filter-range">
+              <div className="pay-filter">
+                <label htmlFor="pay-date-from">From</label>
+                <input
+                  id="pay-date-from"
+                  type="date"
+                  value={from}
+                  onChange={(e) => narrowBy(setFrom, e.target.value)}
+                  aria-describedby="pay-date-hint"
+                />
+              </div>
+              <div className="pay-filter">
+                <label htmlFor="pay-date-to">To</label>
+                <input
+                  id="pay-date-to"
+                  type="date"
+                  value={to}
+                  onChange={(e) => narrowBy(setTo, e.target.value)}
+                  aria-describedby="pay-date-hint"
+                />
+              </div>
+            </div>
+          )}
+          {filterCount > 0 && (
+            <button
+              type="button"
+              className="pay-filters-clear"
+              onClick={clearMethodAndDate}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        {/* Always in the page, so a screen reader announces it when the text
+            appears (role="status" is polite); empty, and no taller than
+            nothing, while the dates are the right way round. */}
+        <p id="pay-date-hint" className="pay-filters-hint" role="status">
+          {reversed ? "The start date is after the end date." : ""}
+        </p>
       </div>
-      {/* Always in the page, so a screen reader announces it when the text
-          appears (role="status" is polite); empty, and no taller than
-          nothing, while the dates are the right way round. */}
-      <p id="pay-date-hint" className="pay-filters-hint" role="status">
-        {reversed ? "The start date is after the end date." : ""}
-      </p>
 
       {capped && (
         <div className="alert info pay-cap">
