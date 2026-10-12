@@ -2689,6 +2689,218 @@ button.link-button:hover:not(:disabled) {
   }
 }
 
+/* PAYMENTS: SEARCH, TYPE TABS, TOTALS AND PAGER (12 Oct 2026). One row of
+   search, status and Refresh; the type tabs; the totals line, which is the
+   list's h2; the rows; the pager. The row is also a .list-head, whose shared
+   rules are unchanged; everything added here is scoped to a .pay-* class,
+   and the h2 repeats .list-head h2's values rather than borrow the class. */
+.pay-toolbar {
+  gap: 12px;
+}
+
+/* The search takes what the status and Refresh leave, up to 560px. Its icon
+   and Clear (x) sit inside the field. type="search" draws its own clear
+   button in Chrome and Safari; it is hidden so there is one, not two. */
+.pay-search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.pay-search input {
+  margin-top: 0;
+  height: 40px;
+  padding: 8px 40px 8px 38px;
+  font-size: 0.95rem;
+}
+
+.pay-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.pay-search .pay-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.05rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* (0,2,0) beats the base `button` rule. The hover is (0,3,1), as button.tab's
+   is, to beat button:hover:not(:disabled), which would paint it blue. */
+.pay-search .pay-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.1rem;
+  color: #64748b;
+  background: none;
+  border-radius: 6px;
+}
+
+button.pay-search-clear:hover:not(:disabled) {
+  color: #334155;
+  background: #f1f5f9;
+}
+
+/* The type tabs: toggle buttons, each with its count in a pill (#e2e8f0,
+   because the page behind is body's #f1f5f9 and a pill of that would vanish;
+   the hover is white for the same reason). The strip scrolls sideways inside
+   itself when the four do not fit, so the page never does. The underline is
+   an inset shadow and the focus ring is drawn inside the button, because the
+   strip's overflow would clip anything outside it. */
+.pay-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0 14px;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.pay-tabs .pay-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 9px 12px 11px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border-radius: 8px 8px 0 0;
+  white-space: nowrap;
+}
+
+button.pay-tab:hover:not(:disabled) {
+  background: #fff;
+}
+
+.pay-tabs .pay-tab:not([aria-pressed="true"]):hover {
+  color: #334155;
+}
+
+.pay-tabs .pay-tab[aria-pressed="true"] {
+  color: #1d4ed8;
+  box-shadow: inset 0 -2px 0 #1d4ed8;
+}
+
+.pay-tabs .pay-tab:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.pay-tabs .pay-tab-count {
+  min-width: 24px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.pay-tabs .pay-tab[aria-pressed="true"] .pay-tab-count {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+/* A tab with no matches is dimmed, never disabled: pressing it still shows
+   its empty list. The label keeps its colour, because #64748b is 4.76:1 on
+   white and anything paler fails AA, and loses weight; the count goes
+   hollow. */
+.pay-tabs .pay-tab.pay-tab-empty {
+  font-weight: 500;
+}
+
+.pay-tabs .pay-tab.pay-tab-empty .pay-tab-count {
+  color: #94a3b8;
+  background: none;
+  box-shadow: inset 0 0 0 1px #cbd5e1;
+}
+
+/* The totals line: the list's h2, at .list-head h2's size and colour, with
+   figures that line up, and a smaller line of amounts under it. A page change
+   scrolls the h2 into view; its scroll margin clears the sticky header,
+   which exists only at 1045px and below (the second rule). */
+.pay-totals {
+  margin-bottom: 12px;
+}
+
+.pay-totals h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+  scroll-margin-top: 16px;
+}
+
+.pay-totals-detail {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1045px) {
+  .pay-totals h2 {
+    scroll-margin-top: 126px;
+  }
+}
+
+/* The pager: Previous, where you are, Next; hidden when everything fits on
+   one page. An end button is aria-disabled rather than disabled, so the one
+   just pressed keeps focus when it reaches the end (a disabled button drops
+   it); the page ignores a press on it. (0,5,0) beats .btn.secondary's hover. */
+.pay-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.pay-pager .btn {
+  min-width: 96px;
+}
+
+.pay-pager .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pay-pager .btn.secondary[aria-disabled="true"]:hover {
+  background: #fff;
+}
+
+.pay-pager-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-pager-status strong {
+  font-weight: 600;
+  color: #334155;
+}
+
 /* Events stage 3c: the resident's household QR code. The code is the only
    thing on the page, so it is centred and given a plain white quiet zone —
    scanners need the light margin around the pattern to lock on. */
@@ -4347,6 +4559,24 @@ button.tab:hover:not(:disabled) {
   .pay-panel-footer .btn {
     width: 100%;
     padding: 14px 20px;
+  }
+
+  /* The Payments search on a phone takes its own full-width row, with the
+     status and Refresh on the row under it (.list-head wraps at this width).
+     The field stays 16px, so iOS Safari does not zoom into it. The pager's
+     buttons are 44px tall, a finger's width. */
+  .pay-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .pay-search input {
+    font-size: 1rem;
+  }
+
+  .pay-pager .btn {
+    min-width: 88px;
+    min-height: 44px;
   }
 }
 

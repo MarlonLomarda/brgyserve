@@ -10,11 +10,19 @@ import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
 import { methodOf } from '../src/utils/chargeMethod.js';
+import * as chargeSearch from '../src/utils/chargeSearch.js';
+import * as chargeTotals from '../src/utils/chargeTotals.js';
+import * as paging from '../src/utils/paging.js';
 
 globalThis.isTokenExpired = isTokenExpired;
 globalThis.decodeJwtPayload = decodeJwtPayload;
 // The Payments page's Method label, checked on its own in section N.
 globalThis.methodOf = methodOf;
+// The Payments page's search, totals and paging helpers, checked on their
+// own in section O.
+globalThis.chargeSearch = chargeSearch;
+globalThis.chargeTotals = chargeTotals;
+globalThis.paging = paging;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.

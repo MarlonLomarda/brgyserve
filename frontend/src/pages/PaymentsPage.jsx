@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IoIosClose } from "react-icons/io";
+import { IoClose, IoSearch } from "react-icons/io5";
 import { useAuth } from "../auth/AuthContext";
 import {
   chargeMeta,
@@ -15,6 +16,16 @@ import {
   latestPayment,
   methodOf,
 } from "../utils/chargeMethod";
+import {
+  chargeSearchText,
+  inTab,
+  matchesTerms,
+  searchTerms,
+  tabCounts,
+  TYPE_TABS,
+} from "../utils/chargeSearch";
+import { totalsLine } from "../utils/chargeTotals";
+import { pageOf, pagerText } from "../utils/paging";
 
 // Payment verification queue for ALL charge types (document fees since stage
 // 4b, rental fees since Facility Rentals stage 4). Used by BOTH the Treasurer
@@ -27,6 +38,12 @@ import {
 // Everything else, and both money actions (Record and Re-check), is in the
 // View panel, which copies the /login modal: see "Overlays follow one
 // pattern" in CLAUDE.md.
+//
+// SEARCH, TYPE TABS, TOTALS AND PAGES (12 Oct 2026). Above the rows: a search
+// box (utils/chargeSearch.js), the status and Refresh; the type tabs; and the
+// totals line (utils/chargeTotals.js), which is the list's h2. Below them, a
+// pager of 25 rows a page (utils/paging.js). All of it works on the list
+// already loaded: nothing here sends a request.
 const FILTERS = ["UNPAID", "PAID", "VOID", "all"];
 const FILTER_LABELS = {
   UNPAID: "Needs verification",
@@ -468,6 +485,19 @@ export default function PaymentsPage() {
   const [selected, setSelected] = useState(null); // charge open in the View panel
   const [recheckingId, setRecheckingId] = useState(null);
   const [verifying, setVerifying] = useState(false);
+  // The search, the type tab and the page. All three start fresh on every
+  // visit (the barangay hall's PC is shared, so nothing is kept in the
+  // browser) and live through Refresh, Record payment and Re-check, which
+  // reload the list without touching them. A new status keeps the search and
+  // the tab and goes back to page 1.
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("all");
+  const [page, setPage] = useState(1);
+  // How many charges the server says the status has. More than it sent means
+  // its 1,000-row cap cut the list (routes/charges.js).
+  const [total, setTotal] = useState(null);
+  const searchRef = useRef(null);
+  const headingRef = useRef(null);
   // The View button that opened the panel, captured from the click, so a
   // close can give focus back to it (closeModal in LoginPage.jsx).
   const openerRef = useRef(null);
@@ -515,9 +545,13 @@ export default function PaymentsPage() {
     const seq = ++loadSeq.current;
     setLoadError(null);
     setCharges(null);
+    setTotal(null);
     try {
       const data = await authFetch(`/charges?status=${filter}`);
-      if (seq === loadSeq.current) setCharges(data.charges);
+      if (seq === loadSeq.current) {
+        setCharges(data.charges);
+        setTotal(data.total);
+      }
     } catch (err) {
       if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
@@ -609,6 +643,77 @@ export default function PaymentsPage() {
     flashRef.current?.focus();
   }, [selected, flash]);
 
+  // What is in view: the charges that match the search, then those of the
+  // selected tab, then one page of those. The tab counts come from the first
+  // (they follow the search, not the tab), the totals from the second (every
+  // match, not just the page on screen). The View panel and the effect above
+  // keep using `charges`, the whole list, so a charge the search hides can
+  // neither close its open panel nor stop it closing once it is paid.
+  const terms = searchTerms(query);
+  const searched = (charges || []).filter((c) =>
+    matchesTerms(
+      chargeSearchText(c, {
+        name: payerName(c),
+        forText: chargeSubject(c).main,
+      }),
+      terms,
+    ),
+  );
+  const counts = tabCounts(searched);
+  const shown = searched.filter((c) => inTab(c, tab));
+  const paging = pageOf(shown.length, page);
+  const pager = pagerText(paging);
+  const rows = shown.slice(paging.start, paging.end);
+  // A reload that shrank the list lands on its last page, and stays there.
+  // Not while a list is loading: the page must survive the reload itself.
+  if (charges !== null && paging.page !== page) setPage(paging.page);
+  const capped =
+    charges !== null && Number.isFinite(total) && total > charges.length;
+  const totals =
+    charges === null
+      ? null
+      : totalsLine({
+          status: filter,
+          shown,
+          received: charges.length,
+          total,
+          filtered: terms.length > 0 || tab !== "all",
+        });
+
+  function changeQuery(value) {
+    setQuery(value);
+    setPage(1);
+  }
+
+  // The Clear (x) button and Escape. Focus stays in the box: the button that
+  // was pressed is gone once the box is empty.
+  function clearSearch() {
+    changeQuery("");
+    searchRef.current?.focus();
+  }
+
+  function chooseTab(key) {
+    setTab(key);
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setTab("all");
+    setPage(1);
+    searchRef.current?.focus();
+  }
+
+  // Previous and Next. The list heading is brought into view, and nothing
+  // else moves: focus stays on the button. An end button is aria-disabled,
+  // not disabled, so it keeps focus when the page reaches it; a press on it
+  // does nothing here.
+  function goToPage(n) {
+    if (n < 1 || n > paging.pages || n === paging.page) return;
+    setPage(n);
+    headingRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
   return (
     <>
       {flash && !selected && (
@@ -616,14 +721,49 @@ export default function PaymentsPage() {
           {flash.text}
         </div>
       )}
-      <div className="list-head">
-        <h2>
-          {charges === null
-            ? "Charges"
-            : `${charges.length} charge${charges.length === 1 ? "" : "s"}`}
-        </h2>
+      {/* The search is not a <form>: nothing is submitted, it filters as
+          you type. Escape clears it and goes no further, so a View panel
+          open behind it is left alone. type="search" brings the phone's
+          search key; index.css hides the browser's own clear button. */}
+      <div className="list-head pay-toolbar">
+        <div className="pay-search" role="search">
+          <IoSearch className="pay-search-icon" aria-hidden="true" />
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            onChange={(e) => changeQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && query) {
+                e.stopPropagation();
+                clearSearch();
+              }
+            }}
+            aria-label="Search charges"
+            placeholder="Search name, charge no. or reference"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query && (
+            <button
+              type="button"
+              className="pay-search-clear"
+              aria-label="Clear search"
+              onClick={clearSearch}
+            >
+              <IoClose aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <div className="head-actions">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select
+            aria-label="Status"
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(1);
+            }}
+          >
             {FILTERS.map((f) => (
               <option key={f} value={f}>
                 {FILTER_LABELS[f]}
@@ -636,9 +776,52 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {capped && (
+        <div className="alert info pay-cap">
+          Showing the newest {charges.length.toLocaleString("en-US")} of{" "}
+          {total.toLocaleString("en-US")} charges. Older ones are not listed,
+          and the counts and totals below cover only these{" "}
+          {charges.length.toLocaleString("en-US")}.
+        </div>
+      )}
+
+      {/* The tabs count what matches the search, whatever tab is selected.
+          A tab with nothing in it is dimmed, never disabled. No page here
+          uses role="tab", so these are toggle buttons. */}
+      {charges !== null && (
+        <div className="pay-tabs" role="group" aria-label="Charge type">
+          {TYPE_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`pay-tab${counts[t.key] === 0 ? " pay-tab-empty" : ""}`}
+              aria-pressed={tab === t.key}
+              onClick={() => chooseTab(t.key)}
+            >
+              {t.label}{" "}
+              <span className="pay-tab-count">
+                {counts[t.key].toLocaleString("en-US")}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* The totals line is the list's heading: "Charges" while loading or
+          after a failed load, then how many charges are in view and what
+          they add up to, over every page. */}
+      <div className="pay-totals" aria-live="polite">
+        <h2 ref={headingRef}>{totals ? totals.heading : "Charges"}</h2>
+        {totals?.detail && (
+          <p className="pay-totals-detail">{totals.detail}</p>
+        )}
+      </div>
+
       {/* The error first, then loading, then empty, then rows: a load that
           failed shows neither a count nor the empty text. Try again repeats
-          the same load, as Refresh does. The markup is Staff accounts'. */}
+          the same load, as Refresh does. The markup is Staff accounts'. A
+          status with no charges at all keeps its own text; one whose charges
+          the search or tab hide says so, and offers to clear them. */}
       {loadError ? (
         <>
           <div className="alert error" role="alert">
@@ -657,6 +840,17 @@ export default function PaymentsPage() {
             {filter === "UNPAID" ? "awaiting verification" : "here"}.
           </p>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="empty">
+          <p>No charges match your search or filters.</p>
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={clearFilters}
+          >
+            Clear search and filters
+          </button>
+        </div>
       ) : (
         <div className="table-wrap">
           <table className="data-table stack-narrow payments-table">
@@ -672,7 +866,7 @@ export default function PaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {charges.map((c) => {
+              {rows.map((c) => {
                 const name = payerName(c);
                 const subject = chargeSubject(c);
                 return (
@@ -719,6 +913,31 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {paging.show && (
+        <nav className="pay-pager" aria-label="Pages of charges">
+          <button
+            type="button"
+            className="btn secondary"
+            aria-disabled={paging.page === 1}
+            onClick={() => goToPage(paging.page - 1)}
+          >
+            Previous
+          </button>
+          <p className="pay-pager-status" aria-live="polite">
+            <strong>{pager.page}</strong>
+            <span>{pager.range}</span>
+          </p>
+          <button
+            type="button"
+            className="btn secondary"
+            aria-disabled={paging.page === paging.pages}
+            onClick={() => goToPage(paging.page + 1)}
+          >
+            Next
+          </button>
+        </nav>
       )}
 
       {selected && (

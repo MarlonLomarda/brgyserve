@@ -39,6 +39,9 @@
 // paid, read from its payment record; what an unpaid or void charge shows
 // instead; and the paid charge's View panel, which shows the record itself.
 //
+// Section O is the Payments page's search, type tabs, totals and paging: the
+// pure helpers case by case, then the real page against 64 stubbed charges.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -1130,11 +1133,13 @@ const root = () => dom.window.document.getElementById('root');
       }
       await page.settle();
     };
-    // What the list area says, read the way a person would.
+    // What the list area says, read the way a person would. The heading is
+    // the one h2 outside the View panel: the totals line since section O, the
+    // "{n} charges" heading before it.
     const listView = (page) => {
       const text = root().textContent;
       return {
-        heading: page.query('.list-head h2')?.textContent ?? null,
+        heading: page.queryAll('h2').find((h) => !h.closest('.pay-panel'))?.textContent ?? null,
         error: page.queryAll('[role="alert"]').map((el) => el.textContent)
           .find((t) => t.startsWith('Could not load the charges')) ?? null,
         tryAgain: !!tryAgainButton(page),
@@ -1205,8 +1210,8 @@ const root = () => dom.window.document.getElementById('root');
       errorOnly(failedPaid) && net.calls.length === paySoFar + 1 && isList(retryCall)
         && retryCall.url.endsWith('status=PAID') && loadingOnly(retrying),
       `${said(failedPaid)} then ${retryCall?.url ?? 'no request'} ${said(retrying)}`);
-    check('  and when it answers with 2 charges the error is gone: "2 charges" and both rows',
-      !retried.error && !retried.tryAgain && retried.heading === '2 charges'
+    check('  and when it answers with 2 charges the error is gone: "2 charges · ₱200.00 paid" and both rows',
+      !retried.error && !retried.tryAgain && retried.heading === '2 charges · ₱200.00 paid'
         && retried.rows.join('|') === 'Carla Santos|Dino Tan', said(retried));
     await again.unmount();
 
@@ -1238,7 +1243,7 @@ const root = () => dom.window.document.getElementById('root');
     check('changing the status after a failure loads that status and clears the error: the loading state shows',
       errorOnly(beforeSwitch) && isList(switchCall) && switchCall.url.endsWith('status=PAID') && loadingOnly(switching),
       `${switchCall?.url ?? 'no request'} ${said(switching)}`);
-    check('  and its answer replaces it', switchedView.heading === '2 charges' && !switchedView.error
+    check('  and its answer replaces it', switchedView.heading === '2 charges · ₱200.00 paid' && !switchedView.error
       && switchedView.rows.join('|') === 'Carla Santos|Dino Tan', said(switchedView));
     await switched.unmount();
 
@@ -1257,7 +1262,7 @@ const root = () => dom.window.document.getElementById('root');
     const refreshedView = listView(refreshed);
     check('Refresh after a failure clears the error, shows the loading state, then the list',
       isList(refreshCall) && refreshCall.url.endsWith('status=UNPAID') && loadingOnly(refreshing)
-        && refreshedView.heading === '2 charges' && !refreshedView.error, `${said(refreshing)} then ${said(refreshedView)}`);
+        && refreshedView.heading === '2 charges · ₱200.00 unpaid' && !refreshedView.error, `${said(refreshing)} then ${said(refreshedView)}`);
     await refreshed.unmount();
 
     // f. A reload that fails after Record payment, then after Re-check. The
@@ -1321,7 +1326,7 @@ const root = () => dom.window.document.getElementById('root');
     await raced.settle();
     const racedView = listView(raced);
     check('an older answer that arrives last cannot replace the newer list: Void keeps its one charge',
-      raced.query('.list-head select')?.value === 'VOID' && racedView.heading === '1 charge'
+      raced.query('.list-head select')?.value === 'VOID' && racedView.heading === '1 charge · ₱100.00 void'
         && racedView.rows.join('|') === 'Elsa Uy', said(racedView));
     await choose(raced, 'all');
     await choose(raced, 'UNPAID');
@@ -1331,7 +1336,7 @@ const root = () => dom.window.document.getElementById('root');
     await raced.settle();
     const racedLater = listView(raced);
     check('  nor can an older load that fails last put its error over the newer list',
-      racedLater.heading === '2 charges' && racedLater.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedLater.error,
+      racedLater.heading === '2 charges · ₱200.00 unpaid' && racedLater.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedLater.error,
       said(racedLater));
     await raced.unmount();
   }
@@ -1608,6 +1613,615 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousTZ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZ;
+  }
+
+  // =========================================================================
+  // O. Payments: search, type tabs, totals and paging
+  // =========================================================================
+  // The page listed every charge of a status in one long table. It now has a
+  // search box that filters as you type (case and accents ignored, every word
+  // required, in any order) over the payer name as shown, the @username, the
+  // charge number, the references the View panel can show and the "For" text,
+  // but never the purpose; type tabs whose counts follow the search; a totals
+  // line over EVERY matching charge, summed in whole centavos, not just the
+  // page shown; and pages of 25. Filters start fresh on every visit and live
+  // through Refresh, Record payment and Re-check. The pure helpers
+  // (utils/chargeSearch.js, chargeTotals.js, paging.js) are checked case by
+  // case, then the real page against 64 stubbed charges: 30 waiting, 26 paid
+  // and 8 void. Every request is answered by the fetch stub.
+  console.log('\n--- Payments: search, type tabs, totals and paging ---');
+  {
+    const S = globalThis.chargeSearch || {};
+    const T = globalThis.chargeTotals || {};
+    const P = globalThis.paging || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const LIST = '/charges?status=';
+    const PAY_ID = 'pay_tEsT51aBcDeFgHiJkLmNoPqR';
+
+    // Charges in the list's real shape (sections M and N). NAME holds each
+    // one's payer name as the page shows it, written by hand.
+    const NAME = new Map();
+    const who = (first, middle, last) => ({ first_name: first, middle_name: middle, last_name: last, suffix: null });
+    const STAFF = { username: 'treasurer_one', role: 'treasurer', profiles: who('Teresa', 'Lim', 'Ocampo') };
+    const paidRow = (id, method, reference, auto = false) => [{
+      payment_id: 5000 + id, payment_method: method, reference_no: reference, created_at: '2026-10-06T01:00:00+00:00',
+      received_by_user_id: auto ? null : 12, recorder: auto ? null : STAFF,
+    }];
+    const charge = (id, type, status, amount, extra) => ({
+      charge_id: id, charge_type: type, amount, status, created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: null, document_requests: null, rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    const docOf = (id, status, amount, [first, middle, last], documentType, { purpose = 'Employment', ...extra } = {}) => {
+      NAME.set(id, [first, middle, last].filter(Boolean).join(' '));
+      return charge(id, 'DOCUMENT', status, amount, {
+        payer: { user_id: 900 + id, username: `res_${id}`, profiles: who(first, middle, last) },
+        document_requests: { request_id: 700 + id, purpose, status: 'approved', document_types: { name: documentType },
+          resident_records: { resident_id: 800 + id, ...who(first, middle, last) } },
+        ...extra,
+      });
+    };
+    // `person` is [first, last] for a resident, or { guest } for a borrower
+    // from another barangay, who has no account and no resident record.
+    const rentalOf = (id, status, amount, person, item, quantity, extra = {}) => {
+      const guest = Array.isArray(person) ? null : person.guest;
+      NAME.set(id, guest || person.join(' '));
+      return charge(id, 'RENTAL', status, amount, {
+        payer: guest ? null : { user_id: 900 + id, username: `res_${id}`, profiles: who(person[0], null, person[1]) },
+        rental_requests: { request_id: 600 + id, quantity_requested: quantity, start_datetime: '2026-10-20T00:00:00+00:00',
+          end_datetime: '2026-10-20T08:00:00+00:00', status: 'confirmed', resident_id: guest ? null : 800 + id,
+          outside_borrower_name: guest, rental_items: { name: item },
+          resident_records: guest ? null : { resident_id: 800 + id, ...who(person[0], null, person[1]) } },
+        ...extra,
+      });
+    };
+    // A household's fine, with no account behind it, named by its head.
+    const fineOf = (id, status, amount, head, title, extra = {}) => {
+      NAME.set(id, head);
+      return charge(id, 'FINE', status, amount, {
+        household_id: id,
+        events: { event_id: 400 + id, title, start_datetime: '2026-10-01T00:00:00+00:00', end_datetime: '2026-10-01T08:00:00+00:00' },
+        household_records: { household_id: id, address: 'Purok 2, Ubujan', head_name: head },
+        ...extra,
+      });
+    };
+
+    // a. Search, on its own. `shown` is what the page shows for the charge,
+    // its payer name and its "For" text, written here by hand.
+    const textOf = (c, name, forText) => attempt(() => S.chargeSearchText(c, { name, forText }));
+    const finds = (text, query) => attempt(() => S.matchesTerms(text, S.searchTerms(query)));
+    const sJuan = docOf(148, 'UNPAID', 50, ['Juan', 'Torralba', 'Dela Cruz'], 'Barangay Clearance', { purpose: 'Scholarship' });
+    // Two keys the list never sends, a contact number and an email: the
+    // search must read only the fields it is meant to, never the whole charge.
+    sJuan.document_requests.resident_records.contact_number = '09171234567';
+    sJuan.payer.email = 'juan@example.com';
+    const tJuan = textOf(sJuan, 'Juan Torralba Dela Cruz', 'Barangay Clearance');
+    const tNino = textOf(docOf(52, 'PAID', 100, ['Niño', null, 'Peñaflor'], 'Certificate of Residency',
+      { payments: paidRow(52, 'onsite', 'OR-2026-0042') }), 'Niño Peñaflor', 'Certificate of Residency');
+    const tOnline = textOf(docOf(53, 'PAID', 100, ['Maria', null, 'Santos'], 'Barangay Clearance', {
+      paymongo_session_id: 'cs_test_53', paymongo_payment_id: PAY_ID, payments: paidRow(53, 'gcash', PAY_ID, true) }),
+    'Maria Santos', 'Barangay Clearance');
+    const tDeclared = textOf(docOf(54, 'UNPAID', 50, ['Ana', null, 'Cruz'], 'Barangay Clearance',
+      { declared_method: 'gcash', declared_reference: '5550001234' }), 'Ana Cruz', 'Barangay Clearance');
+    const sGuest = rentalOf(55, 'UNPAID', 300, { guest: 'Lito Guest' }, 'Monobloc Chairs', 20);
+    const tGuest = textOf(sGuest, 'Lito Guest', 'Monobloc Chairs × 20');
+    const sFine = fineOf(56, 'UNPAID', 100, 'Rosa Lim', 'General Assembly');
+    const tFine = textOf(sFine, 'Rosa Lim', 'Missed General Assembly');
+    const sPlain = docOf(57, 'UNPAID', 50, ['Nino', null, 'Salazar'], 'Barangay Clearance');
+    const tPlain = textOf(sPlain, 'Nino Salazar', 'Barangay Clearance');
+    const TEXTS = [tJuan, tNino, tOnline, tDeclared, tGuest, tFine, tPlain];
+
+    check('search: accents are folded in the charge: "nino penaflor" finds Niño Peñaflor',
+      finds(tNino, 'nino penaflor') === true, said(tNino));
+    check('  and in the search: "Niño" and "NIÑO" find Nino Salazar',
+      finds(tPlain, 'Niño') === true && finds(tPlain, 'NIÑO') === true, said(tPlain));
+    check('search: every word is required, in any order: "cruz juan" and "dela JUAN" find Juan Torralba Dela Cruz, "juan reyes" does not',
+      finds(tJuan, 'cruz juan') === true && finds(tJuan, 'dela JUAN') === true && finds(tJuan, 'juan reyes') === false, said(tJuan));
+    check('search: every name part as shown: "torralba" (the middle name) finds him', finds(tJuan, 'torralba') === true);
+    check('search: the charge number with or without #: "148" and "#148" find charge #148, "#149" does not',
+      finds(tJuan, '148') === true && finds(tJuan, '#148') === true && finds(tJuan, '#149') === false);
+    check('search: the @username: "@res_148" and "res_148" find it',
+      finds(tJuan, '@res_148') === true && finds(tJuan, 'res_148') === true);
+    check('search: a payment reference, here an OR number: "OR-2026-0042", "or-2026" and "0042" find it',
+      finds(tNino, 'OR-2026-0042') === true && finds(tNino, 'or-2026') === true && finds(tNino, '0042') === true);
+    check('search: the pay_ id, in any case: "pay_tEsT51" and "PAY_TEST51ABC" find it',
+      finds(tOnline, 'pay_tEsT51') === true && finds(tOnline, 'PAY_TEST51ABC') === true, said(tOnline));
+    check('search: a declared GCash reference: "5550001234" finds it', finds(tDeclared, '5550001234') === true);
+    check('search: the For text: "clearance" (a document type), "monobloc" (a rental item), "general assembly" (an event title)',
+      finds(tJuan, 'clearance') === true && finds(tGuest, 'monobloc') === true && finds(tFine, 'general assembly') === true);
+    check('search: the name as shown for a guest borrower and a household head: "lito guest", "rosa lim"',
+      finds(tGuest, 'lito guest') === true && finds(tFine, 'rosa lim') === true);
+    check('search: the purpose is NOT searched: "scholarship" (his purpose) finds nothing', finds(tJuan, 'scholarship') === false);
+    check('search: a phone-like or email-like string finds nothing, not even one hidden in the charge: "09171234567", "juan@example.com"',
+      TEXTS.every((t) => finds(t, '09171234567') === false && finds(t, 'juan@example.com') === false));
+    check('search: an empty or blank search has no words and matches every charge',
+      said(attempt(() => S.searchTerms(''))) === '[]' && said(attempt(() => S.searchTerms('   '))) === '[]'
+        && TEXTS.every((t) => finds(t, '') === true && finds(t, '  ') === true));
+
+    // Tabs, on their own.
+    const tabList = attempt(() => S.TYPE_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('tabs: All, Documents, Rentals, Fines, in that order',
+      tabList === 'all:All | DOCUMENT:Documents | RENTAL:Rentals | FINE:Fines', said(tabList));
+    const counted = attempt(() => S.tabCounts([sJuan, sGuest, sFine, sPlain]));
+    check('tab counts: All plus one per type, over whatever list they are given',
+      counted?.all === 4 && counted.DOCUMENT === 2 && counted.RENTAL === 1 && counted.FINE === 1, said(counted));
+    const none = attempt(() => S.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count',
+      none?.all === 0 && none.DOCUMENT === 0 && none.RENTAL === 0 && none.FINE === 0, said(none));
+    check('inTab: All takes every charge, a type tab only its own type',
+      attempt(() => S.inTab(sGuest, 'all') && S.inTab(sGuest, 'RENTAL') && !S.inTab(sGuest, 'DOCUMENT') && !S.inTab(sFine, 'RENTAL')) === true);
+
+    // b. Totals, on their own.
+    const cents = (a) => attempt(() => T.toCentavos(a));
+    check('toCentavos: 0.1 is 10, 0.2 is 20, "100.50" is 10050, 1500 is 150000',
+      cents(0.1) === 10 && cents(0.2) === 20 && cents('100.50') === 10050 && cents(1500) === 150000,
+      said([cents(0.1), cents(0.2), cents('100.50'), cents(1500)]));
+    check('  a missing, null, blank or non-numeric amount adds 0',
+      cents(undefined) === 0 && cents(null) === 0 && cents('') === 0 && cents('abc') === 0);
+    const sum = attempt(() => T.sumCentavos([{ amount: 0.1 }, { amount: 0.2 }]));
+    check('sums are whole centavos: 0.1 + 0.2 is exactly 30, not 30.000000000000004',
+      sum === 30 && Number.isInteger(sum), String(sum));
+    const peso = (c) => attempt(() => T.formatPeso(c));
+    check('formatPeso: thousands separators and two decimals: ₱1,500.00, ₱10,549.00, ₱1,234,567.89, ₱0.30, ₱0.05, ₱0.00',
+      peso(150000) === '₱1,500.00' && peso(1054900) === '₱10,549.00' && peso(123456789) === '₱1,234,567.89'
+        && peso(30) === '₱0.30' && peso(5) === '₱0.05' && peso(0) === '₱0.00',
+      said([peso(150000), peso(1054900), peso(123456789), peso(30), peso(5), peso(0)]));
+
+    const line = (args) => attempt(() => T.totalsLine(args));
+    const owing = (status, list) => list.map((amount, i) => charge(9000 + i, 'DOCUMENT', status, amount, {}));
+    // A paid charge: cash or GCash a staff member recorded, a PayMongo
+    // payment, or no payment row at all.
+    const paidWith = (id, amount, how) => charge(id, 'DOCUMENT', 'PAID', amount, {
+      payments: how === 'none' ? [] : paidRow(id, how === 'online' ? 'gcash' : how, null, how === 'online') });
+    const UNPAID14 = owing('UNPAID', [...Array(13).fill(100), 1050]);
+    let got = line({ status: 'UNPAID', shown: UNPAID14, received: 14, total: 14, filtered: false });
+    check('totals, Needs verification: "14 charges · ₱2,350.00 unpaid", and no second line',
+      got?.heading === '14 charges · ₱2,350.00 unpaid' && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [100]), received: 1, total: 1, filtered: false });
+    check('  one charge: "1 charge · ₱100.00 unpaid"', got?.heading === '1 charge · ₱100.00 unpaid', said(got));
+    const PAID6 = [paidWith(1, 100, 'onsite'), paidWith(2, 50.5, 'onsite'), paidWith(3, 250, 'gcash'),
+      paidWith(4, 0.1, 'online'), paidWith(5, 0.2, 'online'), paidWith(6, 0, 'none')];
+    got = line({ status: 'PAID', shown: PAID6, received: 6, total: 6, filtered: false });
+    check('totals, Paid: "6 charges · ₱400.80 paid", then "Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30" (0.1 + 0.2 online)',
+      got?.heading === '6 charges · ₱400.80 paid' && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30', said(got));
+    check('  a No fee charge is never listed, and "No payment record" only appears when there is one',
+      typeof got?.detail === 'string' && !got.detail.includes('No fee') && !got.detail.includes('No payment record'), said(got));
+    got = line({ status: 'PAID', shown: [...PAID6, paidWith(7, 1500, 'none')], received: 7, total: 7, filtered: false });
+    check('  with a paid PHP 1,500 charge that has no payment record: "· No payment record ₱1,500.00" at the end',
+      got?.heading === '7 charges · ₱1,900.80 paid'
+        && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30 · No payment record ₱1,500.00', said(got));
+    got = line({ status: 'VOID', shown: owing('VOID', [500, 500, 500, 500, 537, 100]), received: 6, total: 6, filtered: false });
+    check('totals, Void: "6 charges · ₱2,637.00 void", and no second line',
+      got?.heading === '6 charges · ₱2,637.00 void' && got.detail === null, said(got));
+    const MIXED = [paidWith(1, 100, 'onsite'), ...owing('UNPAID', [50, 0.3]), ...owing('VOID', [25.5])];
+    got = line({ status: 'all', shown: MIXED, received: 4, total: 4, filtered: false });
+    check('totals, All charges: "4 charges", then "₱100.00 paid · ₱50.30 unpaid · ₱25.50 void"',
+      got?.heading === '4 charges' && got.detail === '₱100.00 paid · ₱50.30 unpaid · ₱25.50 void', said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true });
+    check('totals with a search or tab: "3 of 14 charges match · ₱1,250.00 unpaid"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid' && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [100]), received: 14, total: 14, filtered: true });
+    check('  one match: "1 of 14 charges matches · ₱100.00 unpaid"', got?.heading === '1 of 14 charges matches · ₱100.00 unpaid', said(got));
+    got = line({ status: 'all', shown: [paidWith(1, 100, 'onsite'), ...owing('UNPAID', [50])], received: 64, total: 64, filtered: true });
+    check('  on All charges: "2 of 64 charges match", then the amounts of those two',
+      got?.heading === '2 of 64 charges match' && got.detail === '₱100.00 paid · ₱50.00 unpaid · ₱0.00 void', said(got));
+    got = line({ status: 'UNPAID', shown: [], received: 14, total: 14, filtered: true });
+    const nothing = line({ status: 'PAID', shown: [], received: 0, total: 0, filtered: false });
+    const nothingFiltered = line({ status: 'all', shown: [], received: 0, total: 0, filtered: true });
+    check('totals with nothing to show: "0 of 14 charges match" with no amount; an empty status view "0 charges", searched or not',
+      got?.heading === '0 of 14 charges match' && got.detail === null && nothing?.heading === '0 charges' && nothing.detail === null
+        && nothingFiltered?.heading === '0 charges' && nothingFiltered.detail === null, said([got, nothing, nothingFiltered]));
+    const THIRTY = owing('UNPAID', Array(30).fill(100));
+    got = line({ status: 'UNPAID', shown: THIRTY, received: 30, total: 1234, filtered: false });
+    const cappedSearch = line({ status: 'UNPAID', shown: THIRTY.slice(0, 2), received: 30, total: 1234, filtered: true });
+    check('totals over a capped list never claim to cover everything: "Newest 30 of 1,234 charges · ₱3,000.00 unpaid", '
+        + '"2 of the newest 30 charges match · ₱200.00 unpaid"',
+      got?.heading === 'Newest 30 of 1,234 charges · ₱3,000.00 unpaid'
+        && cappedSearch?.heading === '2 of the newest 30 charges match · ₱200.00 unpaid', said([got, cappedSearch]));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', Array(1000).fill(1)), received: 1000, total: 1000, filtered: false });
+    check('  counts get thousands separators too: "1,000 charges · ₱1,000.00 unpaid"',
+      got?.heading === '1,000 charges · ₱1,000.00 unpaid', said(got));
+
+    // c. Paging, on its own.
+    const pg = (count, pageNo) => attempt(() => P.pageOf(count, pageNo));
+    const words = (p) => attempt(() => P.pagerText(p));
+    check('paging: 25 a page', P.PAGE_SIZE === 25, String(P.PAGE_SIZE));
+    let p = pg(88, 1);
+    check('paging: 88 charges, page 1: rows 1-25 of 4 pages, "Page 1 of 4", "Showing 1–25 of 88", pager shown',
+      p?.page === 1 && p.pages === 4 && p.start === 0 && p.end === 25 && p.show === true
+        && words(p)?.page === 'Page 1 of 4' && words(p)?.range === 'Showing 1–25 of 88', said([p, words(p)]));
+    p = pg(88, 2);
+    check('  page 2: rows 26-50, "Showing 26–50 of 88"', p?.start === 25 && p.end === 50 && words(p)?.range === 'Showing 26–50 of 88', said(p));
+    p = pg(88, 4);
+    check('  the last page holds what is left: rows 76-88, "Page 4 of 4", "Showing 76–88 of 88"',
+      p?.page === 4 && p.start === 75 && p.end === 88 && words(p)?.page === 'Page 4 of 4' && words(p)?.range === 'Showing 76–88 of 88', said(p));
+    check('paging clamps: page 9 of 88 is page 4; page 4 of a list shrunk to 60 is page 3 ("Showing 51–60 of 60"); 0, -2 and NaN are page 1',
+      pg(88, 9)?.page === 4 && pg(60, 4)?.page === 3 && words(pg(60, 4))?.range === 'Showing 51–60 of 60'
+        && pg(10, 0)?.page === 1 && pg(10, -2)?.page === 1 && pg(10, NaN)?.page === 1,
+      said([pg(88, 9)?.page, pg(60, 4)?.page, pg(10, 0)?.page, pg(10, -2)?.page, pg(10, NaN)?.page]));
+    check('paging hides the pager when everything fits: 25 is one page, 26 is two, none is one',
+      pg(25, 1)?.show === false && pg(25, 1).pages === 1 && pg(26, 1)?.show === true && pg(26, 1).pages === 2
+        && pg(0, 3)?.page === 1 && pg(0, 3).pages === 1 && pg(0, 3).show === false, said([pg(25, 1), pg(26, 1), pg(0, 3)]));
+    p = pg(1000, 40);
+    check('  with thousands separators: "Page 40 of 40", "Showing 976–1,000 of 1,000"',
+      words(p)?.page === 'Page 40 of 40' && words(p)?.range === 'Showing 976–1,000 of 1,000', said(words(p)));
+
+    // d. The real page, against 64 charges. 30 waiting: 18 documents at PHP
+    // 50, 8 rentals at 300, 4 fines at 100 (PHP 3,700). 26 paid: 14
+    // documents (one of them PHP 0) and 2 fines, cash, GCash and PayMongo, 10
+    // rentals by PayMongo (PHP 4,500). 8 void: 6 rentals at 500, a fine at
+    // 100, a document at 50 (PHP 3,150).
+    const UNPAID = [
+      docOf(148, 'UNPAID', 50, ['Juan', null, 'Dela Cruz'], 'Barangay Clearance', { purpose: 'Scholarship' }),
+      docOf(331, 'UNPAID', 50, ['Niño', null, 'Peñaflor'], 'Certificate of Residency'),
+      rentalOf(330, 'UNPAID', 300, ['Juan', 'Ramos'], 'Tent', 1, { paymongo_session_id: 'cs_test_330' }),
+      rentalOf(329, 'UNPAID', 300, { guest: 'Lito Guest' }, 'Monobloc Chairs', 20),
+      fineOf(328, 'UNPAID', 100, 'Rosa Lim', 'General Assembly'),
+      docOf(327, 'UNPAID', 50, ['Ana', null, 'Cruz'], 'Barangay Clearance',
+        { declared_method: 'gcash', declared_reference: '5550001234', declared_at: '2026-10-05T02:00:00+00:00' }),
+      ...['Alma', 'Berto', 'Celia', 'Dante', 'Elena', 'Fidel', 'Gina', 'Hector', 'Ines', 'Jaime', 'Karla', 'Leon', 'Mila',
+        'Nestor', 'Olga'].map((first, i) => docOf(300 + i, 'UNPAID', 50, [first, null, 'Abad'], 'Barangay Clearance')),
+      ...['Pablo', 'Quina', 'Rico', 'Sara', 'Tomas', 'Ursula'].map((first, i) =>
+        rentalOf(315 + i, 'UNPAID', 300, [first, 'Bello'], 'Tent', 1)),
+      ...['Victor Cano', 'Wilma Cano', 'Xenia Cano'].map((head, i) => fineOf(321 + i, 'UNPAID', 100, head, 'Clean-up Drive')),
+    ];
+    const PAID = [
+      docOf(340, 'PAID', 100, ['Carla', null, 'Santos'], 'Barangay Clearance', { payments: paidRow(340, 'onsite', 'OR-2026-0042') }),
+      docOf(341, 'PAID', 100, ['Dino', null, 'Tan'], 'Barangay Clearance', { payments: paidRow(341, 'gcash', '9876543210') }),
+      docOf(342, 'PAID', 100, ['Elsa', null, 'Uy'], 'Barangay Clearance', {
+        paymongo_session_id: 'cs_test_342', paymongo_payment_id: PAY_ID, payments: paidRow(342, 'gcash', PAY_ID, true) }),
+      docOf(343, 'PAID', 0, ['Fe', null, 'Vera'], 'Certificate of Indigency'),
+      ...['Gabo', 'Hilda', 'Igme', 'Jojo', 'Kiko', 'Lorna', 'Mario', 'Nena', 'Oscar', 'Pilar'].map((first, i) =>
+        docOf(344 + i, 'PAID', 100, [first, null, 'Cortez'], 'Barangay Clearance', { payments: paidRow(344 + i, 'onsite', null) })),
+      ...['Quintin', 'Rosario', 'Santi', 'Tess', 'Ugo', 'Vilma', 'Wena', 'Xavier', 'Yolanda', 'Zaldy'].map((first, i) =>
+        rentalOf(354 + i, 'PAID', 300, [first, 'Diaz'], 'Tent', 1, { paymongo_session_id: `cs_test_${354 + i}`,
+          paymongo_payment_id: `pay_test_${354 + i}`, payments: paidRow(354 + i, 'gcash', `pay_test_${354 + i}`, true) })),
+      ...['Alfredo Ely', 'Bea Ely'].map((head, i) =>
+        fineOf(364 + i, 'PAID', 100, head, 'General Assembly', { payments: paidRow(364 + i, 'onsite', null) })),
+    ];
+    const VOID = [
+      ...['Celso', 'Divina', 'Efren', 'Flor', 'Goyo', 'Herminia'].map((first, i) =>
+        rentalOf(370 + i, 'VOID', 500, [first, 'Ebro'], 'Tent', 1)),
+      fineOf(376, 'VOID', 100, 'Isabel Fuentes', 'Clean-up Drive'),
+      docOf(377, 'VOID', 50, ['Jun', null, 'Galang'], 'Barangay Clearance'),
+    ];
+    const fresh = () => ({ UNPAID: [...UNPAID], PAID: [...PAID], VOID: [...VOID] });
+    // The list answer for the status asked for, from `state`, which a check
+    // may change between loads; `total` stands in for a server cap.
+    const answerFrom = (state, total = null) => (url, method) => {
+      if (method !== 'GET' || !url.includes(LIST)) return undefined;
+      const status = url.split(LIST)[1].toUpperCase();
+      const charges = status === 'ALL' ? [...state.UNPAID, ...state.PAID, ...state.VOID] : state[status] || [];
+      return { charges, total: total ?? charges.length };
+    };
+    const SEARCH = 'input[aria-label="Search charges"]';
+    const mountPayments = async () => {
+      const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+      await page.settle();
+      return page;
+    };
+    const openWith = async (state, total) => {
+      seedSession(VALID);
+      resetNet(200, answerFrom(state, total));
+      return mountPayments();
+    };
+    const listHeading = (page) => page.queryAll('h2').find((h) => !h.closest('.pay-panel')) ?? null;
+    // What the page says, read the way a person would.
+    const look = (page) => ({
+      heading: listHeading(page)?.textContent ?? null,
+      detail: page.query('.pay-totals-detail')?.textContent ?? null,
+      tabs: page.queryAll('.pay-tabs button').map((b) => b.textContent).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map((b) => b.textContent),
+      rows: page.queryAll('table.payments-table tbody tr').map((tr) => tr.querySelector('strong')?.textContent ?? null),
+      pager: page.query('.pay-pager')?.textContent ?? null,
+      cap: page.query('.pay-cap')?.textContent ?? null,
+      search: page.query(SEARCH)?.value ?? null,
+      noMatch: root().textContent.includes('No charges match your search or filters.'),
+    });
+    const pagerSays = (v, pageText, range) => typeof v.pager === 'string' && v.pager.includes(pageText) && v.pager.includes(range);
+    const type = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
+    const tabNamed = (page, label) => page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const viewFor = (page, name) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${name}:`));
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const namesOf = (list) => list.map((c) => NAME.get(c.charge_id));
+    // jsdom has no scrollIntoView; this one records what asked to be shown.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+
+    let page = await openWith(fresh());
+    let v = look(page);
+    check('Payments opens on Needs verification: "30 charges · ₱3,700.00 unpaid", tabs All 30 · Documents 18 · Rentals 8 · Fines 4, All pressed',
+      page.query('.list-head select')?.value === 'UNPAID' && v.heading === '30 charges · ₱3,700.00 unpaid' && v.detail === null
+        && v.tabs === 'All 30 · Documents 18 · Rentals 8 · Fines 4' && said(v.pressed) === said(['All 30']), said(v));
+    check('  the first 25 rows in the order sent, and the pager reads "Page 1 of 2" and "Showing 1–25 of 30"',
+      said(v.rows) === said(namesOf(UNPAID.slice(0, 25))) && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30'),
+      said({ rows: v.rows.length, first: v.rows[0], pager: v.pager }));
+    const box = page.query(SEARCH);
+    check('  the search box is labelled "Search charges", reads "Search name, charge no. or reference" and starts empty; no Clear button, no cap notice',
+      !!box && box.getAttribute('placeholder') === 'Search name, charge no. or reference' && box.value === ''
+        && !page.query('button[aria-label="Clear search"]') && v.cap === null,
+      said({ placeholder: box?.getAttribute('placeholder') ?? null, cap: v.cap }));
+
+    await type(page, 'juan');
+    v = look(page);
+    check('typing "juan" narrows the rows to Juan Dela Cruz and Juan Ramos as you type, with no button pressed',
+      said(v.rows) === said(['Juan Dela Cruz', 'Juan Ramos']), said(v.rows));
+    check('  the tab counts follow the search: All 2 · Documents 1 · Rentals 1 · Fines 0, Fines dimmed but still a button you can press',
+      v.tabs === 'All 2 · Documents 1 · Rentals 1 · Fines 0' && tabNamed(page, 'Fines')?.classList.contains('pay-tab-empty') === true
+        && tabNamed(page, 'Fines')?.disabled === false && tabNamed(page, 'Rentals')?.classList.contains('pay-tab-empty') === false,
+      said(v.tabs));
+    check('  the totals follow it: "2 of 30 charges match · ₱350.00 unpaid", and the pager is hidden',
+      v.heading === '2 of 30 charges match · ₱350.00 unpaid' && v.pager === null, said(v));
+
+    const rowsFor = async (text) => { await type(page, text); return look(page).rows; };
+    const found = {
+      nino: await rowsFor('nino'), cruzJuan: await rowsFor('cruz juan'), hash: await rowsFor('#148'), bare: await rowsFor('148'),
+    };
+    check('accents, word order and the charge number: "nino" finds Niño Peñaflor; "cruz juan" only Juan Dela Cruz; "#148" and "148" charge #148',
+      said(found.nino) === said(['Niño Peñaflor']) && said(found.cruzJuan) === said(['Juan Dela Cruz'])
+        && said(found.hash) === said(['Juan Dela Cruz']) && said(found.bare) === said(['Juan Dela Cruz']), said(found));
+    const more = {
+      reference: await rowsFor('5550001234'), item: await rowsFor('monobloc'), event: await rowsFor('general assembly'),
+    };
+    check('a declared reference, a rental item, an event title: "5550001234" finds Ana Cruz, "monobloc" Lito Guest, "general assembly" Rosa Lim',
+      said(more.reference) === said(['Ana Cruz']) && said(more.item) === said(['Lito Guest']) && said(more.event) === said(['Rosa Lim']),
+      said(more));
+    await type(page, 'scholarship');
+    v = look(page);
+    check('the purpose is not searched: "scholarship" (Juan Dela Cruz\'s purpose) matches nothing: "No charges match your search or filters."',
+      v.rows.length === 0 && v.noMatch && !!buttonNamed(root(), 'Clear search and filters') && v.heading === '0 of 30 charges match',
+      said(v));
+
+    await type(page, 'juan');
+    const clearX = page.query('button[aria-label="Clear search"]');
+    await clickIf(page, clearX);
+    v = look(page);
+    check('the Clear (x) button shows while the box has text; pressing it empties the box, brings all 30 back and leaves focus in the box',
+      !!clearX && v.search === '' && v.heading === '30 charges · ₱3,700.00 unpaid' && v.rows.length === 25
+        && page.active() === page.query(SEARCH) && !page.query('button[aria-label="Clear search"]'), said(v));
+    await type(page, 'juan');
+    if (page.query(SEARCH)) await page.key('Escape', SEARCH);
+    v = look(page);
+    check('Escape in the box clears it too', v.search === '' && v.rows.length === 25, said({ search: v.search, rows: v.rows.length }));
+
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    v = look(page);
+    check('the Rentals tab: only the 8 rentals, Rentals pressed, "8 of 30 charges match · ₱2,400.00 unpaid"',
+      said(v.rows) === said(namesOf(UNPAID.filter((c) => c.charge_type === 'RENTAL'))) && said(v.pressed) === said(['Rentals 8'])
+        && v.heading === '8 of 30 charges match · ₱2,400.00 unpaid', said(v));
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Fines'));
+    v = look(page);
+    const clearAll = buttonNamed(root(), 'Clear search and filters');
+    check('a tab with nothing in it: "juan", then Fines (0), says "No charges match your search or filters." with a "Clear search and filters" button',
+      v.rows.length === 0 && v.noMatch && !!clearAll && said(v.pressed) === said(['Fines 0']) && v.heading === '0 of 30 charges match',
+      said(v));
+    await clickIf(page, clearAll);
+    v = look(page);
+    check('  pressing it clears the search, goes back to All and puts focus in the search box',
+      v.search === '' && said(v.pressed) === said(['All 30']) && v.rows.length === 25 && page.active() === page.query(SEARCH), said(v));
+
+    scrolled.length = 0;
+    const focusBefore = page.active();
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    v = look(page);
+    const nextButton = buttonNamed(root(), 'Next');
+    check('Next: page 2 holds the last 5 rows, "Page 2 of 2", "Showing 26–30 of 30", and Next is no longer available',
+      said(v.rows) === said(namesOf(UNPAID.slice(25))) && pagerSays(v, 'Page 2 of 2', 'Showing 26–30 of 30')
+        && nextButton?.getAttribute('aria-disabled') === 'true', said(v));
+    check('  it scrolls the list heading into view and moves nothing else: focus stays where it was',
+      scrolled.length === 1 && scrolled[0].el === listHeading(page) && page.active() === focusBefore,
+      `${scrolled.length} scroll(s), onto ${scrolled[0]?.el?.tagName ?? 'nothing'}`);
+    await clickIf(page, nextButton);
+    check('  pressing the unavailable Next does nothing', pagerSays(look(page), 'Page 2 of 2', 'Showing 26–30 of 30') && scrolled.length === 1);
+    await clickIf(page, buttonNamed(root(), 'Previous'));
+    v = look(page);
+    check('  Previous goes back to page 1, where Previous is the one not available',
+      pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30') && buttonNamed(root(), 'Previous')?.getAttribute('aria-disabled') === 'true'
+        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true', said(v.pager));
+
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await choose(page, 'all');
+    v = look(page);
+    check('a status change returns to page 1: page 2 of Needs verification, then All charges, reads "Page 1 of 3"',
+      pagerSays(v, 'Page 1 of 3', 'Showing 1–25 of 64'), said(v.pager));
+    check('All charges: "64 charges", then "₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void"; tabs All 64 · Documents 33 · Rentals 24 · Fines 7',
+      v.heading === '64 charges' && v.detail === '₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void'
+        && v.tabs === 'All 64 · Documents 33 · Rentals 24 · Fines 7', said(v));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, tabNamed(page, 'Documents'));
+    v = look(page);
+    check('a tab change returns to page 1: page 2 of All charges, then Documents, reads "Page 1 of 2" and "33 of 64 charges match"',
+      pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 33') && v.heading === '33 of 64 charges match', said(v));
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const onThird = look(page);
+    await type(page, 'clearance');
+    v = look(page);
+    check('a search change returns to page 1: page 3 of All charges, then "clearance", reads "Page 1 of 2" of 31',
+      pagerSays(onThird, 'Page 3 of 3', 'Showing 51–64 of 64') && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 31'),
+      said([onThird.pager, v.pager]));
+
+    await clickIf(page, tabNamed(page, 'Documents'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const beforeRefresh = look(page);
+    const callsBefore = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('Refresh keeps the search, the tab and the page: "clearance", Documents and page 2 of All charges, before and after the reload',
+      pagerSays(beforeRefresh, 'Page 2 of 2', 'Showing 26–31 of 31') && net.calls.length === callsBefore + 1
+        && v.search === 'clearance' && said(v.pressed) === said(['Documents 31']) && pagerSays(v, 'Page 2 of 2', 'Showing 26–31 of 31'),
+      said({ before: beforeRefresh.pager, after: v }));
+
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+    await choose(page, 'PAID');
+    v = look(page);
+    check('Paid: "26 charges · ₱4,500.00 paid", split "Cash ₱1,300.00 · GCash ₱100.00 · Paid online ₱3,100.00"; the No fee charge is not listed',
+      v.heading === '26 charges · ₱4,500.00 paid' && v.detail === 'Cash ₱1,300.00 · GCash ₱100.00 · Paid online ₱3,100.00', said(v));
+    await choose(page, 'VOID');
+    v = look(page);
+    check('Void: "8 charges · ₱3,150.00 void", no second line, and one page, so no pager',
+      v.heading === '8 charges · ₱3,150.00 void' && v.detail === null && v.pager === null, said(v));
+
+    await choose(page, 'UNPAID');
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await choose(page, 'all');
+    v = look(page);
+    check('a status change keeps the search and the tab: "juan" and Rentals on Needs verification, then All charges: both kept, "1 of 64 charges matches"',
+      v.search === 'juan' && said(v.pressed) === said(['Rentals 1']) && v.heading === '1 of 64 charges matches'
+        && said(v.rows) === said(['Juan Ramos']) && v.detail === '₱0.00 paid · ₱300.00 unpaid · ₱0.00 void', said(v));
+    await page.unmount();
+
+    // A reload that brings back fewer charges: page 3 of 3 becomes the last
+    // page there is, and stays where it landed when the list grows again.
+    const shrinking = fresh();
+    page = await openWith(shrinking);
+    await choose(page, 'all');
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const third = look(page);
+    shrinking.PAID = PAID.filter((c) => c.charge_type !== 'RENTAL');
+    shrinking.VOID = VOID.filter((c) => c.charge_type !== 'RENTAL');
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const shrunk = look(page);
+    Object.assign(shrinking, fresh());
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const regrown = look(page);
+    check('a reload that shrinks the list moves to its last page: page 3 of 3, then 48 charges, reads "Page 2 of 2", "Showing 26–48 of 48"',
+      pagerSays(third, 'Page 3 of 3', 'Showing 51–64 of 64') && pagerSays(shrunk, 'Page 2 of 2', 'Showing 26–48 of 48')
+        && shrunk.rows.length === 23, said([third.pager, shrunk.pager]));
+    check('  and stays there when the list grows back: "Page 2 of 3"', pagerSays(regrown, 'Page 2 of 3', 'Showing 26–50 of 64'), said(regrown.pager));
+    await page.unmount();
+
+    // Filters reset on every visit and are never kept in the browser. The
+    // second mount does NOT reseed the session, which would clear storage.
+    page = await openWith(fresh());
+    const writesAtOpen = store.sets;
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await choose(page, 'PAID');
+    const writesAfter = store.sets;
+    await page.unmount();
+    resetNet(200, answerFrom(fresh()));
+    page = await mountPayments();
+    v = look(page);
+    check('filters start fresh each time the page opens: after "juan", Rentals and Paid, a new visit shows Needs verification, an empty box and All',
+      v.search === '' && said(v.pressed) === said(['All 30']) && page.query('.list-head select')?.value === 'UNPAID'
+        && pagerSays(v, 'Page 1 of 2', 'Showing 1–25 of 30'), said(v));
+    check('  and nothing about them was stored in the browser: no localStorage write, sessionStorage empty',
+      writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0,
+      `${writesAfter - writesAtOpen} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+    await page.unmount();
+
+    // Record payment: the reload after it keeps the search.
+    const recordState = fresh();
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/148/verify')) {
+        recordState.UNPAID = recordState.UNPAID.filter((c) => c.charge_id !== 148);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 88 } };
+      }
+      return answerFrom(recordState)(url, method);
+    });
+    page = await mountPayments();
+    await type(page, 'juan');
+    await clickIf(page, viewFor(page, 'Juan Dela Cruz'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = look(page);
+    check('Record payment keeps the filters: "juan", Record on Juan Dela Cruz, and the reload still reads "juan": "1 of 29 charges matches · ₱300.00 unpaid"',
+      v.search === 'juan' && v.heading === '1 of 29 charges matches · ₱300.00 unpaid' && said(v.rows) === said(['Juan Ramos'])
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #88)' && !page.query('.pay-panel'),
+      said(v));
+    await page.unmount();
+
+    // A charge that a search hides while its panel is open: the panel works
+    // from the whole list, never the filtered one.
+    const recheckState = fresh();
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/330')) {
+        recheckState.UNPAID = recheckState.UNPAID.filter((c) => c.charge_id !== 330);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(recheckState)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, viewFor(page, 'Juan Ramos'));
+    const opened = page.query('.pay-panel #pay-panel-title')?.textContent ?? null;
+    await type(page, 'nino');
+    v = look(page);
+    check('a charge filtered out of view keeps its panel: View Juan Ramos, then "nino": the panel stays open on Juan Ramos, the list shows Niño Peñaflor',
+      opened === 'Juan Ramos' && page.query('.pay-panel #pay-panel-title')?.textContent === 'Juan Ramos'
+        && said(v.rows) === said(['Niño Peñaflor']), said({ opened, rows: v.rows }));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = look(page);
+    check('  and Re-check still closes it when the reload shows the charge paid: focus on the message, "nino" kept',
+      !page.query('.pay-panel') && page.active() === page.query('.alert.success') && v.search === 'nino'
+        && said(v.rows) === said(['Niño Peñaflor']), said({ panel: !!page.query('.pay-panel'), focus: page.active()?.className, v }));
+    await page.unmount();
+
+    // The 1,000-row cap: a total larger than the list received.
+    page = await openWith(fresh(), 1234);
+    v = look(page);
+    const capEl = page.query('.pay-cap');
+    const capFirst = !!capEl && !!listHeading(page)
+      && (capEl.compareDocumentPosition(listHeading(page)) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    check('the 1,000-row cap: a total of 1,234 with 30 received says "Showing the newest 30 of 1,234 charges." above the totals, '
+        + 'which say "Newest 30 of 1,234 charges · ₱3,700.00 unpaid"',
+      typeof v.cap === 'string' && v.cap.startsWith('Showing the newest 30 of 1,234 charges.') && capFirst
+        && v.heading === 'Newest 30 of 1,234 charges · ₱3,700.00 unpaid', said(v));
+    await type(page, 'juan');
+    v = look(page);
+    check('  with a search: "2 of the newest 30 charges match · ₱350.00 unpaid", and the notice stays',
+      v.heading === '2 of the newest 30 charges match · ₱350.00 unpaid' && typeof v.cap === 'string', said(v));
+    await page.unmount();
+
+    // The batch 4 load error: still no rows, counts, tabs, totals or pager.
+    seedSession(VALID);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    v = look(page);
+    const statusSelect = page.query('.list-head select');
+    check('a load error shows no tabs, no totals, no pager and no rows, the heading just "Charges"; the search box and status dropdown still work',
+      root().textContent.includes('Could not load the charges: Network down') && v.heading === 'Charges' && !page.query('.pay-tabs')
+        && v.detail === null && v.pager === null && v.rows.length === 0 && v.cap === null
+        && !!page.query(SEARCH) && !page.query(SEARCH).disabled && !!statusSelect && !statusSelect.disabled, said(v));
+    await type(page, 'juan');
+    v = look(page);
+    check('  typing during the error changes none of that, and says nothing about matches',
+      v.search === 'juan' && v.heading === 'Charges' && !page.query('.pay-tabs') && v.rows.length === 0 && !v.noMatch, said(v));
+    await page.unmount();
+
+    // A status view with no charges at all keeps its own empty text.
+    page = await openWith({ ...fresh(), VOID: [] });
+    await type(page, 'juan');
+    await choose(page, 'VOID');
+    v = look(page);
+    check('a status view with no charges at all keeps its own text: Void with none says "No charges here.", not the no-match text, search or not',
+      root().textContent.includes('No charges here.') && !v.noMatch && v.heading === '0 charges' && v.rows.length === 0, said(v));
+    await page.unmount();
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
   }
 
   console.error = origError;
