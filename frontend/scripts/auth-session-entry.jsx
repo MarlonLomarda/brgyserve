@@ -10,6 +10,7 @@ import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
 import { methodOf } from '../src/utils/chargeMethod.js';
+import * as chargeFilters from '../src/utils/chargeFilters.js';
 import * as chargeSearch from '../src/utils/chargeSearch.js';
 import * as chargeTotals from '../src/utils/chargeTotals.js';
 import * as paging from '../src/utils/paging.js';
@@ -23,6 +24,9 @@ globalThis.methodOf = methodOf;
 globalThis.chargeSearch = chargeSearch;
 globalThis.chargeTotals = chargeTotals;
 globalThis.paging = paging;
+// The Payments page's Method and date filters, and the clock "today" comes
+// from, checked on their own in section Q.
+globalThis.chargeFilters = chargeFilters;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.

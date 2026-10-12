@@ -76,11 +76,17 @@ function paidSplit(paid) {
 //   total     how many the server says there are; more than `received` when
 //             its 1,000-row cap cut the list, and then the line says "newest"
 //             rather than claim to cover everything
-//   filtered  whether a search or a tab other than All is narrowing the view
-export function totalsLine({ status, shown, received, total, filtered }) {
+//   filtered  whether a search, a tab other than All, a method or a date is
+//             narrowing the view
+//   dated     what the date filter counts, such as "billed today" or "paid Oct
+//             1 to Oct 12" (dateText, utils/chargeFilters.js), or null when no
+//             date filter is on. It ends the heading, so the line can never be
+//             read as counting by the other date.
+export function totalsLine({ status, shown, received, total, filtered, dated = null }) {
   if (received === 0) return { heading: "0 charges", detail: null };
   const capped = Number.isFinite(total) && total > received;
   const n = shown.length;
+  const when = dated ? ` · ${dated}` : "";
 
   let count;
   if (filtered) {
@@ -93,17 +99,18 @@ export function totalsLine({ status, shown, received, total, filtered }) {
       ? `Newest ${formatCount(received)} of ${charges(total)}`
       : charges(n);
   }
-  if (n === 0) return { heading: count, detail: null };
+  if (n === 0) return { heading: `${count}${when}`, detail: null };
 
   if (status === "all") {
     const sums = ["PAID", "UNPAID", "VOID"].map(
       (s) =>
         `${formatPeso(sumCentavos(shown.filter((c) => c.status === s)))} ${STATUS_WORD[s]}`,
     );
-    return { heading: count, detail: sums.join(" · ") };
+    return { heading: `${count}${when}`, detail: sums.join(" · ") };
   }
+  const summed = `${count} · ${formatPeso(sumCentavos(shown))} ${STATUS_WORD[status] || ""}`.trim();
   return {
-    heading: `${count} · ${formatPeso(sumCentavos(shown))} ${STATUS_WORD[status] || ""}`.trim(),
+    heading: `${summed}${when}`,
     detail: status === "PAID" ? paidSplit(shown) : null,
   };
 }

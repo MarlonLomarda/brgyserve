@@ -46,6 +46,11 @@
 // numbered page buttons and Previous and Next, against 89 stubbed charges. It
 // sits inside section O's block, to use the same charges and helpers.
 //
+// Section Q is the Payments page's Method and date filters: the pure helpers
+// (utils/chargeFilters.js, and the totals line's date phrase) case by case,
+// then the real page against 23 stubbed charges, with "today" fixed at 12 Oct
+// 2026 by the helpers' one clock. It sits inside section O's block too.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -2565,6 +2570,669 @@ const root = () => dom.window.document.getElementById('root');
     check('no matches: no pager, only "No charges match your search or filters."',
       v.noMatch && v.pager === null && v.rows.length === 0, said({ noMatch: v.noMatch, pager: v.pager }));
     await page.unmount();
+
+    // =======================================================================
+    // Q. Payments: the Method and date filters
+    // =======================================================================
+    // A second toolbar row under the search: a Method select that mirrors
+    // the Method column (methodOf, never the raw payment_method, so "GCash"
+    // is a GCash payment a staff member recorded and never a PayMongo one), a
+    // date select, "Billed date" or, under Paid, "Paid date" (the latest
+    // payment row's, or the billed date for a paid charge with no row), From
+    // and To under "Choose dates", and a quiet "Clear filters" while either
+    // is on. Days are Manila days, both ends included. "Today" comes from the
+    // helpers' one clock, fixed here at 12 Oct 2026, 12:00 in Manila, and this
+    // machine is put on Los Angeles time, where that moment is still Oct 11,
+    // so every Manila day has to be the code's own doing. Everything
+    // composes with the status, the search and the tabs: the tab counts
+    // follow the method and date, the totals cover every match and name the
+    // date, and every change goes back to page 1. The helpers are checked
+    // case by case, then the real page against 23 stubbed charges. Every
+    // request is answered by the fetch stub.
+    console.log('\n--- Payments: the Method and date filters ---');
+    const previousTZQ = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const FIXED_NOW = '2026-10-12T04:00:00Z'; // 12:00 on Oct 12 in Manila, 21:00 on Oct 11 in Los Angeles
+
+    // a. Method, on its own.
+    const optionLabels = (status) => attempt(() => F.methodOptions(status).map((o) => o.label).join(' | '));
+    check('method options per status view: Needs verification offers Any method and Online pending',
+      optionLabels('UNPAID') === 'Any method | Online pending', said(optionLabels('UNPAID')));
+    check('  Paid offers Any method, Cash, GCash, Paid online and No fee',
+      optionLabels('PAID') === 'Any method | Cash | GCash | Paid online | No fee', said(optionLabels('PAID')));
+    check('  Void offers Any method only', optionLabels('VOID') === 'Any method', said(optionLabels('VOID')));
+    check('  All charges offers all six: Any method, Cash, GCash, Paid online, No fee and Online pending',
+      optionLabels('all') === 'Any method | Cash | GCash | Paid online | No fee | Online pending', said(optionLabels('all')));
+
+    // Payment rows in the list's real shape: one a staff member recorded, and
+    // one PayMongo made (nobody received it; its payment_method is "gcash").
+    const STAFF_ROW = (id, method, at, reference = null) => ({ payment_id: 8000 + id, payment_method: method,
+      reference_no: reference, created_at: at, received_by_user_id: 12, recorder: STAFF });
+    const AUTO_ROW = (id, at) => ({ payment_id: 8000 + id, payment_method: 'gcash', reference_no: `pay_q_${id}`,
+      created_at: at, received_by_user_id: null, recorder: null });
+    const AT = '2026-10-06T01:00:00+00:00';
+    // Every case, with the one method it must match (or none), written by hand.
+    const M_CASES = [
+      { name: 'cash a staff member recorded', want: 'Cash',
+        c: charge(8101, 'DOCUMENT', 'PAID', 100, { payments: [STAFF_ROW(8101, 'onsite', AT)] }) },
+      { name: 'GCash a staff member recorded', want: 'GCash',
+        c: charge(8102, 'DOCUMENT', 'PAID', 100, { payments: [STAFF_ROW(8102, 'gcash', AT, '1029384756')] }) },
+      { name: 'a PayMongo payment (payment_method "gcash", nobody received it)', want: 'Paid online',
+        c: charge(8103, 'DOCUMENT', 'PAID', 100, { paymongo_session_id: 'cs_q_8103', paymongo_payment_id: 'pay_q_8103',
+          payments: [AUTO_ROW(8103, AT)] }) },
+      { name: 'unpaid, with an open checkout', want: 'Online pending',
+        c: charge(8104, 'DOCUMENT', 'UNPAID', 100, { paymongo_session_id: 'cs_q_8104' }) },
+      { name: 'unpaid, no checkout', want: '', c: charge(8105, 'DOCUMENT', 'UNPAID', 100, {}) },
+      { name: 'paid, PHP 0, no payment row', want: 'No fee', c: charge(8106, 'DOCUMENT', 'PAID', 0, {}) },
+      { name: 'paid, PHP 100, no payment row ("No record", which is not a choice)', want: '',
+        c: charge(8107, 'DOCUMENT', 'PAID', 100, {}) },
+      { name: 'paid, PHP 0, WITH a cash row', want: 'Cash',
+        c: charge(8108, 'DOCUMENT', 'PAID', 0, { payments: [STAFF_ROW(8108, 'onsite', AT)] }) },
+      { name: 'unpaid, PHP 0, no checkout', want: '', c: charge(8109, 'DOCUMENT', 'UNPAID', 0, {}) },
+      { name: 'paid in cash after a checkout was opened', want: 'Cash',
+        c: charge(8110, 'DOCUMENT', 'PAID', 100, { paymongo_session_id: 'cs_q_8110', payments: [STAFF_ROW(8110, 'onsite', AT)] }) },
+      { name: 'void, with an open checkout (its Method column reads "Online pending")', want: 'Online pending',
+        c: charge(8111, 'DOCUMENT', 'VOID', 100, { paymongo_session_id: 'cs_q_8111' }) },
+      { name: 'void, no checkout', want: '', c: charge(8112, 'DOCUMENT', 'VOID', 100, {}) },
+    ];
+    const FIVE = ['Cash', 'GCash', 'Paid online', 'No fee', 'Online pending'];
+    const matched = (c) => attempt(() => FIVE.filter((m) => F.matchesMethod(c, m) === true).join(','));
+    const wrongM = M_CASES.filter(({ want, c }) => matched(c) !== want)
+      .map(({ name, want, c }) => `${name}: ${said(matched(c))}, want ${said(want)}`);
+    check('matchesMethod mirrors the Method column: each charge matches the one method its column shows, or none',
+      wrongM.length === 0, wrongM.length ? said(wrongM) : `${M_CASES.length} cases`);
+    const mm = (i, method) => attempt(() => F.matchesMethod(M_CASES[i].c, method));
+    check('  GCash never takes a PayMongo payment, though both carry payment_method "gcash"; Paid online takes only the PayMongo one',
+      mm(2, 'GCash') === false && mm(2, 'Paid online') === true && mm(1, 'GCash') === true && mm(1, 'Paid online') === false,
+      said([mm(2, 'GCash'), mm(2, 'Paid online'), mm(1, 'GCash'), mm(1, 'Paid online')]));
+    check('  Online pending takes an unpaid charge with an open checkout, never a paid one, not even one whose checkout was opened',
+      mm(3, 'Online pending') === true && mm(9, 'Online pending') === false && mm(2, 'Online pending') === false
+        && mm(4, 'Online pending') === false, said([mm(3, 'Online pending'), mm(9, 'Online pending'), mm(2, 'Online pending')]));
+    check('  No fee takes only a paid PHP 0 charge with no payment row: not one someone recorded, not an unpaid PHP 0 one, not a paid one with no record',
+      mm(5, 'No fee') === true && mm(7, 'No fee') === false && mm(8, 'No fee') === false && mm(6, 'No fee') === false,
+      said([mm(5, 'No fee'), mm(7, 'No fee'), mm(8, 'No fee'), mm(6, 'No fee')]));
+    check('  "Any method" takes every charge', M_CASES.every(({ c }) => attempt(() => F.matchesMethod(c, F.ANY)) === true),
+      said(M_CASES.map(({ c }) => attempt(() => F.matchesMethod(c, F.ANY)))));
+
+    // b. Days, on their own: Manila days, whatever this machine's clock says.
+    const day = (value) => attempt(() => F.manilaDay(value));
+    check('the Manila day of a UTC timestamp: 2026-10-11T17:00:00Z is Oct 12 in Manila, 2026-10-11T15:59:59Z is still Oct 11',
+      day('2026-10-11T17:00:00Z') === '2026-10-12' && day('2026-10-11T15:59:59Z') === '2026-10-11',
+      said([day('2026-10-11T17:00:00Z'), day('2026-10-11T15:59:59Z')]));
+    check('  midnight in Manila is 16:00 UTC: 16:00:00Z on Oct 11 is Oct 12; so is the live #161 shape, 2026-10-11T23:47:20.859+00:00; 07:30+08:00 on Oct 12 is Oct 12',
+      day('2026-10-11T16:00:00Z') === '2026-10-12' && day('2026-10-11T23:47:20.859+00:00') === '2026-10-12'
+        && day('2026-10-12T07:30:00+08:00') === '2026-10-12',
+      said([day('2026-10-11T16:00:00Z'), day('2026-10-11T23:47:20.859+00:00'), day('2026-10-12T07:30:00+08:00')]));
+    check('  no timestamp, a blank one or one that does not parse has no day (null), never a guess',
+      day(null) === null && day(undefined) === null && day('') === null && day('not a date') === null,
+      said([day(null), day(undefined), day(''), day('not a date')]));
+    const todayAt = (iso) => { setNow(iso); return attempt(() => F.manilaToday()); };
+    const todays = [todayAt('2026-10-12T04:00:00Z'), todayAt('2026-10-11T16:30:00Z'), todayAt('2026-10-12T15:59:59Z'),
+      todayAt('2026-10-12T16:00:00Z')];
+    check('"today" is the Manila day of the clock: 04:00Z on Oct 12 is Oct 12 (Los Angeles says Oct 11); 16:30Z on Oct 11 is already Oct 12 '
+        + '(UTC says Oct 11); 15:59:59Z on Oct 12 is still Oct 12; 16:00Z is Oct 13',
+      said(todays) === said(['2026-10-12', '2026-10-12', '2026-10-12', '2026-10-13']), said(todays));
+
+    // c. The presets, for a fixed "today".
+    const rng = (choice, today, from = '', to = '') => attempt(() => F.dateRange(choice, from, to, today));
+    const span = (r) => (r && typeof r === 'object' ? `${r.from} to ${r.to}` : String(r));
+    check('presets on 12 Oct 2026: Today is Oct 12 to Oct 12; Last 7 days Oct 6 to Oct 12 (today and the 6 days before it); This month Oct 1 to Oct 12',
+      span(rng('today', '2026-10-12')) === '2026-10-12 to 2026-10-12' && span(rng('week', '2026-10-12')) === '2026-10-06 to 2026-10-12'
+        && span(rng('month', '2026-10-12')) === '2026-10-01 to 2026-10-12',
+      said([span(rng('today', '2026-10-12')), span(rng('week', '2026-10-12')), span(rng('month', '2026-10-12'))]));
+    check('  This month on the 1st is the 1st alone (Nov 1 to Nov 1); on the 31st it is the whole month (Oct 1 to Oct 31)',
+      span(rng('month', '2026-11-01')) === '2026-11-01 to 2026-11-01' && span(rng('month', '2026-10-31')) === '2026-10-01 to 2026-10-31',
+      said([span(rng('month', '2026-11-01')), span(rng('month', '2026-10-31'))]));
+    check('  Last 7 days across a 28-day February (3 Mar 2027: Feb 25 to Mar 3), a 29-day one (3 Mar 2028: Feb 26 to Mar 3) and a new year (2 Jan 2027: Dec 27 to Jan 2)',
+      span(rng('week', '2027-03-03')) === '2027-02-25 to 2027-03-03' && span(rng('week', '2028-03-03')) === '2028-02-26 to 2028-03-03'
+        && span(rng('week', '2027-01-02')) === '2026-12-27 to 2027-01-02',
+      said([span(rng('week', '2027-03-03')), span(rng('week', '2028-03-03')), span(rng('week', '2027-01-02'))]));
+    setNow('2026-10-31T16:30:00Z');
+    const monthAtMidnight = attempt(() => F.dateRange('month', '', '', F.manilaToday()));
+    check('  at 00:30 on Nov 1 in Manila (16:30Z on Oct 31), This month is already Nov 1 to Nov 1, not October',
+      span(monthAtMidnight) === '2026-11-01 to 2026-11-01', span(monthAtMidnight));
+    check('Any date restricts nothing (no range), nor does Choose dates with neither date; only From is "from that day on", only To "up to that day"',
+      rng('any', '2026-10-12') === null && rng('custom', '2026-10-12') === null
+        && said(rng('custom', '2026-10-12', '2026-10-05', '')) === said({ from: '2026-10-05', to: null })
+        && said(rng('custom', '2026-10-12', '', '2026-10-05')) === said({ from: null, to: '2026-10-05' })
+        && said(rng('custom', '2026-10-12', '2026-10-01', '2026-10-05')) === said({ from: '2026-10-01', to: '2026-10-05' }),
+      said([rng('any', '2026-10-12'), rng('custom', '2026-10-12'), rng('custom', '2026-10-12', '2026-10-05', ''),
+        rng('custom', '2026-10-12', '', '2026-10-05')]));
+
+    // d. A range against a charge's date: both ends in.
+    const billedAt = (iso, status = 'UNPAID') => charge(8200, 'DOCUMENT', status, 100, { created_at: iso });
+    const inR = (iso, from, to) => attempt(() => F.matchesDate(billedAt(iso), 'billed', { from, to }));
+    check('From and To are both included, in Manila days: Oct 1 to Oct 12 takes 23:59 on Oct 12 (15:59Z) and 00:00 on Oct 1 (16:00Z on Sep 30), '
+        + 'not 00:00 on Oct 13 nor 23:59 on Sep 30',
+      inR('2026-10-12T15:59:00Z', '2026-10-01', '2026-10-12') === true && inR('2026-09-30T16:00:00Z', '2026-10-01', '2026-10-12') === true
+        && inR('2026-10-12T16:00:00Z', '2026-10-01', '2026-10-12') === false && inR('2026-09-30T15:59:00Z', '2026-10-01', '2026-10-12') === false,
+      said([inR('2026-10-12T15:59:00Z', '2026-10-01', '2026-10-12'), inR('2026-09-30T16:00:00Z', '2026-10-01', '2026-10-12'),
+        inR('2026-10-12T16:00:00Z', '2026-10-01', '2026-10-12'), inR('2026-09-30T15:59:00Z', '2026-10-01', '2026-10-12')]));
+    check('  only From (Oct 5): 00:00 on Oct 5 and a day next year are in, 23:59:59 on Oct 4 is not',
+      inR('2026-10-04T16:00:00Z', '2026-10-05', null) === true && inR('2027-06-01T04:00:00Z', '2026-10-05', null) === true
+        && inR('2026-10-04T15:59:59Z', '2026-10-05', null) === false);
+    check('  only To (Oct 5): 23:59:59 on Oct 5 and a day years before are in, 00:00 on Oct 6 is not',
+      inR('2026-10-05T15:59:59Z', null, '2026-10-05') === true && inR('2020-01-01T04:00:00Z', null, '2026-10-05') === true
+        && inR('2026-10-05T16:00:00Z', null, '2026-10-05') === false);
+    const BACK = { from: '2026-10-12', to: '2026-10-01' };
+    check('From after To (Oct 12 to Oct 1) matches nothing, not Oct 1, Oct 5 or Oct 12, and is never swapped: backwards() says so, and only for that',
+      ['2026-09-30T16:00:00Z', '2026-10-05T04:00:00Z', '2026-10-12T04:00:00Z'].every((iso) => attempt(() => F.matchesDate(billedAt(iso), 'billed', BACK)) === false)
+        && attempt(() => F.backwards(BACK)) === true && attempt(() => F.backwards({ from: '2026-10-01', to: '2026-10-12' })) === false
+        && attempt(() => F.backwards({ from: '2026-10-05', to: '2026-10-05' })) === false && attempt(() => F.backwards({ from: '2026-10-12', to: null })) === false
+        && attempt(() => F.backwards(null)) === false);
+    check('  no range (Any date) takes every charge, even one with no date',
+      attempt(() => F.matchesDate(billedAt('2026-10-05T04:00:00Z'), 'billed', null)) === true
+        && attempt(() => F.matchesDate(billedAt(null), 'billed', null)) === true
+        && attempt(() => F.matchesDate(billedAt(null), 'billed', { from: '2026-10-01', to: null })) === false);
+
+    // e. Which date: billed, or paid under Paid.
+    const twoRows = (rows) => charge(8300, 'DOCUMENT', 'PAID', 100, { created_at: '2026-09-01T04:00:00Z', payments: rows });
+    const dOf = (c, kind) => attempt(() => F.chargeDate(c, kind));
+    const EARLY = STAFF_ROW(8301, 'gcash', '2026-09-20T04:00:00Z', '1');
+    const LATE = STAFF_ROW(8302, 'onsite', '2026-10-07T02:00:00Z');
+    check('the paid date is the latest payment row\'s created_at, whichever order the rows come in',
+      dOf(twoRows([EARLY, LATE]), 'paid') === '2026-10-07T02:00:00Z' && dOf(twoRows([LATE, EARLY]), 'paid') === '2026-10-07T02:00:00Z',
+      said([dOf(twoRows([EARLY, LATE]), 'paid'), dOf(twoRows([LATE, EARLY]), 'paid')]));
+    check('  a paid charge with no payment row (approval creates a PHP 0 one already paid) is paid on its billed date',
+      dOf(charge(8303, 'DOCUMENT', 'PAID', 0, { created_at: '2026-10-11T23:47:20.859+00:00' }), 'paid') === '2026-10-11T23:47:20.859+00:00');
+    check('  unpaid and void charges use their billed date, and a paid one does too when the view filters on the billed date',
+      dOf(charge(8304, 'DOCUMENT', 'UNPAID', 100, { created_at: '2026-10-03T04:00:00Z' }), 'paid') === '2026-10-03T04:00:00Z'
+        && dOf(charge(8305, 'DOCUMENT', 'VOID', 100, { created_at: '2026-10-04T04:00:00Z' }), 'paid') === '2026-10-04T04:00:00Z'
+        && dOf(twoRows([EARLY, LATE]), 'billed') === '2026-09-01T04:00:00Z' && dOf(billedAt('2026-10-03T04:00:00Z'), 'billed') === '2026-10-03T04:00:00Z');
+    check('the date a view filters on: "paid" under Paid; "billed" under Needs verification, Void and All charges',
+      attempt(() => ['PAID', 'UNPAID', 'VOID', 'all'].map((s) => F.dateKind(s)).join(' ')) === 'paid billed billed billed',
+      said(attempt(() => ['PAID', 'UNPAID', 'VOID', 'all'].map((s) => F.dateKind(s)).join(' '))));
+    const billedOct1PaidToday = charge(8306, 'DOCUMENT', 'PAID', 100, { created_at: '2026-10-01T02:00:00Z',
+      payments: [STAFF_ROW(8306, 'onsite', '2026-10-11T16:10:00Z')] });
+    const TODAY = { from: '2026-10-12', to: '2026-10-12' };
+    check('  so a charge billed Oct 1 and paid at 00:10 on Oct 12 in Manila is "today" by its paid date and not by its billed date',
+      attempt(() => F.matchesDate(billedOct1PaidToday, 'paid', TODAY)) === true && attempt(() => F.matchesDate(billedOct1PaidToday, 'billed', TODAY)) === false);
+
+    // f. The date phrase the totals line ends with.
+    const dt = (kind, choice, range, today = '2026-10-12') => attempt(() => F.dateText(kind, choice, range, today));
+    check('the date phrase names the date and the range: "billed today", "paid in the last 7 days", "paid this month"',
+      dt('billed', 'today', TODAY) === 'billed today' && dt('paid', 'week', { from: '2026-10-06', to: '2026-10-12' }) === 'paid in the last 7 days'
+        && dt('paid', 'month', { from: '2026-10-01', to: '2026-10-12' }) === 'paid this month',
+      said([dt('billed', 'today', TODAY), dt('paid', 'week', { from: '2026-10-06', to: '2026-10-12' }), dt('paid', 'month', { from: '2026-10-01', to: '2026-10-12' })]));
+    check('  chosen dates: "paid Oct 1 to Oct 12"; one day, "billed on Oct 5"; only From, "billed from Oct 1"; only To, "billed up to Oct 12"',
+      dt('paid', 'custom', { from: '2026-10-01', to: '2026-10-12' }) === 'paid Oct 1 to Oct 12'
+        && dt('billed', 'custom', { from: '2026-10-05', to: '2026-10-05' }) === 'billed on Oct 5'
+        && dt('billed', 'custom', { from: '2026-10-01', to: null }) === 'billed from Oct 1'
+        && dt('billed', 'custom', { from: null, to: '2026-10-12' }) === 'billed up to Oct 12',
+      said([dt('paid', 'custom', { from: '2026-10-01', to: '2026-10-12' }), dt('billed', 'custom', { from: '2026-10-05', to: '2026-10-05' }),
+        dt('billed', 'custom', { from: '2026-10-01', to: null }), dt('billed', 'custom', { from: null, to: '2026-10-12' })]));
+    check('  a date outside this year carries its year, on both ends: "paid Dec 20, 2025 to Jan 5, 2026"',
+      dt('paid', 'custom', { from: '2025-12-20', to: '2026-01-05' }) === 'paid Dec 20, 2025 to Jan 5, 2026',
+      said(dt('paid', 'custom', { from: '2025-12-20', to: '2026-01-05' })));
+    check('  and there is no phrase when no date filter is on', dt('billed', 'any', null) === null && dt('paid', 'custom', null) === null,
+      said([dt('billed', 'any', null), dt('paid', 'custom', null)]));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true, dated: 'billed in the last 7 days' });
+    check('the totals line ends with the date phrase when a date filter is on: "3 of 14 charges match · ₱1,250.00 unpaid · billed in the last 7 days"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid · billed in the last 7 days' && got.detail === null, said(got));
+    got = line({ status: 'PAID', shown: PAID6, received: 69, total: 69, filtered: true, dated: 'paid Oct 1 to Oct 12' });
+    check('  on Paid: "6 of 69 charges match · ₱400.80 paid · paid Oct 1 to Oct 12", and the split still covers those 6',
+      got?.heading === '6 of 69 charges match · ₱400.80 paid · paid Oct 1 to Oct 12'
+        && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30', said(got));
+    got = line({ status: 'all', shown: MIXED, received: 89, total: 89, filtered: true, dated: 'billed this month' });
+    check('  on All charges: "4 of 89 charges match · billed this month", with the amounts on the line under it',
+      got?.heading === '4 of 89 charges match · billed this month' && got.detail === '₱100.00 paid · ₱50.30 unpaid · ₱25.50 void', said(got));
+    got = line({ status: 'UNPAID', shown: [], received: 14, total: 14, filtered: true, dated: 'billed today' });
+    check('  with nothing matching: "0 of 14 charges match · billed today"', got?.heading === '0 of 14 charges match · billed today'
+      && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true, dated: null });
+    check('  and nothing extra when no date filter is on: "3 of 14 charges match · ₱1,250.00 unpaid"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid', said(got));
+
+    // g. The real page, against 23 charges, on 12 Oct 2026 at 12:00 in
+    // Manila. 8 waiting (PHP 950), billed from 00:30 that morning back to
+    // Sep 20, three with an open checkout; 12 paid: cash, GCash a staff member
+    // recorded, PayMongo and No fee, paid from 00:10 that morning back to
+    // July; 3 void. Several sit a minute either side of a Manila midnight.
+    const Q_UNPAID = [
+      docOf(4001, 'UNPAID', 50, ['Aida', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-10-11T16:30:00Z' }),
+      rentalOf(4002, 'UNPAID', 300, ['Bert', 'Flores'], 'Tent', 1, { created_at: '2026-10-12T02:00:00Z', paymongo_session_id: 'cs_q_4002' }),
+      docOf(4003, 'UNPAID', 50, ['Cora', null, 'Flores'], 'Certificate of Residency',
+        { created_at: '2026-10-08T15:59:00Z', paymongo_session_id: 'cs_q_4003' }),
+      fineOf(4004, 'UNPAID', 100, 'Dodong Flores', 'General Assembly', { created_at: '2026-10-05T16:00:00Z' }),
+      docOf(4005, 'UNPAID', 50, ['Edna', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-10-05T15:59:00Z' }),
+      docOf(4006, 'UNPAID', 50, ['Fermin', null, 'Flores'], 'Barangay Clearance',
+        { created_at: '2026-10-01T00:00:00Z', paymongo_session_id: 'cs_q_4006' }),
+      rentalOf(4007, 'UNPAID', 300, ['Gloria', 'Flores'], 'Tent', 1, { created_at: '2026-09-30T15:59:00Z' }),
+      docOf(4008, 'UNPAID', 50, ['Hugo', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-09-20T04:00:00Z' }),
+    ];
+    const online = (id, at) => ({ paymongo_session_id: `cs_q_${id}`, paymongo_payment_id: `pay_q_${id}`, payments: [AUTO_ROW(id, at)] });
+    const Q_PAID = [
+      docOf(4011, 'PAID', 100, ['Ines', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-10-01T02:00:00Z', payments: [STAFF_ROW(4011, 'onsite', '2026-10-11T16:10:00Z')] }),
+      docOf(4012, 'PAID', 150, ['Jose', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-28T03:00:00Z', payments: [STAFF_ROW(4012, 'gcash', '2026-10-12T01:00:00Z', '1112223334')] }),
+      rentalOf(4013, 'PAID', 300, ['Karen', 'Garcia'], 'Tent', 1, { created_at: '2026-10-09T04:00:00Z', ...online(4013, '2026-10-09T05:00:00Z') }),
+      docOf(4014, 'PAID', 100, ['Luis', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-15T04:00:00Z', ...online(4014, '2026-10-05T16:30:00Z') }),
+      docOf(4015, 'PAID', 100, ['Marta', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-10T04:00:00Z', payments: [STAFF_ROW(4015, 'onsite', '2026-10-02T03:00:00Z')] }),
+      fineOf(4016, 'PAID', 100, 'Nonoy Garcia', 'Clean-up Drive',
+        { created_at: '2026-09-05T04:00:00Z', payments: [STAFF_ROW(4016, 'onsite', '2026-09-29T04:00:00Z')] }),
+      docOf(4017, 'PAID', 0, ['Olive', null, 'Garcia'], 'Certificate of Indigency', { created_at: '2026-10-11T23:47:20.859+00:00' }),
+      docOf(4018, 'PAID', 0, ['Pedro', null, 'Garcia'], 'Certificate of Indigency', { created_at: '2026-07-07T11:59:10.124+00:00' }),
+      docOf(4019, 'PAID', 120, ['Queenie', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-08-01T04:00:00Z', payments: [STAFF_ROW(4019, 'gcash', '2026-08-02T04:00:00Z', '5556667778')] }),
+      rentalOf(4020, 'PAID', 300, ['Ramon', 'Garcia'], 'Tent', 1, { created_at: '2026-10-05T03:00:00Z', ...online(4020, '2026-10-05T03:30:00Z') }),
+      docOf(4021, 'PAID', 50, ['Sonia', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-10-12T01:00:00Z', payments: [STAFF_ROW(4021, 'onsite', '2026-10-12T02:00:00Z')] }),
+      // Two rows: a PayMongo one on Sep 20, then cash on Oct 7, the latest.
+      docOf(4022, 'PAID', 100, ['Tonyo', null, 'Garcia'], 'Barangay Clearance', { created_at: '2026-09-19T04:00:00Z',
+        paymongo_session_id: 'cs_q_4022', paymongo_payment_id: 'pay_q_4022',
+        payments: [AUTO_ROW(4022, '2026-09-20T04:00:00Z'), STAFF_ROW(4122, 'onsite', '2026-10-07T02:00:00Z')] }),
+    ];
+    const Q_VOID = [
+      docOf(4031, 'VOID', 50, ['Ursula', null, 'Reyes'], 'Barangay Clearance', { created_at: '2026-10-10T02:00:00Z' }),
+      rentalOf(4032, 'VOID', 500, ['Vic', 'Reyes'], 'Tent', 1, { created_at: '2026-09-25T04:00:00Z' }),
+      fineOf(4033, 'VOID', 100, 'Wally Reyes', 'Clean-up Drive', { created_at: '2026-10-12T03:00:00Z' }),
+    ];
+    const qFresh = () => ({ UNPAID: [...Q_UNPAID], PAID: [...Q_PAID], VOID: [...Q_VOID] });
+    // A control found by its visible label, as a person finds it.
+    const labelled = (pg_, text) => {
+      const label = pg_.queryAll('label').find((l) => l.textContent === text);
+      return label ? label.control || (label.htmlFor ? dom.window.document.getElementById(label.htmlFor) : null) : null;
+    };
+    const methodSelect = (pg_) => labelled(pg_, 'Method');
+    const dateSelect = (pg_) => labelled(pg_, 'Billed date') || labelled(pg_, 'Paid date');
+    const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+    const HINT = 'The start date is after the end date.';
+    const hintEl = (pg_) => pg_.queryAll('[role="status"], [aria-live="polite"]').find((el) => el.textContent === HINT) ?? null;
+    const lookQ = (pg_) => {
+      const m = methodSelect(pg_);
+      const d = dateSelect(pg_);
+      return {
+        ...look(pg_),
+        method: chosen(m),
+        methods: m ? [...m.options].map((o) => o.textContent).join(' | ') : null,
+        methodOff: m ? m.disabled : null,
+        dateLabel: labelled(pg_, 'Paid date') ? 'Paid date' : labelled(pg_, 'Billed date') ? 'Billed date' : null,
+        date: chosen(d),
+        from: labelled(pg_, 'From')?.value ?? null,
+        to: labelled(pg_, 'To')?.value ?? null,
+        clear: !!buttonNamed(root(), 'Clear filters'),
+        hint: !!hintEl(pg_) || root().textContent.includes(HINT),
+      };
+    };
+    // Choose the option a select shows as `label`, the way a person does.
+    const pick = async (pg_, select, label) => {
+      const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+      if (option) {
+        select.value = option.value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await pg_.settle();
+    };
+    const pickMethod = (pg_, label) => pick(pg_, methodSelect(pg_), label);
+    const pickDate = (pg_, label) => pick(pg_, dateSelect(pg_), label);
+    const typeDate = async (pg_, label, value) => {
+      const input = labelled(pg_, label);
+      if (input?.id) await pg_.fill(`#${input.id}`, value);
+      await pg_.settle();
+    };
+    const openQ = (state = qFresh()) => { setNow(FIXED_NOW); return openWith(state); };
+
+    page = await openQ();
+    const writesAtOpenQ = store.sets;
+    v = lookQ(page);
+    const toolbarQ = page.query('.list-head.pay-toolbar');
+    const secondRow = toolbarQ?.nextElementSibling ?? null;
+    const m0 = methodSelect(page);
+    const d0 = dateSelect(page);
+    const tabsQ = page.query('.pay-tabs');
+    check('a second toolbar row sits under the search row and above the tabs, holding a native select labelled "Method" and one labelled "Billed date"',
+      !!secondRow && !!m0 && !!d0 && m0.tagName === 'SELECT' && d0.tagName === 'SELECT' && secondRow.contains(m0) && secondRow.contains(d0)
+        && !toolbarQ.contains(m0) && !!tabsQ && (secondRow.compareDocumentPosition(tabsQ) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      said({ secondRow: secondRow?.className ?? null, method: m0?.tagName ?? null, date: d0?.tagName ?? null }));
+    check('  the search row is as it was: the search box, the status (still the first select in .list-head, on Needs verification) and Refresh',
+      !!toolbarQ && toolbarQ.contains(page.query(SEARCH)) && page.query('.list-head select')?.value === 'UNPAID' && !!buttonNamed(toolbarQ, 'Refresh'));
+    check('  Method reads "Any method"; the date reads "Any date", choosing from Any date, Today, Last 7 days, This month and Choose dates; '
+        + 'no From or To yet, no Clear filters, no hint, and the totals as before',
+      v.method === 'Any method' && v.date === 'Any date'
+        && (d0 ? [...d0.options].map((o) => o.textContent).join(' | ') : null) === 'Any date | Today | Last 7 days | This month | Choose dates'
+        && v.from === null && v.to === null && !v.clear && !v.hint && v.heading === '8 charges · ₱950.00 unpaid', said(v));
+    check('Needs verification: Method offers Any method and Online pending, and the date is the "Billed date"',
+      v.methods === 'Any method | Online pending' && v.methodOff === false && v.dateLabel === 'Billed date', said(v));
+    await choose(page, 'PAID');
+    v = lookQ(page);
+    check('Paid: Method offers Any method, Cash, GCash, Paid online and No fee, and the date label reads "Paid date"',
+      v.methods === 'Any method | Cash | GCash | Paid online | No fee' && v.methodOff === false && v.dateLabel === 'Paid date', said(v));
+    await choose(page, 'VOID');
+    v = lookQ(page);
+    check('Void: Method offers only Any method and is disabled; the date is the "Billed date" again',
+      v.methods === 'Any method' && v.methodOff === true && v.dateLabel === 'Billed date', said(v));
+    await choose(page, 'all');
+    v = lookQ(page);
+    check('All charges: Method offers all six, and the date is the "Billed date"',
+      v.methods === 'Any method | Cash | GCash | Paid online | No fee | Online pending' && v.methodOff === false
+        && v.dateLabel === 'Billed date', said(v));
+
+    await pickMethod(page, 'GCash');
+    v = lookQ(page);
+    check('All charges, Method GCash: the 2 GCash payments a staff member recorded (Jose, Queenie Garcia), never a PayMongo one; '
+        + 'tabs "All 2 · Documents 2 · Rentals 0 · Fines 0", totals "2 of 23 charges match", then "₱270.00 paid · ₱0.00 unpaid · ₱0.00 void"',
+      said(v.rows) === said(['Jose Garcia', 'Queenie Garcia']) && v.tabs === 'All 2 · Documents 2 · Rentals 0 · Fines 0'
+        && v.heading === '2 of 23 charges match' && v.detail === '₱270.00 paid · ₱0.00 unpaid · ₱0.00 void' && v.clear, said(v));
+    const perMethod = {};
+    for (const label of ['Cash', 'Paid online', 'No fee', 'Online pending']) {
+      await pickMethod(page, label);
+      const x = lookQ(page);
+      perMethod[label] = { rows: x.rows, tabs: x.tabs };
+    }
+    check('  Cash: Ines, Marta, Nonoy, Sonia and Tonyo Garcia (his latest row is cash); Paid online: Karen, Luis, Ramon; No fee: Olive, Pedro; '
+        + 'Online pending: Bert, Cora, Fermin Flores; and the tab counts follow each',
+      said(perMethod.Cash?.rows) === said(['Ines Garcia', 'Marta Garcia', 'Nonoy Garcia', 'Sonia Garcia', 'Tonyo Garcia'])
+        && perMethod.Cash.tabs === 'All 5 · Documents 4 · Rentals 0 · Fines 1'
+        && said(perMethod['Paid online']?.rows) === said(['Karen Garcia', 'Luis Garcia', 'Ramon Garcia'])
+        && perMethod['Paid online'].tabs === 'All 3 · Documents 1 · Rentals 2 · Fines 0'
+        && said(perMethod['No fee']?.rows) === said(['Olive Garcia', 'Pedro Garcia'])
+        && said(perMethod['Online pending']?.rows) === said(['Bert Flores', 'Cora Flores', 'Fermin Flores'])
+        && perMethod['Online pending'].tabs === 'All 3 · Documents 2 · Rentals 1 · Fines 0', said(perMethod));
+
+    await choose(page, 'UNPAID');
+    v = lookQ(page);
+    const keptPending = v.method === 'Online pending' && said(v.rows) === said(['Bert Flores', 'Cora Flores', 'Fermin Flores']);
+    await choose(page, 'all');
+    await pickMethod(page, 'Cash');
+    await choose(page, 'PAID');
+    v = lookQ(page);
+    const keptCash = v.method === 'Cash' && v.rows.length === 5;
+    await choose(page, 'UNPAID');
+    v = lookQ(page);
+    check('a status change resets the method when the new view does not offer it: Cash on Paid, then Needs verification, reads Any method, all 8 rows',
+      v.method === 'Any method' && v.rows.length === 8 && v.heading === '8 charges · ₱950.00 unpaid', said(v));
+    check('  and keeps it when it does: Online pending from All charges to Needs verification, Cash from All charges to Paid',
+      keptPending && keptCash, said({ keptPending, keptCash }));
+
+    const presetRows = {};
+    for (const label of ['Today', 'Last 7 days', 'This month']) {
+      await pickDate(page, label);
+      const x = lookQ(page);
+      presetRows[label] = { rows: x.rows, heading: x.heading };
+    }
+    check('Needs verification by billed date: Today takes Aida (00:30 that morning, still Oct 11 in UTC) and Bert; Last 7 days adds Cora and Dodong '
+        + '(00:00 on Oct 6), not Edna (23:59 on Oct 5); This month adds Edna and Fermin, not Gloria (23:59 on Sep 30)',
+      said(presetRows.Today?.rows) === said(['Aida Flores', 'Bert Flores'])
+        && said(presetRows['Last 7 days']?.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores', 'Dodong Flores'])
+        && said(presetRows['This month']?.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores', 'Dodong Flores', 'Edna Flores', 'Fermin Flores']),
+      said(presetRows));
+    check('  the totals name the date and range: "2 of 8 charges match · ₱350.00 unpaid · billed today", "4 of 8 … ₱500.00 … billed in the last 7 days", '
+        + '"6 of 8 … ₱600.00 … billed this month"',
+      presetRows.Today?.heading === '2 of 8 charges match · ₱350.00 unpaid · billed today'
+        && presetRows['Last 7 days']?.heading === '4 of 8 charges match · ₱500.00 unpaid · billed in the last 7 days'
+        && presetRows['This month']?.heading === '6 of 8 charges match · ₱600.00 unpaid · billed this month', said(presetRows));
+
+    await choose(page, 'PAID');
+    const paidMonth = lookQ(page);
+    await pickDate(page, 'Today');
+    const paidToday = lookQ(page);
+    await pickDate(page, 'Last 7 days');
+    const paidWeek = lookQ(page);
+    check('a status change keeps the date: This month on Needs verification is still This month on Paid, by the paid date: '
+        + '"9 of 12 charges match · ₱1,200.00 paid · paid this month", split "Cash ₱350.00 · GCash ₱150.00 · Paid online ₱700.00"',
+      paidMonth.date === 'This month' && paidMonth.dateLabel === 'Paid date' && paidMonth.rows.length === 9
+        && paidMonth.heading === '9 of 12 charges match · ₱1,200.00 paid · paid this month'
+        && paidMonth.detail === 'Cash ₱350.00 · GCash ₱150.00 · Paid online ₱700.00', said(paidMonth));
+    check('Paid, Today: Ines (paid 00:10 that morning, billed Oct 1), Jose, Olive (no payment row, so billed and paid at 07:47) and Sonia',
+      said(paidToday.rows) === said(['Ines Garcia', 'Jose Garcia', 'Olive Garcia', 'Sonia Garcia']), said(paidToday));
+    check('  "4 of 12 charges match · ₱300.00 paid · paid today", and the split covers just those: "Cash ₱150.00 · GCash ₱150.00 · Paid online ₱0.00"',
+      paidToday.heading === '4 of 12 charges match · ₱300.00 paid · paid today'
+        && paidToday.detail === 'Cash ₱150.00 · GCash ₱150.00 · Paid online ₱0.00', said(paidToday));
+    check('  Last 7 days adds Karen, Luis (paid 00:30 on Oct 6) and Tonyo (by his latest row, Oct 7, not his first, Sep 20): '
+        + '"7 of 12 charges match · ₱800.00 paid · paid in the last 7 days"',
+      said(paidWeek.rows) === said(['Ines Garcia', 'Jose Garcia', 'Karen Garcia', 'Luis Garcia', 'Olive Garcia', 'Sonia Garcia', 'Tonyo Garcia'])
+        && paidWeek.heading === '7 of 12 charges match · ₱800.00 paid · paid in the last 7 days'
+        && paidWeek.detail === 'Cash ₱250.00 · GCash ₱150.00 · Paid online ₱400.00', said(paidWeek));
+    await pickDate(page, 'Today');
+    await pickMethod(page, 'No fee');
+    v = lookQ(page);
+    check('  Paid, No fee, Today: Olive Garcia alone, by her billed date; Pedro Garcia, billed in July, is not in it',
+      said(v.rows) === said(['Olive Garcia']) && v.heading === '1 of 12 charges matches · ₱0.00 paid · paid today', said(v));
+
+    await pickMethod(page, 'Any method');
+    await choose(page, 'all');
+    v = lookQ(page);
+    check('All charges goes by the billed date, paid charges too: Today takes Aida, Bert, Olive, Sonia and Wally Reyes, not Ines (paid today, billed Oct 1); '
+        + '"5 of 23 charges match · billed today", then "₱50.00 paid · ₱350.00 unpaid · ₱100.00 void"',
+      v.dateLabel === 'Billed date' && said(v.rows) === said(['Aida Flores', 'Bert Flores', 'Olive Garcia', 'Sonia Garcia', 'Wally Reyes'])
+        && v.tabs === 'All 5 · Documents 3 · Rentals 1 · Fines 1' && v.heading === '5 of 23 charges match · billed today'
+        && v.detail === '₱50.00 paid · ₱350.00 unpaid · ₱100.00 void', said(v));
+    await pickDate(page, 'This month');
+    await pickMethod(page, 'Cash');
+    v = lookQ(page);
+    check('  method and date together: Cash and This month on All charges take Ines and Sonia Garcia only, "2 of 23 charges match · billed this month"',
+      said(v.rows) === said(['Ines Garcia', 'Sonia Garcia']) && v.tabs === 'All 2 · Documents 2 · Rentals 0 · Fines 0'
+        && v.heading === '2 of 23 charges match · billed this month' && v.detail === '₱150.00 paid · ₱0.00 unpaid · ₱0.00 void', said(v));
+
+    await type(page, 'sonia');
+    await clickIf(page, tabNamed(page, 'Documents'));
+    const beforeClear = lookQ(page);
+    const clearButton = buttonNamed(root(), 'Clear filters');
+    await press(page, clearButton);
+    v = lookQ(page);
+    check('"Clear filters" shows while a method or date filter is on, and clears just those: Cash and This month go, "sonia" and the Documents tab stay',
+      beforeClear.clear && !!clearButton && v.method === 'Any method' && v.date === 'Any date' && v.search === 'sonia'
+        && said(v.pressed) === said(['Documents 1']) && said(v.rows) === said(['Sonia Garcia']) && v.heading === '1 of 23 charges matches' && !v.clear,
+      said({ before: beforeClear.clear, after: v }));
+    check('  the button goes once nothing is on, and focus moves to the Method select instead of being dropped',
+      !buttonNamed(root(), 'Clear filters') && !!methodSelect(page) && page.active() === methodSelect(page),
+      `focus on ${page.active()?.tagName ?? 'nothing'} ${page.active()?.id ?? ''}`);
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+
+    await choose(page, 'UNPAID');
+    await pickDate(page, 'Choose dates');
+    v = lookQ(page);
+    const fromInput = labelled(page, 'From');
+    const toInput = labelled(page, 'To');
+    check('Choose dates shows two native date inputs labelled "From" and "To", both empty; with neither filled nothing is narrowed, and Clear filters is offered',
+      fromInput?.type === 'date' && toInput?.type === 'date' && v.from === '' && v.to === '' && v.rows.length === 8
+        && v.heading === '8 charges · ₱950.00 unpaid' && v.clear && !v.hint, said(v));
+    await typeDate(page, 'From', '2026-10-05');
+    await typeDate(page, 'To', '2026-10-08');
+    v = lookQ(page);
+    check('  From Oct 5 to Oct 8, both days in: Cora (23:59 on Oct 8), Dodong and Edna (23:59 on Oct 5): "3 of 8 charges match · ₱200.00 unpaid · billed Oct 5 to Oct 8"',
+      said(v.rows) === said(['Cora Flores', 'Dodong Flores', 'Edna Flores'])
+        && v.heading === '3 of 8 charges match · ₱200.00 unpaid · billed Oct 5 to Oct 8', said(v));
+    await typeDate(page, 'To', '');
+    await typeDate(page, 'From', '2026-10-08');
+    const onlyFrom = lookQ(page);
+    await typeDate(page, 'From', '');
+    await typeDate(page, 'To', '2026-10-05');
+    const onlyTo = lookQ(page);
+    check('  only From (Oct 8): that day on, "billed from Oct 8"; only To (Oct 5): up to that day, "billed up to Oct 5"',
+      said(onlyFrom.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores'])
+        && onlyFrom.heading === '3 of 8 charges match · ₱400.00 unpaid · billed from Oct 8'
+        && said(onlyTo.rows) === said(['Edna Flores', 'Fermin Flores', 'Gloria Flores', 'Hugo Flores'])
+        && onlyTo.heading === '4 of 8 charges match · ₱450.00 unpaid · billed up to Oct 5', said({ onlyFrom, onlyTo }));
+    await typeDate(page, 'From', '2026-10-08');
+    v = lookQ(page);
+    const hintNow = hintEl(page);
+    check('From after To (Oct 8 to Oct 5): "The start date is after the end date." in a polite status region; the range matches nothing and is not swapped',
+      !!hintNow && v.from === '2026-10-08' && v.to === '2026-10-05' && v.rows.length === 0 && v.noMatch
+        && v.tabs === 'All 0 · Documents 0 · Rentals 0 · Fines 0' && v.heading === '0 of 8 charges match · billed Oct 8 to Oct 5', said(v));
+    await typeDate(page, 'To', '2026-10-08');
+    v = lookQ(page);
+    check('  To set to Oct 8 as well: the hint goes, and the one day holds Cora Flores, "1 of 8 charges matches · ₱50.00 unpaid · billed on Oct 8"',
+      !v.hint && said(v.rows) === said(['Cora Flores']) && v.heading === '1 of 8 charges matches · ₱50.00 unpaid · billed on Oct 8', said(v));
+
+    await type(page, 'bert');
+    await pickMethod(page, 'Online pending');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    v = lookQ(page);
+    const emptyButton = buttonNamed(root(), 'Clear search and filters');
+    await clickIf(page, emptyButton);
+    const cleared = lookQ(page);
+    check('no match ("bert", Online pending, Rentals, Oct 8 to Oct 8): "Clear search and filters" clears the search, the tab, the method and the date, and leaves the status',
+      v.noMatch && !!emptyButton && cleared.search === '' && said(cleared.pressed) === said(['All 8']) && cleared.method === 'Any method'
+        && cleared.date === 'Any date' && cleared.from === null && cleared.to === null && page.query('.list-head select')?.value === 'UNPAID'
+        && cleared.rows.length === 8 && cleared.heading === '8 charges · ₱950.00 unpaid' && page.active() === page.query(SEARCH),
+      said({ v, cleared }));
+    await pickDate(page, 'Choose dates');
+    v = lookQ(page);
+    check('  and Choose dates opens empty afterwards: the From and To it held were cleared too', v.from === '' && v.to === '', said(v));
+
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Today');
+    const callsBeforeQ = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = lookQ(page);
+    check('Refresh keeps the method and the date: Online pending and Today before and after the reload, "1 of 8 charges matches · ₱300.00 unpaid · billed today"',
+      net.calls.length === callsBeforeQ + 1 && v.method === 'Online pending' && v.date === 'Today' && said(v.rows) === said(['Bert Flores'])
+        && v.heading === '1 of 8 charges matches · ₱300.00 unpaid · billed today', said(v));
+    check('nothing about the filters is kept in the browser: no localStorage write, sessionStorage empty',
+      store.sets === writesAtOpenQ && dom.window.sessionStorage.length === 0,
+      `${store.sets - writesAtOpenQ} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(qFresh()));
+    page = await mountPayments();
+    v = lookQ(page);
+    check('  and they start fresh each time the page opens: after Online pending and Today, a new visit reads Any method and Any date, no From or To, no Clear filters',
+      v.method === 'Any method' && v.date === 'Any date' && v.from === null && v.to === null && !v.clear && v.rows.length === 8, said(v));
+    await page.unmount();
+
+    // Record payment: the reload after it keeps the method and the date.
+    const qRecord = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/4003/verify')) {
+        qRecord.UNPAID = qRecord.UNPAID.filter((c) => c.charge_id !== 4003);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 90 } };
+      }
+      return answerFrom(qRecord)(url, method);
+    });
+    page = await mountPayments();
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Last 7 days');
+    const beforeRecord = lookQ(page);
+    await clickIf(page, viewFor(page, 'Cora Flores'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = lookQ(page);
+    check('Record payment keeps the method and the date: Online pending and Last 7 days, Record on Cora Flores, and the reload reads '
+        + '"1 of 7 charges matches · ₱300.00 unpaid · billed in the last 7 days"',
+      said(beforeRecord.rows) === said(['Bert Flores', 'Cora Flores']) && v.method === 'Online pending' && v.date === 'Last 7 days'
+        && said(v.rows) === said(['Bert Flores']) && v.heading === '1 of 7 charges matches · ₱300.00 unpaid · billed in the last 7 days'
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #90)' && !page.query('.pay-panel'),
+      said({ before: beforeRecord.rows, v }));
+    await page.unmount();
+
+    // A charge the filters hide while its panel is open: the panel works from
+    // the whole list, never the filtered one, and Re-check keeps the filters.
+    const qRecheck = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/4002')) {
+        qRecheck.UNPAID = qRecheck.UNPAID.filter((c) => c.charge_id !== 4002);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(qRecheck)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, viewFor(page, 'Bert Flores'));
+    const openedQ = page.query('.pay-panel #pay-panel-title')?.textContent ?? null;
+    await pickDate(page, 'Choose dates');
+    await typeDate(page, 'From', '2026-10-01');
+    await typeDate(page, 'To', '2026-10-05');
+    v = lookQ(page);
+    check('a charge the filters hide keeps its panel: View Bert Flores (billed today), then Oct 1 to Oct 5: the panel stays on Bert Flores, the list shows Edna and Fermin',
+      openedQ === 'Bert Flores' && page.query('.pay-panel #pay-panel-title')?.textContent === 'Bert Flores'
+        && said(v.rows) === said(['Edna Flores', 'Fermin Flores']), said({ openedQ, rows: v.rows }));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = lookQ(page);
+    check('  and Re-check still closes it once the reload shows it paid: focus on the message, Oct 1 to Oct 5 kept',
+      !page.query('.pay-panel') && page.active() === page.query('.alert.success') && v.date === 'Choose dates' && v.from === '2026-10-01'
+        && v.to === '2026-10-05' && said(v.rows) === said(['Edna Flores', 'Fermin Flores']),
+      said({ panel: !!page.query('.pay-panel'), focus: page.active()?.className ?? null, v }));
+    await page.unmount();
+
+    // Pages: 30 waiting, 15 with an open checkout, 20 billed today.
+    const PAGING_Q = () => ({
+      UNPAID: Array.from({ length: 30 }, (_, i) => docOf(4100 + i, 'UNPAID', 50, ['Pay', null, String(i + 1).padStart(2, '0')],
+        'Barangay Clearance', { created_at: i < 20 ? '2026-10-12T01:00:00Z' : '2026-10-03T01:00:00Z',
+          paymongo_session_id: i % 2 === 0 ? `cs_q_${4100 + i}` : null })),
+      PAID: [], VOID: [],
+    });
+    page = await openQ(PAGING_Q());
+    const writesQ = store.sets;
+    await setRows(page, 10);
+    const toSecond = () => press(page, numberButton(page, 2));
+    await toSecond();
+    const onTwo = lookQ(page);
+    await pickMethod(page, 'Online pending');
+    const afterMethod = lookQ(page);
+    await pickMethod(page, 'Any method');
+    await toSecond();
+    await pickDate(page, 'Today');
+    const afterPreset = lookQ(page);
+    await toSecond();
+    await pickDate(page, 'Choose dates');
+    const afterChoose = lookQ(page);
+    await toSecond();
+    await typeDate(page, 'From', '2026-10-01');
+    const afterFrom = lookQ(page);
+    await toSecond();
+    await typeDate(page, 'To', '2026-10-12');
+    const afterTo = lookQ(page);
+    check('every filter change goes back to page 1 and keeps 10 a page: from page 2, Online pending reads "Showing 1 to 10 of 15 results"; '
+        + 'Today, "of 20"; Choose dates, "of 30"; a From date, "of 30"; a To date, "of 30"',
+      pagerSays(onTwo, 'Page 2 of 3', 'Showing 11 to 20 of 30 results')
+        && [afterMethod, afterPreset, afterChoose, afterFrom, afterTo].every((x) => x.size === '10' && said(x.current) === said(['1']))
+        && afterMethod.showing === 'Showing 1 to 10 of 15 results' && afterPreset.showing === 'Showing 1 to 10 of 20 results'
+        && afterChoose.showing === 'Showing 1 to 10 of 30 results' && afterFrom.showing === 'Showing 1 to 10 of 30 results'
+        && afterTo.showing === 'Showing 1 to 10 of 30 results',
+      said([onTwo, afterMethod, afterPreset, afterChoose, afterFrom, afterTo].map((x) => `${x.size}: ${x.showing} (${x.current})`)));
+    check('  and still nothing in the browser: no localStorage write, sessionStorage empty',
+      store.sets === writesQ && dom.window.sessionStorage.length === 0, `${store.sets - writesQ} localStorage write(s)`);
+    await page.unmount();
+
+    // A status change keeps the search, the tab and the date.
+    page = await openQ();
+    await type(page, 'tent');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await pickDate(page, 'Last 7 days');
+    const onUnpaid = lookQ(page);
+    await choose(page, 'all');
+    const onAll = lookQ(page);
+    await choose(page, 'PAID');
+    const onPaid = lookQ(page);
+    check('a status change keeps the search, the tab and the date: "tent", Rentals and Last 7 days on Needs verification (Bert), then All charges '
+        + '(Bert, Karen), then Paid, where the label turns to "Paid date" (Karen, paid Oct 9; not Ramon, paid Oct 5)',
+      said(onUnpaid.rows) === said(['Bert Flores']) && onAll.search === 'tent' && said(onAll.pressed) === said(['Rentals 2'])
+        && onAll.date === 'Last 7 days' && onAll.dateLabel === 'Billed date' && said(onAll.rows) === said(['Bert Flores', 'Karen Garcia'])
+        && onPaid.search === 'tent' && onPaid.date === 'Last 7 days' && onPaid.dateLabel === 'Paid date' && said(onPaid.rows) === said(['Karen Garcia']),
+      said({ onUnpaid: onUnpaid.rows, onAll, onPaid }));
+    await page.unmount();
+
+    // The batch 4 load error: the second row stays, and changes nothing.
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    const errMethod = methodSelect(page);
+    const errDate = dateSelect(page);
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Today');
+    v = lookQ(page);
+    check('a load error is unchanged: the second row stays usable, and with Online pending and Today chosen there are still no tabs, totals, pager or rows',
+      root().textContent.includes('Could not load the charges: Network down') && !!errMethod && !errMethod.disabled && !!errDate
+        && v.method === 'Online pending' && v.date === 'Today' && v.heading === 'Charges' && !page.query('.pay-tabs') && v.detail === null
+        && v.pager === null && v.rows.length === 0 && !v.noMatch, said(v));
+    await page.unmount();
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    if (previousTZQ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZQ;
 
     if (previousScroll === undefined) delete proto.scrollIntoView;
     else proto.scrollIntoView = previousScroll;

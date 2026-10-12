@@ -2754,6 +2754,86 @@ button.pay-search-clear:hover:not(:disabled) {
   background: #f1f5f9;
 }
 
+/* The second row (batch 7): Method and the date, each a select with its
+   label beside it, as Rows per page is; From and To under "Choose dates",
+   which wrap as one pair; and a quiet Clear filters. The fields match the
+   status select: 40px tall, 0.9rem. The row wraps where the column is too
+   narrow, and a phone stacks it (the 640px block). */
+.pay-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.pay-filter,
+.pay-filter-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-filter-range {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+/* (0,1,1) beats the base label, select and input rules: no block label, no
+   14px under it, and each field only as wide as what it holds. */
+.pay-filter label {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.pay-filter select,
+.pay-filter input {
+  width: auto;
+  height: 40px;
+  margin-top: 0;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+/* Quiet: accent text, no fill until hovered (#1d4ed8 is 6.1:1 on the page's
+   #f1f5f9, 5.4:1 on the hover's #e2e8f0). (0,2,0) beats the base button
+   rule; the hover is (0,3,1), as .pay-search-clear's is, to beat
+   button:hover:not(:disabled), which would paint it blue. */
+.pay-filters .pay-filters-clear {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: none;
+  border-radius: 8px;
+}
+
+button.pay-filters-clear:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.pay-filters .pay-filters-clear:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* "The start date is after the end date.", under the row. The words carry
+   it, not the colour, which is .alert.error's red (5.9:1 on #f1f5f9).
+   Empty, it has no margin, so it takes no room. */
+.pay-filters-hint {
+  margin: -2px 0 12px;
+  font-size: 0.85rem;
+  color: #b91c1c;
+}
+
+.pay-filters-hint:empty {
+  margin: 0;
+}
+
 /* The type tabs: toggle buttons, each with its count in a pill (#e2e8f0,
    because the page behind is body's #f1f5f9 and a pill of that would vanish;
    the hover is white for the same reason). The strip scrolls sideways inside
@@ -4681,6 +4761,21 @@ button.tab:hover:not(:disabled) {
   }
 
   .pay-search input {
+    font-size: 1rem;
+  }
+
+  /* The second row on a phone: each control on a line of its own, its label
+     beside it and the field taking the rest of the line. The selects and
+     date inputs are 16px, so iOS Safari does not zoom into them. */
+  .pay-filter,
+  .pay-filter-range {
+    flex: 1 1 100%;
+  }
+
+  .pay-filter select,
+  .pay-filter input {
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 1rem;
   }
 

@@ -16,6 +16,19 @@ import {
 } from "../constants/requestStatus";
 import { formatSchedule } from "../constants/rentals";
 import {
+  ANY,
+  backwards,
+  DATE_OPTIONS,
+  dateKind,
+  dateRange,
+  dateText,
+  manilaToday,
+  matchesDate,
+  matchesMethod,
+  methodOffered,
+  methodOptions,
+} from "../utils/chargeFilters";
+import {
   isAutomatic,
   isZeroFee,
   latestPayment,
@@ -58,6 +71,13 @@ import {
 // page (10, 25, 50 or 100, 25 to start), then Previous, the page numbers and
 // Next. All of it works on the list already loaded: nothing here sends a
 // request.
+//
+// METHOD AND DATE (12 Oct 2026, batch 7). A second row under the search:
+// Method, which mirrors the Method column, and the date, "Billed date" or,
+// under Paid, "Paid date", with From and To under "Choose dates"
+// (utils/chargeFilters.js). Days are Manila days. Both compose with the
+// status, the search and the tabs, and the totals line names the date and
+// the range it counts, so it is never read as the Collections report's.
 const FILTERS = ["UNPAID", "PAID", "VOID", "all"];
 const FILTER_LABELS = {
   UNPAID: "Needs verification",
@@ -499,19 +519,27 @@ export default function PaymentsPage() {
   const [selected, setSelected] = useState(null); // charge open in the View panel
   const [recheckingId, setRecheckingId] = useState(null);
   const [verifying, setVerifying] = useState(false);
-  // The search, the type tab, the page and the rows per page. All four start
+  // The search, the type tab, the method, the date (its choice, and From and
+  // To for "Choose dates"), the page and the rows per page. All of them start
   // fresh on every visit (the barangay hall's PC is shared, so nothing is
   // kept in the browser) and live through Refresh, Record payment and
   // Re-check, which reload the list without touching them. A new status keeps
-  // the search, the tab and the rows per page and goes back to page 1.
+  // the search, the tab, the date and the rows per page, keeps the method only
+  // where the new view offers it, and goes back to page 1.
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("all");
+  const [method, setMethod] = useState(ANY);
+  const [dateChoice, setDateChoice] = useState(ANY);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   // How many charges the server says the status has. More than it sent means
   // its 1,000-row cap cut the list (routes/charges.js).
   const [total, setTotal] = useState(null);
   const searchRef = useRef(null);
+  const methodRef = useRef(null);
+  const dateRef = useRef(null);
   const headingRef = useRef(null);
   // The View button that opened the panel, captured from the click, so a
   // close can give focus back to it (closeModal in LoginPage.jsx).
@@ -658,12 +686,15 @@ export default function PaymentsPage() {
     flashRef.current?.focus();
   }, [selected, flash]);
 
-  // What is in view: the charges that match the search, then those of the
-  // selected tab, then one page of those. The tab counts come from the first
-  // (they follow the search, not the tab), the totals from the second (every
-  // match, not just the page on screen). The View panel and the effect above
-  // keep using `charges`, the whole list, so a charge the search hides can
-  // neither close its open panel nor stop it closing once it is paid.
+  // What is in view: the charges that match the search, then those that
+  // match the method and the date, then those of the selected tab, then one
+  // page of those. The tab counts come from the second (they follow the
+  // search, the method and the date, not the tab), the totals from the third
+  // (every match, not just the page on screen). The View panel and the
+  // effect above keep using `charges`, the whole list, so a charge the
+  // filters hide can neither close its open panel nor stop it closing once
+  // it is paid. "Today" is read on every render, so a page left open past
+  // midnight moves its presets on with the day.
   const terms = searchTerms(query);
   const searched = (charges || []).filter((c) =>
     matchesTerms(
@@ -674,8 +705,14 @@ export default function PaymentsPage() {
       terms,
     ),
   );
-  const counts = tabCounts(searched);
-  const shown = searched.filter((c) => inTab(c, tab));
+  const kind = dateKind(filter);
+  const today = manilaToday();
+  const range = dateRange(dateChoice, from, to, today);
+  const narrowed = searched.filter(
+    (c) => matchesMethod(c, method) && matchesDate(c, kind, range),
+  );
+  const counts = tabCounts(narrowed);
+  const shown = narrowed.filter((c) => inTab(c, tab));
   const paging = pageOf(shown.length, page, pageSize);
   const pager = pagerText(paging);
   const rows = shown.slice(paging.start, paging.end);
@@ -692,8 +729,46 @@ export default function PaymentsPage() {
           shown,
           received: charges.length,
           total,
-          filtered: terms.length > 0 || tab !== "all",
+          filtered:
+            terms.length > 0 || tab !== "all" || method !== ANY || !!range,
+          dated: dateText(kind, dateChoice, range, today),
         });
+  const methodChoices = methodOptions(filter);
+  const reversed = backwards(range);
+  const filtersOn = method !== ANY || dateChoice !== ANY;
+
+  // A new status keeps the search, the tab and the date. The method stays
+  // only where the new view offers it: Cash means nothing on Needs
+  // verification, so there it goes back to Any method.
+  function changeStatus(value) {
+    setFilter(value);
+    if (!methodOffered(value, method)) setMethod(ANY);
+    setPage(1);
+  }
+
+  // Method, the date choice, From and To: each change goes back to page 1,
+  // as a search or a tab change does.
+  function narrowBy(set, value) {
+    set(value);
+    setPage(1);
+  }
+
+  function resetMethodAndDate() {
+    setMethod(ANY);
+    setDateChoice(ANY);
+    setFrom("");
+    setTo("");
+  }
+
+  // "Clear filters" in the second row: the method and the date only. Focus
+  // goes to the Method select (the date's under Void, where Method is
+  // disabled), because the button pressed is gone once nothing is on.
+  function clearMethodAndDate() {
+    resetMethodAndDate();
+    setPage(1);
+    const methodSelect = methodRef.current;
+    (methodSelect?.disabled ? dateRef.current : methodSelect)?.focus();
+  }
 
   function changeQuery(value) {
     setQuery(value);
@@ -712,9 +787,12 @@ export default function PaymentsPage() {
     setPage(1);
   }
 
+  // "Clear search and filters", where nothing matches: the search, the tab,
+  // the method and the date. The status stays.
   function clearFilters() {
     setQuery("");
     setTab("all");
+    resetMethodAndDate();
     setPage(1);
     searchRef.current?.focus();
   }
@@ -782,10 +860,7 @@ export default function PaymentsPage() {
           <select
             aria-label="Status"
             value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => changeStatus(e.target.value)}
           >
             {FILTERS.map((f) => (
               <option key={f} value={f}>
@@ -799,6 +874,86 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {/* The second row: Method and the date, native selects with visible
+          labels; From and To under "Choose dates"; and Clear filters while
+          either is on. Method offers what the status view can show, so Void,
+          with Any method alone, has it disabled. The date names itself:
+          "Paid date" under Paid, "Billed date" everywhere else. */}
+      <div className="pay-filters">
+        <div className="pay-filter">
+          <label htmlFor="pay-method-filter">Method</label>
+          <select
+            id="pay-method-filter"
+            ref={methodRef}
+            value={method}
+            onChange={(e) => narrowBy(setMethod, e.target.value)}
+            disabled={methodChoices.length === 1}
+          >
+            {methodChoices.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="pay-filter">
+          <label htmlFor="pay-date-filter">
+            {kind === "paid" ? "Paid date" : "Billed date"}
+          </label>
+          <select
+            id="pay-date-filter"
+            ref={dateRef}
+            value={dateChoice}
+            onChange={(e) => narrowBy(setDateChoice, e.target.value)}
+          >
+            {DATE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {dateChoice === "custom" && (
+          <div className="pay-filter-range">
+            <div className="pay-filter">
+              <label htmlFor="pay-date-from">From</label>
+              <input
+                id="pay-date-from"
+                type="date"
+                value={from}
+                onChange={(e) => narrowBy(setFrom, e.target.value)}
+                aria-describedby="pay-date-hint"
+              />
+            </div>
+            <div className="pay-filter">
+              <label htmlFor="pay-date-to">To</label>
+              <input
+                id="pay-date-to"
+                type="date"
+                value={to}
+                onChange={(e) => narrowBy(setTo, e.target.value)}
+                aria-describedby="pay-date-hint"
+              />
+            </div>
+          </div>
+        )}
+        {filtersOn && (
+          <button
+            type="button"
+            className="pay-filters-clear"
+            onClick={clearMethodAndDate}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+      {/* Always in the page, so a screen reader announces it when the text
+          appears (role="status" is polite); empty, and no taller than
+          nothing, while the dates are the right way round. */}
+      <p id="pay-date-hint" className="pay-filters-hint" role="status">
+        {reversed ? "The start date is after the end date." : ""}
+      </p>
+
       {capped && (
         <div className="alert info pay-cap">
           Showing the newest {charges.length.toLocaleString("en-US")} of{" "}
@@ -808,9 +963,10 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* The tabs count what matches the search, whatever tab is selected.
-          A tab with nothing in it is dimmed, never disabled. No page here
-          uses role="tab", so these are toggle buttons. */}
+      {/* The tabs count what matches the search, the method and the date,
+          whatever tab is selected. A tab with nothing in it is dimmed, never
+          disabled. No page here uses role="tab", so these are toggle
+          buttons. */}
       {charges !== null && (
         <div className="pay-tabs" role="group" aria-label="Charge type">
           {TYPE_TABS.map((t) => (
@@ -844,7 +1000,8 @@ export default function PaymentsPage() {
           failed shows neither a count nor the empty text. Try again repeats
           the same load, as Refresh does. The markup is Staff accounts'. A
           status with no charges at all keeps its own text; one whose charges
-          the search or tab hide says so, and offers to clear them. */}
+          the search, tab, method or date hide says so, and offers to clear
+          them. */}
       {loadError ? (
         <>
           <div className="alert error" role="alert">
