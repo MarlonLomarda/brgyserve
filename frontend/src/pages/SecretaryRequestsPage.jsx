@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListTabs from "../components/ListTabs";
 import ResidentPicker from "../components/ResidentPicker";
 import {
   statusMeta,
   chargeMeta,
   chargeOf,
   formatDate,
-  STATUS_META,
 } from "../constants/requestStatus";
 import { isNoFeeCharge } from "../utils/chargeMethod";
+import {
+  inTab,
+  REQUEST_TABS,
+  tabCounts,
+  tabHeading,
+} from "../utils/requestList";
 
 // Document request processing. Shared by three roles: the Secretary passes
 // canManage and gets the four workflow actions; Staff and the Punong Barangay
@@ -19,12 +25,16 @@ import { isNoFeeCharge } from "../utils/chargeMethod";
 // resident's birthplace, sex, civil_status, contact_number and date_registered
 // and the requester's email. This component renders whatever it was handed and
 // never checks the viewer's role to decide: `key in object` tests the DATA.
-
-const FILTERS = [
-  "pending",
-  "all",
-  ...Object.keys(STATUS_META).filter((s) => s !== "pending"),
-];
+//
+// STATUS TABS (13 Oct 2026). The list is loaded once, every request
+// (?status=all), and seven tabs filter it in the browser with no further
+// request: Pending, Approved, Ready for release, Claimed, Rejected, Cancelled
+// and All, each with its count over the whole list (utils/requestList.js).
+// They replace a status select whose every choice sent a new request. The
+// strip is the Payments page's type tabs, as components/ListTabs.jsx. The page
+// opens on Pending, as the select did, and the chosen tab lives through every
+// reload: Refresh, Try again, Back after a request was acted on, and a filed
+// walk-in.
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -538,7 +548,7 @@ export default function SecretaryRequestsPage({
   canManage = false,
 }) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState("pending");
+  const [tab, setTab] = useState("pending"); // the chosen status tab
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [selectedId, setSelectedId] = useState(null);
@@ -553,24 +563,29 @@ export default function SecretaryRequestsPage({
   // the error takes the place of the rows, the count and the empty text
   // (CLAUDE.md: a list that failed to load), as on the Payments page. Every
   // load starts from the loading state, and an older answer that arrives late
-  // (the status changed twice, Refresh pressed during a reload) is dropped
-  // rather than shown over a newer one.
+  // (Refresh pressed during a reload) is dropped rather than shown over a
+  // newer one. It asks for every request, whatever tab is chosen: a tab only
+  // filters what is loaded, so choosing one sends nothing.
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     setLoadError(null);
     setRequests(null);
     try {
-      const query = filter === "all" ? "" : `?status=${filter}`;
-      const data = await authFetch(`/document-requests${query}`);
+      const data = await authFetch("/document-requests?status=all");
       if (seq === loadSeq.current) setRequests(data.requests);
     } catch (err) {
       if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
-  }, [authFetch, filter]);
+  }, [authFetch]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // The tab counts come from the whole list, so they read the same on every
+  // tab; the rows and the heading are the chosen tab's.
+  const counts = requests === null ? null : tabCounts(requests);
+  const shown = requests === null ? [] : requests.filter((r) => inTab(r, tab));
 
   return (
     <>
@@ -597,24 +612,16 @@ export default function SecretaryRequestsPage({
         <>
           {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
 
-          <div className="list-head">
+          {/* doc-requests-head: on a phone the heading takes a line of its
+              own, so a tab whose heading is longer or shorter never moves
+              the strip under it (index.css). */}
+          <div className="list-head doc-requests-head">
             <h2>
               {requests === null
                 ? "Document requests"
-                : `${requests.length} request${requests.length === 1 ? "" : "s"}`}
+                : tabHeading(tab, shown.length)}
             </h2>
             <div className="head-actions">
-              <select
-                aria-label="Status"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                {FILTERS.map((f) => (
-                  <option key={f} value={f}>
-                    {f === "all" ? "All statuses" : statusMeta(f).label}
-                  </option>
-                ))}
-              </select>
               <button className="btn secondary" onClick={load}>
                 Refresh
               </button>
@@ -636,10 +643,23 @@ export default function SecretaryRequestsPage({
             </div>
           </div>
 
+          {/* The tabs, under the row that holds Refresh, so a reload leaves
+              Refresh where it was: like Payments, they are drawn only once
+              the list has loaded, never while it loads or after it failed. */}
+          {requests !== null && (
+            <ListTabs
+              label="Status"
+              tabs={REQUEST_TABS}
+              counts={counts}
+              active={tab}
+              onChoose={setTab}
+            />
+          )}
+
           {/* The error first, then loading, then empty, then rows: a load that
               failed shows neither a count nor the empty text. Try again
-              repeats the same load, as Refresh does; the status select and
-              Refresh above stay usable. The markup is the Payments page's. */}
+              repeats the same load, as Refresh does; Refresh above stays
+              usable. The markup is the Payments page's. */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
@@ -651,13 +671,13 @@ export default function SecretaryRequestsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading requests…</p>
-          ) : requests.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="empty">
               <p>
                 No{" "}
-                {filter === "all"
+                {tab === "all"
                   ? ""
-                  : `${statusMeta(filter).label.toLowerCase()} `}
+                  : `${statusMeta(tab).label.toLowerCase()} `}
                 requests.
               </p>
             </div>
@@ -675,7 +695,7 @@ export default function SecretaryRequestsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => (
+                  {shown.map((r) => (
                     <tr key={r.request_id}>
                       <td>
                         <strong>

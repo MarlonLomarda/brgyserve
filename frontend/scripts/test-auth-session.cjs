@@ -68,7 +68,13 @@
 // Punong Barangay: what section M checks on Payments. A load that fails says
 // so, with Try again, and never shows an empty list; every way of loading
 // again starts from the loading state; an older answer that arrives late
-// cannot replace a newer one; and the status select is labelled.
+// cannot replace a newer one; and the status tabs are labelled.
+//
+// Section W is the Document requests list's status tabs, for the same three
+// roles: seven tabs with counts in place of the status select, the list
+// loaded once with ?status=all and filtered in the browser, the page opening
+// on Pending, and the chosen tab kept through every reload; then the tab
+// strip on a narrow phone, as section S checks Payments'.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -3755,7 +3761,13 @@ const root = () => dom.window.document.getElementById('root');
 
     // d. The request detail, as the Secretary. Opened from the list's Review
     // (View for the Punong Barangay) and left by Back to list; the workflow
-    // buttons are read, never pressed.
+    // buttons are read, never pressed. The list opens on its Pending tab
+    // (section W) and most of these requests are not pending, so the All tab
+    // is chosen first; the tab is kept when Back to list returns to it.
+    const showAll = async (pg) => {
+      const all = pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith('All '));
+      if (all) await pg.click(all);
+    };
     const detailOf = async (pg, first, last) => {
       const row = pg.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === `${first} ${last}`);
       const opener = row && [...row.querySelectorAll('button')].find((b) => /^(Review|View)$/.test(b.textContent));
@@ -3776,6 +3788,7 @@ const root = () => dom.window.document.getElementById('root');
     resetNet(200, answer);
     page = await globalThis.mountInteractive(root(), '/secretary/requests');
     await page.settle();
+    await showAll(page);
     let d = await detailOf(page, 'Liza', 'Bantilan');
     check('Request detail, request 91 (PAID ₱0.00): Charge says "No fee", not "₱0.00 Paid"; Fee is the charge\'s ₱0.00',
       d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00', said(d.fields));
@@ -3806,6 +3819,7 @@ const root = () => dom.window.document.getElementById('root');
     resetNet(200, answer);
     page = await globalThis.mountInteractive(root(), '/punong-barangay/requests');
     await page.settle();
+    await showAll(page);
     d = await detailOf(page, 'Nora', 'Escabas');
     check('the Punong Barangay\'s read-only detail says "No fee" too, Fee ₱0.00, with no release button',
       d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00' && !d.release, said(d));
@@ -3954,18 +3968,26 @@ const root = () => dom.window.document.getElementById('root');
   // answer that arrived late could replace a newer one. A failed load must
   // say so, with Try again, and show no rows, no count and no empty text;
   // every load starts from the loading state; an older answer is dropped; and
-  // the status select is labelled "Status", as Payments' is. The same checks
+  // the status control is labelled "Status", as Payments' is. The same checks
   // run for the three roles, each with its own projection: Staff's rows carry
   // no requester email and no resident account. The clock is UTC for this
   // section, so the Submitted dates are fixed. Every request is answered by
   // the fetch stub, and only GETs are sent.
+  //
+  // Since the status tabs (section W) the list is loaded once, with
+  // ?status=all, and a tab filters what is loaded without a request. So a
+  // load is started by the first open, Try again and Refresh only: the
+  // checks that changed the status to start one now press Refresh or Try
+  // again, the one that changed it over loaded rows checks that a tab shows
+  // its own rows at once, and the select's label is now the tab group's.
   console.log('\n--- Document requests: a failed load is an error, never an empty list ---');
   {
     const previousTZV = process.env.TZ;
     process.env.TZ = 'UTC';
     const said = (v) => JSON.stringify(v);
     const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
-    // The list's own URL: ?status= for one status, nothing after it for All.
+    // The list's own URL: ?status=all since the tabs (before them, ?status=
+    // for one status and nothing after it for All).
     const isList = (call) => call?.method === 'GET' && /\/document-requests(\?status=[a-z_]+)?$/.test(call.url);
     const statusOf = (call) => (isList(call) ? (call.url.match(/\?status=([a-z_]+)$/)?.[1] ?? 'all') : null);
     // A request in the list's real shape (SECRETARY_LIST_FIELDS in
@@ -3994,15 +4016,12 @@ const root = () => dom.window.document.getElementById('root');
       listRequest(205, 'claimed', 'Elsa', 'Uy', 'Certificate of Indigency', staff),
     ];
     const REJECTED_ONE = (staff) => [listRequest(206, 'rejected', 'Fe', 'Villa', 'Business Clearance', staff)];
-    // The status dropdown, changed the way section M's is.
-    const choose = async (page, value) => {
-      const select = page.query('.list-head select');
-      if (select) {
-        select.value = value;
-        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-      }
-      await page.settle();
-    };
+    // Every request, what ?status=all answers: two pending, one approved, two
+    // claimed, one rejected.
+    const MIXED = (staff) => [...PENDING_TWO(staff), ...APPROVED_ONE(staff), ...CLAIMED_TWO(staff), ...REJECTED_ONE(staff)];
+    // A status tab, by its label ("Approved 1"), as a person presses it.
+    const tabNamed = (page, label) => page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const pressedTab = (page) => page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text);
     // Holds back every answer asked for from here on until a check releases
     // it, so the page can be read while a load is out and answers can arrive
     // in any order. Returns the index the next held answer will have.
@@ -4027,7 +4046,8 @@ const root = () => dom.window.document.getElementById('root');
         error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
         tryAgain: !!tryAgainButton(page),
         rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
-        zero: /\b0 requests\b/.test(all),
+        // "0 requests", or "0 pending requests" since the heading names the tab.
+        zero: /\b0 [a-z ]*requests?\b/.test(all),
         empty: /\bNo [a-z ]*requests\./.test(all),
         loading: all.includes('Loading requests…'),
       };
@@ -4059,9 +4079,11 @@ const root = () => dom.window.document.getElementById('root');
         staff: false, opener: 'View', walkIn: false },
     ];
     for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
-      // a. A successful load reads as it always has, and the select is named.
+      // a. A successful load reads as it always has, on the Pending tab it
+      // opens on, and the tab group is named. Any list URL gets every
+      // request; which one the page asks for is check b's.
       seedSession(token, user);
-      resetNet(200, (url) => (url.endsWith('/document-requests?status=pending') ? { requests: PENDING_TWO(staff) } : undefined));
+      resetNet(200, (url) => (/\/document-requests\?/.test(url) ? { requests: MIXED(staff) } : undefined));
       let page = await globalThis.mountInteractive(root(), route);
       await page.settle();
       const note = (id) => (staff ? '(no note)' : `@res_${id}`);
@@ -4069,16 +4091,17 @@ const root = () => dom.window.document.getElementById('root');
         `Ana Cruz | ${note(201)} | Barangay Clearance | Purpose 201 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
         `Ben Reyes | ${note(202)} | Certificate of Residency | Purpose 202 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
       ];
-      check(`${name}: a successful load shows its rows as before: "2 requests", the six column headers, and each row's `
-          + `name, ${staff ? 'no account note' : 'account note'}, document, purpose, status, date and ${opener}, `
+      check(`${name}: a successful load shows its rows as before: "2 pending requests", the six column headers, and each `
+          + `row's name, ${staff ? 'no account note' : 'account note'}, document, purpose, status, date and ${opener}, `
           + `${walkIn ? 'with' : 'with no'} Encode walk-in`,
-        text(page.query('.list-head h2')) === '2 requests'
+        text(page.query('.list-head h2')) === '2 pending requests'
           && said(headersRead(page)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', ''])
           && said(rowsRead(page)) === said(WANT_ROWS) && !!buttonNamed(root(), 'Encode walk-in') === walkIn,
         said({ heading: text(page.query('.list-head h2')), headers: headersRead(page), rows: rowsRead(page) }));
-      check(`${name}: the status select is labelled "Status"`,
-        page.query('.list-head select')?.getAttribute('aria-label') === 'Status',
-        said(page.query('.list-head select')?.getAttribute('aria-label') ?? null));
+      const group = page.query('.pay-tabs');
+      check(`${name}: the status tabs are a group labelled "Status"`,
+        group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status',
+        said({ role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null }));
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
 
@@ -4094,9 +4117,9 @@ const root = () => dom.window.document.getElementById('root');
       release(at, 500, { error: 'Network down' });
       await page.settle();
       const failed = listView(page);
-      check(`${name}: the first open shows "Loading requests…" while status=pending is out, and when it fails, `
+      check(`${name}: the first open shows "Loading requests…" while status=all is out, and when it fails, `
           + '"Could not load the requests: Network down" with a Try again button',
-        loadingOnly(opening) && statusOf(firstCall) === 'pending'
+        loadingOnly(opening) && statusOf(firstCall) === 'all'
           && failed.error === 'Could not load the requests: Network down' && failed.tryAgain,
         `${said(opening)} then ${said(failed)}`);
       check(`  ${name}: and no rows, no "0 requests", no "No pending requests.": it cannot read as nothing to review`,
@@ -4108,31 +4131,27 @@ const root = () => dom.window.document.getElementById('root');
       await clickIf(page, tryAgainButton(page));
       const retrying = listView(page);
       const retryCall = net.calls[sent];
-      release(at, 200, { requests: PENDING_TWO(staff) });
+      release(at, 200, { requests: MIXED(staff) });
       await page.settle();
       const retried = listView(page);
-      check(`${name}: Try again asks for status=pending again, shows the loading state, not the error, while it is out, `
-          + 'then "2 requests" and both rows',
-        net.calls.length === sent + 1 && statusOf(retryCall) === 'pending' && loadingOnly(retrying)
-          && !retried.error && !retried.tryAgain && retried.heading === '2 requests'
+      check(`${name}: Try again asks for status=all again, shows the loading state, not the error, while it is out, `
+          + 'then "2 pending requests" and both Pending rows',
+        net.calls.length === sent + 1 && statusOf(retryCall) === 'all' && loadingOnly(retrying)
+          && !retried.error && !retried.tryAgain && retried.heading === '2 pending requests'
           && retried.rows.join('|') === 'Ana Cruz|Ben Reyes',
         `${retryCall?.url ?? 'no request'} ${said(retrying)} then ${said(retried)}`);
 
-      // d. A new status over loaded rows: the loading state, not the old
-      // status's rows under the new name.
-      at = holdNext();
+      // d. Another status over loaded rows: its own rows at once, never the
+      // old status's rows under the new name. A tab filters what is loaded,
+      // so there is nothing to wait for and no request.
       sent = net.calls.length;
-      await choose(page, 'approved');
-      const switching = listView(page);
-      const switchCall = net.calls[sent];
-      release(at, 200, { requests: APPROVED_ONE(staff) });
-      await page.settle();
+      await clickIf(page, tabNamed(page, 'Approved'));
       const switched = listView(page);
-      check(`${name}: changing the status to Approved asks for status=approved and shows the loading state, not the two `
-          + 'Pending rows, while it is out; then "1 request" and its row',
-        statusOf(switchCall) === 'approved' && loadingOnly(switching)
-          && switched.heading === '1 request' && switched.rows.join('|') === 'Carla Santos' && !switched.error,
-        `${switchCall?.url ?? 'no request'} ${said(switching)} then ${said(switched)}`);
+      check(`${name}: choosing the Approved tab over the two Pending rows sends no request and shows only its own row at `
+          + 'once, "1 approved request", never the Pending rows under the new name',
+        net.calls.length === sent && said(pressedTab(page)) === said(['Approved 1']) && !switched.loading
+          && switched.heading === '1 approved request' && switched.rows.join('|') === 'Carla Santos' && !switched.error,
+        `${net.calls.length - sent} request(s) ${said(switched)}`);
 
       // e. Refresh over loaded rows, failing: the loading state, then the
       // error, and never the old row or its count.
@@ -4144,53 +4163,57 @@ const root = () => dom.window.document.getElementById('root');
       release(at, 500, { error: 'Internal server error' });
       await page.settle();
       const refreshFailed = listView(page);
-      check(`${name}: Refresh shows the loading state, not the old row, while it is out, and when it fails, `
-          + '"Could not load the requests: Internal server error", never the old row or "1 request"',
-        statusOf(refreshCall) === 'approved' && loadingOnly(refreshing)
+      check(`${name}: Refresh asks for status=all, shows the loading state, not the old row, while it is out, and when it `
+          + 'fails, "Could not load the requests: Internal server error", never the old row or "1 approved request"',
+        statusOf(refreshCall) === 'all' && loadingOnly(refreshing)
           && refreshFailed.error === 'Could not load the requests: Internal server error' && errorOnly(refreshFailed),
         `${refreshCall?.url ?? 'no request'} ${said(refreshing)} then ${said(refreshFailed)}`);
 
-      // f. Two status changes, the older answer last: it is dropped.
+      // f. Two loads out at once, Try again and then Refresh before it has
+      // answered, the older answer last: it is dropped. The Approved tab
+      // chosen before the failed Refresh is still the one shown.
       at = holdNext();
-      await choose(page, 'claimed');
-      await choose(page, 'rejected');
-      release(at + 1, 200, { requests: REJECTED_ONE(staff) });
+      await clickIf(page, tryAgainButton(page));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: MIXED(staff) });
       await page.settle();
       release(at, 200, { requests: CLAIMED_TWO(staff) });
       await page.settle();
       const raced = listView(page);
-      check(`${name}: an older answer that arrives last cannot replace the newer list: Rejected keeps its one row`,
-        statusOf(net.calls.at(-2)) === 'claimed' && statusOf(net.calls.at(-1)) === 'rejected'
-          && page.query('.list-head select')?.value === 'rejected' && raced.heading === '1 request'
-          && raced.rows.join('|') === 'Fe Villa' && !raced.error,
+      check(`${name}: an older answer that arrives last cannot replace the newer list: Approved keeps its one row`,
+        statusOf(net.calls.at(-2)) === 'all' && statusOf(net.calls.at(-1)) === 'all'
+          && said(pressedTab(page)) === said(['Approved 1']) && raced.heading === '1 approved request'
+          && raced.rows.join('|') === 'Carla Santos' && !raced.error,
         said(raced));
 
-      // g. The same, with the older load failing last.
+      // g. The same, Refresh pressed twice, with the older load failing last.
       at = holdNext();
-      await choose(page, 'all');
-      await choose(page, 'pending');
-      const allCall = net.calls.at(-2);
-      release(at + 1, 200, { requests: PENDING_TWO(staff) });
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const olderCall = net.calls.at(-2);
+      release(at + 1, 200, { requests: MIXED(staff) });
       await page.settle();
       release(at, 500, { error: 'boom' });
       await page.settle();
       const racedFail = listView(page);
-      check(`  ${name}: nor can an older load that fails last (All statuses, asked with no ?status=) put its error `
-          + 'over the newer list',
-        statusOf(allCall) === 'all' && allCall.url.endsWith('/document-requests')
-          && page.query('.list-head select')?.value === 'pending' && racedFail.heading === '2 requests'
-          && racedFail.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedFail.error && !racedFail.tryAgain,
-        `${allCall?.url ?? 'no request'} ${said(racedFail)}`);
+      check(`  ${name}: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list`,
+        statusOf(olderCall) === 'all' && statusOf(net.calls.at(-1)) === 'all'
+          && said(pressedTab(page)) === said(['Approved 1']) && racedFail.heading === '1 approved request'
+          && racedFail.rows.join('|') === 'Carla Santos' && !racedFail.error && !racedFail.tryAgain,
+        `${olderCall?.url ?? 'no request'} ${said(racedFail)}`);
 
-      // h. No requests, loaded successfully, is a real empty state.
+      // h. No requests, loaded successfully, is a real empty state: on the
+      // Cancelled tab, Refresh answered with no requests at all.
+      await clickIf(page, tabNamed(page, 'Cancelled'));
       at = holdNext();
-      await choose(page, 'cancelled');
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
       release(at, 200, { requests: [] });
       await page.settle();
       const none = listView(page);
-      check(`${name}: a successful load of no requests still says "0 requests" and "No cancelled requests.", with no error`,
-        none.heading === '0 requests' && /\bNo cancelled requests\./.test(spaced(root())) && !none.error && !none.tryAgain
-          && !none.loading && none.rows.length === 0,
+      check(`${name}: a successful load of no requests still says "0 cancelled requests" and "No cancelled requests.", `
+          + 'with no error',
+        none.heading === '0 cancelled requests' && /\bNo cancelled requests\./.test(spaced(root())) && !none.error
+          && !none.tryAgain && !none.loading && none.rows.length === 0,
         said(none));
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
@@ -4224,6 +4247,474 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousTZV === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZV;
+  }
+
+  // =========================================================================
+  // W. Document requests: status tabs with counts
+  // =========================================================================
+  // The list had one status select, opening on Pending: each choice sent a
+  // new GET /document-requests?status=…, and nothing said how many requests
+  // a status held until it was chosen. It now loads every request once, GET
+  // ?status=all, and seven tabs filter that list in the browser with no
+  // request: Pending, Approved, Ready for release, Claimed, Rejected,
+  // Cancelled and All, each with its count. The counts come from the whole
+  // list, so they read the same whichever tab is chosen; the heading above
+  // the rows names the tab ("3 pending requests", "11 requests" on All); and
+  // a tab with nothing in it shows the empty text the select's status did.
+  // The page opens on Pending, as the select did, and keeps the chosen tab
+  // through Refresh, Try again, Back from a request and a filed walk-in,
+  // which load the list again exactly when they did before; a load that
+  // fails shows no tabs, as Payments does. The strip is the Payments page's
+  // own (.pay-tabs: toggle buttons with aria-pressed in a group, the count in
+  // a pill, the dimmed empty tab, the faded ends and the chosen tab brought
+  // into view), lifted into components/ListTabs.jsx. utils/requestList.js is
+  // checked case by case, then the real page for the Secretary, Staff and the
+  // Punong Barangay against eleven stubbed requests, then the strip on a
+  // narrow phone, laid out by hand as in section S. Every request is answered
+  // by the fetch stub; the only writes, the Secretary's approve and walk-in,
+  // go to the stub too.
+  console.log('\n--- Document requests: status tabs with counts ---');
+  {
+    const previousTZW = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const R = globalThis.requestList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const KEYS = ['pending', 'approved', 'ready_for_release', 'claimed', 'rejected', 'cancelled', 'all'];
+    // Counts compared key by key, whatever order they were built in, and
+    // with no key besides the seven.
+    const sameCounts = (got, want) => !!got && typeof got === 'object'
+      && said(Object.keys(got).sort()) === said([...KEYS].sort()) && KEYS.every((k) => got[k] === want[k]);
+    const counts = (pending, approved, ready, claimed, rejected, cancelled, all) =>
+      ({ pending, approved, ready_for_release: ready, claimed, rejected, cancelled, all });
+
+    // a. The helpers on their own.
+    const order = attempt(() => R.REQUEST_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('tabs: Pending, Approved, Ready for release, Claimed, Rejected, Cancelled, All, in that order, each status with its own label',
+      order === 'pending:Pending | approved:Approved | ready_for_release:Ready for release | claimed:Claimed | '
+        + 'rejected:Rejected | cancelled:Cancelled | all:All', said(order));
+    const req = (id, status) => ({ request_id: id, status });
+    const NINE = [req(1, 'claimed'), req(2, 'pending'), req(3, 'approved'), req(4, 'pending'), req(5, 'rejected'),
+      req(6, 'ready_for_release'), req(7, 'claimed'), req(8, 'pending'), req(9, 'approved')];
+    let got = attempt(() => R.tabCounts(NINE));
+    check('tab counts: one per status and All, over the whole list given: 3 pending, 2 approved, 1 ready for release, '
+        + '2 claimed, 1 rejected, 0 cancelled, 9 in all',
+      sameCounts(got, counts(3, 2, 1, 2, 1, 0, 9)), said(got));
+    got = attempt(() => R.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0, 0)), said(got));
+    got = attempt(() => R.tabCounts([req(1, 'pending'), req(2, 'archived')]));
+    check('  a status outside the six counts under All only, never as a tab of its own',
+      sameCounts(got, counts(1, 0, 0, 0, 0, 0, 2)), said(got));
+    const inTab = (r, tab) => attempt(() => R.inTab(r, tab));
+    const IN_TAB = [[req(1, 'claimed'), 'all', true], [req(2, 'archived'), 'all', true], [req(3, 'claimed'), 'claimed', true],
+      [req(4, 'claimed'), 'pending', false], [req(5, 'ready_for_release'), 'ready_for_release', true], [req(6, 'pending'), 'approved', false]];
+    check('inTab: All takes every request, a status tab only its own status',
+      IN_TAB.every(([r, tab, want]) => inTab(r, tab) === want), said(IN_TAB.map(([r, tab]) => inTab(r, tab))));
+    const HEADS = [['pending', 6, '6 pending requests'], ['pending', 1, '1 pending request'], ['pending', 0, '0 pending requests'],
+      ['ready_for_release', 2, '2 ready for release requests'], ['cancelled', 0, '0 cancelled requests'],
+      ['all', 77, '77 requests'], ['all', 1, '1 request'], ['all', 1234, '1,234 requests']];
+    const heads = HEADS.map(([tab, n]) => attempt(() => R.tabHeading(tab, n)));
+    check('the heading for a tab: "6 pending requests", "1 pending request", "0 pending requests", "2 ready for release requests", '
+        + '"0 cancelled requests", and on All "77 requests", "1 request", "1,234 requests"',
+      said(heads) === said(HEADS.map((h) => h[2])), said(heads));
+
+    // b. The real page. Eleven requests in the list's real shape (as in
+    // section V: Staff's carries no resident account and no requester email),
+    // newest first as the server sends them, the statuses mixed so that a tab
+    // keeping a wrong row, or its rows in the wrong order, shows it.
+    const listRequest = (id, status, first, last, staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: 'Barangay Clearance', fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: { username: `res_${id}` } }) },
+      requester: { user_id: 700 + id, username: `res_${id}`, ...(staff ? {} : { email: `res_${id}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const ELEVEN = [
+      [301, 'pending', 'Ana', 'Cruz'], [302, 'approved', 'Ben', 'Reyes'], [303, 'claimed', 'Carla', 'Santos'],
+      [304, 'pending', 'Dino', 'Tan'], [305, 'ready_for_release', 'Elsa', 'Uy'], [306, 'claimed', 'Fe', 'Villa'],
+      [307, 'rejected', 'Gil', 'Wong'], [308, 'approved', 'Hana', 'Yap'], [309, 'claimed', 'Ivy', 'Zamora'],
+      [310, 'pending', 'Jun', 'Abad'], [311, 'claimed', 'Kim', 'Bello'],
+    ];
+    // What each tab must show, written by hand: its rows, in the order sent,
+    // and its heading.
+    const WANT = {
+      Pending: { rows: ['Ana Cruz', 'Dino Tan', 'Jun Abad'], heading: '3 pending requests' },
+      Approved: { rows: ['Ben Reyes', 'Hana Yap'], heading: '2 approved requests' },
+      'Ready for release': { rows: ['Elsa Uy'], heading: '1 ready for release request' },
+      Claimed: { rows: ['Carla Santos', 'Fe Villa', 'Ivy Zamora', 'Kim Bello'], heading: '4 claimed requests' },
+      Rejected: { rows: ['Gil Wong'], heading: '1 rejected request' },
+      Cancelled: { rows: [], heading: '0 cancelled requests' },
+      All: { rows: ['Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong', 'Hana Yap',
+        'Ivy Zamora', 'Jun Abad', 'Kim Bello'], heading: '11 requests' },
+    };
+    const STRIP = 'Pending 3 · Approved 2 · Ready for release 1 · Claimed 4 · Rejected 1 · Cancelled 0 · All 11';
+    // The requests the stub holds, which Refresh, the approve and the walk-in
+    // change as the server would; the list answer is built from them.
+    const makeState = () => ({ list: ELEVEN.map(([id, status, first, last]) => ({ id, status, first, last })) });
+    const listAnswer = (state, staff) => ({ requests: state.list.map((r) => listRequest(r.id, r.status, r.first, r.last, staff)) });
+    const ROSA = { resident_id: 912, first_name: 'Rosa', middle_name: null, last_name: 'Lim', suffix: null,
+      birthdate: '1990-01-01', address: 'Purok 2, Ubujan' };
+    // Every list URL gets the whole list, whatever status it names: the page
+    // must ask for ?status=all, and the request checks say whether it did.
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(\/approve)?$/);
+      if (one) {
+        const r = state.list.find((x) => x.id === Number(one[1]));
+        if (!r) return undefined;
+        if (method === 'POST' && one[2]) r.status = 'approved';
+        const request = { ...listRequest(r.id, r.status, r.first, r.last, staff), processed_by: null };
+        return one[2] ? { request, message: 'Request approved.' } : { request };
+      }
+      if (method === 'GET' && url.endsWith('/document-types')) {
+        return { document_types: [{ document_type_id: 7, name: 'Barangay Clearance', fee: '20.00', description: null }] };
+      }
+      if (method === 'GET' && url.includes('/resident-records?search=')) return { records: [ROSA] };
+      if (method === 'POST' && url.endsWith('/document-requests')) {
+        state.list.unshift({ id: 312, status: 'pending', first: 'Rosa', last: 'Lim' });
+        return { message: 'Request recorded for Rosa Lim.' };
+      }
+      return undefined;
+    };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    // What the list says, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      table: !!page.query('table.data-table'),
+      empty: text(page.query('.empty')),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    // The requests a step sent to /document-requests, as "GET /document-requests?status=all".
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, name, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // jsdom has no scrollIntoView; this one records what asked to be shown,
+    // so a check can tell that the page itself was never scrolled.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      let v = look(page);
+      const group = page.query('.pay-tabs');
+      const buttons = tabsOf(page);
+      check(`${name}: seven tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
+        v.strip === STRIP && group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status'
+          && buttons.length === 7 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+        said({ strip: v.strip, role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null,
+          pressed: buttons.map((b) => b.getAttribute('aria-pressed')) }));
+      check(`${name}: it opens on Pending, as the status select did: Pending alone pressed, "3 pending requests", and the three `
+          + 'pending rows in the order sent',
+        said(v.pressed) === said(['Pending 3']) && v.heading === WANT.Pending.heading && said(v.rows) === said(WANT.Pending.rows),
+        said(v));
+      check(`${name}: exactly one request on open, GET /document-requests?status=all`,
+        net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /document-requests?status=all']),
+        said(net.calls.map((c) => `${c.method} ${c.url}`)));
+
+      // Every tab in turn, as a person presses them.
+      const sentBefore = net.calls.length;
+      const seen = {};
+      const missing = [];
+      for (const label of Object.keys(WANT)) {
+        const tab = tabNamed(page, label);
+        if (!tab) missing.push(label);
+        await clickIf(page, tab);
+        seen[label] = look(page);
+      }
+      check(`${name}: pressing each of the seven tabs in turn sends no request`,
+        missing.length === 0 && net.calls.length === sentBefore,
+        said({ missing, sent: net.calls.slice(sentBefore).map((c) => `${c.method} ${c.url}`) }));
+      const wrongTabs = Object.keys(WANT).filter((label) => label !== 'All').filter((label) => {
+        const s = seen[label];
+        return !(said(s.rows) === said(WANT[label].rows) && s.heading === WANT[label].heading
+          && s.pressed.length === 1 && s.pressed[0].startsWith(`${label} `));
+      });
+      check(`${name}: each status tab shows only its own requests, in the order sent, under its own heading, and is the one pressed`,
+        wrongTabs.length === 0, said(wrongTabs.map((label) => ({ tab: label, ...seen[label] }))));
+      check(`${name}: All shows every request, all eleven in the order sent, under "11 requests"`,
+        said(seen.All.rows) === said(WANT.All.rows) && seen.All.heading === WANT.All.heading
+          && said(seen.All.pressed) === said(['All 11']), said(seen.All));
+      const strips = [...new Set(Object.values(seen).map((s) => s.strip))];
+      check(`${name}: the counts are the whole list's, and read the same on every tab`, said(strips) === said([STRIP]), said(strips));
+      const dimmed = tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty'));
+      check(`${name}: Cancelled, with none, is the one tab dimmed, still a button; pressed, it shows "0 cancelled requests" and `
+          + 'the empty text the select showed, "No cancelled requests.", with no table',
+        said(dimmed.map(text)) === said(['Cancelled 0']) && dimmed[0].disabled === false
+          && said(seen.Cancelled.pressed) === said(['Cancelled 0']) && seen.Cancelled.heading === '0 cancelled requests'
+          && seen.Cancelled.empty === 'No cancelled requests.' && !seen.Cancelled.table,
+        said({ dimmed: dimmed.map(text), cancelled: seen.Cancelled }));
+
+      // Refresh on Claimed, after a fifth claimed request has arrived. The
+      // answer is held, so the page can be read while it is out.
+      await clickIf(page, tabNamed(page, 'Claimed'));
+      state.list.push({ id: 299, status: 'claimed', first: 'Lito', last: 'Gomez' });
+      const STRIP12 = 'Pending 3 · Approved 2 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 12';
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = look(page);
+      const refreshCall = net.calls[sent];
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, GET ?status=all, with no tabs while it is out, and keeps Claimed: `
+          + '"5 claimed requests" with the new count',
+        net.calls.length === sent + 1 && said(listCalls([refreshCall].filter(Boolean))) === said(['GET /document-requests?status=all'])
+          && reloading.strip === '' && reloading.loading
+          && said(v.pressed) === said(['Claimed 5']) && v.heading === '5 claimed requests'
+          && said(v.rows) === said([...WANT.Claimed.rows, 'Lito Gomez']) && v.strip === STRIP12,
+        said({ reloading, v }));
+
+      // A reload that fails: no tabs, as on Payments; then Try again.
+      const hadTabs = tabsOf(page).length === 7;
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      v = look(page);
+      check(`${name}: a load that fails takes the tabs away: the error and Try again under the heading "Document requests", `
+          + 'with no strip, no rows and no empty text',
+        hadTabs && !page.query('.pay-tabs') && v.heading === 'Document requests'
+          && v.error === 'Could not load the requests: Network down'
+          && !!tryAgainButton(page) && v.rows.length === 0 && !v.table && v.empty === null,
+        said({ hadTabs, v }));
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`  ${name}: Try again brings the tabs back, still on Claimed`,
+        said(v.pressed) === said(['Claimed 5']) && v.strip === STRIP12 && v.heading === '5 claimed requests' && !v.error,
+        said(v));
+
+      // Back from a request's detail, with nothing done there.
+      await clickIf(page, tabNamed(page, 'Approved'));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Ben Reyes', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail, with nothing done there, keeps Approved and does not load the list again `
+          + '(the one request is the detail\'s own)',
+        opened === 'Request #302' && said(v.pressed) === said(['Approved 2']) && said(v.rows) === said(WANT.Approved.rows)
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/302']),
+        said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, as it did, and the tab
+        // stays. The approve goes to the stub.
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await clickIf(page, rowButton(page, 'Ana Cruz', 'Review'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after approving a request loads the list again, once, and keeps Pending, whose count drops: '
+            + 'Ana Cruz has moved to Approved',
+          approved === 'Request approved.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests/301/approve', 'GET /document-requests?status=all'])
+            && said(v.pressed) === said(['Pending 2']) && said(v.rows) === said(['Dino Tan', 'Jun Abad'])
+            && v.strip === 'Pending 2 · Approved 3 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 12',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), v }));
+
+        // Encode walk-in, left without filing: the list is not loaded again.
+        await clickIf(page, tabNamed(page, 'Approved'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Encode walk-in, then Back to list without filing, keeps Approved and does not load the list again',
+          panel === 'Encode walk-in request' && said(v.pressed) === said(['Approved 3'])
+            && listCalls(net.calls.slice(sent)).length === 0,
+          said({ panel, v, calls: net.calls.slice(sent).map((c) => `${c.method} ${c.url}`) }));
+
+        // Filing one: the list loads again, once, and the tab stays. The
+        // resident picker searches 300ms after the last keystroke.
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        if (page.query('.pending-card input')) await page.fill('.pending-card input', 'Lim');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await page.settle();
+        await clickIf(page, page.query('.picker-option'));
+        const typeSelect = page.query('select[name="document_type_id"]');
+        if (typeSelect) {
+          typeSelect.value = '7';
+          typeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+        const purpose = page.query('textarea[name="purpose"]');
+        if (purpose) {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Scholarship');
+          purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        }
+        await page.settle();
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        const filed = text(page.query('.alert.success'));
+        const posted = net.calls.slice(sent).find((c) => c.method === 'POST');
+        check('Secretary: filing a walk-in loads the list again, once, and keeps Approved; the new request is counted under Pending',
+          filed === 'Request recorded for Rosa Lim.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests', 'GET /document-requests?status=all'])
+            && /"resident_id":912/.test(String(posted?.body)) && said(v.pressed) === said(['Approved 3'])
+            && v.strip === 'Pending 3 · Approved 3 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 13',
+          said({ filed, calls: listCalls(net.calls.slice(sent)), body: posted?.body ?? null, v }));
+      }
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. The strip on a narrow phone, as the Secretary. Where the seven tabs
+    // do not fit, the strip scrolls inside itself and fades the edge that has
+    // tabs past it (data-fade: "start", "end" or "start end", absent while
+    // they fit); a tab chosen, or focused, while part of it is out of view is
+    // brought fully into view, clear of the fade, by moving the strip and
+    // never the page. jsdom lays nothing out, so the strip is laid out by
+    // hand: 300px holding 746px of tabs, 96, 112, 166, 98, 102, 110 and 62
+    // wide. Drawing the fade is index.css's, and the layout harness's to see.
+    {
+      const FADE = 24; // the width of the faded edge in index.css
+      const WIDTHS = [96, 112, 166, 98, 102, 110, 62];
+      const MAX = WIDTHS.reduce((a, b) => a + b, 0) - 300; // 446, the strip's furthest scroll
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState(), false));
+      const page = await globalThis.mountInteractive(root(), '/secretary/requests');
+      await page.settle();
+      const strip = () => page.query('.pay-tabs');
+      const fade = () => strip()?.getAttribute('data-fade') ?? null;
+      const pressed = () => page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text);
+      // The strip's client and scroll widths, a scrollLeft held within them as
+      // a browser holds it, and each tab's box from where it sits.
+      const layOut = (clientWidth, widths = WIDTHS) => {
+        const s = strip();
+        if (!s) return;
+        const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0));
+        const scrollWidth = Math.max(widths.reduce((a, b) => a + b, 0), clientWidth);
+        let left = 0;
+        const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+        Object.defineProperty(s, 'clientWidth', { configurable: true, get: () => clientWidth });
+        Object.defineProperty(s, 'scrollWidth', { configurable: true, get: () => scrollWidth });
+        Object.defineProperty(s, 'scrollLeft', {
+          configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, scrollWidth - clientWidth)); },
+        });
+        s.getBoundingClientRect = () => rect(0, clientWidth);
+        [...s.querySelectorAll('.pay-tab')].forEach((b, i) => {
+          b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + widths[i] - left);
+        });
+      };
+      // The strip moved by hand, and the scroll event a browser then sends.
+      const scrollStripTo = async (x) => {
+        if (!strip()) return;
+        strip().scrollLeft = x;
+        strip().dispatchEvent(new dom.window.Event('scroll'));
+        await page.settle();
+      };
+      const tabBox = (label) => {
+        const b = tabNamed(page, label)?.getBoundingClientRect();
+        return b ? { left: b.left, right: b.right } : null;
+      };
+
+      const fitting = fade();
+      layOut(300);
+      dom.window.dispatchEvent(new dom.window.Event('resize'));
+      await page.settle();
+      check('narrow phone: the tabs mark no edge while they fit, and "end" once the strip is narrower than they are (here on a resize)',
+        !!strip() && fitting === null && fade() === 'end', said({ fitting, narrow: fade() }));
+      const marks = [];
+      for (const x of [200, MAX, 0]) {
+        await scrollStripTo(x);
+        marks.push(fade());
+      }
+      check('  scrolling the strip moves the mark: "start end" partway, "start" at its end, "end" back at the start',
+        said(marks) === said(['start end', 'start', 'end']), said(marks));
+
+      const scrollsBefore = scrolled.length;
+      await clickIf(page, tabNamed(page, 'Ready for release'));
+      const ready = { at: strip()?.scrollLeft ?? null, box: tabBox('Ready for release'), fade: fade(), pressed: pressed() };
+      check('  choosing a tab partly out of view scrolls the strip until all of it shows, clear of the faded edges: '
+          + 'Ready for release, and the page itself does not scroll',
+        ready.at > 0 && !!ready.box && ready.box.left >= FADE && ready.box.right <= 300 - FADE && ready.fade === 'start end'
+          && said(ready.pressed) === said(['Ready for release 1']) && scrolled.length === scrollsBefore,
+        said({ ready, pageScrolls: scrolled.length - scrollsBefore }));
+      await clickIf(page, tabNamed(page, 'All'));
+      const last = { at: strip()?.scrollLeft ?? null, box: tabBox('All'), fade: fade() };
+      await clickIf(page, tabNamed(page, 'Pending'));
+      const first = { at: strip()?.scrollLeft ?? null, box: tabBox('Pending'), fade: fade() };
+      check('  All, the last, scrolls it to its end, where nothing is past it and that edge is not faded; Pending, the '
+          + 'first, back to its start',
+        last.at === MAX && !!last.box && last.box.right <= 300 && last.fade === 'start'
+          && first.at === 0 && first.box?.left === 0 && first.fade === 'end' && scrolled.length === scrollsBefore,
+        said({ last, first }));
+      // A browser scrolls a focused element into view only when none of it
+      // shows (measured in Chrome 155, section S).
+      tabNamed(page, 'Ready for release')?.focus();
+      await page.settle();
+      const focused = { at: strip()?.scrollLeft ?? null, box: tabBox('Ready for release'), pressed: pressed() };
+      check('  a tab that takes keyboard focus while partly out of view is brought fully into view too, without being chosen',
+        page.active() === tabNamed(page, 'Ready for release') && focused.at > 0 && !!focused.box && focused.box.left >= FADE
+          && focused.box.right <= 300 - FADE && said(focused.pressed) === said(['Pending 3']), said(focused));
+      layOut(800);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      const widened = fade();
+      layOut(300);
+      await clickIf(page, tabNamed(page, 'Pending'));
+      check('  the mark follows the strip after any render, not only a scroll or a resize: widened to fit, a tab press drops '
+          + 'it; narrowed again, the next press brings "end" back',
+        widened === null && fade() === 'end', said({ widened, narrowed: fade() }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section W sent GETs, and two POSTs, the Secretary\'s approve and walk-in, both answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (previousTZW === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZW;
   }
 
   console.error = origError;

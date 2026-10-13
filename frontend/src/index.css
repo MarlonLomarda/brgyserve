@@ -4517,6 +4517,17 @@ button.tab:hover:not(:disabled) {
     row-gap: 10px;
   }
 
+  /* The Document requests list's heading has a line of its own on a phone
+     (13 Oct 2026). It names the chosen status tab ("6 pending requests",
+     "77 requests"), so its length changes with the tab and the counts, and
+     where it sometimes fitted beside Refresh and Encode walk-in, pressing a
+     tab moved the tab strip under it by 32px (measured at 360, 375, 390 and
+     414 for the Secretary, and at 320 for Staff). On its own line the row is
+     one height on every tab. Scoped to that page's .list-head. */
+  .doc-requests-head h2 {
+    flex-basis: 100%;
+  }
+
   .head-actions input {
     width: auto;
     flex: 1 1 200px;
