@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ResidentPicker from "../components/ResidentPicker";
 import {
@@ -522,26 +522,49 @@ function WalkInRequestPanel({ onDone }) {
   );
 }
 
+// Why a load failed, for "Could not load the requests: …". The server's own
+// message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// The Payments page words its load errors with the same function.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function SecretaryRequestsPage({
   canManage = false,
 }) {
   const { authFetch } = useAuth();
   const [filter, setFilter] = useState("pending");
-  const [requests, setRequests] = useState(null); // null = loading
-  const [listError, setListError] = useState("");
+  const [requests, setRequests] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [selectedId, setSelectedId] = useState(null);
   const [encoding, setEncoding] = useState(false); // walk-in panel open
   const [flash, setFlash] = useState(null);
+  // Numbers each load, so only the newest one may change the page.
+  const loadSeq = useRef(0);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the page said "0 requests" and "No pending requests." while it
+  // knew nothing, which reads as nobody waiting. requests now stays null and
+  // the error takes the place of the rows, the count and the empty text
+  // (CLAUDE.md: a list that failed to load), as on the Payments page. Every
+  // load starts from the loading state, and an older answer that arrives late
+  // (the status changed twice, Refresh pressed during a reload) is dropped
+  // rather than shown over a newer one.
   const load = useCallback(async () => {
-    setListError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setRequests(null);
     try {
       const query = filter === "all" ? "" : `?status=${filter}`;
       const data = await authFetch(`/document-requests${query}`);
-      setRequests(data.requests);
+      if (seq === loadSeq.current) setRequests(data.requests);
     } catch (err) {
-      setListError(err.message);
-      setRequests([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
   }, [authFetch, filter]);
 
@@ -573,7 +596,6 @@ export default function SecretaryRequestsPage({
       ) : (
         <>
           {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-          {listError && <div className="alert error">{listError}</div>}
 
           <div className="list-head">
             <h2>
@@ -583,6 +605,7 @@ export default function SecretaryRequestsPage({
             </h2>
             <div className="head-actions">
               <select
+                aria-label="Status"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
@@ -613,7 +636,20 @@ export default function SecretaryRequestsPage({
             </div>
           </div>
 
-          {requests === null ? (
+          {/* The error first, then loading, then empty, then rows: a load that
+              failed shows neither a count nor the empty text. Try again
+              repeats the same load, as Refresh does; the status select and
+              Refresh above stay usable. The markup is the Payments page's. */}
+          {loadError ? (
+            <>
+              <div className="alert error" role="alert">
+                Could not load the requests: {loadError}
+              </div>
+              <button type="button" className="btn secondary" onClick={load}>
+                Try again
+              </button>
+            </>
+          ) : requests === null ? (
             <p className="muted">Loading requests…</p>
           ) : requests.length === 0 ? (
             <div className="empty">

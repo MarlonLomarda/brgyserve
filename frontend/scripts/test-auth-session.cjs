@@ -64,6 +64,12 @@
 // "Payments recorded", and the monthly series named "Collected (by billed
 // month)" in the chart's legend and the Monthly table.
 //
+// Section V is the Document requests list, for the Secretary, Staff and the
+// Punong Barangay: what section M checks on Payments. A load that fails says
+// so, with Try again, and never shows an empty list; every way of loading
+// again starts from the loading state; an older answer that arrives late
+// cannot replace a newer one; and the status select is labelled.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -3933,6 +3939,291 @@ const root = () => dom.window.document.getElementById('root');
     if (previousCancel === undefined) delete global.cancelAnimationFrame;
     else global.cancelAnimationFrame = previousCancel;
     elementProto.getBoundingClientRect = realRect;
+  }
+
+  // =========================================================================
+  // V. Document requests: a failed load is an error, never an empty list
+  // =========================================================================
+  // One component (SecretaryRequestsPage) is the Document requests list on
+  // three routes: the Secretary's, Staff's and the Punong Barangay's. It had
+  // the defect section M fixed on Payments: a request that failed stored an
+  // empty list beside the error, so the page said "0 requests" and "No
+  // pending requests." while it knew nothing, which reads as nobody waiting.
+  // It showed "Loading requests…" on the first open only, so Refresh and a
+  // new status left the old rows on screen while they were out, and an older
+  // answer that arrived late could replace a newer one. A failed load must
+  // say so, with Try again, and show no rows, no count and no empty text;
+  // every load starts from the loading state; an older answer is dropped; and
+  // the status select is labelled "Status", as Payments' is. The same checks
+  // run for the three roles, each with its own projection: Staff's rows carry
+  // no requester email and no resident account. The clock is UTC for this
+  // section, so the Submitted dates are fixed. Every request is answered by
+  // the fetch stub, and only GETs are sent.
+  console.log('\n--- Document requests: a failed load is an error, never an empty list ---');
+  {
+    const previousTZV = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The list's own URL: ?status= for one status, nothing after it for All.
+    const isList = (call) => call?.method === 'GET' && /\/document-requests(\?status=[a-z_]+)?$/.test(call.url);
+    const statusOf = (call) => (isList(call) ? (call.url.match(/\?status=([a-z_]+)$/)?.[1] ?? 'all') : null);
+    // A request in the list's real shape (SECRETARY_LIST_FIELDS in
+    // routes/documentRequests.js). Staff's drops what STAFF_LIST_FIELDS
+    // withholds: the resident's account and the requester's email.
+    const listRequest = (id, status, first, last, documentType, staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: { username: `res_${id}` } }) },
+      requester: { user_id: 700 + id, username: `res_${id}`, ...(staff ? {} : { email: `res_${id}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const PENDING_TWO = (staff) => [
+      listRequest(201, 'pending', 'Ana', 'Cruz', 'Barangay Clearance', staff),
+      listRequest(202, 'pending', 'Ben', 'Reyes', 'Certificate of Residency', staff),
+    ];
+    const APPROVED_ONE = (staff) => [listRequest(203, 'approved', 'Carla', 'Santos', 'Barangay ID', staff)];
+    const CLAIMED_TWO = (staff) => [
+      listRequest(204, 'claimed', 'Dino', 'Tan', 'Barangay Clearance', staff),
+      listRequest(205, 'claimed', 'Elsa', 'Uy', 'Certificate of Indigency', staff),
+    ];
+    const REJECTED_ONE = (staff) => [listRequest(206, 'rejected', 'Fe', 'Villa', 'Business Clearance', staff)];
+    // The status dropdown, changed the way section M's is.
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // Holds back every answer asked for from here on until a check releases
+    // it, so the page can be read while a load is out and answers can arrive
+    // in any order. Returns the index the next held answer will have.
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    // The page's words with a space between neighbouring elements' text:
+    // textContent runs them together ("Refresh" then "No pending requests."
+    // reads "RefreshNo pending requests."), where \b finds no word edge.
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // What the list area says, read the way a person would.
+    const listView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        zero: /\b0 requests\b/.test(all),
+        empty: /\bNo [a-z ]*requests\./.test(all),
+        loading: all.includes('Loading requests…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing to
+    // review": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Document requests' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Document requests'
+      && v.rows.length === 0 && !v.zero && !v.empty;
+    // Each row as a person reads it: the name, the account note under it, the
+    // document, purpose, status and submitted cells, and the row's button.
+    const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
+      const cells = [...tr.children];
+      return [text(cells[0]?.querySelector('strong')), text(cells[0]?.querySelector('.small-note')) ?? '(no note)',
+        ...cells.slice(1, 5).map(text), text(cells[5]?.querySelector('button'))].join(' | ');
+    });
+    const headersRead = (page) => page.queryAll('table.data-table thead th').map(text);
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      // a. A successful load reads as it always has, and the select is named.
+      seedSession(token, user);
+      resetNet(200, (url) => (url.endsWith('/document-requests?status=pending') ? { requests: PENDING_TWO(staff) } : undefined));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const note = (id) => (staff ? '(no note)' : `@res_${id}`);
+      const WANT_ROWS = [
+        `Ana Cruz | ${note(201)} | Barangay Clearance | Purpose 201 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
+        `Ben Reyes | ${note(202)} | Certificate of Residency | Purpose 202 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
+      ];
+      check(`${name}: a successful load shows its rows as before: "2 requests", the six column headers, and each row's `
+          + `name, ${staff ? 'no account note' : 'account note'}, document, purpose, status, date and ${opener}, `
+          + `${walkIn ? 'with' : 'with no'} Encode walk-in`,
+        text(page.query('.list-head h2')) === '2 requests'
+          && said(headersRead(page)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', ''])
+          && said(rowsRead(page)) === said(WANT_ROWS) && !!buttonNamed(root(), 'Encode walk-in') === walkIn,
+        said({ heading: text(page.query('.list-head h2')), headers: headersRead(page), rows: rowsRead(page) }));
+      check(`${name}: the status select is labelled "Status"`,
+        page.query('.list-head select')?.getAttribute('aria-label') === 'Status',
+        said(page.query('.list-head select')?.getAttribute('aria-label') ?? null));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // b. The first open fails: the loading state while it is out, then the
+      // error, with Try again, and nothing else.
+      seedSession(token, user);
+      resetNet(200);
+      let at = holdNext();
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = listView(page);
+      const firstCall = net.calls[0];
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failed = listView(page);
+      check(`${name}: the first open shows "Loading requests…" while status=pending is out, and when it fails, `
+          + '"Could not load the requests: Network down" with a Try again button',
+        loadingOnly(opening) && statusOf(firstCall) === 'pending'
+          && failed.error === 'Could not load the requests: Network down' && failed.tryAgain,
+        `${said(opening)} then ${said(failed)}`);
+      check(`  ${name}: and no rows, no "0 requests", no "No pending requests.": it cannot read as nothing to review`,
+        errorOnly(failed), said(failed));
+
+      // c. Try again repeats the same load; its rows replace the error.
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      const retrying = listView(page);
+      const retryCall = net.calls[sent];
+      release(at, 200, { requests: PENDING_TWO(staff) });
+      await page.settle();
+      const retried = listView(page);
+      check(`${name}: Try again asks for status=pending again, shows the loading state, not the error, while it is out, `
+          + 'then "2 requests" and both rows',
+        net.calls.length === sent + 1 && statusOf(retryCall) === 'pending' && loadingOnly(retrying)
+          && !retried.error && !retried.tryAgain && retried.heading === '2 requests'
+          && retried.rows.join('|') === 'Ana Cruz|Ben Reyes',
+        `${retryCall?.url ?? 'no request'} ${said(retrying)} then ${said(retried)}`);
+
+      // d. A new status over loaded rows: the loading state, not the old
+      // status's rows under the new name.
+      at = holdNext();
+      sent = net.calls.length;
+      await choose(page, 'approved');
+      const switching = listView(page);
+      const switchCall = net.calls[sent];
+      release(at, 200, { requests: APPROVED_ONE(staff) });
+      await page.settle();
+      const switched = listView(page);
+      check(`${name}: changing the status to Approved asks for status=approved and shows the loading state, not the two `
+          + 'Pending rows, while it is out; then "1 request" and its row',
+        statusOf(switchCall) === 'approved' && loadingOnly(switching)
+          && switched.heading === '1 request' && switched.rows.join('|') === 'Carla Santos' && !switched.error,
+        `${switchCall?.url ?? 'no request'} ${said(switching)} then ${said(switched)}`);
+
+      // e. Refresh over loaded rows, failing: the loading state, then the
+      // error, and never the old row or its count.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const refreshing = listView(page);
+      const refreshCall = net.calls[sent];
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const refreshFailed = listView(page);
+      check(`${name}: Refresh shows the loading state, not the old row, while it is out, and when it fails, `
+          + '"Could not load the requests: Internal server error", never the old row or "1 request"',
+        statusOf(refreshCall) === 'approved' && loadingOnly(refreshing)
+          && refreshFailed.error === 'Could not load the requests: Internal server error' && errorOnly(refreshFailed),
+        `${refreshCall?.url ?? 'no request'} ${said(refreshing)} then ${said(refreshFailed)}`);
+
+      // f. Two status changes, the older answer last: it is dropped.
+      at = holdNext();
+      await choose(page, 'claimed');
+      await choose(page, 'rejected');
+      release(at + 1, 200, { requests: REJECTED_ONE(staff) });
+      await page.settle();
+      release(at, 200, { requests: CLAIMED_TWO(staff) });
+      await page.settle();
+      const raced = listView(page);
+      check(`${name}: an older answer that arrives last cannot replace the newer list: Rejected keeps its one row`,
+        statusOf(net.calls.at(-2)) === 'claimed' && statusOf(net.calls.at(-1)) === 'rejected'
+          && page.query('.list-head select')?.value === 'rejected' && raced.heading === '1 request'
+          && raced.rows.join('|') === 'Fe Villa' && !raced.error,
+        said(raced));
+
+      // g. The same, with the older load failing last.
+      at = holdNext();
+      await choose(page, 'all');
+      await choose(page, 'pending');
+      const allCall = net.calls.at(-2);
+      release(at + 1, 200, { requests: PENDING_TWO(staff) });
+      await page.settle();
+      release(at, 500, { error: 'boom' });
+      await page.settle();
+      const racedFail = listView(page);
+      check(`  ${name}: nor can an older load that fails last (All statuses, asked with no ?status=) put its error `
+          + 'over the newer list',
+        statusOf(allCall) === 'all' && allCall.url.endsWith('/document-requests')
+          && page.query('.list-head select')?.value === 'pending' && racedFail.heading === '2 requests'
+          && racedFail.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedFail.error && !racedFail.tryAgain,
+        `${allCall?.url ?? 'no request'} ${said(racedFail)}`);
+
+      // h. No requests, loaded successfully, is a real empty state.
+      at = holdNext();
+      await choose(page, 'cancelled');
+      release(at, 200, { requests: [] });
+      await page.settle();
+      const none = listView(page);
+      check(`${name}: a successful load of no requests still says "0 requests" and "No cancelled requests.", with no error`,
+        none.heading === '0 requests' && /\bNo cancelled requests\./.test(spaced(root())) && !none.error && !none.tryAgain
+          && !none.loading && none.rows.length === 0,
+        said(none));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // i. Why it failed, when the server sent no reason: Payments' wording.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    let page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    const unreachable = listView(page);
+    check('a server that cannot be reached gets the plain fallback, "Could not load the requests: the server did not respond"',
+      unreachable.error === 'Could not load the requests: the server did not respond' && errorOnly(unreachable)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachable));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    seedSession(VALID);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    const bare = listView(page);
+    check('  so does an error answer with no message in it, never "Request failed (502)"',
+      bare.error === 'Could not load the requests: the server did not respond' && errorOnly(bare)
+        && !/Request failed/.test(root().textContent), said(bare));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    check('section V sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZV === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZV;
   }
 
   console.error = origError;
