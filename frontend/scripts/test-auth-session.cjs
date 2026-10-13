@@ -76,6 +76,12 @@
 // on Pending, and the chosen tab kept through every reload; then the tab
 // strip on a narrow phone, as section S checks Payments'.
 //
+// Section X is the Document requests list's search box, for the same three
+// roles: the Payments box (components/ListToolbar.jsx) over the list already
+// loaded, matching only what a row shows of who and what, with the tab counts
+// and the heading following it, no request per keystroke, and the search kept
+// through Refresh, Try again and Back from a request.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -4715,6 +4721,523 @@ const root = () => dom.window.document.getElementById('root');
     else proto.scrollIntoView = previousScroll;
     if (previousTZW === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZW;
+  }
+
+  // =========================================================================
+  // X. Document requests: the search box
+  // =========================================================================
+  // The Document requests list gains the Payments page's search box, lifted
+  // into components/ListToolbar.jsx: the same look, name pattern, Clear (x)
+  // button and Escape, and no browser autocomplete. It has a row of its own,
+  // under the row that holds the heading and Refresh and over the status
+  // tabs, and like the tabs it is drawn only once the list has loaded. It
+  // filters the list already loaded, as you type, with no request, using
+  // utils/chargeSearch.js's normalise, searchTerms and matchesTerms as they
+  // are, over what utils/requestList.js says a row shows of who and what: the
+  // requester's name, the resident's @account where the row shows one, and
+  // the document type. Never the purpose, the rejection reason, an email, a
+  // status word, a walk-in's filer or the request number; and for Staff,
+  // whose rows show no account, no account at all, although their payload
+  // still carries the filer's username. The search runs over the whole list
+  // and the tabs split what matches: their counts follow it, the chosen tab
+  // stays, and while a search is on the heading reads "N of M <tab> requests
+  // match". It lives through Refresh, Try again and Back from a request, and
+  // is kept nowhere in the browser. The helpers are checked case by case,
+  // then the real page for the Secretary, Staff and the Punong Barangay
+  // against ten stubbed requests. Every request is answered by the fetch
+  // stub; the only write, the Secretary's approve, goes to it too.
+  console.log('\n--- Document requests: the search box ---');
+  {
+    const previousTZX = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const R = globalThis.requestList || {};
+    const CS = globalThis.chargeSearch || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // Ten requests in the list's real shape (SECRETARY_LIST_FIELDS in
+    // routes/documentRequests.js; Staff's drops what STAFF_LIST_FIELDS
+    // withholds, the resident's account and the requester's email, and keeps
+    // the requester's username). The purposes, the rejection reason and the
+    // emails read like real ones, so a search that reached them would find
+    // something. 405 and 410 are walk-ins filed by secretary1; 405's resident
+    // has no online account. No request is cancelled.
+    //   id, status, [first, middle, last, suffix], document type,
+    //   the resident's account (null: none), the filer, purpose, rejection reason
+    const SEARCH_LIST = [
+      [401, 'pending', ['Juan', 'Miguel', 'Dela Cruz', null], 'Barangay Clearance', 'jmdc_1990', 'jmdc_1990',
+        'Employment requirement', null],
+      [402, 'pending', ['Maria', 'Elena', 'Santos', null], 'Certificate of Residency', 'msantos_88', 'msantos_88',
+        'Scholarship application', null],
+      [403, 'approved', ['Niño', null, 'Peñaflor', null], 'Certificate of Indigency', 'ninop', 'ninop', 'Medical assistance', null],
+      [404, 'approved', ['Pedro', null, 'Dela Cruz', 'Jr.'], 'Barangay Clearance', 'pdc_2001', 'pdc_2001', 'Bank account opening', null],
+      [405, 'ready_for_release', ['Rosa', null, 'Lim', null], 'Business Clearance', null, 'secretary1', 'Sari-sari store permit', null],
+      [406, 'claimed', ['Ana', null, 'Cruz', null], 'Barangay ID', 'anacruz', 'anacruz', 'Valid ID for SSS', null],
+      [407, 'rejected', ['Gil', null, 'Wong', null], 'First-time jobseeker', 'gwong', 'gwong', 'First job application',
+        'Incomplete requirements: no birth certificate'],
+      [408, 'claimed', ['Lito', null, 'Ramos', null], 'Certificate of Residency', 'lramos', 'lramos', 'School enrollment', null],
+      [409, 'pending', ['Kim', null, 'Bello', null], 'Barangay Clearance', 'kbello', 'kbello', 'Police clearance requirement', null],
+      [410, 'approved', ['Elsa', null, 'Uy', null], 'Certificate of Residency', 'elsa_uy', 'secretary1', 'Travel abroad', null],
+    ];
+    const asRequest = ([id, status, [first, middle, last, suffix], documentType, account, filer, purpose, rejection], staff) => ({
+      request_id: id, purpose, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: rejection, processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: middle, last_name: last, suffix,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: filer === 'secretary1' ? 1 : 700 + id, username: filer,
+        ...(staff ? {} : { email: `${filer}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const SECRETARY_LIST = SEARCH_LIST.map((row) => asRequest(row, false));
+    const STAFF_LIST = SEARCH_LIST.map((row) => asRequest(row, true));
+    const IDS = SEARCH_LIST.map((row) => row[0]);
+
+    // a. utils/chargeSearch.js's three, as the page uses them, unchanged.
+    const normalised = ['Peñaflor', 'NIÑO', 'Dela Cruz'].map((s) => attempt(() => CS.normalise(s)));
+    check('chargeSearch.normalise, as it is: lower case with the accents taken off: "Peñaflor" → "penaflor", "NIÑO" → "nino", '
+        + '"Dela Cruz" → "dela cruz"',
+      said(normalised) === said(['penaflor', 'nino', 'dela cruz']), said(normalised));
+    const termsOf = ['  JUAN   dela  ', '', '   '].map((s) => attempt(() => CS.searchTerms(s)));
+    check('  searchTerms: the words, normalised, extra spaces dropped: "  JUAN   dela  " → ["juan","dela"]; a blank search, '
+        + 'or one of spaces only, has no words',
+      said(termsOf) === said([['juan', 'dela'], [], []]), said(termsOf));
+    const hits = [
+      ['juan dela cruz', ['cruz', 'juan']], ['juan dela cruz', ['juan', 'santos']], ['juan dela cruz', ['cru']], ['juan dela cruz', []],
+    ].map(([t, terms]) => attempt(() => CS.matchesTerms(t, terms)));
+    check('  matchesTerms: every word must be in the text, in any order, and one missing word fails it; a word matches '
+        + 'part of a word ("cru" finds "cruz"); no words match everything',
+      said(hits) === said([true, false, true, true]), said(hits));
+
+    // b. utils/requestList.js: what a request's search reads, and the words
+    // around a search.
+    const parts = (r) => attempt(() => R.searchParts(r));
+    let got = parts(SECRETARY_LIST[0]);
+    check('searchParts, a Secretary or Punong Barangay row: the name as the row shows it, the @account the row shows under '
+        + 'it, and the document type: "Juan Miguel Dela Cruz", "@jmdc_1990", "Barangay Clearance"',
+      said(got) === said(['Juan Miguel Dela Cruz', '@jmdc_1990', 'Barangay Clearance']), said(got));
+    got = parts(STAFF_LIST[0]);
+    check('  a Staff row shows no account, so its text has none, although the request still carries the filer\'s username, '
+        + '"jmdc_1990", which is the resident\'s own account here',
+      said(got) === said(['Juan Miguel Dela Cruz', 'Barangay Clearance']) && STAFF_LIST[0].requester.username === 'jmdc_1990',
+      said(got));
+    got = [SECRETARY_LIST[4], SECRETARY_LIST[9], SECRETARY_LIST[3]].map(parts);
+    check('  a walk-in reads its resident, never its filer: Rosa Lim, with no online account, has no handle and no '
+        + '"secretary1"; Elsa Uy has her own "@elsa_uy"; and a suffix reads as the row shows it, "Pedro Dela Cruz, Jr."',
+      said(got) === said([['Rosa Lim', 'Business Clearance'], ['Elsa Uy', '@elsa_uy', 'Certificate of Residency'],
+        ['Pedro Dela Cruz, Jr.', '@pdc_2001', 'Barangay Clearance']]), said(got));
+    got = parts({ ...SECRETARY_LIST[0], resident_records: null, requester: { user_id: 9, username: 'filer_9' } });
+    check('  a request with no resident name reads what its row shows in its place, the filer\'s "@filer_9"',
+      said(got) === said(['@filer_9', 'Barangay Clearance']), said(got));
+    // Nothing else a request carries reaches its text.
+    const leaks = [...SECRETARY_LIST, ...STAFF_LIST].flatMap((r) => {
+      const all = attempt(() => R.searchParts(r).join('\n'));
+      if (typeof all !== 'string' || all.startsWith('threw')) return [`${r.request_id}: ${all}`];
+      return [r.purpose, r.rejection_reason, r.requester.email, r.status, String(r.request_id), 'online']
+        .filter(Boolean).filter((s) => all.toLowerCase().includes(s.toLowerCase())).map((s) => `${r.request_id}: ${s}`);
+    });
+    check('  no request\'s text holds its purpose, rejection reason, email, status, request number or the "No online account" '
+        + 'note, in either projection', leaks.length === 0, said(leaks));
+    const matchedIds = (list, query) => attempt(() => R.matchingRequests(list, query).map((r) => r.request_id));
+    got = {
+      blank: matchedIds(SECRETARY_LIST, ''), spaces: matchedIds(SECRETARY_LIST, '   '), nino: matchedIds(SECRETARY_LIST, 'NIÑO'),
+      words: matchedIds(SECRETARY_LIST, 'clearance  DELA'), secretary: matchedIds(SECRETARY_LIST, 'msantos'),
+      staff: matchedIds(STAFF_LIST, 'msantos'),
+    };
+    check('matchingRequests: a blank search, or spaces only, keeps all ten in the order sent; "NIÑO" finds 403; "clearance  DELA" '
+        + '401 and 404; "msantos" finds 402 on the Secretary\'s list and nothing on Staff\'s',
+      said(got) === said({ blank: IDS, spaces: IDS, nino: [403], words: [401, 404], secretary: [402], staff: [] }), said(got));
+    const HEADS = [
+      ['pending', 1, 3, '1 of 3 pending requests matches'], ['pending', 2, 3, '2 of 3 pending requests match'],
+      ['pending', 0, 3, '0 of 3 pending requests match'], ['ready_for_release', 0, 1, '0 of 1 ready for release request match'],
+      ['cancelled', 0, 0, '0 of 0 cancelled requests match'], ['all', 12, 77, '12 of 77 requests match'],
+      ['all', 1, 1, '1 of 1 request matches'], ['all', 1234, 2345, '1,234 of 2,345 requests match'],
+    ];
+    const heads = HEADS.map(([tab, n, m]) => attempt(() => R.searchHeading(tab, n, m)));
+    check('searchHeading, the Payments totals line\'s words for the tab: "1 of 3 pending requests matches", "2 of 3 pending '
+        + 'requests match", "0 of 1 ready for release request match", "12 of 77 requests match" on All, "1,234 of 2,345"',
+      said(heads) === said(HEADS.map((h) => h[3])), said(heads));
+    const NONE = [
+      ['pending', 'zzz', 'No pending requests match "zzz"'], ['all', 'zzz', 'No requests match "zzz"'],
+      ['ready_for_release', '  Dela   CRUZ ', 'No ready for release requests match "Dela CRUZ"'],
+    ];
+    const nones = NONE.map(([tab, q]) => attempt(() => R.noMatchText(tab, q)));
+    check('noMatchText names the tab, as the empty text without a search does, and quotes the search as typed, spaces '
+        + 'tidied: \'No pending requests match "zzz"\', on All \'No requests match "zzz"\'',
+      said(nones) === said(NONE.map((n) => n[2])), said(nones));
+    const holders = [SECRETARY_LIST, STAFF_LIST, []].map((list) => attempt(() => R.searchPlaceholder(list)));
+    check('searchPlaceholder promises an account only where the rows carry one: "Search name, account or document" for '
+        + 'the Secretary\'s list, "Search name or document" for Staff\'s and for an empty list',
+      said(holders) === said(['Search name, account or document', 'Search name or document', 'Search name or document']),
+      said(holders));
+
+    // c. The real page, for the three roles.
+    const makeState = () => ({ rows: SEARCH_LIST.map((row) => [...row]) });
+    const listAnswer = (state, staff) => ({ requests: state.rows.map((row) => asRequest(row, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(\/approve)?$/);
+      if (one) {
+        const row = state.rows.find((x) => x[0] === Number(one[1]));
+        if (!row) return undefined;
+        if (method === 'POST' && one[2]) row[1] = 'approved';
+        const request = { ...asRequest(row, staff), processed_by: null };
+        return one[2] ? { request, message: 'Request approved.' } : { request };
+      }
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const xButton = (page) => page.query('button[aria-label="Clear search"]');
+    // Typed the way a keystroke types (the native setter and an input event);
+    // with no box on screen, nothing is typed.
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const emptyClear = (page) => (page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search') ?? null : null);
+    // What the list says, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      search: box(page)?.value ?? null,
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      dimmed: tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty')).map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      empty: text(page.query('.empty p')),
+      clearSearch: !!emptyClear(page),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, rowName, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    const noteOf = (page, rowName) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? (text(tr.querySelector('.small-note')) ?? '(no note)') : null;
+    };
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    const STRIP10 = 'Pending 3 · Approved 3 · Ready for release 1 · Claimed 2 · Rejected 1 · Cancelled 0 · All 10';
+    const PENDING3 = ['Juan Miguel Dela Cruz', 'Maria Elena Santos', 'Kim Bello'];
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the tabs, the search box is not drawn while the list loads or after a load fails: no box under `
+          + '"Loading requests…", none beside the error, and Try again brings it back with the tabs',
+        !opening.box && !opening.strip && opening.loading && !failedOpen.box && !failedOpen.strip
+          && failedOpen.error === 'Could not load the requests: Network down' && !!box(page) && !!page.query('.pay-tabs'),
+        said({ opening, failedOpen, after: { box: !!box(page), strip: !!page.query('.pay-tabs') } }));
+
+      const input = box(page);
+      const wrapper = input?.closest('[role="search"]') ?? null;
+      const icon = wrapper?.querySelector('svg') ?? null;
+      const headRow = page.query('.doc-requests-head');
+      const toolbar = input?.closest('.list-head') ?? null;
+      const PLACEHOLDER = staff ? 'Search name or document' : 'Search name, account or document';
+      check(`${name}: the box is the Payments one: type="search" in a role="search" wrapper, named "Search requests", reading `
+          + `"${PLACEHOLDER}", no browser autocomplete or spellcheck, its icon hidden from screen readers, empty, no Clear (x)`,
+        input?.type === 'search' && !!wrapper && input.getAttribute('aria-label') === 'Search requests'
+          && input.getAttribute('placeholder') === PLACEHOLDER && input.getAttribute('autocomplete') === 'off'
+          && input.getAttribute('spellcheck') === 'false' && icon?.getAttribute('aria-hidden') === 'true'
+          && input.value === '' && !xButton(page),
+        said({ type: input?.type ?? null, label: input?.getAttribute('aria-label') ?? null,
+          placeholder: input?.getAttribute('placeholder') ?? null, autocomplete: input?.getAttribute('autocomplete') ?? null,
+          spellcheck: input?.getAttribute('spellcheck') ?? null, icon: icon?.getAttribute('aria-hidden') ?? null, x: !!xButton(page) }));
+      check(`${name}: it has a row of its own, under the row with the heading and Refresh and over the tabs, and is no form`,
+        !!toolbar && !!headRow && toolbar !== headRow && follows(headRow, toolbar) && follows(toolbar, page.query('.pay-tabs'))
+          && !input.closest('form'),
+        said({ toolbar: toolbar?.className ?? null, head: headRow?.className ?? null }));
+      // The heading says how many match, as the Payments totals line does,
+      // and like it is a polite live region, so a screen reader hears the
+      // count change as the search is typed.
+      const liveHeading = headRow?.querySelector('h2');
+      check(`${name}: the heading is a polite live region, as the Payments totals line is, so the count is heard as you type`,
+        liveHeading?.getAttribute('aria-live') === 'polite', said({ ariaLive: liveHeading?.getAttribute('aria-live') ?? null }));
+      let v = look(page);
+      check(`${name}: with nothing typed the list reads as it did: Pending, "3 pending requests", its three rows, every count`,
+        said(v.pressed) === said(['Pending 3']) && v.heading === '3 pending requests' && said(v.rows) === said(PENDING3)
+          && v.strip === STRIP10, said(v));
+
+      // Typing, a keystroke at a time.
+      const writesAtOpen = store.sets;
+      let sent = net.calls.length;
+      const perKey = [];
+      for (const s of ['c', 'cr', 'cru', 'cruz']) {
+        await type(page, s);
+        perKey.push(net.calls.length - sent);
+      }
+      v = look(page);
+      check(`${name}: each keystroke filters at once and sends nothing: "c", "cr", "cru", "cruz", no request after any`,
+        net.calls.length === sent && perKey.every((n) => n === 0) && v.search === 'cruz', said({ perKey, search: v.search }));
+      check(`${name}: on Pending, "cruz" leaves Juan Miguel Dela Cruz; Pending stays chosen, and the heading reads "1 of 3 `
+          + 'pending requests matches"',
+        said(v.rows) === said(['Juan Miguel Dela Cruz']) && said(v.pressed) === said(['Pending 1'])
+          && v.heading === '1 of 3 pending requests matches', said(v));
+      check(`${name}: the counts follow the search, "Pending 1 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · `
+          + 'Cancelled 0 · All 3", and the tabs left with none are dimmed, still buttons',
+        v.strip === 'Pending 1 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 3'
+          && said(v.dimmed) === said(['Ready for release 0', 'Rejected 0', 'Cancelled 0'])
+          && tabsOf(page).length === 7 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
+
+      // The tabs split what matches.
+      sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      const onAll = look(page);
+      await clickIf(page, tabNamed(page, 'Ready for release'));
+      const onReady = look(page);
+      check(`${name}: a tab press splits what matches and sends nothing: All shows the three Cruz rows under "3 of 10 requests match"`,
+        said(onAll.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.', 'Ana Cruz'])
+          && onAll.heading === '3 of 10 requests match' && said(onAll.pressed) === said(['All 3']), said(onAll));
+      check(`${name}: Ready for release, where none match: "0 of 1 ready for release request match", and in place of the rows `
+          + '\'No ready for release requests match "cruz"\' with a Clear search button',
+        onReady.heading === '0 of 1 ready for release request match' && onReady.empty === 'No ready for release requests match "cruz"'
+          && onReady.clearSearch && onReady.rows.length === 0 && !page.query('table.data-table')
+          && said(onReady.pressed) === said(['Ready for release 0']) && net.calls.length === sent, said(onReady));
+      await clickIf(page, emptyClear(page));
+      v = look(page);
+      check(`${name}: that Clear search empties the box, leaves focus in it and keeps Ready for release: its row, under the `
+          + 'heading it had before, "1 ready for release request", and every count back',
+        v.search === '' && !!box(page) && page.active() === box(page) && said(v.pressed) === said(['Ready for release 1'])
+          && said(v.rows) === said(['Rosa Lim']) && v.heading === '1 ready for release request' && v.strip === STRIP10
+          && net.calls.length === sent, said(v));
+
+      // An empty tab: its own text with no search, the search's with one.
+      await clickIf(page, tabNamed(page, 'Cancelled'));
+      const noSearch = look(page);
+      await type(page, 'zzz');
+      const zzz = look(page);
+      check(`${name}: an empty tab with no search keeps its text, "0 cancelled requests" and "No cancelled requests.", with no `
+          + 'Clear search',
+        noSearch.heading === '0 cancelled requests' && noSearch.empty === 'No cancelled requests.' && !noSearch.clearSearch,
+        said(noSearch));
+      check(`${name}: with "zzz", matching nothing: "0 of 0 cancelled requests match", 'No cancelled requests match "zzz"' `
+          + 'with Clear search, and all seven tabs dimmed',
+        zzz.heading === '0 of 0 cancelled requests match' && zzz.empty === 'No cancelled requests match "zzz"' && zzz.clearSearch
+          && zzz.dimmed.length === 7 && said(zzz.pressed) === said(['Cancelled 0']), said(zzz));
+
+      // What a search finds, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const rowsFor = async (q) => {
+        await type(page, q);
+        return look(page).rows;
+      };
+      sent = net.calls.length;
+      const found = {
+        name: await rowsFor('juan'), middle: await rowsFor('elena'), document: await rowsFor('indigency'),
+        documents: await rowsFor('residency'), cased: await rowsFor('  JUAN   dela  '), upper: await rowsFor('BARANGAY id'),
+        words: await rowsFor('cruz clearance'), reversed: await rowsFor('clearance pedro'), apart: await rowsFor('juan santos'),
+        accents: await rowsFor('nino penaflor'), accented: await rowsFor('NIÑO'),
+      };
+      check(`${name}: by the name the row shows, middle name and all: "juan" finds Juan Miguel Dela Cruz, "elena" Maria Elena Santos`,
+        said(found.name) === said(['Juan Miguel Dela Cruz']) && said(found.middle) === said(['Maria Elena Santos']), said(found));
+      check(`${name}: by document type: "indigency" finds Niño Peñaflor, "residency" the three Certificates of Residency, in `
+          + 'the order sent',
+        said(found.document) === said(['Niño Peñaflor'])
+          && said(found.documents) === said(['Maria Elena Santos', 'Lito Ramos', 'Elsa Uy']), said(found));
+      check(`${name}: case and extra spaces do not matter: "  JUAN   dela  " finds Juan Miguel Dela Cruz, "BARANGAY id" Ana Cruz`,
+        said(found.cased) === said(['Juan Miguel Dela Cruz']) && said(found.upper) === said(['Ana Cruz']), said(found));
+      check(`${name}: several words must all match the same request, in any order, across its name and document: "cruz `
+          + 'clearance" finds the two Dela Cruz clearances, "clearance pedro" Pedro alone, "juan santos" nothing',
+        said(found.words) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.'])
+          && said(found.reversed) === said(['Pedro Dela Cruz, Jr.']) && Array.isArray(found.apart) && found.apart.length === 0,
+        said(found));
+      check(`${name}: accents do not matter: "nino penaflor" and "NIÑO" find Niño Peñaflor`,
+        said(found.accents) === said(['Niño Peñaflor']) && said(found.accented) === said(['Niño Peñaflor']), said(found));
+
+      // The account: found exactly where the row shows it.
+      await type(page, '');
+      const notes = { maria: noteOf(page, 'Maria Elena Santos'), rosa: noteOf(page, 'Rosa Lim'), elsa: noteOf(page, 'Elsa Uy') };
+      const accounts = { msantos: await rowsFor('msantos'), handle: await rowsFor('@elsa_uy'), self: await rowsFor('jmdc_1990') };
+      if (staff) {
+        check('Staff: the rows show no account note, and an account the row does not show is never found: "msantos", '
+            + '"@elsa_uy" and "jmdc_1990" find nothing, though Staff\'s payload still carries the filers\' usernames',
+          said(notes) === said({ maria: '(no note)', rosa: '(no note)', elsa: '(no note)' })
+            && Object.values(accounts).every((rows) => rows.length === 0)
+            && said(STAFF_LIST.filter((r) => ['msantos_88', 'jmdc_1990'].includes(r.requester.username)).map((r) => r.request_id))
+              === said([401, 402]),
+          said({ notes, accounts }));
+      } else {
+        check(`${name}: the rows show the resident's account under the name ("@msantos_88", "@elsa_uy"; Rosa Lim "No online `
+            + 'account"), and a search finds it there: "msantos" Maria Elena Santos, "@elsa_uy" Elsa Uy (a walk-in, her own '
+            + 'account), "jmdc_1990" Juan Miguel Dela Cruz',
+          said(notes) === said({ maria: '@msantos_88', rosa: 'No online account', elsa: '@elsa_uy' })
+            && said(accounts) === said({ msantos: ['Maria Elena Santos'], handle: ['Elsa Uy'], self: ['Juan Miguel Dela Cruz'] }),
+          said({ notes, accounts }));
+      }
+
+      // What a search never reaches.
+      const NEVER = ['scholarship', 'employment', 'bank account', 'incomplete', 'birth certificate', 'example.invalid',
+        'pending', 'rejected', 'secretary1', 'online', '401'];
+      const leaked = [];
+      for (const q of NEVER) {
+        const rows = await rowsFor(q);
+        if (rows.length > 0) leaked.push({ q, rows });
+      }
+      check(`${name}: never matched: a purpose ("scholarship", "employment", "bank account"), the rejection reason `
+          + '("incomplete", "birth certificate"), an email ("example.invalid"), a status ("pending", "rejected"), a walk-in\'s '
+          + 'filer ("secretary1"), the "No online account" note ("online"), a request number ("401")',
+        leaked.length === 0 && !!box(page), said(leaked));
+      // With no box on screen nothing was typed, so "no request" would say nothing.
+      check(`${name}: and none of those ${Object.keys(found).length + 3 + NEVER.length} searches sent a request`,
+        !!box(page) && net.calls.length === sent, `${net.calls.length - sent} request(s), box ${box(page) ? 'present' : 'absent'}`);
+
+      // Escape and the Clear (x) button.
+      await clickIf(page, tabNamed(page, 'Pending'));
+      await type(page, 'juan');
+      const x = xButton(page);
+      box(page)?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape in the box empties it, keeps focus in it, and brings Pending's three rows back`,
+        !!x && v.search === '' && page.active() === box(page) && said(v.rows) === said(PENDING3)
+          && v.heading === '3 pending requests', said(v));
+      await type(page, 'juan');
+      const x2 = xButton(page);
+      await clickIf(page, x2);
+      v = look(page);
+      check(`${name}: the Clear (x) button, there while the box has text, does the same: a type="button" named "Clear `
+          + 'search"; pressed, the box is empty, focus is in it and the button is gone',
+        !!x2 && x2.type === 'button' && x2.getAttribute('aria-label') === 'Clear search' && v.search === ''
+          && page.active() === box(page) && !xButton(page) && said(v.rows) === said(PENDING3), said(v));
+      await type(page, 'juan');
+      tabNamed(page, 'Pending')?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape clears only while the box has focus: pressed on a tab, the box keeps "juan" and its row`,
+        page.active() === tabNamed(page, 'Pending') && v.search === 'juan' && said(v.rows) === said(['Juan Miguel Dela Cruz']),
+        said(v));
+
+      // Back from a request's detail.
+      await clickIf(page, tabNamed(page, 'All'));
+      await type(page, 'dela');
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Pedro Dela Cruz, Jr.', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      const focusAfterBack = page.active()?.tagName ?? null;
+      check(`${name}: Back from a request's detail keeps the search and the tab: "dela" in the box, All chosen, the two Dela `
+          + 'Cruz rows under "2 of 10 requests match"; only the detail was requested',
+        opened === 'Request #404' && v.search === 'dela' && said(v.pressed) === said(['All 2'])
+          && said(v.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.']) && v.heading === '2 of 10 requests match'
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/404']),
+        said({ opened, v, calls: listCalls(net.calls.slice(sent)), focusAfterBack }));
+
+      // Refresh, then a reload that fails, then Try again.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, and keeps the search: no box and no tabs while it is out, then "dela" `
+          + 'still in the box, All chosen, "2 of 10 requests match"',
+        said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests?status=all']) && !reloading.box
+          && !reloading.strip && reloading.loading && v.search === 'dela' && said(v.pressed) === said(['All 2'])
+          && v.heading === '2 of 10 requests match' && said(v.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.']),
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails takes the box away with the tabs, and Try again brings it back with "dela" in it`,
+        !failedReload.box && !failedReload.strip && failedReload.error === 'Could not load the requests: Internal server error'
+          && v.search === 'dela' && said(v.pressed) === said(['All 2']) && v.heading === '2 of 10 requests match',
+        said({ failedReload, v }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, and the search and the
+        // tab stay. The approve goes to the stub.
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await type(page, 'maria');
+        await clickIf(page, rowButton(page, 'Maria Elena Santos', 'Review'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after approving loads the list again, once, and keeps the search and the tab: "maria" on '
+            + 'Pending, where she no longer is: "0 of 2 pending requests match", \'No pending requests match "maria"\', '
+            + 'and Approved 1 in the strip',
+          approved === 'Request approved.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests/402/approve', 'GET /document-requests?status=all'])
+            && v.search === 'maria' && said(v.pressed) === said(['Pending 0']) && v.heading === '0 of 2 pending requests match'
+            && v.empty === 'No pending requests match "maria"'
+            && v.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 1',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), v }));
+      }
+
+      // Nothing kept in the browser; a new visit starts empty. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the search is kept in the browser: no localStorage write, sessionStorage empty, and a `
+          + 'new visit opens on Pending with an empty box',
+        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && v.search === ''
+          && said(v.pressed) === said(['Pending 3']) && v.heading === '3 pending requests',
+        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length, v }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section X sent GETs, and one POST, the Secretary\'s approve, answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZX === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZX;
   }
 
   console.error = origError;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListTabs from "../components/ListTabs";
+import ListToolbar from "../components/ListToolbar";
 import ResidentPicker from "../components/ResidentPicker";
 import {
   statusMeta,
@@ -9,9 +10,17 @@ import {
   formatDate,
 } from "../constants/requestStatus";
 import { isNoFeeCharge } from "../utils/chargeMethod";
+import { searchTerms } from "../utils/chargeSearch";
 import {
+  accountHandle,
   inTab,
+  matchingRequests,
+  noMatchText,
+  personName,
   REQUEST_TABS,
+  requesterName,
+  searchHeading,
+  searchPlaceholder,
   tabCounts,
   tabHeading,
 } from "../utils/requestList";
@@ -35,6 +44,17 @@ import {
 // opens on Pending, as the select did, and the chosen tab lives through every
 // reload: Refresh, Try again, Back after a request was acted on, and a filed
 // walk-in.
+//
+// SEARCH (13 Oct 2026). The Payments page's search box, as
+// components/ListToolbar.jsx, in a row of its own between the row that holds
+// Refresh and the tabs. It filters the loaded list as you type, with no
+// request, over what a row shows of who and what: the requester's name, the
+// @account under it where the row shows one, and the document type
+// (utils/requestList.js). The search runs over the whole list and the tabs
+// split what matches, so their counts follow it; the chosen tab stays. While a
+// search is on, the heading reads "2 of 6 pending requests match". The search
+// lives through every reload and through Back from a request, and is kept
+// nowhere in the browser: the barangay hall's PC is shared.
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -45,14 +65,6 @@ const OPTIONAL_RESIDENT_FIELDS = [
   { key: "contact_number", label: "Contact number" },
 ];
 
-function personName(p) {
-  if (!p) return null;
-  const name = [p.first_name, p.middle_name, p.last_name]
-    .filter(Boolean)
-    .join(" ");
-  return p.suffix ? `${name}, ${p.suffix}` : name;
-}
-
 // The handle beneath the name is the SUBJECT'S account — the resident the
 // request is for — never the requester's. They are the same person on a
 // self-service row and different on a walk-in, where the requester is the
@@ -61,13 +73,13 @@ function personName(p) {
 // only when the server sends it (the Staff projection withholds it), so this
 // tests the KEY, never the viewer's role: absent renders nothing; null means
 // the resident has no online account, said plainly rather than left blank.
+// The handle is accountHandle's (utils/requestList.js), which the search reads
+// too, so a search finds an account exactly where a row shows one.
 function AccountNote({ record }) {
   if (!record || !("account" in record)) return null;
   return (
     <div className="muted small-note">
-      {record.account?.username
-        ? `@${record.account.username}`
-        : "No online account"}
+      {accountHandle(record) || "No online account"}
     </div>
   );
 }
@@ -554,6 +566,10 @@ export default function SecretaryRequestsPage({
   const [selectedId, setSelectedId] = useState(null);
   const [encoding, setEncoding] = useState(false); // walk-in panel open
   const [flash, setFlash] = useState(null);
+  // The search, as typed. Here rather than in the box, so it outlives the list
+  // while a request's detail or the walk-in panel takes its place.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null); // the search box, for Clear search
   // Numbers each load, so only the newest one may change the page.
   const loadSeq = useRef(0);
 
@@ -582,10 +598,34 @@ export default function SecretaryRequestsPage({
     load();
   }, [load]);
 
-  // The tab counts come from the whole list, so they read the same on every
-  // tab; the rows and the heading are the chosen tab's.
-  const counts = requests === null ? null : tabCounts(requests);
-  const shown = requests === null ? [] : requests.filter((r) => inTab(r, tab));
+  // The search runs over the whole list, then the tabs split what matches.
+  // The tab counts come from every match, so they read the same on every tab
+  // and follow the search; the rows and the heading are the chosen tab's.
+  // With no search, every request matches, as before.
+  const searching = searchTerms(query).length > 0;
+  const matching = requests === null ? [] : matchingRequests(requests, query);
+  const counts = requests === null ? null : tabCounts(matching);
+  const shown = matching.filter((r) => inTab(r, tab));
+  // "2 of 6 pending requests match": how many of the tab's requests match, of
+  // how many it holds with no search.
+  let heading = "Document requests";
+  if (requests !== null) {
+    heading = searching
+      ? searchHeading(
+          tab,
+          shown.length,
+          requests.filter((r) => inTab(r, tab)).length,
+        )
+      : tabHeading(tab, shown.length);
+  }
+
+  // "Clear search", where nothing matches: the search only, and the tab stays.
+  // Focus goes to the box, as the Clear (x) button's does: the button pressed
+  // is gone once the rows are back.
+  function clearSearch() {
+    setQuery("");
+    searchRef.current?.focus();
+  }
 
   return (
     <>
@@ -614,13 +654,11 @@ export default function SecretaryRequestsPage({
 
           {/* doc-requests-head: on a phone the heading takes a line of its
               own, so a tab whose heading is longer or shorter never moves
-              the strip under it (index.css). */}
+              the strip under it (index.css). The heading is a polite live
+              region, as the Payments totals line is, so a screen reader
+              hears "2 of 6 pending requests match" as the search is typed. */}
           <div className="list-head doc-requests-head">
-            <h2>
-              {requests === null
-                ? "Document requests"
-                : tabHeading(tab, shown.length)}
-            </h2>
+            <h2 aria-live="polite">{heading}</h2>
             <div className="head-actions">
               <button className="btn secondary" onClick={load}>
                 Refresh
@@ -643,23 +681,37 @@ export default function SecretaryRequestsPage({
             </div>
           </div>
 
-          {/* The tabs, under the row that holds Refresh, so a reload leaves
-              Refresh where it was: like Payments, they are drawn only once
-              the list has loaded, never while it loads or after it failed. */}
+          {/* The search, then the tabs, under the row that holds Refresh, so
+              a reload leaves Refresh where it was: both are drawn only once
+              the list has loaded, never while it loads or after it failed.
+              (The Payments page keeps its search box on screen through both;
+              its tabs go, as these do.) */}
           {requests !== null && (
-            <ListTabs
-              label="Status"
-              tabs={REQUEST_TABS}
-              counts={counts}
-              active={tab}
-              onChoose={setTab}
-            />
+            <>
+              <ListToolbar
+                className="doc-requests-toolbar"
+                label="Search requests"
+                placeholder={searchPlaceholder(requests)}
+                value={query}
+                onChange={setQuery}
+                inputRef={searchRef}
+              />
+              <ListTabs
+                label="Status"
+                tabs={REQUEST_TABS}
+                counts={counts}
+                active={tab}
+                onChoose={setTab}
+              />
+            </>
           )}
 
           {/* The error first, then loading, then empty, then rows: a load that
               failed shows neither a count nor the empty text. Try again
               repeats the same load, as Refresh does; Refresh above stays
-              usable. The markup is the Payments page's. */}
+              usable. The markup is the Payments page's. A tab with no
+              requests keeps its own text; one whose requests the search
+              hides says so, naming the tab, and offers to clear the search. */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
@@ -671,6 +723,17 @@ export default function SecretaryRequestsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading requests…</p>
+          ) : shown.length === 0 && searching ? (
+            <div className="empty">
+              <p>{noMatchText(tab, query)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearch}
+              >
+                Clear search
+              </button>
+            </div>
           ) : shown.length === 0 ? (
             <div className="empty">
               <p>
@@ -698,10 +761,7 @@ export default function SecretaryRequestsPage({
                   {shown.map((r) => (
                     <tr key={r.request_id}>
                       <td>
-                        <strong>
-                          {personName(r.resident_records) ||
-                            `@${r.requester?.username}`}
-                        </strong>
+                        <strong>{requesterName(r)}</strong>
                         <AccountNote record={r.resident_records} />
                       </td>
                       <td data-label="Document">{r.document_types?.name}</td>
