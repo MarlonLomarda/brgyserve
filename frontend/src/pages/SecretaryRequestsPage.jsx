@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
 import ResidentPicker from "../components/ResidentPicker";
@@ -11,6 +12,7 @@ import {
 } from "../constants/requestStatus";
 import { isNoFeeCharge } from "../utils/chargeMethod";
 import { searchTerms } from "../utils/chargeSearch";
+import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
   accountHandle,
   inTab,
@@ -55,6 +57,17 @@ import {
 // search is on, the heading reads "2 of 6 pending requests match". The search
 // lives through every reload and through Back from a request, and is kept
 // nowhere in the browser: the barangay hall's PC is shared.
+//
+// PAGES (13 Oct 2026). The Payments page's pager, as components/ListPager.jsx,
+// under the rows: "Showing 1 to 25 of 77 results", Rows per page (10, 25, 50
+// or 100, 25 to start), then Previous, the page numbers and Next. It pages
+// the list already loaded, with no request, and shows from 11 matches, as on
+// Payments. Only the rows drawn are one page: the heading and the tab counts
+// still count every match, and the search runs over the whole list. A tab,
+// a search or a new Rows per page goes back to page 1; Rows per page stays
+// as chosen. Refresh, Try again and Back from a request keep the page, and a
+// list that shrank under it lands on its last page. Like the search, neither
+// is kept in the browser.
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -570,6 +583,11 @@ export default function SecretaryRequestsPage({
   // while a request's detail or the walk-in panel takes its place.
   const [query, setQuery] = useState("");
   const searchRef = useRef(null); // the search box, for Clear search
+  // The page of the chosen tab's matches, and how many rows a page holds.
+  // Like the search, both live through every reload and Back from a request.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const headingRef = useRef(null); // the list's heading, for a page change
   // Numbers each load, so only the newest one may change the page.
   const loadSeq = useRef(0);
 
@@ -606,6 +624,13 @@ export default function SecretaryRequestsPage({
   const matching = requests === null ? [] : matchingRequests(requests, query);
   const counts = requests === null ? null : tabCounts(matching);
   const shown = matching.filter((r) => inTab(r, tab));
+  // One page of the tab's matches (utils/paging.js). Only the rows drawn are
+  // a page: the heading and the counts still count every match.
+  const paging = pageOf(shown.length, page, pageSize);
+  const rows = shown.slice(paging.start, paging.end);
+  // A reload that shrank the list lands on its last page, and stays there.
+  // Not while a list is loading: the page must survive the reload itself.
+  if (requests !== null && paging.page !== page) setPage(paging.page);
   // "2 of 6 pending requests match": how many of the tab's requests match, of
   // how many it holds with no search.
   let heading = "Document requests";
@@ -619,11 +644,28 @@ export default function SecretaryRequestsPage({
       : tabHeading(tab, shown.length);
   }
 
+  // A new search, tab or Rows per page goes back to page 1, as on Payments.
+  // Rows per page itself stays as chosen through the first two.
+  function changeQuery(text) {
+    setQuery(text);
+    setPage(1);
+  }
+
+  function chooseTab(key) {
+    setTab(key);
+    setPage(1);
+  }
+
+  function changePageSize(size) {
+    setPageSize(PAGE_SIZES.includes(size) ? size : PAGE_SIZE);
+    setPage(1);
+  }
+
   // "Clear search", where nothing matches: the search only, and the tab stays.
   // Focus goes to the box, as the Clear (x) button's does: the button pressed
   // is gone once the rows are back.
   function clearSearch() {
-    setQuery("");
+    changeQuery("");
     searchRef.current?.focus();
   }
 
@@ -658,7 +700,7 @@ export default function SecretaryRequestsPage({
               region, as the Payments totals line is, so a screen reader
               hears "2 of 6 pending requests match" as the search is typed. */}
           <div className="list-head doc-requests-head">
-            <h2 aria-live="polite">{heading}</h2>
+            <h2 ref={headingRef} aria-live="polite">{heading}</h2>
             <div className="head-actions">
               <button className="btn secondary" onClick={load}>
                 Refresh
@@ -693,7 +735,7 @@ export default function SecretaryRequestsPage({
                 label="Search requests"
                 placeholder={searchPlaceholder(requests)}
                 value={query}
-                onChange={setQuery}
+                onChange={changeQuery}
                 inputRef={searchRef}
               />
               <ListTabs
@@ -701,7 +743,7 @@ export default function SecretaryRequestsPage({
                 tabs={REQUEST_TABS}
                 counts={counts}
                 active={tab}
-                onChoose={setTab}
+                onChoose={chooseTab}
               />
             </>
           )}
@@ -758,7 +800,7 @@ export default function SecretaryRequestsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((r) => (
+                  {rows.map((r) => (
                     <tr key={r.request_id}>
                       <td>
                         <strong>{requesterName(r)}</strong>
@@ -787,6 +829,19 @@ export default function SecretaryRequestsPage({
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* The pager, under the rows, as on Payments, from 11 matches
+              (components/ListPager.jsx). Drawn only once the list has loaded,
+              never while it loads or beside a failed load, as the search and
+              the tabs are. */}
+          {requests !== null && (
+            <ListPager
+              paging={paging}
+              onPage={setPage}
+              onSize={changePageSize}
+              headingRef={headingRef}
+            />
           )}
         </>
       )}

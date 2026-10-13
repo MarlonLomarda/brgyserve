@@ -82,6 +82,13 @@
 // and the heading following it, no request per keystroke, and the search kept
 // through Refresh, Try again and Back from a request.
 //
+// Section Y is the Document requests list's pager, for the same three roles:
+// the Payments pager (components/ListPager.jsx) under the rows, from 11
+// matches, paging the list already loaded with no request; the heading and
+// the tab counts still counting every match; page 1 again on a tab, search
+// or Rows per page change; and the page kept, or clamped to the last one,
+// through Refresh, Try again and Back from a request.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -5238,6 +5245,559 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousTZX === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZX;
+  }
+
+  // =========================================================================
+  // Y. Document requests: the pager
+  // =========================================================================
+  // The list drew every request of a tab on one page: 77 on All, a very long
+  // page on a phone. It gains the Payments pager, lifted into
+  // components/ListPager.jsx with its classes, markup and behaviour: a nav
+  // named "Pagination" under the rows; "Showing 1 to 25 of 77 results", its
+  // figures in bold, in a polite live region; Rows per page (10, 25, 50 or
+  // 100, 25 to start); then Previous, the page numbers, each a button named
+  // "Page N" with the current one marked aria-current="page" and a "…" as
+  // text where pages are left out, and Next; "Page 1 of 4" for a phone. Like
+  // Payments' it shows from 11 matches. It pages the list already loaded,
+  // with no request, and only the rows drawn are one page: the heading and
+  // the tab counts still count every match, and the search still runs over
+  // the whole list. A tab, a search or a new Rows per page goes back to page
+  // 1, and Rows per page stays as chosen until a new visit. Refresh, Try
+  // again and Back from a request keep the page; a list that shrank under it
+  // lands on its last page, never an empty one past the end, and stays there.
+  // utils/paging.js is sections O's and P's, unchanged, and nothing was added
+  // to utils/requestList.js, so there is no new helper to check on its own.
+  // The real page for the Secretary, Staff and the Punong Barangay, against
+  // 77 stubbed requests in the order and with the statuses of the live list
+  // on 13 Oct 2026 (6 pending, 50 approved, 4 ready for release, 5 claimed, 5
+  // rejected, 7 cancelled), each named by its place in All, "Res 001" to "Res
+  // 077". Every request is answered by the fetch stub; the only writes, the
+  // Secretary's approve and mark ready for release, go to it too.
+  console.log('\n--- Document requests: the pager ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The live list's statuses, newest first, a letter each: P pending, A
+    // approved, R ready for release, C claimed, J rejected, X cancelled.
+    const SEQ = 'RPPXAPPPRXAJCAXAPACAAAAAAAAAAAAACRAAAAAAAAXAAAAAAAAAAAAAAACCAAAAAAAJAXXAXJJRJ';
+    const LETTER = { P: 'pending', A: 'approved', R: 'ready_for_release', C: 'claimed', J: 'rejected', X: 'cancelled' };
+    // The document type turns with the place in All, so "clearance" finds
+    // every third request, from Res 001.
+    const TYPES = ['Certificate of Indigency', 'Barangay Clearance', 'Certificate of Residency'];
+    const num = (n) => String(n).padStart(3, '0');
+    const nameOf = (n) => `Res ${num(n)}`;
+    // Request n in the list's real shape (as in sections V to X: Staff's has
+    // no resident account and no requester email). A billed request's charge
+    // is paid, so the Secretary can mark an approved one ready for release.
+    const asRequest = (n, status, staff) => ({
+      request_id: 1000 + n, purpose: `Purpose ${n}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 600 + (n % 3), name: TYPES[n % 3], fee: '20.00' },
+      resident_records: { resident_id: 3000 + n, first_name: 'Res', middle_name: null, last_name: num(n), suffix: null,
+        ...(staff ? {} : { account: { username: `res_${num(n)}` } }) },
+      requester: { user_id: 4000 + n, username: `res_${num(n)}`, ...(staff ? {} : { email: `res_${num(n)}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 5000 + n, amount: '20.00', status: 'PAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    // The requests the stub holds, which the approve, the mark ready for
+    // release and another session's changes alter as the server would.
+    const makeState = (seq = SEQ) => ({ list: [...seq].map((c, i) => ({ n: i + 1, status: LETTER[c] })) });
+    const listAnswer = (state, staff) => ({ requests: state.list.map((r) => asRequest(r.n, r.status, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(?:\/(approve|ready-for-release))?$/);
+      if (one) {
+        const r = state.list.find((x) => 1000 + x.n === Number(one[1]));
+        if (!r) return undefined;
+        if (method === 'POST' && one[2] === 'approve') r.status = 'approved';
+        if (method === 'POST' && one[2] === 'ready-for-release') r.status = 'ready_for_release';
+        const request = { ...asRequest(r.n, r.status, staff), processed_by: null };
+        if (!one[2]) return { request };
+        return { request, message: one[2] === 'approve' ? 'Request approved.' : 'Request marked ready for release.' };
+      }
+      return undefined;
+    };
+    const names = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => nameOf(from + i));
+    const where = (state, status) => state.list.filter((r) => r.status === status).map((r) => r.n);
+    const STRIP77 = 'Pending 6 · Approved 50 · Ready for release 4 · Claimed 5 · Rejected 5 · Cancelled 7 · All 77';
+    // Worked out by hand from SEQ: "clearance" is every third request from Res 001.
+    const STRIP_CLEARANCE = 'Pending 1 · Approved 15 · Ready for release 3 · Claimed 2 · Rejected 0 · Cancelled 5 · All 26';
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const pagerOf = (page) => page.query('nav.pay-pager');
+    const sizeSelect = (page) => page.query('.pay-pager select');
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const stepButton = (page, label) => (pagerOf(page) ? buttonNamed(pagerOf(page), label) ?? null : null);
+    const listHeading = (page) => page.query('.doc-requests-head h2');
+    const rowOf = (page, rowName) =>
+      page.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === rowName) ?? null;
+    const rowButton = (page, rowName, label) => {
+      const tr = rowOf(page, rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // What the list and its pager say, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      pager: !!pagerOf(page),
+      showing: text(page.query('.pay-pager-count')),
+      bold: page.queryAll('.pay-pager-count strong').map(text),
+      numbers: page.queryAll('.pay-pager-numbers li').map(text).join(' '),
+      current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+      short: text(page.query('.pay-pager-short')),
+      size: sizeSelect(page)?.value ?? null,
+      search: box(page)?.value ?? null,
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    // The pager is on page n of m, showing `from` to `to` of `of`: the count
+    // line, the one number marked aria-current="page" and the phone's "Page n
+    // of m" must all say so.
+    const onPage = (v, n, m, from, to, of) => v.showing === `Showing ${from} to ${to} of ${of} results`
+      && said(v.current) === said([String(n)]) && v.short === `Page ${n} of ${m}`;
+    const brief = (v) => ({ showing: v.showing, current: v.current, short: v.short, numbers: v.numbers, size: v.size,
+      rows: v.rows.length ? [v.rows.length, v.rows[0], v.rows.at(-1)] : [] });
+    // Focus first, as a press does in a browser: a dispatched click in jsdom
+    // moves no focus, and some checks are about where focus ends up.
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    const setRows = async (page, value) => {
+      const select = sizeSelect(page);
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    // jsdom has no scrollIntoView; this one records what asked to be shown.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      let state = makeState();
+      const APPROVED = where(state, 'approved');
+      const APPROVED_CLEARANCE = APPROVED.filter((n) => n % 3 === 1);
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const writesAtOpen = store.sets;
+      let v = look(page);
+      check(`${name}: it opens on Pending, whose 6 requests fit one page, and at 10 matches or fewer there is no pager: no `
+          + 'Pagination nav, no Rows per page, no Previous or Next',
+        said(v.pressed) === said(['Pending 6']) && v.rows.length === 6 && v.strip === STRIP77 && !v.pager && v.size === null
+          && !buttonNamed(root(), 'Previous') && !buttonNamed(root(), 'Next'),
+        said({ pressed: v.pressed, rows: v.rows.length, pager: v.pager, size: v.size }));
+
+      // All: 77 requests, four pages of 25. From here to the search for "070"
+      // nothing may send a request.
+      const sentBeforePaging = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: All, 77 requests at 25 a page: "Showing 1 to 25 of 77 results", pages "1 2 3 4" with 1 the current one, `
+          + '"Page 1 of 4" for a phone, and only the first 25 rows, "Res 001" to "Res 025", under "77 requests"',
+        v.heading === '77 requests' && onPage(v, 1, 4, 1, 25, 77) && v.numbers === '1 2 3 4' && said(v.rows) === said(names(1, 25)),
+        said({ heading: v.heading, ...brief(v) }));
+      const nav = pagerOf(page);
+      const countLine = page.query('.pay-pager-count');
+      check(`${name}: the pager is a nav named "Pagination" right under the rows' table, as on Payments; its count line is a `
+          + 'polite live region with its three figures in bold: "1", "25", "77"',
+        nav?.getAttribute('aria-label') === 'Pagination' && !!nav.previousElementSibling?.classList.contains('table-wrap')
+          && countLine?.getAttribute('aria-live') === 'polite' && said(v.bold) === said(['1', '25', '77']),
+        said({ label: nav?.getAttribute('aria-label') ?? null, after: nav?.previousElementSibling?.className ?? null,
+          live: countLine?.getAttribute('aria-live') ?? null, bold: v.bold }));
+      const select = sizeSelect(page);
+      const sizeLabel = nav?.querySelector('label') ?? null;
+      const options = select ? [...select.options].map((o) => o.textContent) : null;
+      check(`${name}: Rows per page is a select labelled "Rows per page", offering 10, 25, 50 and 100, with 25 chosen`,
+        !!select && sizeLabel?.textContent === 'Rows per page' && !!select.id && sizeLabel.htmlFor === select.id
+          && select.labels?.[0] === sizeLabel && said(options) === said(['10', '25', '50', '100']) && select.value === '25',
+        said({ label: sizeLabel?.textContent ?? null, for: sizeLabel?.htmlFor ?? null, id: select?.id ?? null, options,
+          value: select?.value ?? null }));
+      const numberButtons = page.queryAll('.pay-pager-numbers button')
+        .map((b) => `${b.getAttribute('type')}:${b.getAttribute('aria-label')}:${b.getAttribute('aria-current')}`);
+      const previous = stepButton(page, 'Previous');
+      const next = stepButton(page, 'Next');
+      check(`${name}: each number is a type="button" named "Page N", only the current one marked aria-current="page"; Previous `
+          + 'and Next are buttons whose arrows are hidden from screen readers, Previous aria-disabled on page 1, never disabled',
+        said(numberButtons) === said(['button:Page 1:page', 'button:Page 2:null', 'button:Page 3:null', 'button:Page 4:null'])
+          && previous?.type === 'button' && next?.type === 'button' && previous.getAttribute('aria-disabled') === 'true'
+          && next.getAttribute('aria-disabled') !== 'true' && !previous.disabled && !next.disabled
+          && [previous, next].every((b) => b.querySelector('svg')?.getAttribute('aria-hidden') === 'true'),
+        said({ numberButtons, previous: previous?.getAttribute('aria-disabled') ?? null, next: next?.getAttribute('aria-disabled') ?? null }));
+
+      scrolled.length = 0;
+      await press(page, next);
+      v = look(page);
+      check(`${name}: Next: page 2, "Res 026" to "Res 050", "Showing 26 to 50 of 77 results"; the list heading is brought into `
+          + 'view (block "nearest"), and focus stays on Next',
+        onPage(v, 2, 4, 26, 50, 77) && said(v.rows) === said(names(26, 50)) && scrolled.length === 1
+          && scrolled[0].el === listHeading(page) && scrolled[0].options?.block === 'nearest' && !!next && page.active() === next,
+        said({ ...brief(v), scrolls: scrolled.length, onto: scrolled[0]?.el?.tagName ?? null,
+          focus: page.active()?.textContent ?? null }));
+      await press(page, numberButton(page, 4));
+      v = look(page);
+      const nextAtEnd = stepButton(page, 'Next');
+      check(`${name}: "Page 4", the last: exactly the last two rows, "Res 076" and "Res 077", "Showing 76 to 77 of 77 results", `
+          + 'and Next unavailable',
+        onPage(v, 4, 4, 76, 77, 77) && said(v.rows) === said(['Res 076', 'Res 077'])
+          && nextAtEnd?.getAttribute('aria-disabled') === 'true', said(brief(v)));
+      scrolled.length = 0;
+      await press(page, nextAtEnd);
+      v = look(page);
+      check(`  ${name}: pressing the unavailable Next does nothing: no scroll, still page 4, and focus stays on it, aria-disabled `
+          + 'and never disabled',
+        onPage(v, 4, 4, 76, 77, 77) && scrolled.length === 0 && !!nextAtEnd && page.active() === nextAtEnd && !nextAtEnd.disabled,
+        said({ ...brief(v), scrolls: scrolled.length, focusOnNext: !!nextAtEnd && page.active() === nextAtEnd }));
+      scrolled.length = 0;
+      await press(page, numberButton(page, 4));
+      check(`  ${name}: nor does pressing the current page: no scroll, still page 4`,
+        onPage(look(page), 4, 4, 76, 77, 77) && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+      await press(page, stepButton(page, 'Previous'));
+      v = look(page);
+      check(`${name}: Previous from page 4: page 3, "Res 051" to "Res 075", "Showing 51 to 75 of 77 results"`,
+        onPage(v, 3, 4, 51, 75, 77) && said(v.rows) === said(names(51, 75)), said(brief(v)));
+      const perPage = [];
+      for (const n of [1, 2, 3, 4]) {
+        await press(page, numberButton(page, n));
+        const x = look(page);
+        perPage.push({ page: x.current, heading: x.heading, strip: x.strip, rows: x.rows.length });
+      }
+      check(`${name}: the heading and the tab counts are the whole list's on every page: "77 requests" and "${STRIP77}" on `
+          + 'pages 1 to 4, which draw 25, 25, 25 and 2 rows',
+        perPage.every((p) => p.heading === '77 requests' && p.strip === STRIP77)
+          && said(perPage.map((p) => [p.page, p.rows])) === said([[['1'], 25], [['2'], 25], [['3'], 25], [['4'], 2]]),
+        said(perPage.map((p) => ({ page: p.page, heading: p.heading, rows: p.rows, strip: p.strip === STRIP77 ? 'same' : p.strip }))));
+      await press(page, numberButton(page, 1));
+      const previousAtStart = stepButton(page, 'Previous');
+      scrolled.length = 0;
+      await press(page, previousAtStart);
+      v = look(page);
+      check(`${name}: on page 1, Previous is unavailable the same way: pressing it does nothing and focus stays on it; Next is `
+          + 'available',
+        onPage(v, 1, 4, 1, 25, 77) && scrolled.length === 0 && !!previousAtStart && page.active() === previousAtStart
+          && previousAtStart.getAttribute('aria-disabled') === 'true' && !previousAtStart.disabled
+          && stepButton(page, 'Next')?.getAttribute('aria-disabled') !== 'true',
+        said({ ...brief(v), scrolls: scrolled.length }));
+
+      // Rows per page.
+      await press(page, numberButton(page, 3));
+      scrolled.length = 0;
+      await setRows(page, 10);
+      v = look(page);
+      check(`${name}: Rows per page 10, from page 3: back to page 1, "Res 001" to "Res 010", "Showing 1 to 10 of 77 results", `
+          + 'pages "1 2 3 4 5 … 8", and the list heading brought into view, as for a page change',
+        v.size === '10' && onPage(v, 1, 8, 1, 10, 77) && v.numbers === '1 2 3 4 5 … 8' && said(v.rows) === said(names(1, 10))
+          && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+        said({ ...brief(v), scrolls: scrolled.length }));
+      const gaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+      check(`  ${name}: the "…" is plain text: not a button, and nothing in it can take focus`,
+        gaps.length === 1 && gaps.every((li) => !li.matches('[tabindex]') && !li.querySelector('button, a, input, select, [tabindex]')),
+        gaps.map((li) => li.outerHTML).join(' ') || 'no "…" drawn');
+      // Eight pages: pages 1 to 4 draw "1 2 3 4 5 … 8", the last four "1 …"
+      // and the last five (utils/paging.js), so 8 pages have no middle shape.
+      await press(page, numberButton(page, 5));
+      v = look(page);
+      check(`${name}: "Page 5" of 8, one of the last four: "1 … 4 5 6 7 8", "Res 041" to "Res 050", "Showing 41 to 50 of 77 `
+          + 'results", and focus stays on the button for page 5',
+        onPage(v, 5, 8, 41, 50, 77) && v.numbers === '1 … 4 5 6 7 8' && said(v.rows) === said(names(41, 50))
+          && page.active()?.getAttribute('aria-label') === 'Page 5',
+        said({ ...brief(v), focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+      await press(page, numberButton(page, 8));
+      v = look(page);
+      check(`${name}: "Page 8" of 8: "1 … 4 5 6 7 8", "Res 071" to "Res 077", "Showing 71 to 77 of 77 results"`,
+        onPage(v, 8, 8, 71, 77, 77) && v.numbers === '1 … 4 5 6 7 8' && said(v.rows) === said(names(71, 77)), said(brief(v)));
+      await press(page, numberButton(page, 4));
+      v = look(page);
+      check(`${name}: "Page 4" of 8, among the first four: "1 2 3 4 5 … 8", "Showing 31 to 40 of 77 results"`,
+        onPage(v, 4, 8, 31, 40, 77) && v.numbers === '1 2 3 4 5 … 8' && said(v.rows) === said(names(31, 40)), said(brief(v)));
+      await setRows(page, 50);
+      const at50 = look(page);
+      await press(page, numberButton(page, 2));
+      const at50second = look(page);
+      await setRows(page, 100);
+      const at100 = look(page);
+      check(`${name}: Rows per page 50: "Showing 1 to 50 of 77 results", pages "1 2", and page 2 "Res 051" to "Res 077"; 100: all `
+          + '77 on one page, "Showing 1 to 77 of 77 results", a single "1", Previous and Next both unavailable',
+        at50.size === '50' && onPage(at50, 1, 2, 1, 50, 77) && at50.numbers === '1 2' && said(at50.rows) === said(names(1, 50))
+          && onPage(at50second, 2, 2, 51, 77, 77) && said(at50second.rows) === said(names(51, 77))
+          && at100.size === '100' && onPage(at100, 1, 1, 1, 77, 77) && at100.numbers === '1' && at100.rows.length === 77
+          && stepButton(page, 'Previous')?.getAttribute('aria-disabled') === 'true'
+          && stepButton(page, 'Next')?.getAttribute('aria-disabled') === 'true',
+        said({ at50: brief(at50), at50second: brief(at50second), at100: brief(at100) }));
+
+      // A tab, a search, and Rows per page kept through both.
+      await setRows(page, 10);
+      await press(page, numberButton(page, 3));
+      const allThird = look(page);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: a tab change goes back to page 1 and keeps Rows per page: page 3 of All at 10 a page, then Approved, `
+          + '"Showing 1 to 10 of 50 results", pages "1 2 3 4 5", its first ten rows, under "50 approved requests"',
+        onPage(allThird, 3, 8, 21, 30, 77) && v.size === '10' && onPage(v, 1, 5, 1, 10, 50) && v.numbers === '1 2 3 4 5'
+          && said(v.rows) === said(APPROVED.slice(0, 10).map(nameOf)) && v.heading === '50 approved requests',
+        said({ before: brief(allThird), after: brief(v), heading: v.heading }));
+      await press(page, numberButton(page, 3));
+      const approvedThird = look(page);
+      await type(page, 'clearance');
+      const searched = look(page);
+      check(`${name}: a search goes back to page 1 and keeps Rows per page: page 3 of Approved, then "clearance", `
+          + '"Showing 1 to 10 of 15 results", the first ten approved clearances, under "15 of 50 approved requests match"',
+        onPage(approvedThird, 3, 5, 21, 30, 50) && searched.size === '10' && onPage(searched, 1, 2, 1, 10, 15)
+          && said(searched.rows) === said(APPROVED_CLEARANCE.slice(0, 10).map(nameOf))
+          && searched.heading === '15 of 50 approved requests match',
+        said({ before: brief(approvedThird), after: brief(searched), heading: searched.heading }));
+      await press(page, numberButton(page, 2));
+      v = look(page);
+      check(`  ${name}: its page 2 holds the other five, and the heading and the counts stay those of every match: "15 of 50 `
+          + `approved requests match" and "${STRIP_CLEARANCE}" on both pages`,
+        onPage(v, 2, 2, 11, 15, 15) && said(v.rows) === said(APPROVED_CLEARANCE.slice(10).map(nameOf))
+          && searched.strip === STRIP_CLEARANCE && v.strip === STRIP_CLEARANCE && v.heading === searched.heading,
+        said({ ...brief(v), heading: v.heading, strip: v.strip }));
+      await clickIf(page, page.query('button[aria-label="Clear search"]'));
+      v = look(page);
+      check(`${name}: the Clear (x) button is a search change too: from page 2 of the clearances back to page 1 of Approved's `
+          + '50, still at 10 a page',
+        v.search === '' && v.size === '10' && onPage(v, 1, 5, 1, 10, 50) && v.strip === STRIP77, said(brief(v)));
+      await setRows(page, 25);
+      await clickIf(page, tabNamed(page, 'All'));
+      await press(page, numberButton(page, 3));
+      const allThird25 = look(page);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: from page 3 of All at 25 a page, Approved opens on its page 1, "Showing 1 to 25 of 50 results", not its last`,
+        onPage(allThird25, 3, 4, 51, 75, 77) && onPage(v, 1, 2, 1, 25, 50)
+          && said(v.rows) === said(APPROVED.slice(0, 25).map(nameOf)),
+        said({ before: brief(allThird25), after: brief(v) }));
+
+      // The search runs over the whole list before paging.
+      await clickIf(page, tabNamed(page, 'All'));
+      const allFirst = look(page);
+      await type(page, '070');
+      v = look(page);
+      check(`${name}: the search runs over the whole list, not the page shown: Res 070 is on page 3, not among page 1's rows, `
+          + 'and "070" finds it: one match, "1 of 77 requests matches", and no pager',
+        onPage(allFirst, 1, 4, 1, 25, 77) && !allFirst.rows.includes('Res 070') && said(v.rows) === said(['Res 070'])
+          && v.heading === '1 of 77 requests matches' && !v.pager,
+        said({ first: brief(allFirst), searched: { rows: v.rows, heading: v.heading, pager: v.pager } }));
+      await type(page, '');
+      check(`${name}: none of those page, Rows per page, tab and search changes sent a request`,
+        !!pagerOf(page) && net.calls.length === sentBeforePaging,
+        `${net.calls.length - sentBeforePaging} request(s): ${said(listCalls(net.calls.slice(sentBeforePaging)))}`);
+
+      // Refresh, a reload that fails, Try again, and Back from a request.
+      await setRows(page, 50);
+      await press(page, numberButton(page, 2));
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { pager: !!pagerOf(page), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, with no pager while it is out, and keeps the page and Rows per page: `
+          + 'page 2 at 50, "Showing 51 to 77 of 77 results", "Res 051" to "Res 077"',
+        net.calls.length === sent + 1 && !reloading.pager && reloading.loading && v.size === '50'
+          && onPage(v, 2, 2, 51, 77, 77) && said(v.rows) === said(names(51, 77)),
+        said({ requests: net.calls.length - sent, reloading, after: brief(v) }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failed = look(page);
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails shows no pager beside the error, and Try again brings it back on the same page: page 2 `
+          + 'at 50',
+        !failed.pager && failed.error === 'Could not load the requests: Internal server error' && failed.rows.length === 0
+          && v.size === '50' && onPage(v, 2, 2, 51, 77, 77),
+        said({ failed: { pager: failed.pager, error: failed.error, rows: failed.rows.length }, after: brief(v) }));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Res 060', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail, with nothing done there, keeps the page: Res 060's, page 2 at 50; only the `
+          + 'detail was requested',
+        opened === 'Request #1060' && v.size === '50' && onPage(v, 2, 2, 51, 77, 77)
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1060']),
+        said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, and the page stays
+        // where it still exists.
+        await setRows(page, 10);
+        await press(page, numberButton(page, 2));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Res 017', 'Review'));
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        const badge = text(rowOf(page, 'Res 017')?.querySelector('.badge'));
+        check('Secretary: Back after approving a request loads the list again, once, and keeps the page where it still exists: '
+            + 'page 2 of All at 10, "Showing 11 to 20 of 77 results", with Res 017 now Approved',
+          approved === 'Request approved.' && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1017',
+            'POST /document-requests/1017/approve', 'GET /document-requests?status=all'])
+            && v.size === '10' && onPage(v, 2, 8, 11, 20, 77) && said(v.rows) === said(names(11, 20)) && badge === 'Approved',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), after: brief(v), badge }));
+
+        // Back after the last page's only request has left the tab: the page
+        // before, now the last, and never an empty page past the end.
+        await setRows(page, 25);
+        await clickIf(page, tabNamed(page, 'Approved'));
+        await press(page, numberButton(page, 3));
+        const third = look(page);
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Res 072', 'Review'));
+        await clickIf(page, buttonNamed(root(), 'Mark ready for release'));
+        const marked = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after the only request on the last page has left the tab lands on the page before it, now the '
+            + 'last: Approved\'s page 3 held Res 072 alone, "Showing 51 to 51 of 51 results"; marked ready for release, the list '
+            + 'reloads and shows page 2, "Showing 26 to 50 of 50 results", never an empty page 3',
+          onPage(third, 3, 3, 51, 51, 51) && said(third.rows) === said(['Res 072']) && marked === 'Request marked ready for release.'
+            && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1072',
+              'POST /document-requests/1072/ready-for-release', 'GET /document-requests?status=all'])
+            && onPage(v, 2, 2, 26, 50, 50) && v.rows.length === 25 && v.heading === '50 approved requests',
+          said({ third: brief(third), marked, calls: listCalls(net.calls.slice(sent)), after: brief(v) }));
+      }
+
+      // Nothing kept in the browser; a new visit starts at 25 a page, page 1.
+      // The second mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: nothing about the pager is kept in the browser: no localStorage write, sessionStorage empty, no cookie; and `
+          + 'a new visit starts again at 25 a page, on page 1',
+        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === ''
+          && v.size === '25' && onPage(v, 1, 4, 1, 25, 77),
+        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length,
+          cookie: dom.window.document.cookie, after: brief(v) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // A Refresh that shrinks the tab under the page, then one that grows it.
+      state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await press(page, numberButton(page, 2));
+      const second = look(page);
+      const firstTwentyFive = APPROVED.slice(0, 25).map(nameOf);
+      for (const n of APPROVED.slice(25)) state.list.find((r) => r.n === n).status = 'ready_for_release';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const shrunk = look(page);
+      for (const r of state.list) if (r.status === 'pending') r.status = 'approved';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const grown = look(page);
+      check(`${name}: a Refresh that shrinks the tab under the page lands on its last page, never an empty one past the end, and `
+          + 'stays there when the tab grows again: on page 2 of Approved\'s 50, another session marks 25 ready for release, '
+          + 'and Refresh shows page 1, "Showing 1 to 25 of 25 results"; then the six pending are approved, and Refresh still '
+          + 'shows page 1, "Showing 1 to 25 of 31 results"',
+        onPage(second, 2, 2, 26, 50, 50) && onPage(shrunk, 1, 1, 1, 25, 25) && said(shrunk.rows) === said(firstTwentyFive)
+          && onPage(grown, 1, 2, 1, 25, 31) && grown.rows.length === 25,
+        said({ second: brief(second), shrunk: brief(shrunk), grown: brief(grown) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // 10 matches or fewer: no pager. 11: the pager, on one page.
+      resetNet(200, answerFor(makeState('P'.repeat(10)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const ten = look(page);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState('P'.repeat(11)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const eleven = look(page);
+      const elevenSteps = [stepButton(page, 'Previous'), stepButton(page, 'Next')].map((b) => b?.getAttribute('aria-disabled') ?? null);
+      check(`${name}: the pager shows from 11 matches, as on Payments: 10 pending requests, no pager at all, not even Rows per `
+          + 'page; 11, the pager, "Showing 1 to 11 of 11 results", a single "1", Rows per page 25, Previous and Next unavailable',
+        ten.rows.length === 10 && !ten.pager && ten.size === null
+          && eleven.rows.length === 11 && onPage(eleven, 1, 1, 1, 11, 11) && eleven.numbers === '1' && eleven.size === '25'
+          && said(elevenSteps) === said(['true', 'true']),
+        said({ ten: { rows: ten.rows.length, pager: ten.pager, size: ten.size }, eleven: { ...brief(eleven), steps: elevenSteps } }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // The middle shape needs more than 8 pages: 95 pending requests at 10 a
+      // page make 10, and page 5 is neither among the first four nor the last.
+      resetNet(200, answerFor(makeState('P'.repeat(95)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await setRows(page, 10);
+      const shapes = [look(page)];
+      await press(page, numberButton(page, 5));
+      shapes.push(look(page));
+      const middleGaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+      await press(page, numberButton(page, 10));
+      shapes.push(look(page));
+      check(`${name}: above 7 pages there are always 7 slots: 95 requests at 10 a page, "1 2 3 4 5 … 10" on page 1, `
+          + '"1 … 4 5 6 … 10" on page 5 (Res 041 to Res 050), with both "…" plain text, and "1 … 6 7 8 9 10" on page 10 '
+          + '(Res 091 to Res 095)',
+        onPage(shapes[0], 1, 10, 1, 10, 95) && shapes[0].numbers === '1 2 3 4 5 … 10'
+          && onPage(shapes[1], 5, 10, 41, 50, 95) && shapes[1].numbers === '1 … 4 5 6 … 10'
+          && said(shapes[1].rows) === said(names(41, 50))
+          && middleGaps.length === 2 && middleGaps.every((li) => !li.querySelector('button, a, input, select, [tabindex]'))
+          && onPage(shapes[2], 10, 10, 91, 95, 95) && shapes[2].numbers === '1 … 6 7 8 9 10'
+          && said(shapes[2].rows) === said(names(91, 95)),
+        said(shapes.map(brief)));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section Y sent GETs, and two POSTs, the Secretary\'s approve and mark ready for release, both answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
   }
 
   console.error = origError;

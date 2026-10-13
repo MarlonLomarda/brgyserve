@@ -3026,6 +3026,20 @@ button.pay-tab:hover:not(:disabled) {
   }
 }
 
+/* The Document requests list's heading (13 Oct 2026). A page change or a new
+   Rows per page brings it into view (components/ListPager.jsx), as it does
+   the Payments totals line above, so it takes that line's scroll margins:
+   16px, and 126px at 1045px and below, clear of the sticky header there. */
+.doc-requests-head h2 {
+  scroll-margin-top: 16px;
+}
+
+@media (max-width: 1045px) {
+  .doc-requests-head h2 {
+    scroll-margin-top: 126px;
+  }
+}
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only
