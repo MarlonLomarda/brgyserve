@@ -89,6 +89,14 @@
 // or Rows per page change; and the page kept, or clamped to the last one,
 // through Refresh, Try again and Back from a request.
 //
+// Section Z is the Document requests list's payment marker and request
+// number, for the same three roles: every row says "Paid", "No fee",
+// "Unpaid", "Void" or "Not billed" under its status badge and "#91" under the
+// requester, with no new column; the search finds a request by its number,
+// part of it matching as on Payments, and never by a marker's word; and on a
+// phone card both are labelled, which index.css does (read from the file,
+// as jsdom applies no width media query).
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -4073,10 +4081,12 @@ const root = () => dom.window.document.getElementById('root');
       && v.rows.length === 0 && !v.zero && !v.empty;
     // Each row as a person reads it: the name, the account note under it, the
     // document, purpose, status and submitted cells, and the row's button.
+    // Since section Z the Status cell holds the badge and the payment marker
+    // under it, so a cell's words are read with a space between elements.
     const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
       const cells = [...tr.children];
       return [text(cells[0]?.querySelector('strong')), text(cells[0]?.querySelector('.small-note')) ?? '(no note)',
-        ...cells.slice(1, 5).map(text), text(cells[5]?.querySelector('button'))].join(' | ');
+        ...cells.slice(1, 5).map((cell) => (cell ? spaced(cell) : null)), text(cells[5]?.querySelector('button'))].join(' | ');
     });
     const headersRead = (page) => page.queryAll('table.data-table thead th').map(text);
     const methodsSent = [];
@@ -4101,12 +4111,12 @@ const root = () => dom.window.document.getElementById('root');
       await page.settle();
       const note = (id) => (staff ? '(no note)' : `@res_${id}`);
       const WANT_ROWS = [
-        `Ana Cruz | ${note(201)} | Barangay Clearance | Purpose 201 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
-        `Ben Reyes | ${note(202)} | Certificate of Residency | Purpose 202 | Pending | Oct 8, 2026, 2:00 AM | ${opener}`,
+        `Ana Cruz | ${note(201)} | Barangay Clearance | Purpose 201 | Pending Not billed | Oct 8, 2026, 2:00 AM | ${opener}`,
+        `Ben Reyes | ${note(202)} | Certificate of Residency | Purpose 202 | Pending Not billed | Oct 8, 2026, 2:00 AM | ${opener}`,
       ];
       check(`${name}: a successful load shows its rows as before: "2 pending requests", the six column headers, and each `
-          + `row's name, ${staff ? 'no account note' : 'account note'}, document, purpose, status, date and ${opener}, `
-          + `${walkIn ? 'with' : 'with no'} Encode walk-in`,
+          + `row's name, ${staff ? 'no account note' : 'account note'}, document, purpose, status with its payment marker `
+          + `("Not billed", section Z), date and ${opener}, ${walkIn ? 'with' : 'with no'} Encode walk-in`,
         text(page.query('.list-head h2')) === '2 pending requests'
           && said(headersRead(page)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', ''])
           && said(rowsRead(page)) === said(WANT_ROWS) && !!buttonNamed(root(), 'Encode walk-in') === walkIn,
@@ -4742,10 +4752,10 @@ const root = () => dom.window.document.getElementById('root');
   // utils/chargeSearch.js's normalise, searchTerms and matchesTerms as they
   // are, over what utils/requestList.js says a row shows of who and what: the
   // requester's name, the resident's @account where the row shows one, and
-  // the document type. Never the purpose, the rejection reason, an email, a
-  // status word, a walk-in's filer or the request number; and for Staff,
-  // whose rows show no account, no account at all, although their payload
-  // still carries the filer's username. The search runs over the whole list
+  // the document type, and since section Z the request number under them.
+  // Never the purpose, the rejection reason, an email, a status word or a
+  // walk-in's filer; and for Staff, whose rows show no account, no account
+  // at all, although their payload still carries the filer's username. The search runs over the whole list
   // and the tabs split what matches: their counts follow it, the chosen tab
   // stays, and while a search is on the heading reads "N of M <tab> requests
   // match". It lives through Refresh, Try again and Back from a request, and
@@ -4826,30 +4836,32 @@ const root = () => dom.window.document.getElementById('root');
     const parts = (r) => attempt(() => R.searchParts(r));
     let got = parts(SECRETARY_LIST[0]);
     check('searchParts, a Secretary or Punong Barangay row: the name as the row shows it, the @account the row shows under '
-        + 'it, and the document type: "Juan Miguel Dela Cruz", "@jmdc_1990", "Barangay Clearance"',
-      said(got) === said(['Juan Miguel Dela Cruz', '@jmdc_1990', 'Barangay Clearance']), said(got));
+        + 'it, the request number under that (section Z), and the document type: "Juan Miguel Dela Cruz", "@jmdc_1990", '
+        + '"#401", "Barangay Clearance"',
+      said(got) === said(['Juan Miguel Dela Cruz', '@jmdc_1990', '#401', 'Barangay Clearance']), said(got));
     got = parts(STAFF_LIST[0]);
     check('  a Staff row shows no account, so its text has none, although the request still carries the filer\'s username, '
-        + '"jmdc_1990", which is the resident\'s own account here',
-      said(got) === said(['Juan Miguel Dela Cruz', 'Barangay Clearance']) && STAFF_LIST[0].requester.username === 'jmdc_1990',
+        + '"jmdc_1990", which is the resident\'s own account here; it has the number, "#401"',
+      said(got) === said(['Juan Miguel Dela Cruz', '#401', 'Barangay Clearance']) && STAFF_LIST[0].requester.username === 'jmdc_1990',
       said(got));
     got = [SECRETARY_LIST[4], SECRETARY_LIST[9], SECRETARY_LIST[3]].map(parts);
     check('  a walk-in reads its resident, never its filer: Rosa Lim, with no online account, has no handle and no '
         + '"secretary1"; Elsa Uy has her own "@elsa_uy"; and a suffix reads as the row shows it, "Pedro Dela Cruz, Jr."',
-      said(got) === said([['Rosa Lim', 'Business Clearance'], ['Elsa Uy', '@elsa_uy', 'Certificate of Residency'],
-        ['Pedro Dela Cruz, Jr.', '@pdc_2001', 'Barangay Clearance']]), said(got));
+      said(got) === said([['Rosa Lim', '#405', 'Business Clearance'], ['Elsa Uy', '@elsa_uy', '#410', 'Certificate of Residency'],
+        ['Pedro Dela Cruz, Jr.', '@pdc_2001', '#404', 'Barangay Clearance']]), said(got));
     got = parts({ ...SECRETARY_LIST[0], resident_records: null, requester: { user_id: 9, username: 'filer_9' } });
-    check('  a request with no resident name reads what its row shows in its place, the filer\'s "@filer_9"',
-      said(got) === said(['@filer_9', 'Barangay Clearance']), said(got));
-    // Nothing else a request carries reaches its text.
+    check('  a request with no resident name reads what its row shows in its place, the filer\'s "@filer_9", and its number',
+      said(got) === said(['@filer_9', '#401', 'Barangay Clearance']), said(got));
+    // Nothing else a request carries reaches its text. (The request number
+    // was on this list until section Z put it in the row and the search.)
     const leaks = [...SECRETARY_LIST, ...STAFF_LIST].flatMap((r) => {
       const all = attempt(() => R.searchParts(r).join('\n'));
       if (typeof all !== 'string' || all.startsWith('threw')) return [`${r.request_id}: ${all}`];
-      return [r.purpose, r.rejection_reason, r.requester.email, r.status, String(r.request_id), 'online']
+      return [r.purpose, r.rejection_reason, r.requester.email, r.status, 'online']
         .filter(Boolean).filter((s) => all.toLowerCase().includes(s.toLowerCase())).map((s) => `${r.request_id}: ${s}`);
     });
-    check('  no request\'s text holds its purpose, rejection reason, email, status, request number or the "No online account" '
-        + 'note, in either projection', leaks.length === 0, said(leaks));
+    check('  no request\'s text holds its purpose, rejection reason, email, status or the "No online account" note, in either '
+        + 'projection', leaks.length === 0, said(leaks));
     const matchedIds = (list, query) => attempt(() => R.matchingRequests(list, query).map((r) => r.request_id));
     got = {
       blank: matchedIds(SECRETARY_LIST, ''), spaces: matchedIds(SECRETARY_LIST, '   '), nino: matchedIds(SECRETARY_LIST, 'NIÑO'),
@@ -5109,9 +5121,10 @@ const root = () => dom.window.document.getElementById('root');
           said({ notes, accounts }));
       }
 
-      // What a search never reaches.
+      // What a search never reaches. (A request number, "401", was on this
+      // list until section Z put the number in the row and the search.)
       const NEVER = ['scholarship', 'employment', 'bank account', 'incomplete', 'birth certificate', 'example.invalid',
-        'pending', 'rejected', 'secretary1', 'online', '401'];
+        'pending', 'rejected', 'secretary1', 'online'];
       const leaked = [];
       for (const q of NEVER) {
         const rows = await rowsFor(q);
@@ -5119,7 +5132,7 @@ const root = () => dom.window.document.getElementById('root');
       }
       check(`${name}: never matched: a purpose ("scholarship", "employment", "bank account"), the rejection reason `
           + '("incomplete", "birth certificate"), an email ("example.invalid"), a status ("pending", "rejected"), a walk-in\'s '
-          + 'filer ("secretary1"), the "No online account" note ("online"), a request number ("401")',
+          + 'filer ("secretary1"), the "No online account" note ("online")',
         leaked.length === 0 && !!box(page), said(leaked));
       // With no box on screen nothing was typed, so "no request" would say nothing.
       check(`${name}: and none of those ${Object.keys(found).length + 3 + NEVER.length} searches sent a request`,
@@ -5798,6 +5811,510 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousScroll === undefined) delete proto.scrollIntoView;
     else proto.scrollIntoView = previousScroll;
+  }
+
+  // =========================================================================
+  // Z. Document requests: the payment marker and the request number
+  // =========================================================================
+  // Every row of the Document requests list now says where the request
+  // stands with its fee, and which request it is. The marker sits under the
+  // status badge, in the Status cell: "Paid" (a PAID charge above PHP 0),
+  // "No fee" (a PAID charge of PHP 0, through isNoFeeCharge as My requests
+  // and the request detail use it), "Unpaid" (an UNPAID charge, whatever was
+  // declared), "Void" (a VOID charge: no route voids a document charge, but
+  // the column allows one) and "Not billed" (no charge: pending, rejected and
+  // cancelled requests, and two approved before approval billed). The number
+  // is a line of its own under the requester, after the account note, as the
+  // detail names the request: "#91". Neither is a new column, and neither is
+  // a <strong>, so a row's first <strong> is still the name that section T
+  // and the others find it by. The search reads the number, "91" or "#91",
+  // part of it matching as on Payments ("9" finds 9, 19 and 91; "#9" 9 and
+  // 91), and never the marker's words. On a phone each has a card label of
+  // its own, which index.css prints from its data-label; jsdom applies no
+  // @media rule with a width in it, so the 640px rules are read from
+  // index.css itself. utils/requestList.js is checked case by case, then the
+  // real page for the three roles against thirteen stubbed requests, then 77
+  // shaped like the live list on 13 Oct 2026, then index.css. Every request
+  // is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Document requests: the payment marker and the request number ---');
+  {
+    const previousTZZ = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const fs = require('fs');
+    const R = globalThis.requestList || {};
+    const CS = globalThis.chargeSearch || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // a. The helpers on their own.
+    const numbers = [91, 6, 1234].map((id) => attempt(() => R.requestNumber({ request_id: id })));
+    check('requestNumber: the number as the request detail names it, "#91", "#6", and "#1234" with no thousands separator',
+      said(numbers) === said(['#91', '#6', '#1234']), said(numbers));
+    // The marker for a request whose charges embed is `charges`, as
+    // "label (colour class)". The class is the charge's own CHARGE_META one,
+    // the detail's Paid, Unpaid and Void badges', or "gray".
+    const markerOf = (charges) => attempt(() => {
+      const m = R.paymentMarker({ request_id: 1, status: 'approved', ...(charges === undefined ? {} : { charges }) });
+      return m ? `${m.label} (${m.className})` : m;
+    });
+    const MARKER_CASES = [
+      ['no charge yet, null, absent or an empty list, is "Not billed"', [null, undefined, []], 'Not billed (gray)'],
+      ['a PAID charge above PHP 0, as a number, as a string, or inside a list, is "Paid", green as the detail\'s Paid badge',
+        [{ status: 'PAID', amount: 50 }, { status: 'PAID', amount: '200.00' }, [{ status: 'PAID', amount: '20.00' }]],
+        'Paid (status-claimed)'],
+      ['a PAID charge of PHP 0, 0, "0.00" or "0", is "No fee", never "Paid"',
+        [{ status: 'PAID', amount: 0 }, { status: 'PAID', amount: '0.00' }, { status: 'PAID', amount: '0' }], 'No fee (gray)'],
+      ['a PAID charge with no amount, a null one or a blank one is "Paid", never "No fee" (Number() reads them as 0; '
+        + 'isZeroFee does not)', [{ status: 'PAID' }, { status: 'PAID', amount: null }, { status: 'PAID', amount: '' }],
+      'Paid (status-claimed)'],
+      ['an UNPAID charge is "Unpaid", amber, whatever its amount, PHP 0 included, and whatever the resident declared',
+        [{ status: 'UNPAID', amount: '50.00' }, { status: 'UNPAID', amount: 0 },
+          { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' }], 'Unpaid (status-pending)'],
+      ['a VOID charge is "Void", never "Unpaid", "Paid" or "No fee", PHP 0 included',
+        [{ status: 'VOID', amount: '50.00' }, { status: 'VOID', amount: '0.00' }], 'Void (status-cancelled)'],
+      ['a charge status outside the three is shown as it is, never blank and never "Unpaid"',
+        [{ status: 'REFUNDED', amount: '50.00' }], 'REFUNDED (gray)'],
+    ];
+    for (const [what, inputs, want] of MARKER_CASES) {
+      const got = inputs.map(markerOf);
+      check(`paymentMarker: ${what}`, got.every((g) => g === want), said(got));
+    }
+
+    // The number in a search, against the Payments search's own rule for its
+    // charge number (utils/chargeSearch.js, "#" and the number, matched as
+    // part of the text). The names and the document hold no digit.
+    const IDS_N = [91, 90, 19, 11, 9, 29, 6, 191];
+    const numbered = IDS_N.map((id) => ({ request_id: id, status: 'approved', document_types: { name: 'Barangay Clearance' },
+      resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null },
+      charges: null }));
+    const QUERIES = ['91', '#91', '9', '#9', '#1', '191', '  #91 '];
+    const requestIds = (q) => attempt(() => R.matchingRequests(numbered, q).map((r) => r.request_id));
+    const chargeIds = (q) => attempt(() => IDS_N.filter((id) => CS.matchesTerms(
+      CS.chargeSearchText({ charge_id: id }, { name: 'Ana Cruz', forText: 'Barangay Clearance' }), CS.searchTerms(q))));
+    const byNumber = Object.fromEntries(QUERIES.map((q) => [q, requestIds(q)]));
+    check('matchingRequests reads the number: "91" finds 91 and 191, "#91" only 91; part of a number matches: "9" finds 91, '
+        + '90, 19, 9, 29 and 191, "#9" 91, 90 and 9, "#1" 19, 11 and 191; "191" only 191',
+      said(byNumber) === said({ 91: [91, 191], '#91': [91], 9: [91, 90, 19, 9, 29, 191], '#9': [91, 90, 9],
+        '#1': [19, 11, 191], 191: [191], '  #91 ': [91] }), said(byNumber));
+    const unlikePayments = QUERIES.filter((q) => said(requestIds(q)) !== said(chargeIds(q)));
+    check('  the Payments search\'s rule for its charge number, exactly: each of those searches finds the requests whose '
+        + 'numbers are the numbers of the charges it finds on Payments',
+      unlikePayments.length === 0, said(QUERIES.map((q) => ({ q, requests: requestIds(q), charges: chargeIds(q) }))));
+    // One request in each state; no name or document holds a marker's word.
+    const STATES = [
+      [1, 'approved', { status: 'PAID', amount: '50.00' }], [2, 'approved', { status: 'PAID', amount: '0.00' }],
+      [3, 'approved', { status: 'UNPAID', amount: '50.00' }], [4, 'approved', { status: 'VOID', amount: '50.00' }],
+      [5, 'pending', null],
+    ].map(([id, status, charge]) => ({ request_id: id, status, document_types: { name: 'Barangay Clearance' },
+      resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null },
+      charges: charge && { charge_id: 900 + id, ...charge } }));
+    const WORDS = ['paid', 'unpaid', 'no fee', 'fee', 'not billed', 'billed', 'void'];
+    const byWord = Object.fromEntries(WORDS.map((w) => [w, attempt(() => R.matchingRequests(STATES, w).map((r) => r.request_id))]));
+    const markersHeld = STATES.map((r) => attempt(() => R.paymentMarker(r).label));
+    check('the marker\'s words are never searched: "paid", "unpaid", "no fee", "fee", "not billed", "billed" and "void" find '
+        + 'nothing, in a list holding a request in each state',
+      said(markersHeld) === said(['Paid', 'No fee', 'Unpaid', 'Void', 'Not billed'])
+        && Object.values(byWord).every((ids) => Array.isArray(ids) && ids.length === 0), said({ markersHeld, byWord }));
+
+    // b. The real page. Thirteen requests in the list's real shape (as in
+    // sections V to Y: Staff's carries no resident account and no requester
+    // email), newest first, at least one in every payment state. A charge
+    // arrives as one object, as the live list sends it (the embed is
+    // one-to-one: charges.document_request_id is UNIQUE). 19 is a walk-in
+    // filed by secretary1 for a resident with no online account, and its
+    // resident has declared paying onsite, which pays nothing. 55's resident
+    // is fevilla2006: an account Staff's rows never show, though their
+    // payload still carries it as the filer's username.
+    //   id, status, first, last, document type, charge, account, the marker
+    const MARKED = [
+      [91, 'ready_for_release', 'Liza', 'Bantilan', 'First-time Jobseeker Certificate', { status: 'PAID', amount: '0.00' },
+        'liza_b', 'No fee'],
+      [90, 'pending', 'Ana', 'Cruz', 'Barangay Clearance', null, 'ana_cruz', 'Not billed'],
+      [84, 'approved', 'Ben', 'Reyes', 'Certificate of Residency', { status: 'VOID', amount: '50.00' }, 'ben_reyes', 'Void'],
+      [82, 'approved', 'Carla', 'Santos', 'Business Clearance', { status: 'UNPAID', amount: '0.00' }, 'carla_s', 'Unpaid'],
+      [71, 'cancelled', 'Dino', 'Tan', 'Barangay Clearance', null, 'dino_tan', 'Not billed'],
+      [70, 'rejected', 'Elsa', 'Uy', 'Barangay ID', null, 'elsa_uy', 'Not billed'],
+      [55, 'approved', 'Fe', 'Villa', 'Barangay Clearance', { status: 'PAID', amount: '20.00' }, 'fevilla2006', 'Paid'],
+      [29, 'claimed', 'Gil', 'Wong', 'Certificate of Residency', { status: 'PAID', amount: 200 }, 'gil_wong', 'Paid'],
+      [19, 'approved', 'Hana', 'Yap', 'Certificate of Indigency', { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' },
+        null, 'Unpaid'],
+      [11, 'approved', 'Ivy', 'Zamora', 'Certificate of Indigency', { status: 'PAID', amount: 0 }, 'ivy_z', 'No fee'],
+      [9, 'approved', 'Jun', 'Abad', 'Barangay Clearance', null, 'jun_abad', 'Not billed'],
+      [6, 'approved', 'Kim', 'Bello', 'Certificate of Residency', null, 'kim_bello', 'Not billed'],
+      [1, 'claimed', 'Lito', 'Gomez', 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, 'lito_g', 'Paid'],
+    ];
+    const asRequest = ([id, status, first, last, documentType, charge, account], staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: account ? 700 + id : 1, username: account ?? 'secretary1',
+        ...(staff ? {} : { email: `${account ?? 'secretary1'}@example.invalid` }) },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, ...charge },
+    });
+    const nameOf = (row) => `${row[2]} ${row[3]}`;
+    const wantRow = (row) => `${nameOf(row)} | #${row[0]} | ${row[7]}`;
+    const TAB_STATUS = { Pending: 'pending', Approved: 'approved', 'Ready for release': 'ready_for_release',
+      Claimed: 'claimed', Rejected: 'rejected', Cancelled: 'cancelled', All: null };
+    const STRIP13 = 'Pending 1 · Approved 7 · Ready for release 1 · Claimed 2 · Rejected 1 · Cancelled 1 · All 13';
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const rowsOf = (page) => page.queryAll('table.data-table tbody tr');
+    const numberOf = (tr) => tr.querySelectorAll('.doc-requests-number');
+    const markerEls = (tr) => tr.querySelectorAll('.doc-requests-pay');
+    // Each row as a person reads its name, number and marker.
+    const readRow = (tr) => `${text(tr.querySelector('strong'))} | ${text(numberOf(tr)[0]) ?? '(no number)'} | `
+      + `${text(markerEls(tr)[0]) ?? '(no marker)'}`;
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: rowsOf(page).map(readRow),
+      showing: text(page.query('.pay-pager-count')),
+    });
+    // jsdom has no scrollIntoView, and the pager calls it on a Rows per page
+    // change (part c); this one only records it.
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView() {};
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, staff: true },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, staff: false },
+    ];
+    for (const { name, route, token, user, staff } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+        ? { requests: MARKED.map((row) => asRequest(row, staff)) } : undefined));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      let v = look(page);
+      check(`${name}: on open, Pending: the request not yet decided shows "Not billed" under its badge and "#90" under the `
+          + 'name; heading, counts and the one request sent as before the marker',
+        v.heading === '1 pending request' && v.strip === STRIP13 && said(v.rows) === said(['Ana Cruz | #90 | Not billed'])
+          && net.calls.length === 1 && /\/document-requests\?status=all$/.test(net.calls[0].url),
+        said({ v, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+
+      const sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: on All every row shows its number and its marker: No fee, Not billed, Void, Unpaid, Paid, each where `
+          + 'its charge says so',
+        said(v.rows) === said(MARKED.map(wantRow)), said(v.rows));
+      const rowById = (id) => rowsOf(page).find((tr) => text(numberOf(tr)[0]) === `#${id}`) ?? null;
+      const markerById = (id) => text(rowById(id) && markerEls(rowById(id))[0]);
+      check(`${name}: each of the four states, and Void, on a row of its own: 55 "Paid", 11 "No fee", 19 "Unpaid", 90 "Not `
+          + 'billed", 84 "Void"',
+        markerById(55) === 'Paid' && markerById(11) === 'No fee' && markerById(19) === 'Unpaid'
+          && markerById(90) === 'Not billed' && markerById(84) === 'Void',
+        said([55, 11, 19, 90, 84].map((id) => [id, markerById(id)])));
+      check(`${name}: a PAID PHP 0.00 charge reads "No fee", never "Paid": 91 (amount "0.00") and 11 (amount 0)`,
+        markerById(91) === 'No fee' && markerById(11) === 'No fee', said([markerById(91), markerById(11)]));
+      check(`${name}: an approved request with an UNPAID charge reads "Unpaid": 19 (its resident declared paying onsite) and `
+          + '82 (PHP 0.00, never "No fee")',
+        markerById(19) === 'Unpaid' && markerById(82) === 'Unpaid', said([markerById(19), markerById(82)]));
+      check(`${name}: requests with no charge read "Not billed": pending 90, rejected 70, cancelled 71, and 9 and 6, approved `
+          + 'with no charge',
+        [90, 70, 71, 9, 6].every((id) => markerById(id) === 'Not billed'), said([90, 70, 71, 9, 6].map(markerById)));
+      check(`${name}: All, 13 requests: heading "13 requests", every count, and the pager's "Showing 1 to 13 of 13 results", `
+          + 'as before the marker; no request sent by the tab',
+        v.heading === '13 requests' && v.strip === STRIP13 && v.showing === 'Showing 1 to 13 of 13 results'
+          && net.calls.length === sent, said({ heading: v.heading, strip: v.strip, showing: v.showing, sent: net.calls.length - sent }));
+
+      // Where the two sit in the row.
+      const heads = page.queryAll('table.data-table thead th').map(text);
+      const shapes = rowsOf(page).map((tr) => {
+        const cells = [...tr.children];
+        const num = numberOf(tr);
+        const mark = markerEls(tr);
+        const strongs = [...tr.querySelectorAll('strong')];
+        const note = cells[0]?.querySelector('.small-note') ?? null;
+        return {
+          cells: cells.length,
+          firstStrong: text(strongs[0]),
+          oneEach: num.length === 1 && mark.length === 1,
+          numberCell: num[0]?.closest('td') === cells[0],
+          markerCell: mark[0]?.closest('td') === cells[3],
+          // after the name, and after the account note where the row has one
+          numberAfter: !!num[0] && !!(strongs[0]?.compareDocumentPosition(num[0]) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)
+            && (!note || !!(note.compareDocumentPosition(num[0]) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)),
+          markerAfterBadge: !!mark[0] && !!(cells[3]?.querySelector('.badge')?.compareDocumentPosition(mark[0])
+            & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
+          noStrong: !num[0]?.closest('strong') && !num[0]?.querySelector('strong') && !mark[0]?.closest('strong')
+            && !mark[0]?.querySelector('strong'),
+          labels: `${num[0]?.getAttribute('data-label')}/${mark[0]?.getAttribute('data-label')}`,
+          tone: mark[0] ? [...mark[0].classList].filter((c) => c !== 'doc-requests-pay').sort().join(' ') : null,
+          note: text(note),
+        };
+      });
+      const TONES = { Paid: 'charge-word status-claimed', Unpaid: 'charge-word status-pending', Void: 'charge-word status-cancelled',
+        'No fee': 'charge-word gray', 'Not billed': 'charge-word gray' };
+      check(`${name}: no new column: the same six headers, and six cells in every row`,
+        said(heads) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', '']) && shapes.every((s) => s.cells === 6),
+        said({ heads, cells: shapes.map((s) => s.cells) }));
+      check(`${name}: the number is in the Requester cell, after the name${staff ? '' : ' and the account note'}, and the marker `
+          + 'in the Status cell, after the badge; one of each per row, neither a <strong>, so the row\'s first <strong> is '
+          + 'still the name (section T finds rows by it)',
+        shapes.every((s, i) => s.oneEach && s.numberCell && s.markerCell && s.numberAfter && s.markerAfterBadge && s.noStrong
+          && s.firstStrong === nameOf(MARKED[i])), said(shapes));
+      check(`${name}: on a phone card they are labelled "Request" and "Payment" (data-label), and the marker takes the charge `
+          + 'colours of .charge-word: Paid green, Unpaid amber, Void, No fee and Not billed slate',
+        shapes.every((s, i) => s.labels === 'Request/Payment' && s.tone === TONES[MARKED[i][7]]),
+        said(shapes.map((s) => [s.labels, s.tone])));
+      if (staff) {
+        const tableText = text(page.query('table.data-table'));
+        check('Staff: the rows show no account note, and no filer\'s username anywhere ("fevilla2006", "secretary1")',
+          shapes.every((s) => s.note === null) && !tableText.includes('fevilla2006') && !tableText.includes('secretary1'),
+          said({ notes: shapes.map((s) => s.note), fevilla: tableText.includes('fevilla2006') }));
+      }
+
+      // Every tab: each row's number and marker, and nothing sent.
+      const sentTabs = net.calls.length;
+      const wrongTabs = [];
+      for (const [label, status] of Object.entries(TAB_STATUS)) {
+        await clickIf(page, tabNamed(page, label));
+        const want = MARKED.filter((row) => status === null || row[1] === status).map(wantRow);
+        const got = look(page).rows;
+        if (said(got) !== said(want)) wrongTabs.push({ tab: label, got, want });
+      }
+      check(`${name}: on every one of the seven tabs, every row shows its own number and marker, and pressing them sends nothing`,
+        wrongTabs.length === 0 && net.calls.length === sentTabs, said({ wrongTabs, sent: net.calls.length - sentTabs }));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: Approved keeps its heading and counts, "7 approved requests", and at 7 matches no pager`,
+        v.heading === '7 approved requests' && v.strip === STRIP13 && v.showing === null, said(v));
+
+      // The search, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const sentSearch = net.calls.length;
+      const found = async (q) => {
+        await type(page, q);
+        return rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      };
+      const hits = {
+        n91: await found('91'), hash91: await found('#91'), n9: await found('9'), hash9: await found('#9'),
+        hash1: await found('#1'), withWord: await found('91 jobseeker'), wrongWord: await found('91 clearance'),
+      };
+      check(`${name}: a search finds a request by its number: "91" and "#91" find #91 alone`,
+        said(hits.n91) === said(['#91']) && said(hits.hash91) === said(['#91']), said(hits));
+      check(`${name}: part of a number matches, as on Payments: "9" finds #91, #90, #29, #19 and #9; "#9" #91, #90 and #9; `
+          + '"#1" #19, #11 and #1',
+        said(hits.n9) === said(['#91', '#90', '#29', '#19', '#9']) && said(hits.hash9) === said(['#91', '#90', '#9'])
+          && said(hits.hash1) === said(['#19', '#11', '#1']), said(hits));
+      check(`${name}: the number is one more word of the search: "91 jobseeker" finds #91, "91 clearance" nothing`,
+        said(hits.withWord) === said(['#91']) && Array.isArray(hits.wrongWord) && hits.wrongWord.length === 0, said(hits));
+      await type(page, '9');
+      v = look(page);
+      check(`${name}: with "9", the heading and the counts follow the search as they do for a name: "5 of 13 requests match", `
+          + '"Pending 1 · Approved 2 · Ready for release 1 · Claimed 1 · Rejected 0 · Cancelled 0 · All 5"',
+        v.heading === '5 of 13 requests match'
+          && v.strip === 'Pending 1 · Approved 2 · Ready for release 1 · Claimed 1 · Rejected 0 · Cancelled 0 · All 5',
+        said({ heading: v.heading, strip: v.strip }));
+      const wordHits = {};
+      for (const q of WORDS) wordHits[q] = await found(q);
+      check(`${name}: the marker's words find nothing: "paid", "unpaid", "no fee", "fee", "not billed", "billed", "void"`,
+        Object.values(wordHits).every((rows) => rows.length === 0) && !!box(page), said(wordHits));
+      const username = await found('2006');
+      check(staff
+        ? 'Staff: "2006", in the username of 55\'s filer, finds nothing: the search never reads a username Staff\'s rows do not show'
+        : `${name}: "2006" finds #55, whose row shows "@fevilla2006" under the name`,
+      said(username) === said(staff ? [] : ['#55']), said(username));
+      await type(page, '');
+      check(`${name}: none of those searches sent a request`, !!box(page) && net.calls.length === sentSearch,
+        `${net.calls.length - sentSearch} request(s)`);
+
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. 77 requests in the order of the live list on 13 Oct 2026 (D1's
+    // read-only capture), with its statuses (section Y's SEQ), its payment
+    // states and its request numbers. PAY77 is each one's state: F No fee, P
+    // Paid, U Unpaid, N Not billed. Named by their place in letters, so no
+    // name holds a digit. The counts, written by hand from the capture, are
+    // the 13 Oct note's for Approved: Paid 41, No fee 1, Unpaid 6, Not
+    // billed 2.
+    const SEQ77 = 'RPPXAPPPRXAJCAXAPACAAAAAAAAAAAAACRAAAAAAAAXAAAAAAAAAAAAAAACCAAAAAAAJAXXAXJJRJ';
+    const PAY77 = 'FNNNUNNNPNPNPPNUNUPPPPPPPPPPPPPPPPPPPPPPPPNPPPPPPUUPPPUPPPPPPPPPPPFNNNNNNNNPN';
+    const IDS77 = [91, 90, 84, 83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 62, 61, 60, 59, 58, 57, 56, 55, 54,
+      53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22,
+      20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+    const LETTER = { P: 'pending', A: 'approved', R: 'ready_for_release', C: 'claimed', J: 'rejected', X: 'cancelled' };
+    const CHARGE = { F: { status: 'PAID', amount: '0.00' }, P: { status: 'PAID', amount: '50.00' },
+      U: { status: 'UNPAID', amount: '50.00' }, N: null };
+    const letters = (n) => (n > 26 ? letters(Math.floor((n - 1) / 26)) : '') + String.fromCharCode(65 + ((n - 1) % 26));
+    const LIVE = IDS77.map((id, i) => [id, LETTER[SEQ77[i]], 'Res', letters(i + 1), 'Barangay Clearance', CHARGE[PAY77[i]],
+      `res_${letters(i + 1).toLowerCase()}`]);
+    const WANT77 = {
+      Pending: { 'Not billed': 6 }, Approved: { Paid: 41, 'No fee': 1, Unpaid: 6, 'Not billed': 2 },
+      'Ready for release': { Paid: 3, 'No fee': 1 }, Claimed: { Paid: 5 }, Rejected: { 'Not billed': 5 },
+      Cancelled: { 'Not billed': 7 }, All: { Paid: 49, 'No fee': 2, Unpaid: 6, 'Not billed': 20 },
+    };
+    const tally = (labels) => labels.reduce((m, l) => ({ ...m, [l]: (m[l] || 0) + 1 }), {});
+    const sameTally = (a, b) => said(Object.keys(a).sort().map((k) => [k, a[k]])) === said(Object.keys(b).sort().map((k) => [k, b[k]]));
+    for (const { name, route, token, user, staff } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+        ? { requests: LIVE.map((row) => asRequest(row, staff)) } : undefined));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      const sizeSelect = page.query('.pay-pager select');
+      if (sizeSelect) {
+        sizeSelect.value = '100';
+        sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+      const counted = {};
+      for (const label of Object.keys(WANT77)) {
+        await clickIf(page, tabNamed(page, label));
+        counted[label] = tally(rowsOf(page).map((tr) => text(markerEls(tr)[0]) ?? '(no marker)'));
+      }
+      const off = Object.keys(WANT77).filter((label) => !sameTally(counted[label], WANT77[label]));
+      check(`${name}: over the 77 live-shaped requests, at 100 a page, the markers count as the capture does: Approved Paid 41, `
+          + 'No fee 1, Unpaid 6, Not billed 2; All Paid 49, No fee 2, Unpaid 6, Not billed 20; and every other tab',
+        off.length === 0, said({ off: off.map((label) => ({ label, got: counted[label], want: WANT77[label] })) }));
+      await clickIf(page, tabNamed(page, 'All'));
+      const allNumbers = rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      check(`${name}: All shows every number in the order sent, #91 first and #1 last, under "77 requests" and "Showing 1 to `
+          + '77 of 77 results"',
+        said(allNumbers) === said(IDS77.map((id) => `#${id}`)) && look(page).heading === '77 requests'
+          && look(page).showing === 'Showing 1 to 77 of 77 results', said({ first: allNumbers.slice(0, 3), n: allNumbers.length }));
+      await type(page, '#91');
+      const one = look(page).rows;
+      await type(page, '9');
+      const nines = rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      check(`${name}: "#91" finds the one request 91, ready for release with no fee; "9" the ten numbers holding a 9`,
+        said(one) === said(['Res A | #91 | No fee'])
+          && said(nines) === said(['#91', '#90', '#79', '#69', '#59', '#49', '#39', '#29', '#19', '#9']), said({ one, nines }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. The phone card. jsdom applies no @media rule with a width in it, so
+    // index.css is read here as a browser of a given width would apply it:
+    // comments stripped first (a comment may hold braces and selectors), then
+    // each rule kept with the @media conditions around it. A block applies
+    // when each width condition in it holds; a print, reduced-motion or other
+    // feature block does not. Selectors are tried on the real row's elements
+    // with matches(); a rule for ::before is tried on the element it belongs
+    // to.
+    const cssRules = () => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      const open = [];
+      let from = 0;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim();
+          open.push(head.startsWith('@') ? { at: head } : { selector: head.replace(/\s+/g, ' '), body: i + 1 });
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          if (block && block.selector !== undefined) {
+            const decls = {};
+            for (const d of src.slice(block.body, i).split(';')) {
+              const k = d.indexOf(':');
+              if (k > 0) decls[d.slice(0, k).trim().toLowerCase()] = d.slice(k + 1).trim().replace(/\s+/g, ' ');
+            }
+            rules.push({ selector: block.selector, decls, media: open.filter((b) => b.at).map((b) => b.at) });
+          }
+          from = i + 1;
+        } else if (ch === ';' && !open.some((b) => b.selector !== undefined)) {
+          from = i + 1;
+        }
+      }
+      return { rules, balanced: open.length === 0 };
+    };
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // Every value `prop` is given for `el` (or its ::before) by the rules a
+    // browser `width` wide applies, as "selector => value".
+    const declared = (css, width, el, prop, before = false) => css.rules
+      .filter((r) => prop in r.decls && appliesAt(r.media, width))
+      .filter((r) => r.selector.split(',').some((s) => {
+        const m = s.trim().match(/^(.*?)::?before$/);
+        return before ? !!m && tryMatch(el, m[1])
+          : !/(::[\w-]+|:(before|after|first-line|first-letter))$/.test(s.trim()) && tryMatch(el, s.trim());
+      }))
+      .map((r) => `${r.selector} => ${r.decls[prop]}`);
+    // What would hide `el` at `width`: on it, or on anything between it and
+    // the table, a display of none, a visibility of hidden, an opacity or font
+    // size of 0, or a clip.
+    const hiders = (css, width, el) => {
+      const found = [];
+      for (let node = el; node; node = node.parentElement) {
+        for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+          ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+          for (const d of declared(css, width, node, prop)) if (bad.test(d.split(' => ')[1])) found.push(d);
+        }
+        if (node.tagName === 'TABLE') break;
+      }
+      return found;
+    };
+    seedSession(VALID);
+    resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+      ? { requests: MARKED.map((row) => asRequest(row, false)) } : undefined));
+    const cardPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await cardPage.settle();
+    await clickIf(cardPage, tabNamed(cardPage, 'All'));
+    const css = cssRules();
+    const docCell = cardPage.query('table.data-table tbody td[data-label="Document"]');
+    check('index.css reads as a browser applies it: every brace closed, and a cell\'s card label ("Document") printed from '
+        + 'its data-label at 390px and not at 1280px, so what follows is measured right',
+      css.balanced && css.rules.length > 500 && !!docCell
+        && said(declared(css, 390, docCell, 'content', true).map((d) => d.split(' => ')[1])) === said(['attr(data-label)'])
+        && declared(css, 1280, docCell, 'content', true).length === 0,
+      said({ balanced: css.balanced, rules: css.rules.length, at390: docCell && declared(css, 390, docCell, 'content', true) }));
+    const parts = cardPage.queryAll('table.data-table tbody .doc-requests-number, table.data-table tbody .doc-requests-pay');
+    const at = (width) => parts.map((el) => ({
+      el: `${el.className} "${text(el)}"`,
+      hidden: hiders(css, width, el),
+      label: declared(css, width, el, 'content', true).map((d) => d.split(' => ')[1]),
+      labelHidden: declared(css, width, el, 'display', true).filter((d) => /=> none/.test(d)),
+    }));
+    const phone = at(390);
+    const fromAttr = (p) => p.label.length > 0 && p.label.every((v) => v === 'attr(data-label)');
+    check('on a phone (390px) nothing hides the number or the marker, in any row, and each card prints its label from '
+        + 'data-label ("Request", "Payment"), never hidden',
+      parts.length === MARKED.length * 2 && phone.every((p) => p.hidden.length === 0 && fromAttr(p) && p.labelHidden.length === 0),
+      said(phone.filter((p) => p.hidden.length || !fromAttr(p) || p.labelHidden.length).slice(0, 4)));
+    const wide = at(1280);
+    check('  above 640px (1280) nothing hides them either, and no label is printed: the data-label is inert there',
+      parts.length === MARKED.length * 2 && wide.every((p) => p.hidden.length === 0 && p.label.length === 0),
+      said(wide.filter((p) => p.hidden.length || p.label.length).slice(0, 4)));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await cardPage.unmount();
+
+    check('section Z sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (previousTZZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZZ;
   }
 
   console.error = origError;

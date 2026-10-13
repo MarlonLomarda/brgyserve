@@ -3040,6 +3040,26 @@ button.pay-tab:hover:not(:disabled) {
   }
 }
 
+/* The Document requests rows (13 Oct 2026). The request number is a line of
+   its own under the requester, at the account note's size and in its colour
+   (.muted); the payment marker is a line under the status badge, in the
+   colour .charge-word gives a charge's status word, and never breaks inside
+   its words ("Not billed"). Both sit in cells the table already had. The
+   .data-table in each selector outranks .muted's 0.9rem wherever this rule
+   sits. The marker's 8px clears the badge, whose padding reaches below its
+   line. On a phone card each takes a label of its own: see the 640px
+   .stack-narrow block. */
+.data-table .doc-requests-number {
+  font-size: 0.8rem;
+}
+
+.data-table .doc-requests-pay {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only
@@ -4784,6 +4804,29 @@ button.tab:hover:not(:disabled) {
 
   .data-table.stack-narrow.payments-table td[data-label] > * {
     min-width: 0;
+  }
+
+  /* Document requests (13 Oct 2026): the request number and the payment
+     marker sit inside the Requester and Status cells, so a cell's own
+     data-label cannot name them. Each carries its own, printed here as a
+     cell's is above (the same size, case, spacing and colour), and stands
+     8px under the field before it, as two cells do with 4px of padding each.
+     On a card their values read at the size of the other fields'. */
+  .data-table.stack-narrow .doc-requests-number,
+  .data-table.stack-narrow .doc-requests-pay {
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .data-table.stack-narrow .doc-requests-number[data-label]::before,
+  .data-table.stack-narrow .doc-requests-pay[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
   }
 
   /* The View panel on a phone fills the screen. Everything under the header

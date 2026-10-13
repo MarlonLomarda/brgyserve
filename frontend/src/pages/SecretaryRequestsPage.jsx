@@ -18,9 +18,11 @@ import {
   inTab,
   matchingRequests,
   noMatchText,
+  paymentMarker,
   personName,
   REQUEST_TABS,
   requesterName,
+  requestNumber,
   searchHeading,
   searchPlaceholder,
   tabCounts,
@@ -68,6 +70,15 @@ import {
 // as chosen. Refresh, Try again and Back from a request keep the page, and a
 // list that shrank under it lands on its last page. Like the search, neither
 // is kept in the browser.
+//
+// PAYMENT AND NUMBER (13 Oct 2026). Every row shows its request number,
+// "#91" as the detail names it, on a line of its own under the requester, and
+// under the status badge where the request stands with its fee: "Paid",
+// "No fee", "Unpaid", "Void" or "Not billed" (utils/requestList.js). Both sit
+// in cells the table already had, so it has no new column, and neither is a
+// <strong>: a row's first <strong> is still the requester's name. The search
+// reads the number and never the marker. On a phone card each is labelled
+// from its own data-label, as a cell is from its own (index.css).
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -100,6 +111,21 @@ function AccountNote({ record }) {
 function StatusBadge({ status }) {
   const meta = statusMeta(status);
   return <span className={`badge ${meta.className}`}>{meta.label}</span>;
+}
+
+// Where the request stands with its fee, under its status badge, in the
+// colours .charge-word gives the charge's own status words. data-label is
+// the phone card's label for it; above 640px nothing reads it.
+function PaymentMarker({ request }) {
+  const marker = paymentMarker(request);
+  return (
+    <div
+      className={`charge-word ${marker.className} doc-requests-pay`}
+      data-label="Payment"
+    >
+      {marker.label}
+    </div>
+  );
 }
 
 function RequestDetail({ id, canManage, onBack }) {
@@ -805,6 +831,12 @@ export default function SecretaryRequestsPage({
                       <td>
                         <strong>{requesterName(r)}</strong>
                         <AccountNote record={r.resident_records} />
+                        <div
+                          className="muted doc-requests-number"
+                          data-label="Request"
+                        >
+                          {requestNumber(r)}
+                        </div>
                       </td>
                       <td data-label="Document">{r.document_types?.name}</td>
                       <td className="muted truncate" data-label="Purpose">
@@ -812,6 +844,7 @@ export default function SecretaryRequestsPage({
                       </td>
                       <td>
                         <StatusBadge status={r.status} />
+                        <PaymentMarker request={r} />
                       </td>
                       <td className="muted" data-label="Submitted">
                         {formatDate(r.requested_at)}

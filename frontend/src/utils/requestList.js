@@ -14,7 +14,13 @@
 // and every word required, in any order, each anywhere in the request's text,
 // part of a word included ("cru" finds "Cruz"). That text is what the row
 // shows of who and what (searchParts), and nothing else.
-import { statusMeta } from "../constants/requestStatus";
+//
+// PAYMENT AND NUMBER (13 Oct 2026). Each row also shows its request number,
+// "#91" as the detail names it (requestNumber), which the search reads too,
+// and where the request stands with its fee (paymentMarker), which it does
+// not.
+import { chargeMeta, chargeOf, statusMeta } from "../constants/requestStatus";
+import { isNoFeeCharge } from "./chargeMethod";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
 
 export const ALL = "all";
@@ -97,18 +103,49 @@ export function accountHandle(record) {
   return record.account?.username ? `@${record.account.username}` : null;
 }
 
+// The request's number as its row shows it under the requester, and as the
+// detail names the request ("Request #91"): "#91". No thousands separator.
+export function requestNumber(request) {
+  return `#${request.request_id}`;
+}
+
+// Where a request stands with its fee, for the marker under its status badge:
+// { label, className }, the class a .charge-word colour. Read from the charge
+// the list carries (charge_id, amount, status), never from the request's
+// status or from what the resident declared:
+//   no charge                 "Not billed": approval bills a request, so a
+//                             pending, rejected or cancelled one has none, and
+//                             so do two approved before approval billed (6, 9)
+//   a PAID charge of PHP 0    "No fee", through isNoFeeCharge, as My requests
+//                             and the detail say it (utils/chargeMethod.js)
+//   any other charge          its status as the detail's charge badge words
+//                             and colours it (CHARGE_META): "Paid", "Unpaid",
+//                             "Void" (no route voids a document charge, but
+//                             the column allows it), or an unknown status as
+//                             it is, never blank
+export function paymentMarker(request) {
+  const charge = chargeOf(request);
+  if (!charge) return { label: "Not billed", className: "gray" };
+  if (isNoFeeCharge(charge)) return { label: "No fee", className: "gray" };
+  const meta = chargeMeta(charge.status);
+  return { label: meta.label, className: meta.className };
+}
+
 // What a search reads of one request: what its row shows of who and what,
 // each its own part. The requester's name as the row shows it; the @account
 // the row shows under it, and only there (never on Staff's rows, whose
 // payload has no resident account but still carries the filer's username,
-// which on a self-service request is that same account); and the document
-// type. NEVER the purpose or the rejection reason, which are free text; never
-// an email; never the status, whose words would match every row of its tab;
-// and not the request number, which the rows do not show.
+// which on a self-service request is that same account); the request number
+// under them, "#91", so "91" and "#91" find it and part of it matches, as the
+// Payments search reads its charge number; and the document type. NEVER the
+// purpose or the rejection reason, which are free text; never an email; never
+// the status or the payment marker, whose words would match every row of a
+// tab.
 export function searchParts(request) {
   return [
     requesterName(request),
     accountHandle(request.resident_records),
+    requestNumber(request),
     request.document_types?.name,
   ].filter(Boolean);
 }
