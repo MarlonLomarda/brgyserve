@@ -127,6 +127,14 @@
 // focus back to the button, as on Payments, while Escape anywhere else leaves
 // it open, and nothing else changes. It sits inside section AA's block.
 //
+// Section AD is the Rental bookings list, for the Secretary, Staff and the
+// Punong Barangay: what section V checks on Document requests. A load that
+// fails (a 500, a server that cannot be reached, an answer with no message)
+// says so, with Try again, and never shows an empty list or "0 bookings"; a
+// 401 ends the session once and goes to the login screen; every way of
+// loading again starts from the loading state; and an older answer that
+// arrives late cannot replace a newer one.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -8196,6 +8204,268 @@ const root = () => dom.window.document.getElementById('root');
     if (F.clock && realNow) F.clock.now = realNow;
     if (previousTZAA === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAA;
+  }
+
+  // =========================================================================
+  // AD. Rental bookings: a failed load is an error, never an empty list
+  // =========================================================================
+  // One component (RentalBookingsPage) is the Rental bookings list on three
+  // routes: the Secretary's /secretary/rentals, and the homes of Staff
+  // (/staff) and the Punong Barangay (/punong-barangay). It had the defect
+  // section V fixed on Document requests: a load that failed stored an empty
+  // list beside the error, so the page said "0 bookings" and "No confirmed /
+  // upcoming bookings." under the server's bare message while it knew
+  // nothing, which reads as nothing booked; it had no Try again; and Refresh
+  // left the old rows on screen while it was out, so an older answer that
+  // arrived late could replace a newer one. A failed load must say so, with
+  // Try again, and show no rows, no count and no empty text; every load
+  // starts from the loading state; an older answer is dropped. A 401 ends the
+  // session once, in authFetch, and the route guard sends the person to the
+  // login screen: the list never says "0 bookings" there either. The same
+  // checks run for the three roles. Each role's list here holds only the
+  // bookings the page opens on (two upcoming for the Secretary and the Punong
+  // Barangay, two overdue for Staff), so these checks read the same whatever
+  // the page shows first; which rows a tab shows is the tabs' own checks'.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Rental bookings: a failed load is an error, never an empty list ---');
+  {
+    const previousTZAD = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The page's words with a space between neighbouring elements' text, so
+    // that \b finds the edge between "Refresh" and "0 bookings".
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // The list's own URL: GET /rental-requests, with or without ?status=.
+    const isList = (call) => call?.method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(call.url);
+    // A booking in the list's real shape (MANAGE_FIELDS in
+    // routes/rentalRequests.js, one projection for every role), with the
+    // derived_status the server adds.
+    const booking = (id, first, last, item, type, derived, day) => ({
+      request_id: id, quantity_requested: 1,
+      start_datetime: `2026-${day}T01:00:00+00:00`, end_datetime: `2026-${day}T05:00:00+00:00`,
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null,
+      resident_id: 800 + id, outside_borrower_name: null, outside_borrower_contact: null,
+      rental_items: { item_id: 600 + id, name: item, type, fee: '25.00', quantity_total: 10, quantity_available: 10 },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: `res_${id}@example.invalid`,
+        profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      returned_by: null,
+      charges: { charge_id: 950 + id, amount: '25.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+      derived_status: derived,
+    });
+    // Two upcoming bookings (confirmed, their end still ahead), and two
+    // overdue ones (confirmed, their end passed, physical items not back).
+    const UPCOMING_TWO = () => [booking(401, 'Ana', 'Cruz', 'Sound System', 'equipment', 'confirmed', '10-21'),
+      booking(402, 'Ben', 'Reyes', 'Covered Court', 'facility', 'confirmed', '10-20')];
+    const OVERDUE_TWO = () => [booking(403, 'Carla', 'Santos', 'Plastic Chairs', 'furniture', 'overdue', '10-02'),
+      booking(404, 'Dino', 'Tan', 'Tent (10x10)', 'equipment', 'overdue', '09-30')];
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    // What the list area says, read the way a person would.
+    const listView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        // "0 bookings", or "0 upcoming bookings" with a tab named.
+        zero: /\b0 [a-z ]*bookings?\b/.test(all),
+        // "No upcoming bookings.", or the select's "No confirmed / upcoming
+        // bookings." and "No overdue (awaiting return) bookings.".
+        empty: /\bNo [a-z /()]*bookings\./.test(all),
+        loading: all.includes('Loading bookings…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing
+    // booked": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Bookings' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && !v.zero && !v.empty;
+    // Two rows under a heading that counts them ("2 bookings", "2 upcoming
+    // bookings"): the heading's words are the tabs' checks'.
+    const twoShown = (v, names) => said(v.rows) === said(names) && /^2 ([a-z]+ )?bookings$/.test(v.heading || '')
+      && !v.error && !v.tryAgain && !v.loading;
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, rows: UPCOMING_TWO },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, rows: OVERDUE_TWO },
+      { name: 'Punong Barangay', route: '/punong-barangay',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, rows: UPCOMING_TWO },
+    ];
+    for (const { name, route, token, user, rows } of ROLES) {
+      const names = rows().map((b) => `${b.resident_records.first_name} ${b.resident_records.last_name}`);
+      // a. A successful load reads as it always has: one request, the rows.
+      seedSession(token, user);
+      resetNet(200, (url) => (/\/rental-requests\?/.test(url) ? { requests: rows() } : undefined));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const shown = listView(page);
+      check(`${name}: a successful load shows its two rows (${names.join(', ')}) under a heading that counts them, from one `
+          + 'GET of the bookings list, with no error',
+        twoShown(shown, names) && net.calls.length === 1 && isList(net.calls[0]),
+        said({ shown, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // b. The first open fails: the loading state while it is out, then the
+      // error, with Try again, and nothing else.
+      seedSession(token, user);
+      resetNet(200);
+      let at = holdNext();
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = listView(page);
+      const firstCall = net.calls[0];
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failed = listView(page);
+      check(`${name}: the first open shows "Loading bookings…" while the list is out, and when it fails, `
+          + '"Could not load the bookings: Network down" with a Try again button',
+        loadingOnly(opening) && isList(firstCall)
+          && failed.error === 'Could not load the bookings: Network down' && failed.tryAgain,
+        `${said(opening)} then ${said(failed)}`);
+      check(`  ${name}: and no rows, no "0 bookings", no "No … bookings.": it cannot read as nothing booked`,
+        errorOnly(failed), said(failed));
+
+      // c. Try again repeats the same load; its rows replace the error.
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      const retrying = listView(page);
+      const retryCall = net.calls[sent];
+      release(at, 200, { requests: rows() });
+      await page.settle();
+      const retried = listView(page);
+      check(`${name}: Try again loads the list again, once, shows the loading state, not the error, while it is out, then `
+          + 'the two rows',
+        net.calls.length === sent + 1 && isList(retryCall) && retryCall.url === firstCall?.url && loadingOnly(retrying)
+          && twoShown(retried, names),
+        `${retryCall?.url ?? 'no request'} ${said(retrying)} then ${said(retried)}`);
+
+      // d. Refresh over loaded rows, failing: the loading state, then the
+      // error, and never the old rows or their count.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const refreshing = listView(page);
+      const refreshCall = net.calls[sent];
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const refreshFailed = listView(page);
+      check(`${name}: Refresh shows the loading state, not the old rows, while it is out, and when it fails, "Could not load `
+          + 'the bookings: Internal server error", never the old rows or their count',
+        isList(refreshCall) && loadingOnly(refreshing)
+          && refreshFailed.error === 'Could not load the bookings: Internal server error' && errorOnly(refreshFailed),
+        `${refreshCall?.url ?? 'no request'} ${said(refreshing)} then ${said(refreshFailed)}`);
+
+      // e. Two loads out at once, Try again and then Refresh before it has
+      // answered, the older answer last: it is dropped.
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: rows() });
+      await page.settle();
+      release(at, 200, { requests: rows().slice(0, 1) });
+      await page.settle();
+      const raced = listView(page);
+      check(`${name}: an older answer that arrives last cannot replace the newer list: both rows stay`,
+        isList(net.calls.at(-2)) && isList(net.calls.at(-1)) && twoShown(raced, names), said(raced));
+
+      // f. The same, Refresh pressed twice, with the older load failing last.
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: rows() });
+      await page.settle();
+      release(at, 500, { error: 'boom' });
+      await page.settle();
+      const racedFail = listView(page);
+      check(`  ${name}: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list`,
+        twoShown(racedFail, names), said(racedFail));
+
+      // g. No bookings, loaded successfully, is a real empty state.
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 200, { requests: [] });
+      await page.settle();
+      net.hold = false;
+      const none = listView(page);
+      check(`${name}: a successful load of no bookings still counts 0 and says "No … bookings.", with no error`,
+        /^0 ([a-z]+ )?bookings$/.test(none.heading || '') && none.empty && !none.error && !none.tryAgain && !none.loading
+          && none.rows.length === 0,
+        said(none));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // h. Why it failed, when the server could not be reached: Document
+      // requests' wording.
+      seedSession(token, user);
+      resetNet(200);
+      net.fail = true;
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const unreachable = listView(page);
+      check(`${name}: a server that cannot be reached gets the plain fallback, "Could not load the bookings: the server did `
+          + 'not respond", never "Failed to fetch"',
+        unreachable.error === 'Could not load the bookings: the server did not respond' && errorOnly(unreachable)
+          && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachable));
+      net.fail = false;
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, { requests: rows() });
+      await page.settle();
+      net.hold = false;
+      check(`  ${name}: and Try again recovers once the server answers`, twoShown(listView(page), names), said(listView(page)));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // i. An error answer with no message in it.
+      seedSession(token, user);
+      resetNet(502);
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const bare = listView(page);
+      check(`  ${name}: so does an error answer with no message in it, never "Request failed (502)"`,
+        bare.error === 'Could not load the bookings: the server did not respond' && errorOnly(bare)
+          && !/Request failed/.test(root().textContent), said(bare));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // j. A 401: the session ends once and the login screen takes the page's
+      // place, as on every page (authFetch, section C); never "0 bookings".
+      seedSession(token, user);
+      resetNet(401);
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const ended = listView(page);
+      check(`${name}: a 401 on the list ends the session once and shows the login screen, with no "0 bookings", no `
+          + '"No … bookings." and no list error',
+        store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+          && !ended.zero && !ended.empty && !ended.error && ended.rows.length === 0 && isList(net.calls[0]),
+        `${store.removes} teardown(s) ${said(ended)}`);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+    check('section AD\'s failed loads sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZAD === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAD;
   }
 
   console.error = origError;

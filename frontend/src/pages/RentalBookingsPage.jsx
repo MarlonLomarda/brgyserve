@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ResidentPicker from "../components/ResidentPicker";
 import { formatDate } from "../constants/requestStatus";
@@ -632,29 +632,54 @@ function WalkInBookingPanel({ onDone }) {
   );
 }
 
+// Why a load failed, for "Could not load the bookings: …". The server's own
+// message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// The Document requests and Payments pages word their load errors with the
+// same function, each its own copy.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function RentalBookingsPage({
   canManage = false,
   canReturn = false,
 }) {
   const { authFetch } = useAuth();
   const [filter, setFilter] = useState(canReturn ? "overdue" : "confirmed");
-  const [requests, setRequests] = useState(null); // null = loading
-  const [listError, setListError] = useState("");
+  const [requests, setRequests] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
   const [encoding, setEncoding] = useState(false); // walk-in panel open
+  // Numbers each load, so only the newest one may change the list.
+  const loadSeq = useRef(0);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the page said "0 bookings" and "No confirmed / upcoming
+  // bookings." under the server's bare message while it knew nothing, which
+  // reads as nothing booked. requests now stays null and the error, with Try
+  // again, takes the place of the rows, the count and the empty text
+  // (CLAUDE.md: a list that failed to load), as on Document requests. Every
+  // load starts from the loading state, and an older answer that arrives late
+  // (Refresh pressed during a reload) is dropped rather than shown over a
+  // newer one.
   const load = useCallback(async () => {
-    setListError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setRequests(null);
     try {
       const query = filter === "all" ? "" : `?status=${filter}`;
       const data = await authFetch(`/rental-requests${query}`);
-      setRequests(data.requests);
+      if (seq === loadSeq.current) setRequests(data.requests);
     } catch (err) {
-      setListError(err.message);
-      setRequests([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
   }, [authFetch, filter]);
 
@@ -723,7 +748,6 @@ export default function RentalBookingsPage({
       ) : (
         <>
           {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-          {listError && <div className="alert error">{listError}</div>}
 
           <div className="list-head">
             <h2>
@@ -763,7 +787,20 @@ export default function RentalBookingsPage({
             </div>
           </div>
 
-          {requests === null ? (
+          {/* The error first, then loading, then empty, then rows: a load that
+              failed shows neither a count nor the empty text. Try again
+              repeats the same load, as Refresh does; Refresh above stays
+              usable. The markup is the Document requests page's. */}
+          {loadError ? (
+            <>
+              <div className="alert error" role="alert">
+                Could not load the bookings: {loadError}
+              </div>
+              <button type="button" className="btn secondary" onClick={load}>
+                Try again
+              </button>
+            </>
+          ) : requests === null ? (
             <p className="muted">Loading bookings…</p>
           ) : requests.length === 0 ? (
             <div className="empty">
