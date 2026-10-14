@@ -444,6 +444,8 @@ Moved: **read `docs/modules/document-requests.md` BEFORE changing Document Reque
 
 ## Facility Rentals
 
+**Read `docs/modules/rental-bookings.md` BEFORE changing the Rental bookings list.**
+
 Residents book barangay facilities and equipment **self-service, with no approval step**: the system runs a conflict check at submission and the booking is **CONFIRMED instantly** if the slot and units are free, or refused with a reason. The Secretary manages bookings afterwards (view, edit, cancel); Staff have exactly one write action, marking returns; the Punong Barangay is view-only.
 
 **Stored statuses** (`backend/src/constants/rentals.js`): `confirmed | cancelled | returned | returned_late | returned_with_issue`. **`completed` and `overdue` are DERIVED at display time** from a confirmed booking whose end has passed — never stored, so there is no scheduler and GETs stay read-only. Returnability is by item type: `equipment` and `furniture` are returnable, a `facility` is not.
