@@ -106,6 +106,16 @@
 // the filters kept through every reload and kept nowhere in the browser; and
 // on a phone, the row stacked with every field shown (read from index.css).
 //
+// Section AB is the Document requests list's Filters button, for the same
+// three roles: on a phone the filters row sits in a panel behind one
+// full-width "Filters" button, which counts the filters that are on
+// ("Filters (2)", From and To counting once, with Submitted) and opens the
+// panel in place and closes it, by its button only; the open state kept
+// through every reload and Back and never in the browser; Clear filters
+// keeping its place in the row while nothing is on, disabled and hidden, so
+// the first filter never makes the row taller; and above 640px no button and
+// the row as it was (read from index.css). It sits inside section AA's block.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -6605,6 +6615,10 @@ const root = () => dom.window.document.getElementById('root');
     };
     const HINT = 'The start date is after the end date.';
     const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    // Clear filters is offered when its button can be pressed. Since section
+    // AB the button keeps its place in the row while no filter is on,
+    // disabled and aria-hidden, so being in the page is not being offered.
+    const clearOffered = (b) => !!b && !b.disabled && b.getAttribute('aria-hidden') !== 'true';
     // What the list and its filters say, read the way a person would.
     const look = (page) => {
       const empty = page.query('.empty');
@@ -6621,7 +6635,7 @@ const root = () => dom.window.document.getElementById('root');
         date: chosen(dateSelect(page)),
         from: fromInput(page)?.value ?? null,
         to: toInput(page)?.value ?? null,
-        clear: !!buttonNamed(root(), 'Clear filters'),
+        clear: clearOffered(buttonNamed(root(), 'Clear filters')),
         hint: page.queryAll('[role="status"]').some((el) => el.textContent === HINT),
         search: box(page)?.value ?? null,
         showing: text(page.query('.pay-pager-count')),
@@ -7284,6 +7298,9 @@ const root = () => dom.window.document.getElementById('root');
     await pickDate(cardPage, 'Choose dates');
     await typeDate(cardPage, fromInput(cardPage), '2026-10-12');
     await typeDate(cardPage, toInput(cardPage), '2026-10-01');
+    // On a phone the row is in the Filters panel (section AB), which is not
+    // drawn until its button opens it: opened here, as a person opens it.
+    await clickIf(cardPage, cardPage.queryAll('button').find((b) => /^Filters( \(\d+\))?$/.test(b.textContent)));
     const rowEl = filtersRow(cardPage);
     const controls = [docSelect(cardPage), paySelect(cardPage), dateSelect(cardPage), fromInput(cardPage), toInput(cardPage)];
     const fields = controls.map((c) => c?.closest('.pay-filter') ?? null);
@@ -7300,7 +7317,8 @@ const root = () => dom.window.document.getElementById('root');
         missing: shownAll.map((el, i) => (el ? null : i)).filter((i) => i !== null) }));
     const hidden390 = shownAll.filter(Boolean).flatMap((el) => hidersAt(390, el).map((h) => `${el.tagName} ${h}`));
     const hidden1280 = shownAll.filter(Boolean).flatMap((el) => hidersAt(1280, el).map((h) => `${el.tagName} ${h}`));
-    check('on a phone (390px) nothing hides the row, a field, its label, Clear filters or the hint, and nothing does at 1280 either',
+    check('on a phone (390px), the Filters panel open, nothing hides the row, a field, its label, Clear filters or the hint, and '
+        + 'nothing does at 1280 either',
       shownAll.every(Boolean) && hidden390.length === 0 && hidden1280.length === 0, said({ hidden390, hidden1280 }));
     const phone = {
       row: valueAt(390, rowEl, 'flex-direction'),
@@ -7329,6 +7347,504 @@ const root = () => dom.window.document.getElementById('root');
 
     check('section AA sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
       `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    // =========================================================================
+    // AB. Document requests: the Filters button on a phone, and a row that
+    // keeps its height
+    // =========================================================================
+    // On a phone (640px and below) the filters row is a panel behind one
+    // full-width button, "Filters", which counts the filters that are on,
+    // "Filters (2)": a filter counts when it is off its Any choice, and From
+    // and To are Submitted's own, so they count once, with it (filterCount in
+    // utils/requestList.js). The button is a real button with aria-expanded
+    // and aria-controls; the panel, Payments' .pay-filters-panel, opens in
+    // place under it and holds the three selects, From and To, Clear filters
+    // and the hint. It opens and closes by its button only: a pick, a tab,
+    // Escape or a reload never closes it, and focus stays where it is. Its
+    // open state is the page's, so it lives through Refresh, Try again, a tab,
+    // a search and Back from a request, as the filters do, and a new visit
+    // starts closed; nothing is kept in the browser. Like the row, the button
+    // and the panel are not drawn while the list loads or beside a failed
+    // load. Above 640px the button is not drawn and the panel is the row as it
+    // was, open or closed. Clear filters keeps its place in the row while no
+    // filter is on, disabled and aria-hidden (and hidden by index.css), so the
+    // first filter never makes the row taller; on a phone it is not drawn
+    // then. jsdom applies no width media query, so index.css is read as
+    // section AA reads it. It sits inside section AA's block, to use the same
+    // requests, helpers and reader.
+    console.log('\n--- Document requests: the Filters button ---');
+    {
+      const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+      const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+      // The panel the button names, found the way a screen reader finds it.
+      const panelOf = (page) => {
+        const id = filtersButton(page)?.getAttribute('aria-controls');
+        return id ? dom.window.document.getElementById(id) : null;
+      };
+      const slotOf = () => buttonNamed(root(), 'Clear filters') ?? null;
+      const stateOf = (page) => {
+        const b = filtersButton(page);
+        const p = panelOf(page);
+        return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+          open: !!p && p.classList.contains('is-open') };
+      };
+      const isOpen = (s) => s.expanded === 'true' && s.open;
+      const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+      // What is drawn of the three, each found on its own, so a panel or a
+      // slot drawn without the button is still seen.
+      const drawn = (page) => ({ button: !!filtersButton(page), panel: !!page.query('.pay-filters-panel'), slot: !!slotOf() });
+      const none = (d) => !d.button && !d.panel && !d.slot;
+      const toggle = (page) => press(page, filtersButton(page));
+      const sent = [];
+
+      // a. The count on its own.
+      const NOTHING = { document: R.ANY_DOCUMENT, payment: F.ANY, date: F.ANY, from: '', to: '' };
+      //   what, the filters (over NOTHING), the count
+      const COUNTS = [
+        ['nothing on', {}, 0],
+        ['Document', { document: 'Barangay Clearance' }, 1],
+        ['a type named "any", which is not Any', { document: 'any' }, 1],
+        ['Payment', { payment: 'Unpaid' }, 1],
+        ['a Submitted preset', { date: 'today' }, 1],
+        ['Choose dates with no date yet', { date: 'custom' }, 1],
+        ['Choose dates with From', { date: 'custom', from: '2026-09-01' }, 1],
+        ['Choose dates with From and To', { date: 'custom', from: '2026-09-01', to: '2026-09-30' }, 1],
+        ['Document and Payment', { document: 'efef21', payment: 'Paid' }, 2],
+        ['Payment and Choose dates with From and To', { payment: 'No fee', date: 'custom', from: '2026-09-01', to: '2026-09-30' }, 2],
+        ['all three, From and To set', { document: 'Barangay Clearance', payment: 'Not billed', date: 'custom', from: '2026-09-01',
+          to: '2026-09-30' }, 3],
+        ['all three, a preset', { document: 'Barangay Clearance', payment: 'Void', date: 'month' }, 3],
+        ['From and To left over under Any date', { from: '2026-09-01', to: '2026-09-30' }, 0],
+      ];
+      const wrongCounts = COUNTS.map(([what, over, want]) => ({ what, got: attempt(() => R.filterCount({ ...NOTHING, ...over })), want }))
+        .filter((c) => c.got !== c.want);
+      check('filterCount counts each of Document, Payment and Submitted that is off its Any choice, 0 to 3; From and To are '
+          + 'Submitted\'s own, so Choose dates counts once with no date, with From, and with From and To, and the two never count '
+          + 'under Any date; a type named "any" is a choice like any other',
+        wrongCounts.length === 0, wrongCounts.length ? said(wrongCounts) : `${COUNTS.length} cases`);
+
+      // b. The real page, for the three roles, against section AA's sixteen
+      // requests.
+      for (const { name, route, token, user, staff, opener } of ROLES) {
+        const st = makeState();
+        seedSession(token, user);
+        resetNet(200, answerFor(st, staff));
+        let at = holdNext();
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        const whileLoading = { ...drawn(page), loading: look(page).loading };
+        release(at, 500, { error: 'Network down' });
+        await page.settle();
+        const afterFailure = { ...drawn(page), error: look(page).error };
+        at = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        const loaded = drawn(page);
+        check(`${name}: the Filters button, its panel and the Clear filters slot are not drawn while the list loads or beside a failed `
+            + 'load, as the filters row is not; Try again brings all three',
+          none(whileLoading) && whileLoading.loading && none(afterFailure)
+            && afterFailure.error === 'Could not load the requests: Network down' && loaded.button && loaded.panel && loaded.slot,
+          said({ whileLoading, afterFailure, loaded }));
+
+        // The button and the panel it names.
+        const button = filtersButton(page);
+        const panel = panelOf(page);
+        const wrap = button?.closest('.doc-requests-filters') ?? null;
+        const searchRow = box(page)?.closest('.list-head') ?? null;
+        const sameId = panel ? [...dom.window.document.querySelectorAll('[id]')].filter((el) => el.id === panel.id).length : 0;
+        check(`${name}: "Filters" is a real button, type="button", named by its own text, with aria-expanded="false" and `
+            + 'aria-controls naming the panel, whose id no other element has; the button is over the panel and outside it, both in '
+            + 'the filters wrapper between the search row and the tabs',
+          !!button && button.tagName === 'BUTTON' && button.getAttribute('type') === 'button' && button.textContent === 'Filters'
+            && !button.hasAttribute('aria-label') && button.getAttribute('aria-expanded') === 'false' && !!panel
+            && button.getAttribute('aria-controls') === panel.id && sameId === 1 && !panel.contains(button) && follows(button, panel)
+            && !!wrap && wrap.contains(panel) && follows(searchRow, wrap) && follows(wrap, page.query('.pay-tabs')),
+          said({ button: button ? { text: button.textContent, type: button.getAttribute('type'),
+            expanded: button.getAttribute('aria-expanded'), controls: button.getAttribute('aria-controls') } : null,
+          panel: panel?.id ?? null, sameId, wrap: wrap?.className ?? null }));
+        const hint = panel?.querySelector('[role="status"]') ?? null;
+        const held = [docSelect(page), paySelect(page), dateSelect(page), slotOf(), hint];
+        check(`${name}: the panel holds the three selects, the Clear filters slot and the hint, and nothing else of the list: no `
+            + 'heading, no search box, no tab',
+          !!panel && held.every((el) => !!el && panel.contains(el))
+            && !panel.querySelector('h1, h2, h3, h4, h5, h6, input[type="search"], .pay-tabs'),
+          said({ held: held.map((el) => !!el && !!panel && panel.contains(el)) }));
+
+        // Opening and closing.
+        const sentAtOpen = net.calls.length;
+        const writesAtOpen = store.sets;
+        const s0 = stateOf(page);
+        await toggle(page);
+        const s1 = stateOf(page);
+        const focusAfterOpen = !!filtersButton(page) && page.active() === filtersButton(page);
+        await toggle(page);
+        const s2 = stateOf(page);
+        await toggle(page);
+        const s3 = stateOf(page);
+        check(`${name}: a press opens the panel in place (aria-expanded="true", the panel open) and focus stays on the button; a `
+            + 'second press closes it and a third opens it again, aria-controls naming the same panel throughout',
+          isClosed(s0) && isOpen(s1) && focusAfterOpen && isClosed(s2) && isOpen(s3) && !!panel
+            && filtersButton(page)?.getAttribute('aria-controls') === panel.id,
+          said({ s0, s1, focusAfterOpen, s2, s3 }));
+        docSelect(page)?.focus();
+        if (!!docSelect(page) && page.active() === docSelect(page)) await page.key('Escape');
+        await page.settle();
+        const afterEscape = stateOf(page);
+        check(`${name}: Escape inside the open panel neither closes it nor moves focus: it opens and closes by its button only`,
+          isOpen(afterEscape) && !!docSelect(page) && page.active() === docSelect(page),
+          said({ afterEscape, focus: page.active()?.tagName ?? null }));
+
+        // Clear filters with nothing on: its place kept, nothing to press.
+        const idle = slotOf();
+        const lastInRow = docSelect(page)?.closest('.pay-filters')?.lastElementChild ?? null;
+        idle?.focus();
+        const idleFocused = !!idle && page.active() === idle;
+        const sentBeforeIdle = net.calls.length;
+        await clickIf(page, idle);
+        const afterIdlePress = { ...stateOf(page), heading: look(page).heading, calls: net.calls.length - sentBeforeIdle };
+        check(`${name}: with nothing on, Clear filters keeps its place, the row's last control, but disabled and aria-hidden="true": `
+            + 'focus cannot reach it and a press on it does nothing',
+          !!idle && idle === lastInRow && idle.disabled && idle.getAttribute('aria-hidden') === 'true' && !idleFocused
+            && afterIdlePress.label === 'Filters' && afterIdlePress.heading === '2 pending requests' && afterIdlePress.calls === 0,
+          said({ idle: idle ? { disabled: idle.disabled, hidden: idle.getAttribute('aria-hidden'), last: idle === lastInRow } : null,
+            idleFocused, afterIdlePress }));
+
+        // The count, as filters are chosen in the open panel.
+        await clickIf(page, tabNamed(page, 'All'));
+        const steps = [];
+        const note = (what) => {
+          const s = stateOf(page);
+          steps.push({ what, label: s.label, open: isOpen(s) });
+        };
+        note('nothing on');
+        await pickPay(page, 'Unpaid');
+        note('Payment Unpaid');
+        const unpaid = look(page);
+        const live = slotOf();
+        // Read now: by the check, every filter is off again.
+        const liveNow = { offered: clearOffered(live), disabled: live?.disabled ?? null,
+          hidden: live?.getAttribute('aria-hidden') ?? null };
+        live?.focus();
+        const liveFocused = !!live && page.active() === live;
+        await pickDoc(page, 'Barangay Clearance');
+        note('Document Barangay Clearance');
+        const twoOn = look(page);
+        await pickDate(page, 'Today');
+        note('Submitted Today');
+        await pickDate(page, 'Choose dates');
+        note('Choose dates, no date yet');
+        await typeDate(page, fromInput(page), '2026-09-01');
+        note('From 1 Sep');
+        await typeDate(page, toInput(page), '2026-10-12');
+        note('To 12 Oct');
+        const threeOn = look(page);
+        const rangeInPanel = [fromInput(page), toInput(page)].every((el) => !!el && !!panelOf(page) && panelOf(page).contains(el));
+        await pickDoc(page, 'Any document');
+        note('Document back to Any');
+        await pickPay(page, 'Any payment');
+        note('Payment back to Any');
+        const datesOnly = look(page);
+        await pickDate(page, 'Any date');
+        note('Submitted back to Any');
+        const COUNTED = ['Filters', 'Filters (1)', 'Filters (2)', 'Filters (3)', 'Filters (3)', 'Filters (3)', 'Filters (3)',
+          'Filters (2)', 'Filters (1)', 'Filters'];
+        check(`${name}: the button counts the filters that are on as they are chosen in the panel: "Filters", "Filters (1)" with `
+            + 'Payment, "(2)" with Document, "(3)" with Today, still "(3)" for Choose dates with no date, with From, and with From '
+            + 'and To, which are one filter, Submitted; then "(2)", "(1)" for the dates alone, and "Filters"',
+          said(steps.map((s) => s.label)) === said(COUNTED), said(steps.map((s) => `${s.what}: ${s.label}`)));
+        check(`${name}: the panel stays open through every one of those choices: a pick never closes it`,
+          steps.length === COUNTED.length && steps.every((s) => s.open), said(steps.filter((s) => !s.open).map((s) => s.what)));
+        check(`${name}: with a filter on, Clear filters is a normal button again, enabled and not aria-hidden, and it takes focus`,
+          liveNow.offered && liveFocused, said({ liveNow, liveFocused }));
+        const DATED = ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong',
+          'Hana Yap', 'Ivy Zamora', 'Jun Abad', 'Kim Bello'];
+        check(`${name}: chosen in the panel, they filter as before: Unpaid on All, Carla Santos and Gil Wong, "2 of 16 requests `
+            + 'match", the counts following; with Barangay Clearance, Carla Santos alone; with 1 Sep to 12 Oct as well, still her, '
+            + 'From and To inside the panel; and those dates alone, the twelve submitted from 1 Sep to 12 Oct in Manila days',
+          said(unpaid.rows) === said(BY_PAY.Unpaid.rows) && unpaid.heading === '2 of 16 requests match'
+            && unpaid.strip === BY_PAY.Unpaid.strip && said(twoOn.rows) === said(['Carla Santos'])
+            && twoOn.heading === '1 of 16 requests matches' && said(threeOn.rows) === said(['Carla Santos']) && rangeInPanel
+            && said(datesOnly.rows) === said(DATED) && datesOnly.heading === '12 of 16 requests match',
+          said({ unpaid, twoOn: twoOn.rows, threeOn: threeOn.rows, rangeInPanel, datesOnly: datesOnly.rows }));
+
+        // Section AA's expectations, made in the open panel.
+        const offeredNow = { documents: optionsOf(docSelect(page)), payments: optionsOf(paySelect(page)),
+          dates: optionsOf(dateSelect(page)) };
+        const byPay = {};
+        for (const label of Object.keys(BY_PAY)) {
+          await pickPay(page, label);
+          const x = look(page);
+          byPay[label] = { rows: x.rows, strip: x.strip };
+        }
+        await pickPay(page, 'Any payment');
+        const byDate = {};
+        for (const zone of ZONES) {
+          process.env.TZ = zone;
+          for (const label of PRESET_KEYS) {
+            await pickDate(page, label);
+            byDate[`${zone} ${label}`] = look(page).rows;
+          }
+          await pickDate(page, 'Choose dates');
+          await typeDate(page, fromInput(page), '2026-09-21');
+          await typeDate(page, toInput(page), '2026-09-21');
+          byDate[`${zone} sep21`] = look(page).rows;
+        }
+        process.env.TZ = HOME_ZONE;
+        const stillOpen = stateOf(page);
+        const wrongPayAB = Object.keys(BY_PAY)
+          .filter((k) => said(byPay[k].rows) !== said(BY_PAY[k].rows) || byPay[k].strip !== BY_PAY[k].strip);
+        const wrongDateAB = Object.keys(byDate).filter((k) => said(byDate[k]) !== said(BY_DATE[k.split(' ').slice(1).join(' ')]));
+        check(`${name}: in the panel the choices and what they show are section AA's: Document "${DOCS}", sorted with case ignored; `
+            + `Payment "${PAYS}"; Submitted "${DATES}"; each Payment choice its rows and counts; Today, Last 7 days and This month, `
+            + 'and 21 Sep to 21 Sep, in Manila days on UTC, Los Angeles and Tokyo time; the panel open throughout',
+          offeredNow.documents === DOCS && offeredNow.payments === PAYS && offeredNow.dates === DATES && wrongPayAB.length === 0
+            && wrongDateAB.length === 0 && Object.keys(byDate).length === ZONES.length * 4 && isOpen(stillOpen),
+          said({ offeredNow, wrongPayAB, wrongDateAB: wrongDateAB.map((k) => ({ k, got: byDate[k] })), stillOpen }));
+
+        // The count follows Clear filters and "Clear search and filters".
+        await pickDoc(page, 'Certificate of Indigency');
+        await pickPay(page, 'Paid');
+        await pickDate(page, 'This month');
+        const beforeClear = stateOf(page);
+        await press(page, slotOf());
+        const afterClear = stateOf(page);
+        const clearedSlot = slotOf();
+        check(`${name}: Clear filters, pressed in the open panel, takes "Filters (3)" back to "Filters", leaves the panel open and `
+            + 'puts focus on the Document select; its slot is disabled and aria-hidden again',
+          beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!docSelect(page)
+            && page.active() === docSelect(page) && !!clearedSlot && clearedSlot.disabled
+            && clearedSlot.getAttribute('aria-hidden') === 'true' && filtersOf(look(page)) === 'Any document / Any payment / Any date',
+          said({ beforeClear, afterClear, focus: page.active()?.tagName ?? null,
+            slot: clearedSlot ? [clearedSlot.disabled, clearedSlot.getAttribute('aria-hidden')] : null }));
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await type(page, 'a');
+        await pickPay(page, 'Paid');
+        const emptied = { ...stateOf(page), empty: look(page).empty };
+        const emptyBox = page.query('.empty');
+        await clickIf(page, emptyBox ? buttonNamed(emptyBox, 'Clear search and filters') : null);
+        const bothCleared = look(page);
+        const afterBoth = stateOf(page);
+        check(`${name}: "Clear search and filters" takes the count back too: "Filters (1)" over "No pending requests match your `
+            + 'search or filters.", then "Filters", the search empty, both pending requests back, and the panel as it was, open',
+          emptied.label === 'Filters (1)' && emptied.empty === 'No pending requests match your search or filters.'
+            && afterBoth.label === 'Filters' && isOpen(afterBoth) && bothCleared.search === ''
+            && said(bothCleared.rows) === said(['Ana Cruz', 'Ben Reyes']),
+          said({ emptied, afterBoth, search: bothCleared.search, rows: bothCleared.rows }));
+        check(`${name}: none of those presses, picks, clears or searches sent a request, and none wrote to localStorage`,
+          net.calls.length === sentAtOpen && store.sets === writesAtOpen,
+          `${net.calls.length - sentAtOpen} request(s): ${said(listCalls(net.calls.slice(sentAtOpen)))}, `
+            + `${store.sets - writesAtOpen} write(s)`);
+
+        // The Payments-style controls keep their names, the panel open or
+        // closed.
+        await clickIf(page, tabNamed(page, 'All'));
+        await pickDate(page, 'Choose dates');
+        const named = () => {
+          const hintEl = panelOf(page)?.querySelector('[role="status"]') ?? null;
+          const strip = page.query('.pay-tabs');
+          return {
+            search: page.query('[role="search"] input[type="search"]')?.getAttribute('aria-label') ?? null,
+            strip: [strip?.getAttribute('role') ?? null, strip?.getAttribute('aria-label') ?? null],
+            pressed: tabsOf(page).length === 7 && tabsOf(page).every((b) => ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+            pager: page.query('nav.pay-pager')?.getAttribute('aria-label') ?? null,
+            selects: [docSelect(page), paySelect(page), dateSelect(page)].map((s) => s?.labels?.[0]?.textContent ?? null),
+            described: [fromInput(page), toInput(page)].map((i) => !!i && !!hintEl && i.getAttribute('aria-describedby') === hintEl.id),
+            hint: hintEl ? hintEl.getAttribute('role') : null,
+          };
+        };
+        const namesOpen = named();
+        await toggle(page);
+        const namesClosed = named();
+        const closedNow = stateOf(page);
+        const NAMES = { search: 'Search requests', strip: ['group', 'Status'], pressed: true, pager: 'Pagination',
+          selects: ['Document', 'Payment', 'Submitted'], described: [true, true], hint: 'status' };
+        check(`${name}: the Payments-style controls keep their names with the panel open and closed: the search box "Search `
+            + 'requests" in a search landmark, the status tabs a group named "Status" of aria-pressed buttons, the pager '
+            + '"Pagination", the three selects named by their labels, From and To described by the hint, a polite status',
+          said(namesOpen) === said(NAMES) && said(namesClosed) === said(NAMES) && isClosed(closedNow),
+          said({ namesOpen, namesClosed, closedNow }));
+        await pickDate(page, 'Any date');
+
+        // Open, it stays open through a tab, a search, Refresh, a failed
+        // reload and Try again, and Back from a request; closed, it stays
+        // closed.
+        await toggle(page);
+        const keptOpen = [];
+        const keep = (list, what) => list.push({ what, ...stateOf(page) });
+        await clickIf(page, tabNamed(page, 'Approved'));
+        keep(keptOpen, 'a tab');
+        await type(page, 'kim');
+        keep(keptOpen, 'a search');
+        await type(page, '');
+        const callsBefore = net.calls.length;
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const duringRefresh = drawn(page);
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptOpen, 'Refresh');
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(at, 500, { error: 'Internal server error' });
+        await page.settle();
+        const besideError = drawn(page);
+        at = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptOpen, 'a failed reload, then Try again');
+        await clickIf(page, rowButton(page, 'Kim Bello', opener));
+        const openedDetail = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        keep(keptOpen, 'Back from a request');
+        const reloadCalls = listCalls(net.calls.slice(callsBefore));
+        check(`${name}: open, the panel stays open through a tab, a search, Refresh, a reload that fails and Try again, and Back `
+            + 'from a request, though the button is not drawn while the list reloads: the open state is the page\'s',
+          keptOpen.length === 5 && keptOpen.every((s) => isOpen(s)) && none(duringRefresh) && none(besideError)
+            && openedDetail === 'Request #80'
+            && said(reloadCalls) === said(['GET /document-requests?status=all', 'GET /document-requests?status=all',
+              'GET /document-requests?status=all', 'GET /document-requests/80']),
+          said({ keptOpen, duringRefresh, besideError, openedDetail, reloadCalls }));
+        await toggle(page);
+        const keptClosed = [];
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptClosed, 'Refresh');
+        await clickIf(page, tabNamed(page, 'All'));
+        keep(keptClosed, 'a tab');
+        await type(page, 'zamora');
+        keep(keptClosed, 'a search');
+        await type(page, '');
+        await clickIf(page, rowButton(page, 'Kim Bello', opener));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        keep(keptClosed, 'Back from a request');
+        check(`${name}: closed, it stays closed through Refresh, a tab, a search and Back from a request`,
+          keptClosed.length === 4 && keptClosed.every((s) => isClosed(s)), said(keptClosed));
+
+        // A new visit starts closed; nothing about it was kept. The second
+        // mount does not reseed the session, which would clear storage.
+        await toggle(page);
+        const leftOpen = stateOf(page);
+        sent.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+        resetNet(200, answerFor(makeState(), staff));
+        const again = await globalThis.mountInteractive(root(), route);
+        await again.settle();
+        const fresh = stateOf(again);
+        check(`${name}: a new visit opens with the panel closed and the button reading "Filters", though it was left open; nothing `
+            + 'about it is in the browser: no localStorage write, sessionStorage empty, no cookie',
+          isOpen(leftOpen) && isClosed(fresh) && fresh.label === 'Filters' && store.sets === writesAtOpen
+            && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+          said({ leftOpen, fresh, writes: store.sets - writesAtOpen, session: dom.window.sessionStorage.length }));
+        sent.push(...net.calls.map((c) => c.method));
+        await again.unmount();
+      }
+
+      // c. index.css, read as section AA reads it: the button and the panel
+      // at 640px and below, neither above it, and Clear filters' place.
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState(), false));
+      const cssPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+      await cssPage.settle();
+      const tb = filtersButton(cssPage);
+      const pn = panelOf(cssPage);
+      const idleSlot = slotOf();
+      const PHONE_WIDTHS = [320, 390, 640];
+      const WIDE_WIDTHS = [641, 768, 1045, 1046, 1280, 1920];
+      // Every property a rule that applies at `width` and matches `el` sets,
+      // with the value that wins.
+      const styleOf = (width, el) => {
+        if (!el) return null;
+        const hits = cssRead.rules.filter((r) => appliesAt(r.media, width) && r.selectors.some((s) => tryMatch(el, s)));
+        const props = [...new Set(hits.flatMap((r) => Object.keys(r.decls)))].sort();
+        return Object.fromEntries(props.map((p) => [p, valueAt(width, el, p)]));
+      };
+      // `prop` at rest: no pointer on `el` and no focus in it. jsdom keeps
+      // calling an element :hover once a click was dispatched on it, so
+      // .btn.secondary's hover fill, the open fill's #eff6ff, would stand in
+      // for the open fill's own rule.
+      const AT_REST = /:(hover|active|focus|focus-visible|focus-within)\b/;
+      const restValue = (width, el, prop) => {
+        if (!el) return 'no element';
+        let best = null;
+        for (const r of cssRead.rules) {
+          if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (AT_REST.test(sel) || /::?(before|after|placeholder)$/.test(sel) || !tryMatch(el, sel)) continue;
+            const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specificity(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, '') };
+            }
+          }
+        }
+        return best?.value ?? null;
+      };
+      // The rules that apply at `width` and read the panel or its open state.
+      const panelRules = (width) => (pn ? cssRead.rules.filter((r) => appliesAt(r.media, width)
+        && r.selectors.some((s) => /pay-filters-panel|is-open/.test(s) && tryMatch(pn, s))).map((r) => r.selector) : ['no panel']);
+      const phoneClosed = PHONE_WIDTHS.map((w) => ({ w, button: [valueAt(w, tb, 'display'), valueAt(w, tb, 'width'),
+        valueAt(w, tb, 'height')], fill: restValue(w, tb, 'background'), panel: valueAt(w, pn, 'display'),
+        slot: valueAt(w, idleSlot, 'display') }));
+      const wideClosed = WIDE_WIDTHS.map((w) => ({ w, button: valueAt(w, tb, 'display'), panelRules: panelRules(w),
+        slot: [valueAt(w, idleSlot, 'visibility'), valueAt(w, idleSlot, 'display')] }));
+      const styleClosed = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+      await toggle(cssPage);
+      const phoneOpen = PHONE_WIDTHS.map((w) => ({ w, panel: valueAt(w, pn, 'display'), fill: restValue(w, tb, 'background') }));
+      const wideOpen = WIDE_WIDTHS.map((w) => ({ w, button: valueAt(w, tb, 'display'), panelRules: panelRules(w) }));
+      const styleOpen = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+      const opened = stateOf(cssPage);
+      await pickPay(cssPage, 'Unpaid');
+      const liveSlot = slotOf();
+      const liveRead = [...PHONE_WIDTHS, ...WIDE_WIDTHS].map((w) => ({ w, display: valueAt(w, liveSlot, 'display'),
+        visibility: valueAt(w, liveSlot, 'visibility'), height: valueAt(w, liveSlot, 'height') }));
+      const layered = [390, 1280].flatMap((w) => [tb, pn, liveSlot].map((el) => ({ w, el: el?.className ?? null,
+        z: valueAt(w, el, 'z-index'), position: valueAt(w, el, 'position') })));
+      check('on a phone (320, 390 and 640px) the Filters button is drawn, the full width and a finger\'s 44px tall; closed, the '
+          + 'panel it controls is not drawn; and Clear filters, with nothing on, is not drawn in it',
+        !!tb && !!pn && !!idleSlot && phoneClosed.every((r) => said(r.button) === said(['flex', '100%', '44px']) && r.panel === 'none'
+          && r.slot === 'none'), said(phoneClosed));
+      check('  open, the panel is drawn there (a block: Payments\' card) and the button keeps the open fill, #eff6ff, as Payments\' '
+          + 'Filters button does, white at rest when closed (read with no pointer on it: jsdom leaves a clicked button :hover)',
+        isOpen(opened) && phoneOpen.every((r) => r.panel === 'block' && r.fill === '#eff6ff')
+          && phoneClosed.every((r) => r.fill === '#fff'),
+        said({ opened, phoneOpen, closedFill: phoneClosed.map((r) => r.fill) }));
+      check('above 640px (641, 768, 1045, 1046, 1280 and 1920) the button is not drawn, and no rule there reads the panel or its '
+          + 'open state: the panel is the row as it was, styled the same open or closed',
+        !!pn && [...wideClosed, ...wideOpen].every((r) => r.button === 'none' && r.panelRules.length === 0)
+          && said(styleClosed) === said(styleOpen),
+        said({ wideClosed: wideClosed.map((r) => [r.w, r.button, r.panelRules]), wideOpen: wideOpen.map((r) => [r.w, r.button,
+          r.panelRules]), closed: styleClosed[0], open: styleOpen[0] }));
+      check('  and there, with nothing on, Clear filters keeps its place in the row, hidden: visibility hidden, never display none, '
+          + 'which would give its place up',
+        !!idleSlot && wideClosed.every((r) => r.slot[0] === 'hidden' && r.slot[1] !== 'none'),
+        said(wideClosed.map((r) => [r.w, ...r.slot])));
+      check('with a filter on, nothing hides Clear filters at any width, and on a phone it is a finger\'s 44px tall',
+        !!liveSlot && clearOffered(liveSlot) && liveRead.every((r) => r.display !== 'none' && r.visibility === null)
+          && liveRead.filter((r) => r.w <= 640).every((r) => r.height === '44px'), said(liveRead));
+      check('the button, the panel and Clear filters stay in the page\'s flow: no z-index and no position of their own, at 390 or '
+          + '1280',
+        !!tb && !!pn && !!liveSlot && layered.every((r) => r.z === null && r.position === null), said(layered));
+      const cssText = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const breakpoints = [...new Set([...cssText.matchAll(/@media[^{]*/g)]
+        .flatMap((m) => [...m[0].matchAll(/(\d+)px/g)].map((x) => Number(x[1]))))].sort((a, b) => a - b);
+      check('index.css gains no breakpoint (its @media widths are still 480, 560, 640, 641, 768 and 1045px) and no CSS variable',
+        said(breakpoints) === said([480, 560, 640, 641, 768, 1045]) && !/var\(--/.test(cssText)
+          && !/(^|[;{\s])--[\w-]+\s*:/.test(cssText),
+        said({ breakpoints, variables: (cssText.match(/var\(--[\w-]+|--[\w-]+\s*:/g) || []).slice(0, 3) }));
+      sent.push(...net.calls.map((c) => c.method));
+      await cssPage.unmount();
+
+      check('section AB sent nothing but GETs', sent.length > 0 && sent.every((m) => m === 'GET'),
+        `${sent.length} request(s): ${[...new Set(sent)].join(', ')}`);
+    }
 
     if (previousScroll === undefined) delete proto.scrollIntoView;
     else proto.scrollIntoView = previousScroll;

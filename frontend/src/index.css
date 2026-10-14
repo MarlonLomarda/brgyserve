@@ -3060,6 +3060,22 @@ button.pay-tab:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* The Document requests filters (14 Oct 2026). Above 640px the row is
+   always shown, as Payments' is: the phone's Filters button is not drawn
+   (the 640px block draws it), and the panel round the row has no rules up
+   here, so the row lays out as before, open or closed. Clear filters keeps
+   its place at the row's end while no filter is on, hidden, so the first
+   filter never makes the row taller (it moved the list down 50px at 768
+   and 1046): components/ListFilters makes it disabled and aria-hidden then,
+   and this hides it. */
+.doc-requests-filters .pay-filters-toggle {
+  display: none;
+}
+
+.doc-requests-filters .pay-filters .pay-filters-clear[aria-hidden="true"] {
+  visibility: hidden;
+}
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only
@@ -5050,22 +5066,42 @@ button.tab:hover:not(:disabled) {
     margin: 10px 0 0;
   }
 
-  /* The Document requests filters row (14 Oct 2026) is this second row with
-     no panel round it: it has no Filters button yet, so here it stays in
-     the page, stacked by the rules above, one field a line. Outside a panel
-     it keeps the panel's spacing, 12px under the row and 10px over the
-     hint, and its Clear filters, 40px tall in Payments' panel, is a
-     finger's 44px. Scoped to that page's wrapper (components/ListFilters). */
+  /* The Document requests filters (14 Oct 2026) are this second row in
+     Payments' panel, which the rules above hide until it is open, draw as a
+     card and stack, one field a line. Its button has a line of its own, the
+     full width and a finger's 44px, with the open fill Payments' button
+     keeps; the card opens 12px under it, and 12px is kept under whichever
+     of the two is last. Clear filters, 40px in Payments' panel, is a
+     finger's 44px, and while no filter is on it is not drawn, so the card
+     ends at its last field. Scoped to that page's wrapper
+     (components/ListFilters). */
   .doc-requests-filters {
     margin-bottom: 12px;
   }
 
-  .doc-requests-filters .pay-filters-hint:not(:empty) {
-    margin: 10px 0 0;
+  .doc-requests-filters .pay-filters-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    padding: 0 14px;
+  }
+
+  .doc-requests-filters .pay-filters-toggle[aria-expanded="true"] {
+    background: #eff6ff;
+  }
+
+  .doc-requests-filters .pay-filters-panel.is-open {
+    margin: 12px 0 0;
   }
 
   .doc-requests-filters .pay-filters .pay-filters-clear {
     height: 44px;
+  }
+
+  .doc-requests-filters .pay-filters .pay-filters-clear[aria-hidden="true"] {
+    display: none;
   }
 
   /* The type tabs (batch 8): less room around each, so All, Documents,

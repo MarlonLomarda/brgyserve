@@ -25,7 +25,9 @@
 // and Submitted. Their choices are the loaded rows', and each matches what a
 // row shows: the document type's whole name; the payment marker's word,
 // through paymentMarker itself; and the Manila day the request was submitted,
-// through utils/chargeFilters.js's manilaDay and backwards, as they are.
+// through utils/chargeFilters.js's manilaDay and backwards, as they are. On a
+// phone they sit behind a Filters button, which says how many are on
+// (filterCount).
 import { chargeMeta, chargeOf, statusMeta } from "../constants/requestStatus";
 import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { isNoFeeCharge } from "./chargeMethod";
@@ -289,4 +291,14 @@ export function matchesSubmitted(request, range) {
 // alone keeps noMatchText.
 export function filtersNoMatchText(tab) {
   return `No ${tabWords(tab)}requests match your search or filters.`;
+}
+
+// How many filters are on, for the "(2)" on a phone's Filters button: each
+// of Document, Payment and Submitted that is off its Any choice. From and To
+// are Submitted's own ("Choose dates"), so they never count apart from it:
+// "Choose dates" is one filter with both dates, and still one with none, as
+// it is a filter on for Clear filters.
+export function filterCount({ document, payment, date }) {
+  const on = [document !== ANY_DOCUMENT, payment !== ANY, date !== ANY];
+  return on.filter(Boolean).length;
 }

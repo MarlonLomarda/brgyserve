@@ -25,6 +25,7 @@ import {
   accountHandle,
   ANY_DOCUMENT,
   documentOptions,
+  filterCount,
   filtersNoMatchText,
   inTab,
   matchesDocument,
@@ -105,7 +106,9 @@ import {
 // and any filter change goes back to page 1, with no request. Like the
 // search, the filters live through every reload and Back from a request, a
 // choice a reload no longer offers goes back to Any, and nothing is kept in
-// the browser. On a phone the row stacks, one field a line (index.css).
+// the browser. On a phone the row is a panel behind a "Filters" button that
+// counts the filters on ("Filters (2)") and opens it in place; whether it is
+// open lives here too, closed on every visit (components/ListFilters.jsx).
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -649,6 +652,12 @@ export default function SecretaryRequestsPage({
   const [dateChoice, setDateChoice] = useState(ANY);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // Whether a phone's Filters panel is open. Here, not in the filters row,
+  // which is not drawn while the list loads or while a request's detail
+  // takes its place, so it lives through those as the filters do: closed on
+  // every visit, kept through Refresh, Try again, a tab, a search and Back,
+  // and kept nowhere in the browser.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const headingRef = useRef(null); // the list's heading, for a page change
   // Numbers each load, so only the newest one may change the page.
   const loadSeq = useRef(0);
@@ -691,10 +700,13 @@ export default function SecretaryRequestsPage({
   // (Clear filters shows) but restricts nothing.
   const filtered =
     documentChoice !== ANY_DOCUMENT || paymentChoice !== ANY || range !== null;
-  const filtersOn =
-    documentChoice !== ANY_DOCUMENT ||
-    paymentChoice !== ANY ||
-    dateChoice !== ANY;
+  // How many filters are on: the "(2)" on a phone's Filters button, and
+  // Clear filters is offered while it is above 0.
+  const filtersOn = filterCount({
+    document: documentChoice,
+    payment: paymentChoice,
+    date: dateChoice,
+  });
   const searched = requests === null ? [] : matchingRequests(requests, query);
   const matching = searched.filter(
     (r) =>
@@ -903,8 +915,10 @@ export default function SecretaryRequestsPage({
                   onTo: (value) => narrowBy(setTo, value),
                   reversed: backwards(range),
                 }}
-                active={filtersOn}
+                count={filtersOn}
                 onClear={clearFilters}
+                open={filtersOpen}
+                onToggle={() => setFiltersOpen((open) => !open)}
               />
               <ListTabs
                 label="Status"
