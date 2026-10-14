@@ -3060,6 +3060,71 @@ button.pay-tab:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* The Document requests columns (14 Oct 2026). Above 640px the columns stand
+   in the same places on every tab, page, search and filter result: the
+   layout is fixed, so these widths decide the columns, not the rows drawn
+   (which moved them by up to 145px between two views of the list). Each width
+   holds the widest of the 77 live requests (D1's capture, measured in
+   Chrome) and the cell's 32px of padding:
+     Requester 224  "Rodrigo Cempron Bautista" on one line, 189.4
+     Document  192  "Certificate of Residency" on one line, 156.4; 120 at
+                    1045px and below, on two ("Certificate of", 84.7)
+     Status    156  the "Ready for release" badge, 121.7
+     Submitted 128  the date over the time in every row: 96px of text holds
+                    "May 10, 2026,", the widest date half of 2026 (87.9),
+                    and no date with its hour ("Jul 1, 2026, 1:05", 100.1);
+                    balance keeps that break for a narrower font
+     actions   112  the Review button, 75.8, with its margin and padding
+   Purpose has no width: it takes the rest, never under 96px (its heading
+   and the median purpose, 61.4, whole), because the table is never narrower
+   than the five and 96. Below that the table scrolls in its card, as it
+   did. .row-actions' 200px floor does not bind a fixed column, so the
+   actions column needs no exception. Phones keep their cards: nothing here
+   applies at 640px and below. */
+@media (min-width: 641px) {
+  .doc-requests-table {
+    table-layout: fixed;
+    min-width: 908px;
+  }
+
+  .doc-requests-table th.doc-requests-requester {
+    width: 224px;
+  }
+
+  .doc-requests-table th.doc-requests-document {
+    width: 192px;
+  }
+
+  .doc-requests-table th.doc-requests-status {
+    width: 156px;
+  }
+
+  .doc-requests-table th.doc-requests-submitted {
+    width: 128px;
+  }
+
+  .doc-requests-table th.doc-requests-actions {
+    width: 112px;
+  }
+
+  .doc-requests-table td[data-label="Submitted"] {
+    text-wrap: balance;
+  }
+}
+
+/* Below the sidebar, 641 to 1045px, Document takes two lines, so the
+   columns fit from 870px instead of 942px. The range reuses this file's 641
+   and 1045; it adds no breakpoint. */
+@media (min-width: 641px) and (max-width: 1045px) {
+  .doc-requests-table {
+    min-width: 836px;
+  }
+
+  .doc-requests-table th.doc-requests-document {
+    width: 120px;
+  }
+}
+
 /* The Document requests filters (14 Oct 2026). Above 640px the row is
    always shown, as Payments' is: the phone's Filters button is not drawn
    (the 640px block draws it), and the panel round the row has no rules up

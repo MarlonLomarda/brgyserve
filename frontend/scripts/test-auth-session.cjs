@@ -116,6 +116,14 @@
 // the first filter never makes the row taller; and above 640px no button and
 // the row as it was (read from index.css). It sits inside section AA's block.
 //
+// Section AC is the Document requests table's columns, for the same three
+// roles: above 640px the table is .doc-requests-table, table-layout fixed,
+// with a width for every column but Purpose, which takes the rest, each width
+// holding what was measured in Chrome on the 77 live requests; none of it on
+// a phone; and the protected col-*, .row-actions, .num, .dash-main and
+// .pending-card rules as they were at 85dbba4. It sits inside section AA's
+// block.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -7843,6 +7851,203 @@ const root = () => dom.window.document.getElementById('root');
       await cssPage.unmount();
 
       check('section AB sent nothing but GETs', sent.length > 0 && sent.every((m) => m === 'GET'),
+        `${sent.length} request(s): ${[...new Set(sent)].join(', ')}`);
+    }
+
+    // =========================================================================
+    // AC. Document requests: columns that keep their places
+    // =========================================================================
+    // Above 640px the list's table keeps its columns in the same places on
+    // every tab, every page and every search or filter result: it is
+    // .doc-requests-table (this table alone), table-layout: fixed, and every
+    // column but Purpose has a width of its own, Purpose taking the rest and
+    // never less than 96px, because the table is never narrower than the five
+    // widths and 96. What each width must hold was measured in Chrome on the
+    // 77 live requests (D1's capture), with each cell's 32px of padding:
+    //   Requester  the longest name on one line, "Rodrigo Cempron Bautista",
+    //              189.44px: 221.44
+    //   Document   from 1046px, "Certificate of Residency" on one line,
+    //              156.38: 188.38; from 641 to 1045px, below the sidebar, two
+    //              lines ("Certificate of", 84.66: 116.66) and not one
+    //   Status     the "Ready for release" badge, 121.73: 153.73
+    //   Submitted  the date over the time in every row: room for the widest
+    //              date half of any day of 2026, "May 10, 2026," 87.94
+    //              (119.94), and none for the narrowest with its hour, "Jul
+    //              1, 2026, 1:05", 100.08 (132.08), so no hour ends line one;
+    //              text-wrap: balance keeps that break for a narrower font
+    //   actions    the Review button, 75.84, with its 8px margin and the
+    //              cell's 24px of padding: 107.84
+    //   Purpose    96, its floor: the PURPOSE heading (56) and the median
+    //              purpose (61.39) whole
+    // On a phone (640px and below) none of it applies, and no rule in the
+    // 640px block names the table. The protected col-*, .row-actions (its
+    // three exceptions among them), .num, .dash-main and .pending-card rules
+    // are as they were at 85dbba4 (D7), read with git. jsdom applies no width
+    // media query, so index.css is read with section AA's reader; the section
+    // sits inside section AA's block for that and for its requests and
+    // helpers.
+    console.log('\n--- Document requests: fixed columns ---');
+    {
+      const { execFileSync } = require('child_process');
+      const PINNED_REV = '85dbba4';
+      const WIDE = [641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440, 1920];
+      const PHONES = [320, 390, 640];
+      // The measured floors (Chrome, the 77 live requests), padding in.
+      const NEED = { requester: 221.44, documentOneLine: 188.38, documentTwoLines: 116.66, status: 153.73,
+        submittedFrom: 119.94, submittedBelow: 132.08, actions: 107.84 };
+      const PURPOSE_FLOOR = 96;
+      const px = (v) => (typeof v === 'string' && /^\d+(\.\d+)?px$/.test(v) ? Number.parseFloat(v) : null);
+      const sent = [];
+
+      for (const { name, route, token, user, staff } of ROLES) {
+        seedSession(token, user);
+        resetNet(200, answerFor(makeState(), staff));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+
+        // a. The table, and index.css's rules for it, read for this role's
+        // own elements.
+        const tbl = page.query('table.data-table');
+        const ths = tbl ? [...tbl.querySelectorAll('thead th')] : [];
+        const submittedCell = tbl?.querySelector('tbody td[data-label="Submitted"]') ?? null;
+        check(`${name}: the list's table is .doc-requests-table, beside data-table and stack-narrow, with its six headers as before`,
+          !!tbl && ['data-table', 'stack-narrow', 'doc-requests-table'].every((c) => tbl.classList.contains(c))
+            && said(ths.map(text)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', '']) && !!submittedCell,
+          said({ table: tbl?.className ?? null, headers: ths.map(text) }));
+        const [thReq, thDoc, thPur, thSta, thSub, thAct] = ths;
+        const sized = [thReq, thDoc, thSta, thSub, thAct];
+        const wideRead = WIDE.map((w) => ({
+          w,
+          layout: valueAt(w, tbl, 'table-layout'),
+          min: px(valueAt(w, tbl, 'min-width')),
+          widths: sized.map((th) => px(valueAt(w, th, 'width'))),
+          purpose: valueAt(w, thPur, 'width'),
+          wrap: valueAt(w, submittedCell, 'text-wrap'),
+        }));
+        check(`${name}: above 640px (641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440 and 1920) the columns are fixed: table-layout `
+            + 'fixed; Requester, Document, Status, Submitted and the actions column each a width in px; Purpose none, so it takes the '
+            + 'rest; and the table never narrower than those five and Purpose\'s 96px',
+          wideRead.every((r) => r.layout === 'fixed' && r.widths.every((x) => x !== null) && r.purpose === null
+            && r.min === r.widths.reduce((a, b) => a + b, 0) + PURPOSE_FLOOR),
+          said(wideRead.map((r) => [r.w, r.layout, r.widths.join('/'), r.purpose, r.min])));
+        const short = wideRead.flatMap((r) => {
+          const [req, doc, sta, sub, act] = r.widths;
+          const docOk = r.w >= 1046 ? doc >= NEED.documentOneLine : doc >= NEED.documentTwoLines && doc < NEED.documentOneLine;
+          const bad = [req >= NEED.requester ? null : `Requester ${req}`, docOk ? null : `Document ${doc}`,
+            sta >= NEED.status ? null : `Status ${sta}`,
+            sub >= NEED.submittedFrom && sub < NEED.submittedBelow ? null : `Submitted ${sub}`,
+            act >= NEED.actions ? null : `actions ${act}`].filter(Boolean);
+          return bad.length ? [`${r.w}: ${bad.join(', ')}`] : [];
+        });
+        check(`${name}: each width holds what was measured in Chrome on the 77 live requests: Requester the longest name on one line `
+            + '(221.44); Document "Certificate of Residency" on one line from 1046px (188.38) and on two below the sidebar, 641 to '
+            + '1045px (116.66 up to, not reaching, 188.38); Status the "Ready for release" badge (153.73); Submitted the date over the '
+            + 'time in every 2026 row (119.94 up to, not reaching, 132.08); the actions column the Review button (107.84)',
+          short.length === 0, short.length ? said(short) : said(wideRead.map((r) => [r.w, r.widths.join('/')])));
+        check(`${name}:   and the Submitted cells balance their two lines (text-wrap: balance) at every one of those widths`,
+          wideRead.every((r) => r.wrap === 'balance'), said(wideRead.map((r) => [r.w, r.wrap])));
+        const origins = WIDE.flatMap((w) => [[tbl, 'table-layout'], [tbl, 'min-width'], ...sized.map((th) => [th, 'width']),
+          [submittedCell, 'text-wrap']].map(([el, prop]) => {
+          const win = el ? winning(w, el, prop) : null;
+          return { w, prop, el: el?.textContent?.slice(0, 12) ?? null, selector: win?.selector ?? null,
+            media: win ? cssRead.rules[win.order].media : null };
+        }));
+        const stray = origins.filter((o) => !o.selector || !o.selector.startsWith('.doc-requests-table')
+          || !o.media.some((m) => /min-width:\s*641px/.test(m)));
+        check(`${name}: every one of those values comes from a rule of this table's own, .doc-requests-table first in its selector, `
+            + 'inside an @media (min-width: 641px)',
+          origins.length === WIDE.length * 8 && stray.length === 0, said(stray.slice(0, 6)));
+        const phoneRead = PHONES.map((w) => ({ w, layout: valueAt(w, tbl, 'table-layout'), min: valueAt(w, tbl, 'min-width'),
+          widths: ths.map((th) => valueAt(w, th, 'width')), wrap: valueAt(w, submittedCell, 'text-wrap') }));
+        check(`${name}: on a phone (320, 390 and 640px) none of it applies: no table-layout, no min-width, no header width and no `
+            + 'text-wrap reach the table, which is cards as before',
+          ths.length === 6 && phoneRead.every((r) => r.layout === null && r.min === null && r.widths.every((x) => x === null)
+            && r.wrap === null), said(phoneRead));
+
+        sent.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // c. index.css as a whole, the source, and another page's table.
+      const tableRules = cssRead.rules.filter((r) => r.selectors.some((s) => s.includes('.doc-requests-table')));
+      const inPhoneBlock = cssRead.rules.filter((r) => r.media.some((m) => /max-width:\s*640px/.test(m))
+        && r.selectors.some((s) => s.includes('doc-requests-table')));
+      check('index.css: every rule that names .doc-requests-table is this table\'s, each of its selectors starting with it, and '
+          + 'sits inside an @media (min-width: 641px); none is in the 640px block',
+        tableRules.length > 0 && inPhoneBlock.length === 0 && tableRules.every((r) => r.media.some((m) => /min-width:\s*641px/.test(m))
+          && r.selectors.every((s) => s.startsWith('.doc-requests-table'))),
+        said({ rules: tableRules.map((r) => `${r.media.join(' ')} { ${r.selector} }`), inPhoneBlock: inPhoneBlock.map((r) => r.selector) }));
+      // Every style rule of a stylesheet, comments gone and line endings and
+      // spaces tidied: the @-rules round it, its selector, its declarations.
+      const rulesOf = (src) => {
+        const css = src.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
+        const out = [];
+        const open = [];
+        let from = 0;
+        for (let i = 0; i < css.length; i += 1) {
+          const ch = css[i];
+          if (ch === '{') {
+            open.push({ head: css.slice(from, i).trim().replace(/\s+/g, ' '), decls: [] });
+            from = i + 1;
+          } else if (ch === ';' || ch === '}') {
+            const decl = css.slice(from, i).trim().replace(/\s+/g, ' ');
+            if (decl && open.length) open.at(-1).decls.push(decl);
+            from = i + 1;
+            const block = ch === '}' ? open.pop() : null;
+            if (block && !block.head.startsWith('@')) {
+              out.push({ at: open.filter((b) => b.head.startsWith('@')).map((b) => b.head), selector: block.head,
+                decls: block.decls });
+            }
+          }
+        }
+        return out;
+      };
+      const PROTECTED = /\.col-[\w-]+|row-actions|\.num\b|\.dash-main\b|\.pending-card\b/;
+      const protectedIn = (src) => rulesOf(src).filter((r) => PROTECTED.test(r.selector));
+      let pinnedCss = null;
+      try {
+        pinnedCss = execFileSync('git', ['show', `${PINNED_REV}:frontend/src/index.css`],
+          { cwd: path.join(HERE, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch {
+        pinnedCss = null;
+      }
+      const nowRules = protectedIn(fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8'));
+      const thenRules = pinnedCss === null ? null : protectedIn(pinnedCss);
+      let firstDiff = -1;
+      for (let i = 0; thenRules && i < Math.max(nowRules.length, thenRules.length); i += 1) {
+        if (said(nowRules[i]) !== said(thenRules[i])) { firstDiff = i; break; }
+      }
+      check(`the col-*, .row-actions (its three exceptions among them), .num, .dash-main and .pending-card rules are as they were `
+          + `at ${PINNED_REV} (D7, read with git): the same rules in the same order, under the same @media, with the same declarations`,
+        !!thenRules && thenRules.length > 20 && firstDiff === -1,
+        thenRules === null ? `git could not read ${PINNED_REV}:frontend/src/index.css`
+          : firstDiff === -1 ? `${nowRules.length} rules, the same`
+            : said({ at: firstDiff, now: nowRules[firstDiff] ?? null, then: thenRules[firstDiff] ?? null,
+              counts: [nowRules.length, thenRules.length] }));
+      const srcRoot = path.join(HERE, '..', 'src');
+      const sourceFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory()
+        ? sourceFiles(path.join(dir, d.name)) : /\.jsx?$/.test(d.name) ? [path.join(dir, d.name)] : []));
+      const codeOf = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      const carriers = sourceFiles(srcRoot).flatMap((f) => {
+        const n = (codeOf(fs.readFileSync(f, 'utf8')).match(/doc-requests-table/g) || []).length;
+        return n ? [`${path.relative(srcRoot, f).replace(/\\/g, '/')}: ${n}`] : [];
+      });
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(200, (url, method) => (method === 'GET' && url.includes('/document-requests/mine')
+        ? { requests: FILTER_LIST.slice(0, 4).map((row) => asRequest(row, false)) } : undefined));
+      const minePage = await globalThis.mountInteractive(root(), '/resident');
+      await minePage.settle();
+      const mineTable = minePage.query('table.data-table');
+      const mineClass = mineTable?.className ?? null;
+      sent.push(...net.calls.map((c) => c.method));
+      await minePage.unmount();
+      check('.doc-requests-table is this table\'s alone: the source names it once, in SecretaryRequestsPage.jsx, and the '
+          + 'resident\'s My requests table, which shares .data-table and .row-actions with it, does not carry it',
+        said(carriers) === said(['pages/SecretaryRequestsPage.jsx: 1']) && !!mineTable
+          && !mineTable.classList.contains('doc-requests-table'),
+        said({ carriers, mineClass }));
+
+      check('section AC sent nothing but GETs', sent.length > 0 && sent.every((m) => m === 'GET'),
         `${sent.length} request(s): ${[...new Set(sent)].join(', ')}`);
     }
 

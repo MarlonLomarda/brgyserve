@@ -109,6 +109,12 @@ import {
 // the browser. On a phone the row is a panel behind a "Filters" button that
 // counts the filters on ("Filters (2)") and opens it in place; whether it is
 // open lives here too, closed on every visit (components/ListFilters.jsx).
+//
+// COLUMNS (14 Oct 2026). Above 640px the columns stand in the same places on
+// every tab, page, search and filter result: the table and its headers carry
+// classes of their own, and index.css lays the table out fixed, a width for
+// each column but Purpose, which takes the rest. On a phone the rows are
+// cards, as before.
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -984,15 +990,15 @@ export default function SecretaryRequestsPage({
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="data-table stack-narrow">
+              <table className="data-table stack-narrow doc-requests-table">
                 <thead>
                   <tr>
-                    <th>Requester</th>
-                    <th>Document</th>
+                    <th className="doc-requests-requester">Requester</th>
+                    <th className="doc-requests-document">Document</th>
                     <th>Purpose</th>
-                    <th>Status</th>
-                    <th>Submitted</th>
-                    <th></th>
+                    <th className="doc-requests-status">Status</th>
+                    <th className="doc-requests-submitted">Submitted</th>
+                    <th className="doc-requests-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
