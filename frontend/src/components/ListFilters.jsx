@@ -29,6 +29,9 @@ import { useId, useRef } from "react";
 //   as it keeps the values, because this row is not drawn while its list
 //   loads. Above 640px the page's index.css rules hide the button, and the
 //   row is shown, open or not.
+// - Escape in the open panel, or on its button, closes it (`onToggle()`)
+//   and gives focus back to the button, as Payments' panel does. The key
+//   stops there; with the panel closed it does nothing and goes on.
 // - It is never a form: nothing is submitted, and each change filters at
 //   once. The page keeps every value and decides what a change does.
 //
@@ -44,6 +47,7 @@ export default function ListFilters({
 }) {
   const id = useId();
   const rowRef = useRef(null);
+  const buttonRef = useRef(null);
   const hintId = `${id}-hint`;
   const panelId = `${id}-panel`;
   const active = count > 0;
@@ -53,9 +57,21 @@ export default function ListFilters({
     rowRef.current?.querySelector("select:not(:disabled)")?.focus();
   }
 
+  // Payments' closeFiltersOnEscape (PaymentsPage.jsx), on the wrapper round
+  // the button and the panel rather than on the panel alone, so Escape on
+  // the button closes it too. Never on the document: Escape in the search
+  // box or on a tab, outside the wrapper, leaves the panel open.
+  function closeOnEscape(e) {
+    if (e.key !== "Escape" || !open) return;
+    e.stopPropagation();
+    onToggle();
+    buttonRef.current?.focus();
+  }
+
   return (
-    <div className={className}>
+    <div className={className} onKeyDown={closeOnEscape}>
       <button
+        ref={buttonRef}
         type="button"
         className="btn secondary pay-filters-toggle"
         aria-expanded={open}

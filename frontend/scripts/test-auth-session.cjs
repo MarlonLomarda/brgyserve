@@ -110,19 +110,22 @@
 // three roles: on a phone the filters row sits in a panel behind one
 // full-width "Filters" button, which counts the filters that are on
 // ("Filters (2)", From and To counting once, with Submitted) and opens the
-// panel in place and closes it, by its button only; the open state kept
-// through every reload and Back and never in the browser; Clear filters
-// keeping its place in the row while nothing is on, disabled and hidden, so
-// the first filter never makes the row taller; and above 640px no button and
-// the row as it was (read from index.css). It sits inside section AA's block.
+// panel in place and closes it, by its button (and Escape, section AC); the
+// open state kept through every reload and Back and never in the browser;
+// Clear filters keeping its place in the row while nothing is on, disabled
+// and hidden, so the first filter never makes the row taller; and above
+// 640px no button and the row as it was (read from index.css). It sits
+// inside section AA's block.
 //
 // Section AC is the Document requests table's columns, for the same three
 // roles: above 640px the table is .doc-requests-table, table-layout fixed,
 // with a width for every column but Purpose, which takes the rest, each width
 // holding what was measured in Chrome on the 77 live requests; none of it on
-// a phone; and the protected col-*, .row-actions, .num, .dash-main and
-// .pending-card rules as they were at 85dbba4. It sits inside section AA's
-// block.
+// a phone; the protected col-*, .row-actions, .num, .dash-main and
+// .pending-card rules as they were at 85dbba4. And the Filters panel's
+// Escape: in the open panel, or on its button, it closes the panel and gives
+// focus back to the button, as on Payments, while Escape anywhere else leaves
+// it open, and nothing else changes. It sits inside section AA's block.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -7367,9 +7370,10 @@ const root = () => dom.window.document.getElementById('root');
     // utils/requestList.js). The button is a real button with aria-expanded
     // and aria-controls; the panel, Payments' .pay-filters-panel, opens in
     // place under it and holds the three selects, From and To, Clear filters
-    // and the hint. It opens and closes by its button only: a pick, a tab,
-    // Escape or a reload never closes it, and focus stays where it is. Its
-    // open state is the page's, so it lives through Refresh, Try again, a tab,
+    // and the hint. It opens and closes by its button, and since section AC
+    // Escape inside it closes it too, as on Payments: a pick, a tab or a
+    // reload never closes it, and focus stays where it is. Its open state
+    // is the page's, so it lives through Refresh, Try again, a tab,
     // a search and Back from a request, as the filters do, and a new visit
     // starts closed; nothing is kept in the browser. Like the row, the button
     // and the panel are not drawn while the list loads or beside a failed
@@ -7496,13 +7500,20 @@ const root = () => dom.window.document.getElementById('root');
           isClosed(s0) && isOpen(s1) && focusAfterOpen && isClosed(s2) && isOpen(s3) && !!panel
             && filtersButton(page)?.getAttribute('aria-controls') === panel.id,
           said({ s0, s1, focusAfterOpen, s2, s3 }));
+        // Since section AC, Escape inside the open panel closes it, as on
+        // Payments; a press opens it again for the checks below (only if it
+        // closed, so a page that ignored Escape fails this check alone).
         docSelect(page)?.focus();
         if (!!docSelect(page) && page.active() === docSelect(page)) await page.key('Escape');
         await page.settle();
         const afterEscape = stateOf(page);
-        check(`${name}: Escape inside the open panel neither closes it nor moves focus: it opens and closes by its button only`,
-          isOpen(afterEscape) && !!docSelect(page) && page.active() === docSelect(page),
-          said({ afterEscape, focus: page.active()?.tagName ?? null }));
+        const focusAfterEscape = !!filtersButton(page) && page.active() === filtersButton(page);
+        if (!isOpen(afterEscape)) await toggle(page);
+        const reopened = stateOf(page);
+        check(`${name}: Escape inside the open panel closes it and puts focus back on the Filters button, as on Payments; a press `
+            + 'opens it again',
+          isClosed(afterEscape) && focusAfterEscape && isOpen(reopened),
+          said({ afterEscape, focusAfterEscape, reopened, focus: page.active()?.textContent ?? page.active()?.tagName ?? null }));
 
         // Clear filters with nothing on: its place kept, nothing to press.
         const idle = slotOf();
@@ -7855,7 +7866,8 @@ const root = () => dom.window.document.getElementById('root');
     }
 
     // =========================================================================
-    // AC. Document requests: columns that keep their places
+    // AC. Document requests: columns that keep their places, and Escape on
+    // the Filters panel
     // =========================================================================
     // Above 640px the list's table keeps its columns in the same places on
     // every tab, every page and every search or filter result: it is
@@ -7886,7 +7898,19 @@ const root = () => dom.window.document.getElementById('root');
     // media query, so index.css is read with section AA's reader; the section
     // sits inside section AA's block for that and for its requests and
     // helpers.
-    console.log('\n--- Document requests: fixed columns ---');
+    //
+    // Escape in the open Filters panel closes it and gives focus back to the
+    // Filters button, as Payments' panel does (closeFiltersOnEscape in
+    // PaymentsPage.jsx: a keydown handler on the panel, never the document,
+    // that returns at once while the panel is closed and otherwise stops the
+    // key there). Here the handler is on the filters wrapper, which holds the
+    // button and the panel, so Escape on the button closes it too; Payments'
+    // button sits outside its panel, in the status row, and Escape on it does
+    // nothing. Escape anywhere else, the search box, a tab or nothing
+    // focused, leaves the panel open, as on Payments, where those are outside
+    // the panel too. The count and the filters stay as they were; no request,
+    // nothing kept in the browser.
+    console.log('\n--- Document requests: fixed columns and Escape ---');
     {
       const { execFileSync } = require('child_process');
       const PINNED_REV = '85dbba4';
@@ -7898,6 +7922,42 @@ const root = () => dom.window.document.getElementById('root');
       const PURPOSE_FLOOR = 96;
       const px = (v) => (typeof v === 'string' && /^\d+(\.\d+)?px$/.test(v) ? Number.parseFloat(v) : null);
       const sent = [];
+      const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+      const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+      const panelOf = (page) => {
+        const id = filtersButton(page)?.getAttribute('aria-controls');
+        return id ? dom.window.document.getElementById(id) : null;
+      };
+      const stateOf = (page) => {
+        const b = filtersButton(page);
+        const p = panelOf(page);
+        return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+          open: !!p && p.classList.contains('is-open') };
+      };
+      const isOpen = (s) => s.expanded === 'true' && s.open;
+      const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+      const toggle = (page) => press(page, filtersButton(page));
+      // The panel opened or closed by its button only when it is not so
+      // already, so a page that ignores an Escape fails that one check and
+      // not every check after it.
+      const openIt = async (page) => { if (!isOpen(stateOf(page))) await toggle(page); };
+      const closeIt = async (page) => { if (isOpen(stateOf(page))) await toggle(page); };
+      // Escape where focus is, after focusing `el` ('nothing': with nothing
+      // focused): whether the element took focus, and whether the key went on
+      // to the document (Payments' handler stops it when it closes a panel).
+      const escapeFrom = async (page, el) => {
+        if (el === 'nothing') page.active()?.blur?.();
+        else el?.focus();
+        const body = dom.window.document.body;
+        const focused = el === 'nothing' ? page.active() === body : !!el && page.active() === el;
+        let reached = false;
+        const spy = (e) => { if (e.key === 'Escape') reached = true; };
+        dom.window.document.addEventListener('keydown', spy);
+        if (focused) await page.key('Escape');
+        await page.settle();
+        dom.window.document.removeEventListener('keydown', spy);
+        return { focused, reached: focused ? reached : null };
+      };
 
       for (const { name, route, token, user, staff } of ROLES) {
         seedSession(token, user);
@@ -7964,6 +8024,86 @@ const root = () => dom.window.document.getElementById('root');
           ths.length === 6 && phoneRead.every((r) => r.layout === null && r.min === null && r.widths.every((x) => x === null)
             && r.wrap === null), said(phoneRead));
 
+        // b. Escape. The page opens on Pending, the panel closed.
+        const sentAtB = net.calls.length;
+        const writesAtB = store.sets;
+        const onButton = () => !!filtersButton(page) && page.active() === filtersButton(page);
+        const headingAtB = look(page).heading;
+        const k1 = await escapeFrom(page, filtersButton(page));
+        const closedEscape = { ...stateOf(page), onButton: onButton(), heading: look(page).heading, ...k1 };
+        check(`${name}: with the panel closed, Escape does nothing: on the Filters button the panel stays closed, focus stays on the `
+            + 'button, the list is as it was, and the key goes on unstopped, as Payments\' handler lets it while its panel is closed',
+          isClosed(closedEscape) && closedEscape.onButton && closedEscape.heading === headingAtB && k1.focused
+            && k1.reached === true, said(closedEscape));
+        await openIt(page);
+        const openedB = isOpen(stateOf(page));
+        const k2 = await escapeFrom(page, docSelect(page));
+        const fromSelect = { openedB, ...stateOf(page), onButton: onButton(), ...k2 };
+        check(`${name}: open, Escape from the Document select closes the panel and puts focus back on the Filters button, and the key `
+            + 'goes no further, as on Payments',
+          openedB && isClosed(fromSelect) && fromSelect.onButton && k2.focused && k2.reached === false, said(fromSelect));
+        await openIt(page);
+        const k3 = await escapeFrom(page, filtersButton(page));
+        const fromButton = { ...stateOf(page), onButton: onButton(), ...k3 };
+        check(`${name}: open, Escape on the Filters button itself closes the panel and leaves focus on the button (Payments' button `
+            + 'sits outside its panel, where Escape does nothing; here the handler is on the wrapper round both)',
+          isClosed(fromButton) && fromButton.onButton && k3.focused && k3.reached === false, said(fromButton));
+        await pickDate(page, 'Choose dates');
+        const inner = [];
+        for (const [what, find] of [['From', () => fromInput(page)], ['To', () => toInput(page)],
+          ['Clear filters', () => buttonNamed(root(), 'Clear filters')]]) {
+          await openIt(page);
+          const wasOpen = isOpen(stateOf(page));
+          const k = await escapeFrom(page, find());
+          inner.push({ what, wasOpen, ...stateOf(page), onButton: onButton(), ...k });
+        }
+        await pickDate(page, 'Any date');
+        check(`${name}: open, with Choose dates on, Escape from From, from To and from Clear filters closes it each time and puts `
+            + 'focus back on the Filters button',
+          inner.length === 3 && inner.every((x) => x.wasOpen && isClosed(x) && x.onButton && x.focused && x.reached === false),
+          said(inner));
+        await openIt(page);
+        const elsewhere = [];
+        let k = await escapeFrom(page, box(page));
+        elsewhere.push({ what: 'the empty search box', ...stateOf(page), stays: page.active() === box(page), ...k });
+        await type(page, 'ana');
+        k = await escapeFrom(page, box(page));
+        elsewhere.push({ what: 'the search box holding "ana"', ...stateOf(page), stays: page.active() === box(page),
+          search: box(page)?.value ?? null, ...k });
+        const allTab = tabNamed(page, 'All');
+        k = await escapeFrom(page, allTab);
+        elsewhere.push({ what: 'the All tab', ...stateOf(page), stays: page.active() === allTab, ...k });
+        k = await escapeFrom(page, 'nothing');
+        elsewhere.push({ what: 'nothing focused', ...stateOf(page), stays: page.active() === dom.window.document.body, ...k });
+        check(`${name}: open, Escape anywhere else leaves it open, as on Payments, where these are outside the panel too: from the `
+            + 'search box (empty, or holding "ana", which the box\'s own Escape clears), from a tab, and with nothing focused; focus '
+            + 'stays where it was',
+          elsewhere.length === 4 && elsewhere.every((x) => isOpen(x) && x.stays && x.focused) && elsewhere[1].search === '',
+          said(elsewhere));
+        await closeIt(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        await pickDoc(page, 'Barangay Clearance');
+        await pickPay(page, 'Unpaid');
+        await openIt(page);
+        const kept0 = { ...look(page), ...stateOf(page) };
+        const k5 = await escapeFrom(page, paySelect(page));
+        const kept1 = { ...look(page), ...stateOf(page), onButton: onButton(), ...k5 };
+        check(`${name}: Escape leaves the count and the filters as they were: with Document and Payment on, "Filters (2)", Escape `
+            + 'from the Payment select closes the panel, the button still "Filters (2)", the selects still Barangay Clearance and '
+            + 'Unpaid, the list still Carla Santos alone under "1 of 16 requests matches", the tab counts as before',
+          isOpen(kept0) && kept0.label === 'Filters (2)' && isClosed(kept1) && kept1.label === 'Filters (2)' && kept1.onButton
+            && kept1.document === 'Barangay Clearance' && kept1.payment === 'Unpaid' && kept1.date === 'Any date'
+            && said(kept1.rows) === said(['Carla Santos']) && kept1.heading === '1 of 16 requests matches'
+            && kept1.strip === kept0.strip && kept1.search === kept0.search,
+          said({ before: { label: kept0.label, heading: kept0.heading, rows: kept0.rows },
+            after: { label: kept1.label, heading: kept1.heading, rows: kept1.rows, document: kept1.document,
+              payment: kept1.payment, strip: kept1.strip === kept0.strip } }));
+        check(`${name}: none of those Escapes, presses or picks sent a request or wrote to the browser: no localStorage write, `
+            + 'sessionStorage empty, no cookie',
+          net.calls.length === sentAtB && store.sets === writesAtB && dom.window.sessionStorage.length === 0
+            && dom.window.document.cookie === '',
+          `${net.calls.length - sentAtB} request(s): ${said(listCalls(net.calls.slice(sentAtB)))}, `
+            + `${store.sets - writesAtB} write(s)`);
         sent.push(...net.calls.map((c) => c.method));
         await page.unmount();
       }
