@@ -5050,6 +5050,24 @@ button.tab:hover:not(:disabled) {
     margin: 10px 0 0;
   }
 
+  /* The Document requests filters row (14 Oct 2026) is this second row with
+     no panel round it: it has no Filters button yet, so here it stays in
+     the page, stacked by the rules above, one field a line. Outside a panel
+     it keeps the panel's spacing, 12px under the row and 10px over the
+     hint, and its Clear filters, 40px tall in Payments' panel, is a
+     finger's 44px. Scoped to that page's wrapper (components/ListFilters). */
+  .doc-requests-filters {
+    margin-bottom: 12px;
+  }
+
+  .doc-requests-filters .pay-filters-hint:not(:empty) {
+    margin: 10px 0 0;
+  }
+
+  .doc-requests-filters .pay-filters .pay-filters-clear {
+    height: 44px;
+  }
+
   /* The type tabs (batch 8): less room around each, so All, Documents,
      Rentals and Fines with their counts fit on one line from 360px up,
      measured with two-digit counts: 3.9px to spare at 360, 18.9 at 375 and

@@ -19,7 +19,15 @@
 // "#91" as the detail names it (requestNumber), which the search reads too,
 // and where the request stands with its fee (paymentMarker), which it does
 // not.
+//
+// FILTERS (14 Oct 2026). The filters row (components/ListFilters.jsx)
+// narrows what the search leaves, before the tabs split it: Document, Payment
+// and Submitted. Their choices are the loaded rows', and each matches what a
+// row shows: the document type's whole name; the payment marker's word,
+// through paymentMarker itself; and the Manila day the request was submitted,
+// through utils/chargeFilters.js's manilaDay and backwards, as they are.
 import { chargeMeta, chargeOf, statusMeta } from "../constants/requestStatus";
+import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { isNoFeeCharge } from "./chargeMethod";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
 
@@ -195,4 +203,90 @@ export function searchPlaceholder(requests) {
   return accounts
     ? "Search name, account or document"
     : "Search name or document";
+}
+
+// "Any document": no Document filter. Empty, because a document type always
+// has a name (the Secretary's form requires one), where "any", the value of
+// the Payment and Submitted filters' Any (chargeFilters.js's ANY), could be
+// one.
+export const ANY_DOCUMENT = "";
+
+// The Document choices: "Any document", then each type the loaded requests
+// hold, once, sorted by name with case ignored ("efef21" comes before
+// "First-time jobseeker"). A type is offered by its name, the words its rows
+// show; the Secretary's form refuses a second type of the same name.
+export function documentOptions(requests) {
+  const names = [
+    ...new Set(requests.map((r) => r.document_types?.name).filter(Boolean)),
+  ];
+  names.sort((a, b) => a.localeCompare(b, "en"));
+  return [
+    { value: ANY_DOCUMENT, label: "Any document" },
+    ...names.map((name) => ({ value: name, label: name })),
+  ];
+}
+
+// A request matches a type when its type has that whole name: "Barangay
+// Clearance" never takes "Barangay Clearance for Business".
+export function matchesDocument(request, choice) {
+  return choice === ANY_DOCUMENT || request.document_types?.name === choice;
+}
+
+// The marker's word for a request whose charge is `charges`. The Payment
+// choices are made of these, so a choice and the marker it takes are never
+// spelled two ways.
+function markerFor(charges) {
+  return paymentMarker({ charges }).label;
+}
+
+const PAYMENT_WORDS = [
+  markerFor({ status: "PAID", amount: 1 }), // Paid
+  markerFor({ status: "UNPAID", amount: 1 }), // Unpaid
+  markerFor({ status: "PAID", amount: 0 }), // No fee
+  markerFor(null), // Not billed
+];
+
+const VOID_WORD = markerFor({ status: "VOID", amount: 1 });
+
+// The Payment choices: "Any payment", then Paid, Unpaid, No fee and Not
+// billed, and Void last, only when a loaded request is void (no route voids a
+// document charge, so only one set by hand would be). A charge status outside
+// the vocabulary is never a choice; its rows show under Any payment.
+export function paymentOptions(requests) {
+  const words = requests.some((r) => paymentMarker(r).label === VOID_WORD)
+    ? [...PAYMENT_WORDS, VOID_WORD]
+    : PAYMENT_WORDS;
+  return [
+    { value: ANY, label: "Any payment" },
+    ...words.map((word) => ({ value: word, label: word })),
+  ];
+}
+
+// A request matches a Payment choice when its marker says that word: the row
+// and the filter read the same function, so they cannot disagree.
+export function matchesPayment(request, choice) {
+  return choice === ANY || paymentMarker(request).label === choice;
+}
+
+// Whether a request was submitted within `range`, chargeFilters.js's
+// dateRange: { from, to } in Manila days, either null for no bound, or null
+// for no range. Both ends are included. The day is the Manila day of
+// requested_at, whatever clock the viewer's computer keeps; a request with no
+// time is never guessed into a range, and a start after the end matches
+// nothing. Not chargeFilters.js's matchesDate, which reads a charge's own
+// date (billed, or paid under Paid); its manilaDay and backwards, as they are.
+export function matchesSubmitted(request, range) {
+  if (!range) return true;
+  const day = manilaDay(request.requested_at);
+  if (!day || backwards(range)) return false;
+  return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+}
+
+// What takes the place of the rows when the filters, with or without a
+// search, leave a tab nothing: 'No pending requests match your search or
+// filters.', 'No requests match your search or filters.' on All. The Payments
+// page's words, naming the tab as this list's other empty texts do. A search
+// alone keeps noMatchText.
+export function filtersNoMatchText(tab) {
+  return `No ${tabWords(tab)}requests match your search or filters.`;
 }

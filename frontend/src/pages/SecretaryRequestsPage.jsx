@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
@@ -10,15 +11,29 @@ import {
   chargeOf,
   formatDate,
 } from "../constants/requestStatus";
+import {
+  ANY,
+  backwards,
+  DATE_OPTIONS,
+  dateRange,
+  manilaToday,
+} from "../utils/chargeFilters";
 import { isNoFeeCharge } from "../utils/chargeMethod";
 import { searchTerms } from "../utils/chargeSearch";
 import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
   accountHandle,
+  ANY_DOCUMENT,
+  documentOptions,
+  filtersNoMatchText,
   inTab,
+  matchesDocument,
+  matchesPayment,
+  matchesSubmitted,
   matchingRequests,
   noMatchText,
   paymentMarker,
+  paymentOptions,
   personName,
   REQUEST_TABS,
   requesterName,
@@ -79,6 +94,18 @@ import {
 // <strong>: a row's first <strong> is still the requester's name. The search
 // reads the number and never the marker. On a phone card each is labelled
 // from its own data-label, as a cell is from its own (index.css).
+//
+// FILTERS (14 Oct 2026). The Payments page's second row, as
+// components/ListFilters.jsx, between the search and the tabs, where Payments
+// puts it: Document (the types the loaded rows hold), Payment (the marker's
+// words, matched through the marker itself) and Submitted (Payments' presets
+// and "Choose dates", in Manila days, utils/chargeFilters.js). The list shown
+// is tab AND search AND filters: the tab counts, the heading ("3 of 8
+// approved requests match") and the pager follow the search and the filters,
+// and any filter change goes back to page 1, with no request. Like the
+// search, the filters live through every reload and Back from a request, a
+// choice a reload no longer offers goes back to Any, and nothing is kept in
+// the browser. On a phone the row stacks, one field a line (index.css).
 
 // Resident rows that may be absent depending on the viewer's projection.
 const OPTIONAL_RESIDENT_FIELDS = [
@@ -613,6 +640,15 @@ export default function SecretaryRequestsPage({
   // Like the search, both live through every reload and Back from a request.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // The filters: Document, Payment and Submitted (its choice, and From and To
+  // under "Choose dates"). Like the search, they live here, so they outlive
+  // the list while a request's detail takes its place; every visit starts
+  // them at Any, and none is kept in the browser.
+  const [documentChoice, setDocumentChoice] = useState(ANY_DOCUMENT);
+  const [paymentChoice, setPaymentChoice] = useState(ANY);
+  const [dateChoice, setDateChoice] = useState(ANY);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const headingRef = useRef(null); // the list's heading, for a page change
   // Numbers each load, so only the newest one may change the page.
   const loadSeq = useRef(0);
@@ -642,12 +678,30 @@ export default function SecretaryRequestsPage({
     load();
   }, [load]);
 
-  // The search runs over the whole list, then the tabs split what matches.
-  // The tab counts come from every match, so they read the same on every tab
-  // and follow the search; the rows and the heading are the chosen tab's.
-  // With no search, every request matches, as before.
+  // The search runs over the whole list, then the filters over what it
+  // leaves, then the tabs split what matches. The tab counts come from every
+  // match, so they read the same on every tab and follow the search and the
+  // filters; the rows and the heading are the chosen tab's. With no search
+  // and no filter, every request matches, as before. "Today" is read on every
+  // render, as on Payments, so a page left open past midnight moves its
+  // presets on with the day.
   const searching = searchTerms(query).length > 0;
-  const matching = requests === null ? [] : matchingRequests(requests, query);
+  const range = dateRange(dateChoice, from, to, manilaToday());
+  // A filter that restricts something: "Choose dates" with no date is on
+  // (Clear filters shows) but restricts nothing.
+  const filtered =
+    documentChoice !== ANY_DOCUMENT || paymentChoice !== ANY || range !== null;
+  const filtersOn =
+    documentChoice !== ANY_DOCUMENT ||
+    paymentChoice !== ANY ||
+    dateChoice !== ANY;
+  const searched = requests === null ? [] : matchingRequests(requests, query);
+  const matching = searched.filter(
+    (r) =>
+      matchesDocument(r, documentChoice) &&
+      matchesPayment(r, paymentChoice) &&
+      matchesSubmitted(r, range),
+  );
   const counts = requests === null ? null : tabCounts(matching);
   const shown = matching.filter((r) => inTab(r, tab));
   // One page of the tab's matches (utils/paging.js). Only the rows drawn are
@@ -657,24 +711,77 @@ export default function SecretaryRequestsPage({
   // A reload that shrank the list lands on its last page, and stays there.
   // Not while a list is loading: the page must survive the reload itself.
   if (requests !== null && paging.page !== page) setPage(paging.page);
+  // The Document and Payment choices are the loaded rows', made by
+  // utils/requestList.js. A choice a reload no longer offers (its type
+  // renamed, its one void charge no longer void) goes back to Any, and the
+  // page to 1: a select never reads a choice over rows that do not hold it.
+  const documentChoices =
+    requests === null ? null : documentOptions(requests);
+  const paymentChoices = requests === null ? null : paymentOptions(requests);
+  if (
+    documentChoices &&
+    !documentChoices.some((o) => o.value === documentChoice)
+  ) {
+    setDocumentChoice(ANY_DOCUMENT);
+    setPage(1);
+  }
+  if (
+    paymentChoices &&
+    !paymentChoices.some((o) => o.value === paymentChoice)
+  ) {
+    setPaymentChoice(ANY);
+    setPage(1);
+  }
   // "2 of 6 pending requests match": how many of the tab's requests match, of
-  // how many it holds with no search.
+  // how many it holds with no search and no filter.
   let heading = "Document requests";
   if (requests !== null) {
-    heading = searching
-      ? searchHeading(
-          tab,
-          shown.length,
-          requests.filter((r) => inTab(r, tab)).length,
-        )
-      : tabHeading(tab, shown.length);
+    heading =
+      searching || filtered
+        ? searchHeading(
+            tab,
+            shown.length,
+            requests.filter((r) => inTab(r, tab)).length,
+          )
+        : tabHeading(tab, shown.length);
   }
 
-  // A new search, tab or Rows per page goes back to page 1, as on Payments.
-  // Rows per page itself stays as chosen through the first two.
+  // A new search, tab, filter or Rows per page goes back to page 1, as on
+  // Payments. Rows per page itself stays as chosen through the others.
   function changeQuery(text) {
     setQuery(text);
     setPage(1);
+  }
+
+  // Document, Payment, Submitted, From and To.
+  function narrowBy(set, value) {
+    set(value);
+    setPage(1);
+  }
+
+  function resetFilters() {
+    setDocumentChoice(ANY_DOCUMENT);
+    setPaymentChoice(ANY);
+    setDateChoice(ANY);
+    setFrom("");
+    setTo("");
+  }
+
+  // "Clear filters" in the row: the filters only; the search and the tab
+  // stay. The row moves focus to its first select (components/ListFilters).
+  function clearFilters() {
+    resetFilters();
+    setPage(1);
+  }
+
+  // "Clear search and filters", where they leave the tab nothing: the search
+  // and the filters, as on Payments. The tab stays, as Payments' status does.
+  // Focus goes to the box: the button pressed is gone once the rows are back.
+  function clearSearchAndFilters() {
+    setQuery("");
+    resetFilters();
+    setPage(1);
+    searchRef.current?.focus();
   }
 
   function chooseTab(key) {
@@ -749,11 +856,13 @@ export default function SecretaryRequestsPage({
             </div>
           </div>
 
-          {/* The search, then the tabs, under the row that holds Refresh, so
-              a reload leaves Refresh where it was: both are drawn only once
-              the list has loaded, never while it loads or after it failed.
-              (The Payments page keeps its search box on screen through both;
-              its tabs go, as these do.) */}
+          {/* The search, the filters, then the tabs, under the row that holds
+              Refresh, so a reload leaves Refresh where it was: all three are
+              drawn only once the list has loaded, never while it loads or
+              after it failed. (The Payments page keeps its search box on
+              screen through both; its tabs go, as these do.) The filters row
+              sits under the search and over the tabs, as Payments' second
+              row does. */}
           {requests !== null && (
             <>
               <ListToolbar
@@ -763,6 +872,39 @@ export default function SecretaryRequestsPage({
                 value={query}
                 onChange={changeQuery}
                 inputRef={searchRef}
+              />
+              <ListFilters
+                className="doc-requests-filters"
+                selects={[
+                  {
+                    label: "Document",
+                    value: documentChoice,
+                    options: documentChoices,
+                    onChange: (value) => narrowBy(setDocumentChoice, value),
+                  },
+                  {
+                    label: "Payment",
+                    value: paymentChoice,
+                    options: paymentChoices,
+                    onChange: (value) => narrowBy(setPaymentChoice, value),
+                  },
+                  {
+                    label: "Submitted",
+                    value: dateChoice,
+                    options: DATE_OPTIONS,
+                    onChange: (value) => narrowBy(setDateChoice, value),
+                  },
+                ]}
+                range={{
+                  shown: dateChoice === "custom",
+                  from,
+                  to,
+                  onFrom: (value) => narrowBy(setFrom, value),
+                  onTo: (value) => narrowBy(setTo, value),
+                  reversed: backwards(range),
+                }}
+                active={filtersOn}
+                onClear={clearFilters}
               />
               <ListTabs
                 label="Status"
@@ -778,8 +920,11 @@ export default function SecretaryRequestsPage({
               failed shows neither a count nor the empty text. Try again
               repeats the same load, as Refresh does; Refresh above stays
               usable. The markup is the Payments page's. A tab with no
-              requests keeps its own text; one whose requests the search
-              hides says so, naming the tab, and offers to clear the search. */}
+              requests keeps its own text; one whose requests the filters
+              hide, with or without a search, says so in Payments' words,
+              naming the tab, and offers to clear the search and the filters;
+              one whose requests a search alone hides says so, naming the tab,
+              and offers to clear the search. */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
@@ -791,6 +936,17 @@ export default function SecretaryRequestsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading requests…</p>
+          ) : shown.length === 0 && filtered ? (
+            <div className="empty">
+              <p>{filtersNoMatchText(tab)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearchAndFilters}
+              >
+                Clear search and filters
+              </button>
+            </div>
           ) : shown.length === 0 && searching ? (
             <div className="empty">
               <p>{noMatchText(tab, query)}</p>

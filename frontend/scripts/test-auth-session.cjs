@@ -97,6 +97,15 @@
 // phone card both are labelled, which index.css does (read from the file,
 // as jsdom applies no width media query).
 //
+// Section AA is the Document requests list's filters row, for the same three
+// roles: the Payments second row (components/ListFilters.jsx) with Document,
+// Payment and Submitted; the list shown is tab AND search AND filters, with
+// the tab counts, the heading and the pager following them; Submitted counts
+// Manila days whatever the machine's time zone (checked on three); Clear
+// filters and "Clear search and filters"; no request for a filter change;
+// the filters kept through every reload and kept nowhere in the browser; and
+// on a phone, the row stacked with every field shown (read from index.css).
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -6315,6 +6324,1017 @@ const root = () => dom.window.document.getElementById('root');
     else proto.scrollIntoView = previousScroll;
     if (previousTZZ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZZ;
+  }
+
+  // =========================================================================
+  // AA. Document requests: the filters row
+  // =========================================================================
+  // The Document requests list gains the Payments page's second row, lifted
+  // into components/ListFilters.jsx with its classes (.pay-filters,
+  // .pay-filter, .pay-filter-range, .pay-filters-clear, .pay-filters-hint)
+  // and behaviour: native selects, each with its visible label; "Choose
+  // dates" bringing From and To; a hint, a polite status, while From is after
+  // To, which then matches nothing and is never swapped; and a quiet "Clear
+  // filters" while a filter is on, which moves focus to the first select. It
+  // sits where Payments' sits, under the search row and over the tabs, and
+  // like them it is drawn only once the list has loaded. Three controls:
+  // Document, "Any document" and the types the loaded rows hold, sorted by
+  // name with case ignored, matched by the whole name; Payment, "Any
+  // payment", Paid, Unpaid, No fee and Not billed, and Void only when a
+  // loaded row is void, each the marker's own word and matched through
+  // paymentMarker, so a filter and a row cannot disagree; and Submitted,
+  // Payments' presets from utils/chargeFilters.js as they are, over the
+  // Manila day of the request's requested_at. The list shown is tab AND
+  // search AND filters: the tab counts, the heading ("3 of 8 approved
+  // requests match") and the pager follow the search and the filters, and
+  // every filter change goes back to page 1. A filter sends no request, lives
+  // through Refresh, Try again, a tab, a search and Back from a request, and
+  // is kept nowhere in the browser; a choice the reloaded list no longer
+  // offers goes back to Any. Where a filter leaves a tab empty the text names
+  // the tab in Payments' words, "No pending requests match your search or
+  // filters.", with Payments' "Clear search and filters", which keeps the
+  // tab as Payments keeps its status; a search alone keeps its own text and
+  // Clear search. "Today" is fixed at 12 Oct 2026, 12:00 in Manila, by the
+  // helpers' one clock; the machine is on Los Angeles time, and the day
+  // checks run again on UTC and on Tokyo time: 7:47 AM on 12 Oct in Manila
+  // (request 91, live) is 11 Oct in the first two, and 11:48 PM on 21 Sep is
+  // 22 Sep in Tokyo, so every Manila day has to be the code's own doing.
+  // utils/requestList.js is checked case by case; then the real page for the
+  // three roles against sixteen stubbed requests; then 40, for the pager and
+  // page 1; then index.css on a phone, read from the file as in section Z.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Document requests: the filters row ---');
+  {
+    const previousTZAA = process.env.TZ;
+    const HOME_ZONE = 'America/Los_Angeles';
+    process.env.TZ = HOME_ZONE;
+    const fs = require('fs');
+    const R = globalThis.requestList || {};
+    const F = globalThis.chargeFilters || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    setNow('2026-10-12T04:00:00Z'); // 12:00 on 12 Oct in Manila, 21:00 on 11 Oct in Los Angeles
+    // Three clocks for the machine: on the first two a Manila morning is the
+    // day before, on the third a Manila night is the day after.
+    const ZONES = ['UTC', 'America/Los_Angeles', 'Asia/Tokyo'];
+    const inZone = (zone, f) => {
+      process.env.TZ = zone;
+      try { return f(); } finally { process.env.TZ = HOME_ZONE; }
+    };
+
+    // a. The helpers on their own.
+    const typed = (name) => ({ request_id: 1, status: 'approved',
+      document_types: name === undefined ? null : { document_type_id: 1, name } });
+    const docOptions = (requests) => attempt(() => R.documentOptions(requests).map((o) => `${o.value}=${o.label}`).join(' | '));
+    let got = docOptions(['First-time jobseeker', 'Barangay Clearance', 'efef21', 'Certificate of Indigency', 'Barangay Clearance',
+      'Business Clearance', 'Barangay Clearance for Business'].map(typed).concat([typed(undefined)]));
+    check('documentOptions: "Any document" first, its value empty, then each type the rows hold, once, sorted by name with case '
+        + 'ignored ("efef21" between "Certificate of Indigency" and "First-time jobseeker"), each valued by its name; a row with no '
+        + 'type adds none',
+      got === '=Any document | Barangay Clearance=Barangay Clearance | Barangay Clearance for Business=Barangay Clearance for '
+        + 'Business | Business Clearance=Business Clearance | Certificate of Indigency=Certificate of Indigency | efef21=efef21 | '
+        + 'First-time jobseeker=First-time jobseeker', said(got));
+    got = [docOptions([]), docOptions([typed('any')])];
+    check('  an empty list offers "Any document" alone; a type named "any" is offered as itself, never taken for Any, whose value '
+        + 'is empty (a type always has a name, and "any" is the value of Payments\' Any choices)',
+      said(got) === said(['=Any document', '=Any document | any=any']), said(got));
+    const md = (name, choice) => attempt(() => R.matchesDocument(typed(name), choice));
+    const ANY_DOC = R.ANY_DOCUMENT;
+    got = {
+      any: [md('Barangay Clearance', ANY_DOC), md(undefined, ANY_DOC), md('any', ANY_DOC)],
+      exact: md('Barangay Clearance', 'Barangay Clearance'),
+      longer: md('Barangay Clearance for Business', 'Barangay Clearance'),
+      shorter: md('Barangay Clearance', 'Barangay Clearance for Business'),
+      cased: md('barangay clearance', 'Barangay Clearance'),
+      part: md('Barangay Clearance', 'Clearance'),
+      none: md(undefined, 'Barangay Clearance'),
+      anyName: [md('any', 'any'), md('Barangay Clearance', 'any')],
+    };
+    check('matchesDocument: Any takes every request, one with no type too; a type takes only requests of exactly that name: not '
+        + '"Barangay Clearance for Business" for "Barangay Clearance", nor the reverse, nor another case, nor part of a name; the '
+        + 'type named "any" takes only its own',
+      said(got) === said({ any: [true, true, true], exact: true, longer: false, shorter: false, cased: false, part: false,
+        none: false, anyName: [true, false] }), said(got));
+
+    const charged = (charges) => ({ request_id: 1, status: 'approved', charges });
+    const payOptions = (requests) => attempt(() => R.paymentOptions(requests).map((o) => `${o.value}=${o.label}`).join(' | '));
+    const FIVE = `${F.ANY}=Any payment | Paid=Paid | Unpaid=Unpaid | No fee=No fee | Not billed=Not billed`;
+    const NO_VOID = [charged({ status: 'PAID', amount: '50.00' }), charged({ status: 'UNPAID', amount: '50.00' }), charged(null)];
+    got = [payOptions(NO_VOID), payOptions([]), payOptions([charged({ status: 'REFUNDED', amount: '5.00' })])];
+    check('paymentOptions: "Any payment" (Payments\' Any value), then Paid, Unpaid, No fee and Not billed, each valued by its own '
+        + 'word, whatever the rows hold (those three, none, or a status outside the vocabulary): never Void where no row is void',
+      said(got) === said([FIVE, FIVE, FIVE]), said(got));
+    got = [payOptions([...NO_VOID, charged({ status: 'VOID', amount: '50.00' })]), payOptions([charged({ status: 'VOID', amount: '0.00' })])];
+    check('  and Void last, only when a row\'s marker says Void (a VOID charge, PHP 0 included)',
+      said(got) === said([`${FIVE} | Void=Void`, `${FIVE} | Void=Void`]), said(got));
+    const offered = attempt(() => R.paymentOptions([charged({ status: 'VOID', amount: '1.00' })]).slice(1).map((o) => o.value));
+    const spoken = attempt(() => [{ status: 'PAID', amount: 5 }, { status: 'UNPAID', amount: 5 }, { status: 'PAID', amount: 0 }, null,
+      { status: 'VOID', amount: 5 }].map((c) => R.paymentMarker(charged(c)).label));
+    check('  each choice is the marker\'s own word: the five values are what paymentMarker says for a paid, an unpaid, a no-fee, an '
+        + 'unbilled and a void request', said(offered) === said(spoken)
+        && said(spoken) === said(['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void']), said({ offered, spoken }));
+    // Every state, the marker's edge cases among them, with the one choice
+    // each must match (or none), written by hand; the marker must agree.
+    const P_CASES = [
+      ['a PAID charge above PHP 0', { status: 'PAID', amount: '50.00' }, 'Paid'],
+      ['a PAID charge of PHP 0.00', { status: 'PAID', amount: '0.00' }, 'No fee'],
+      ['a PAID charge of 0, a number', { status: 'PAID', amount: 0 }, 'No fee'],
+      ['a PAID charge with a null amount, never 0', { status: 'PAID', amount: null }, 'Paid'],
+      ['an UNPAID charge', { status: 'UNPAID', amount: '50.00' }, 'Unpaid'],
+      ['an UNPAID charge of PHP 0.00, never No fee', { status: 'UNPAID', amount: '0.00' }, 'Unpaid'],
+      ['an UNPAID charge declared paid onsite', { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' }, 'Unpaid'],
+      ['no charge', null, 'Not billed'],
+      ['a charge inside a list', [{ status: 'PAID', amount: '20.00' }], 'Paid'],
+      ['a VOID charge', { status: 'VOID', amount: '50.00' }, 'Void'],
+      ['a status outside the vocabulary', { status: 'REFUNDED', amount: '5.00' }, ''],
+    ];
+    const CHOICES = ['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void'];
+    const wrongP = P_CASES.flatMap(([what, c, want]) => {
+      const r = charged(c);
+      const hits = CHOICES.filter((choice) => attempt(() => R.matchesPayment(r, choice)) === true).join(',');
+      const any = attempt(() => R.matchesPayment(r, F.ANY));
+      const marker = attempt(() => R.paymentMarker(r).label);
+      return hits === want && any === true && (want === '' || marker === want) ? []
+        : [`${what}: ${hits || '(none)'}, Any ${any}, marker ${marker}, want ${want || '(none)'}`];
+    });
+    check('matchesPayment: each request matches Any payment and the one choice its marker shows, never another: PHP 0 paid is No '
+        + 'fee, never Paid; PHP 0 unpaid is Unpaid, never No fee; a null amount is Paid; no charge is Not billed; a status outside the '
+        + 'vocabulary only Any', wrongP.length === 0, wrongP.length ? said(wrongP) : `${P_CASES.length} cases`);
+
+    const submitted = (iso) => ({ request_id: 1, status: 'pending', requested_at: iso });
+    //   what, submitted at, From, To (From undefined: no range), whether it is in
+    const S_CASES = [
+      ['7:47 AM on 12 Oct in Manila (23:47Z on 11 Oct, request 91 live) is 12 Oct', '2026-10-11T23:47:01.208336+00:00',
+        '2026-10-12', '2026-10-12', true],
+      ['  and not 11 Oct', '2026-10-11T23:47:01.208336+00:00', '2026-10-11', '2026-10-11', false],
+      ['11:48 PM on 21 Sep in Manila (15:48Z) is 21 Sep', '2026-09-21T15:48:00Z', '2026-09-21', '2026-09-21', true],
+      ['  and not 22 Sep', '2026-09-21T15:48:00Z', '2026-09-22', '2026-09-22', false],
+      ['  To 21 Sep alone takes it: the end day is in', '2026-09-21T15:48:00Z', null, '2026-09-21', true],
+      ['  From 22 Sep alone does not', '2026-09-21T15:48:00Z', '2026-09-22', null, false],
+      ['00:00 on 6 Oct in Manila (16:00Z on 5 Oct) is in 6 Oct to 12 Oct', '2026-10-05T16:00:00Z', '2026-10-06', '2026-10-12', true],
+      ['23:59 on 5 Oct in Manila is not', '2026-10-05T15:59:00Z', '2026-10-06', '2026-10-12', false],
+      ['From after To (12 Oct to 1 Oct) takes nothing, not 5 Oct', '2026-10-05T04:00:00Z', '2026-10-12', '2026-10-01', false],
+      ['no range takes every request', '2026-10-05T04:00:00Z', undefined, undefined, true],
+      ['  one with no submitted time too', null, undefined, undefined, true],
+      ['a range never takes a request with no submitted time', null, '2026-10-01', null, false],
+      ['  nor one whose time does not parse', 'not a date', null, '2026-10-12', false],
+    ];
+    const wrongS = ZONES.flatMap((zone) => inZone(zone, () => S_CASES.map(([what, iso, from, to, want]) => {
+      const res = attempt(() => R.matchesSubmitted(submitted(iso), from === undefined ? null : { from, to }));
+      return res === want ? null : `${zone}: ${what.trim()} -> ${res}`;
+    }).filter(Boolean)));
+    check('matchesSubmitted counts Manila days, both ends in, on UTC, Los Angeles and Tokyo time alike: 7:47 AM on 12 Oct in Manila '
+        + 'is 12 Oct (11 Oct in UTC and Los Angeles), 11:48 PM on 21 Sep is 21 Sep (22 Sep in Tokyo) and To 21 Sep takes it; From '
+        + 'after To takes nothing; no range takes everything; a range never takes a request with no time',
+      wrongS.length === 0, wrongS.length ? said(wrongS) : `${S_CASES.length} cases on ${ZONES.length} zones`);
+    //   chargeFilters' choice, submitted at, whether it is in, with today 12 Oct in Manila
+    const PRESETS = [
+      ['today', '2026-10-11T16:00:00Z', true], ['today', '2026-10-11T15:59:59Z', false],
+      ['week', '2026-10-05T16:00:00Z', true], ['week', '2026-10-05T15:59:00Z', false],
+      ['month', '2026-09-30T16:00:00Z', true], ['month', '2026-09-30T15:59:00Z', false],
+    ];
+    const wrongPresets = ZONES.flatMap((zone) => inZone(zone, () => PRESETS.map(([choice, iso, want]) => {
+      const res = attempt(() => R.matchesSubmitted(submitted(iso), F.dateRange(choice, '', '', F.manilaToday())));
+      return res === want ? null : `${zone}: ${choice} ${iso} -> ${res}`;
+    }).filter(Boolean)));
+    check('  with chargeFilters\' dateRange and manilaToday as they are, on each zone: Today takes 00:00 on 12 Oct in Manila and not '
+        + '23:59:59 on 11 Oct; Last 7 days 00:00 on 6 Oct and not 23:59 on 5 Oct; This month 00:00 on 1 Oct and not 23:59 on 30 Sep',
+      wrongPresets.length === 0, said(wrongPresets));
+    const NOMATCH = [['pending', 'No pending requests match your search or filters.'],
+      ['all', 'No requests match your search or filters.'],
+      ['ready_for_release', 'No ready for release requests match your search or filters.']];
+    got = NOMATCH.map(([tab]) => attempt(() => R.filtersNoMatchText(tab)));
+    check('filtersNoMatchText names the tab, as every empty text of this list does, in Payments\' words: "No pending requests match '
+        + 'your search or filters.", on All "No requests match your search or filters."',
+      said(got) === said(NOMATCH.map((n) => n[1])), said(got));
+
+    // b. The real page. Sixteen requests in the list's real shape (as in
+    // sections V to Z: Staff's carries no resident account and no requester
+    // email), newest first, every payment state among them, of five document
+    // types (one name inside a longer one, one in lower case, both as in the
+    // live list), submitted a minute either side of Manila's midnight.
+    //   id, status, [first, last], document type, charge, submitted at (UTC), the resident's account
+    const FILTER_LIST = [
+      [91, 'ready_for_release', ['Liza', 'Bantilan'], 'First-time jobseeker', { status: 'PAID', amount: '0.00' },
+        '2026-10-11T23:47:01.208336+00:00', 'liza_b'],
+      [90, 'pending', ['Ana', 'Cruz'], 'Barangay Clearance', null, '2026-10-11T16:00:00+00:00', 'ana_cruz'],
+      [89, 'pending', ['Ben', 'Reyes'], 'Barangay Clearance for Business', null, '2026-10-11T15:59:59+00:00', 'ben_reyes'],
+      [88, 'approved', ['Carla', 'Santos'], 'Barangay Clearance', { status: 'UNPAID', amount: '50.00' },
+        '2026-10-09T02:00:00+00:00', 'carla_s'],
+      [87, 'approved', ['Dino', 'Tan'], 'Certificate of Indigency', { status: 'PAID', amount: 0 }, '2026-10-05T16:00:00+00:00', 'dino_tan'],
+      [86, 'approved', ['Elsa', 'Uy'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-10-05T15:59:00+00:00', 'elsa_uy'],
+      [85, 'claimed', ['Fe', 'Villa'], 'Barangay Clearance for Business', { status: 'PAID', amount: '75.00' },
+        '2026-09-30T16:00:00+00:00', 'fevilla'],
+      [84, 'approved', ['Gil', 'Wong'], 'efef21', { status: 'UNPAID', amount: '0.00' }, '2026-09-30T15:59:00+00:00', 'gil_wong'],
+      [83, 'rejected', ['Hana', 'Yap'], 'Barangay Clearance', null, '2026-09-21T16:10:00+00:00', 'hana_yap'],
+      [82, 'approved', ['Ivy', 'Zamora'], 'Certificate of Indigency', { status: 'PAID', amount: '20.00' },
+        '2026-09-21T15:48:00+00:00', 'ivy_z'],
+      [81, 'cancelled', ['Jun', 'Abad'], 'Barangay Clearance', null, '2026-09-21T02:00:00+00:00', 'jun_abad'],
+      [80, 'approved', ['Kim', 'Bello'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-09-18T03:00:00+00:00', 'kim_bello'],
+      [79, 'claimed', ['Lito', 'Gomez'], 'Certificate of Indigency', { status: 'PAID', amount: 20 }, '2026-08-19T03:00:00+00:00', 'lito_g'],
+      [9, 'approved', ['Mario', 'Dagohoy'], 'Barangay Clearance', null, '2026-07-07T03:00:00+00:00', 'mario_d'],
+      [6, 'approved', ['Nora', 'Escabas'], 'Barangay Clearance for Business', null, '2026-07-07T02:00:00+00:00', null],
+      [1, 'claimed', ['Oscar', 'Fuentes'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-07-06T05:00:00+00:00', 'oscar_f'],
+    ];
+    const TYPE_IDS = { 'Barangay Clearance': 1, 'Certificate of Indigency': 3, efef21: 6, 'First-time jobseeker': 7,
+      'Barangay Clearance for Business': 8, 'Barangay ID': 9 };
+    const asRequest = ([id, status, [first, last], documentType, charge, requestedAt, account], staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: requestedAt,
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: TYPE_IDS[documentType] ?? 6, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: account ? 700 + id : 1, username: account ?? 'secretary1',
+        ...(staff ? {} : { email: `${account ?? 'secretary1'}@example.invalid` }) },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, ...charge },
+    });
+    const makeState = (rows = FILTER_LIST) => ({ rows: rows.map((row) => [...row]) });
+    const listAnswer = (state, staff) => ({ requests: state.rows.map((row) => asRequest(row, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)$/);
+      if (method === 'GET' && one) {
+        const row = state.rows.find((x) => x[0] === Number(one[1]));
+        return row ? { request: { ...asRequest(row, staff), processed_by: null } } : undefined;
+      }
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    // A control found by its visible label, as a person finds it.
+    const labelled = (page, label) => {
+      const found = page.queryAll('label').find((l) => l.textContent === label);
+      return found ? found.control ?? null : null;
+    };
+    const docSelect = (page) => labelled(page, 'Document');
+    const paySelect = (page) => labelled(page, 'Payment');
+    const dateSelect = (page) => labelled(page, 'Submitted');
+    const fromInput = (page) => labelled(page, 'From');
+    const toInput = (page) => labelled(page, 'To');
+    const filtersRow = (page) => docSelect(page)?.closest('.pay-filters') ?? null;
+    const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+    const optionsOf = (select) => (select ? [...select.options].map((o) => o.textContent).join(' | ') : null);
+    // Choose the option a select shows as `label`, the way a person does.
+    const pick = async (page, select, label) => {
+      const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+      if (option) {
+        select.value = option.value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const pickDoc = (page, label) => pick(page, docSelect(page), label);
+    const pickPay = (page, label) => pick(page, paySelect(page), label);
+    const pickDate = (page, label) => pick(page, dateSelect(page), label);
+    // A date typed into From or To: the native setter and an input event.
+    const typeDate = async (page, input, value) => {
+      if (input) {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const HINT = 'The start date is after the end date.';
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    // What the list and its filters say, read the way a person would.
+    const look = (page) => {
+      const empty = page.query('.empty');
+      return {
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        markers: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('.doc-requests-pay'))),
+        empty: text(page.query('.empty p')),
+        emptyButtons: empty ? [...empty.querySelectorAll('button')].map(text) : [],
+        document: chosen(docSelect(page)),
+        payment: chosen(paySelect(page)),
+        date: chosen(dateSelect(page)),
+        from: fromInput(page)?.value ?? null,
+        to: toInput(page)?.value ?? null,
+        clear: !!buttonNamed(root(), 'Clear filters'),
+        hint: page.queryAll('[role="status"]').some((el) => el.textContent === HINT),
+        search: box(page)?.value ?? null,
+        showing: text(page.query('.pay-pager-count')),
+        current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+        loading: root().textContent.includes('Loading requests…'),
+      };
+    };
+    // The three filters as one line: "Barangay Clearance / Paid / Choose dates 2026-08-01..2026-09-21".
+    const filtersOf = (v) => `${v.document} / ${v.payment} / ${v.date}${v.from !== null ? ` ${v.from}..${v.to}` : ''}`;
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, rowName, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // Focus first, as a press does in a browser (section Y).
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const setRows = async (page, value) => {
+      const select = page.query('.pay-pager select');
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // jsdom has no scrollIntoView, and the pager calls it on a page change.
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView() {};
+    const methodsSent = [];
+
+    const STRIP16 = 'Pending 2 · Approved 8 · Ready for release 1 · Claimed 3 · Rejected 1 · Cancelled 1 · All 16';
+    const ALL16 = FILTER_LIST.map(([, , [first, last]]) => `${first} ${last}`);
+    const DOCS = 'Any document | Barangay Clearance | Barangay Clearance for Business | Certificate of Indigency | efef21 | '
+      + 'First-time jobseeker';
+    const PAYS = 'Any payment | Paid | Unpaid | No fee | Not billed';
+    const DATES = 'Any date | Today | Last 7 days | This month | Choose dates';
+    // What each choice shows on All, worked out by hand from FILTER_LIST, in
+    // the order sent.
+    const BY_DOC = {
+      'Barangay Clearance': ['Ana Cruz', 'Carla Santos', 'Elsa Uy', 'Hana Yap', 'Jun Abad', 'Kim Bello', 'Mario Dagohoy', 'Oscar Fuentes'],
+      'Barangay Clearance for Business': ['Ben Reyes', 'Fe Villa', 'Nora Escabas'],
+      'Certificate of Indigency': ['Dino Tan', 'Ivy Zamora', 'Lito Gomez'],
+      efef21: ['Gil Wong'],
+      'First-time jobseeker': ['Liza Bantilan'],
+    };
+    const BY_PAY = {
+      Paid: { rows: ['Elsa Uy', 'Fe Villa', 'Ivy Zamora', 'Kim Bello', 'Lito Gomez', 'Oscar Fuentes'],
+        strip: 'Pending 0 · Approved 3 · Ready for release 0 · Claimed 3 · Rejected 0 · Cancelled 0 · All 6' },
+      Unpaid: { rows: ['Carla Santos', 'Gil Wong'],
+        strip: 'Pending 0 · Approved 2 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2' },
+      'No fee': { rows: ['Liza Bantilan', 'Dino Tan'],
+        strip: 'Pending 0 · Approved 1 · Ready for release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2' },
+      'Not billed': { rows: ['Ana Cruz', 'Ben Reyes', 'Hana Yap', 'Jun Abad', 'Mario Dagohoy', 'Nora Escabas'],
+        strip: 'Pending 2 · Approved 2 · Ready for release 0 · Claimed 0 · Rejected 1 · Cancelled 1 · All 6' },
+    };
+    const BY_DATE = {
+      Today: ['Liza Bantilan', 'Ana Cruz'],
+      'Last 7 days': ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan'],
+      'This month': ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa'],
+      sep21: ['Ivy Zamora', 'Jun Abad'],
+      fromSep22: ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong', 'Hana Yap'],
+      toSep21: ['Ivy Zamora', 'Jun Abad', 'Kim Bello', 'Lito Gomez', 'Mario Dagohoy', 'Nora Escabas', 'Oscar Fuentes'],
+    };
+    const PRESET_KEYS = ['Today', 'Last 7 days', 'This month'];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review' },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, staff: true, opener: 'View' },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, staff: false,
+        opener: 'View' },
+    ];
+    for (const { name, route, token, user, staff, opener } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = { row: !!docSelect(page), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { row: !!docSelect(page), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the search and the tabs, the filters row is not drawn while the list loads or after a load fails: no `
+          + 'Document select under "Loading requests…", none beside the error; Try again brings the row back',
+        !opening.row && opening.loading && !failedOpen.row && failedOpen.error === 'Could not load the requests: Network down'
+          && !!docSelect(page) && !!paySelect(page) && !!dateSelect(page),
+        said({ opening, failedOpen, after: !!docSelect(page) }));
+
+      // Where it sits, what it holds, and how it opens.
+      const row = filtersRow(page);
+      const searchRow = box(page)?.closest('.list-head') ?? null;
+      check(`${name}: the row sits where Payments' second row does, under the search row and over the tabs, and is not part of a `
+          + '.list-head and holds no heading, so the list heading is still the heading row\'s',
+        !!row && !!searchRow && follows(searchRow, row) && !searchRow.contains(row) && follows(row, page.query('.pay-tabs'))
+          && !row.closest('.list-head') && !row.querySelector('h1, h2, h3, h4, h5, h6')
+          && text(page.query('.list-head h2')) === '2 pending requests',
+        said({ row: row?.className ?? null, inHead: !!row?.closest('.list-head') }));
+      const selects = [docSelect(page), paySelect(page), dateSelect(page)];
+      const named = selects.map((s, i) => !!s && s.tagName === 'SELECT' && s.labels?.length === 1
+        && s.labels[0].textContent === ['Document', 'Payment', 'Submitted'][i] && !!s.id && s.labels[0].htmlFor === s.id
+        && !!row && row.contains(s));
+      check(`${name}: three native selects, each named by its own visible label, "Document", "Payment" and "Submitted", in that order `
+          + '(the label for= its select\'s id, the three ids different)',
+        named.every(Boolean) && new Set(selects.map((s) => s?.id)).size === 3 && follows(selects[0], selects[1])
+          && follows(selects[1], selects[2]), said({ named, ids: selects.map((s) => s?.id ?? null) }));
+      let v = look(page);
+      check(`${name}: they open on "Any document", "Any payment" and "Any date", with no From or To, no Clear filters and no hint, `
+          + `and the list as before: Pending, "2 pending requests", "${STRIP16}"`,
+        v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+          && !v.clear && !v.hint && v.heading === '2 pending requests' && v.strip === STRIP16
+          && said(v.rows) === said(['Ana Cruz', 'Ben Reyes']), said(v));
+      check(`${name}: Document offers "Any document" and the five types the loaded rows hold, sorted by name with case ignored: "${DOCS}"`,
+        optionsOf(docSelect(page)) === DOCS, said(optionsOf(docSelect(page))));
+      check(`${name}: Payment offers "${PAYS}", no Void, as no loaded row is void; Submitted offers Payments' "${DATES}"`,
+        optionsOf(paySelect(page)) === PAYS && optionsOf(dateSelect(page)) === DATES,
+        said({ payment: optionsOf(paySelect(page)), date: optionsOf(dateSelect(page)) }));
+      const hintBox = row?.nextElementSibling ?? null;
+      check(`${name}: under the row the hint is in the page, empty, a polite status, so it is heard when its words appear`,
+        !!hintBox && hintBox.getAttribute('role') === 'status' && hintBox.textContent === '' && !!hintBox.id,
+        said({ role: hintBox?.getAttribute('role') ?? null, text: hintBox?.textContent ?? null, id: hintBox?.id ?? null }));
+
+      // Document.
+      const writesAtOpen = store.sets;
+      const sentBefore = net.calls.length;
+      await pickDoc(page, 'Barangay Clearance');
+      v = look(page);
+      check(`${name}: Document "Barangay Clearance" on Pending: Ana Cruz alone, not Ben Reyes, whose "Barangay Clearance for `
+          + 'Business" holds the name; "1 of 2 pending requests matches"; the counts follow it, "Pending 1 · Approved 4 · Ready for '
+          + 'release 0 · Claimed 1 · Rejected 1 · Cancelled 1 · All 8"; and Clear filters appears',
+        said(v.rows) === said(['Ana Cruz']) && v.heading === '1 of 2 pending requests matches'
+          && v.strip === 'Pending 1 · Approved 4 · Ready for release 0 · Claimed 1 · Rejected 1 · Cancelled 1 · All 8' && v.clear,
+        said(v));
+      await clickIf(page, tabNamed(page, 'All'));
+      const perDoc = {};
+      for (const label of Object.keys(BY_DOC)) {
+        await pickDoc(page, label);
+        perDoc[label] = look(page).rows;
+      }
+      const wrongDocs = Object.keys(BY_DOC).filter((label) => said(perDoc[label]) !== said(BY_DOC[label]));
+      check(`${name}: on All each type shows exactly its own requests, in the order sent: Barangay Clearance 8, Barangay Clearance for `
+          + 'Business 3, Certificate of Indigency 3, efef21 1, First-time jobseeker 1',
+        wrongDocs.length === 0, said(wrongDocs.map((label) => ({ label, got: perDoc[label], want: BY_DOC[label] }))));
+      await pickDoc(page, 'Barangay Clearance');
+      const allBC = look(page).heading;
+      await pickDoc(page, 'Any document');
+      v = look(page);
+      check(`${name}: on All, "8 of 16 requests match" for Barangay Clearance; back on "Any document", all sixteen, "16 requests", `
+          + 'every count as before, and no Clear filters',
+        allBC === '8 of 16 requests match' && said(v.rows) === said(ALL16) && v.heading === '16 requests' && v.strip === STRIP16
+          && !v.clear, said({ allBC, v }));
+
+      // Payment.
+      const perPay = {};
+      for (const label of Object.keys(BY_PAY)) {
+        await pickPay(page, label);
+        const x = look(page);
+        perPay[label] = { rows: x.rows, strip: x.strip, heading: x.heading, markers: [...new Set(x.markers)] };
+      }
+      const wrongPays = Object.keys(BY_PAY).filter((label) => said(perPay[label].rows) !== said(BY_PAY[label].rows)
+        || perPay[label].strip !== BY_PAY[label].strip || perPay[label].heading !== `${BY_PAY[label].rows.length} of 16 requests match`);
+      check(`${name}: on All each Payment choice shows its requests, with the counts and the heading following it: Paid 6 (never the `
+          + 'PHP 0 paid Liza Bantilan or Dino Tan), Unpaid 2 (Gil Wong\'s PHP 0 unpaid charge among them), No fee 2, Not billed 6',
+        wrongPays.length === 0, said(wrongPays.map((label) => ({ label, got: perPay[label], want: BY_PAY[label] }))));
+      check(`${name}: the filter and the row never disagree: every row a choice shows has that word under its badge, and no other`,
+        Object.keys(BY_PAY).every((label) => said(perPay[label].markers) === said([label])),
+        said(Object.fromEntries(Object.keys(BY_PAY).map((label) => [label, perPay[label].markers]))));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await pickPay(page, 'Paid');
+      v = look(page);
+      check(`${name}: a filter and a tab together: Approved with Paid shows Elsa Uy, Ivy Zamora and Kim Bello under "3 of 8 approved `
+          + 'requests match"',
+        said(v.rows) === said(['Elsa Uy', 'Ivy Zamora', 'Kim Bello']) && v.heading === '3 of 8 approved requests match'
+          && said(v.pressed) === said(['Approved 3']), said(v));
+
+      // Submitted, on three clocks.
+      await clickIf(page, tabNamed(page, 'All'));
+      await pickPay(page, 'Any payment');
+      const byZone = {};
+      for (const zone of ZONES) {
+        process.env.TZ = zone;
+        const seen = {};
+        for (const label of PRESET_KEYS) {
+          await pickDate(page, label);
+          seen[label] = look(page).rows;
+        }
+        await pickDate(page, 'Choose dates');
+        await typeDate(page, fromInput(page), '2026-09-21');
+        await typeDate(page, toInput(page), '2026-09-21');
+        seen.sep21 = look(page).rows;
+        await typeDate(page, fromInput(page), '2026-09-22');
+        await typeDate(page, toInput(page), '');
+        seen.fromSep22 = look(page).rows;
+        await typeDate(page, fromInput(page), '');
+        await typeDate(page, toInput(page), '2026-09-21');
+        seen.toSep21 = look(page).rows;
+        await typeDate(page, toInput(page), '');
+        byZone[zone] = seen;
+      }
+      process.env.TZ = HOME_ZONE;
+      const wrongDates = ZONES.flatMap((zone) => Object.keys(BY_DATE)
+        .filter((k) => said(byZone[zone][k]) !== said(BY_DATE[k])).map((k) => ({ zone, k, got: byZone[zone][k] })));
+      check(`${name}: Submitted in Manila days, on UTC, Los Angeles and Tokyo time alike: Today, Liza Bantilan (7:47 AM on 12 Oct in `
+          + 'Manila, 11 Oct in UTC and Los Angeles) and Ana Cruz (00:00); Last 7 days adds Ben Reyes (23:59:59 on 11 Oct), Carla Santos '
+          + 'and Dino Tan (00:00 on 6 Oct), not Elsa Uy (23:59 on 5 Oct); This month adds Elsa Uy and Fe Villa (00:00 on 1 Oct), not '
+          + 'Gil Wong (23:59 on 30 Sep)',
+        wrongDates.filter((w) => PRESET_KEYS.includes(w.k)).length === 0, said(wrongDates.filter((w) => PRESET_KEYS.includes(w.k))));
+      check(`${name}: Choose dates, both ends in, on all three: 21 Sep to 21 Sep takes Ivy Zamora (11:48 PM, which Tokyo calls 22 Sep) `
+          + 'and Jun Abad, not Hana Yap (00:10 on 22 Sep); From 22 Sep alone the nine from Hana Yap up; To 21 Sep alone the seven from '
+          + 'Ivy Zamora down',
+        wrongDates.filter((w) => !PRESET_KEYS.includes(w.k)).length === 0, said(wrongDates.filter((w) => !PRESET_KEYS.includes(w.k))));
+      await pickDate(page, 'Today');
+      v = look(page);
+      check(`${name}: Today on All: "2 of 16 requests match", and the counts follow the date, "Pending 1 · Approved 0 · Ready for `
+          + 'release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2"',
+        v.heading === '2 of 16 requests match'
+          && v.strip === 'Pending 1 · Approved 0 · Ready for release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2', said(v));
+      await pickDate(page, 'Choose dates');
+      const fromBox = fromInput(page);
+      const toBox = toInput(page);
+      v = look(page);
+      check(`${name}: Choose dates brings From and To, date inputs labelled "From" and "To", both described by the hint; with neither `
+          + 'set it restricts nothing ("16 requests") but is a filter on (Clear filters shows)',
+        fromBox?.type === 'date' && toBox?.type === 'date' && !!hintBox?.id && fromBox.getAttribute('aria-describedby') === hintBox.id
+          && toBox.getAttribute('aria-describedby') === hintBox.id && v.heading === '16 requests' && v.rows.length === 16 && v.clear,
+        said({ from: fromBox?.type ?? null, to: toBox?.type ?? null, describedBy: fromBox?.getAttribute('aria-describedby') ?? null,
+          hint: hintBox?.id ?? null, heading: v.heading, clear: v.clear }));
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Paid');
+      await typeDate(page, fromInput(page), '2026-10-12');
+      await typeDate(page, toInput(page), '2026-10-01');
+      v = look(page);
+      check(`${name}: From after To (12 Oct to 1 Oct) is never swapped and takes nothing: the hint "${HINT}", "0 of 16 requests `
+          + 'match", and "No requests match your search or filters." with Clear search and filters',
+        v.hint && v.from === '2026-10-12' && v.to === '2026-10-01' && v.rows.length === 0 && v.heading === '0 of 16 requests match'
+          && v.empty === 'No requests match your search or filters.' && said(v.emptyButtons) === said(['Clear search and filters']),
+        said(v));
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      v = look(page);
+      check(`${name}: Clear filters puts all three back to Any, every one, takes From, To and the hint away, and goes itself; focus `
+          + 'moves to the Document select rather than being dropped; the tab stays: All, "16 requests"',
+        v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+          && !v.hint && !v.clear && !!docSelect(page) && page.active() === docSelect(page) && said(v.pressed) === said(['All 16'])
+          && v.heading === '16 requests', said({ v, focus: page.active()?.tagName ?? null }));
+
+      // A tab, a search and the filters together; then the empty texts.
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Paid');
+      const twoFilters = look(page);
+      await type(page, 'kim');
+      const withSearch = look(page);
+      check(`${name}: tab, filters and search together: Approved, Barangay Clearance and Paid, Elsa Uy and Kim Bello, "2 of 8 `
+          + 'approved requests match" ("… Claimed 1 … All 3"); then "kim", Kim Bello alone, "1 of 8 approved requests matches"',
+        said(twoFilters.rows) === said(['Elsa Uy', 'Kim Bello']) && twoFilters.heading === '2 of 8 approved requests match'
+          && twoFilters.strip === 'Pending 0 · Approved 2 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 3'
+          && said(withSearch.rows) === said(['Kim Bello']) && withSearch.heading === '1 of 8 approved requests matches'
+          && withSearch.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 1',
+        said({ twoFilters, withSearch }));
+      await pickDate(page, 'This month');
+      v = look(page);
+      check(`${name}: with This month as well nothing is left (Kim Bello was submitted on 18 Sep): "0 of 8 approved requests match", `
+          + 'and in place of the rows "No approved requests match your search or filters." with one button, Clear search and filters',
+        v.rows.length === 0 && v.heading === '0 of 8 approved requests match'
+          && v.empty === 'No approved requests match your search or filters.'
+          && said(v.emptyButtons) === said(['Clear search and filters']), said(v));
+      await clickIf(page, page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search and filters') : null);
+      v = look(page);
+      check(`${name}: Clear search and filters empties the search and puts every filter back to Any, keeps the tab (Approved, as `
+          + 'Payments keeps its status), and puts focus in the search box: "8 approved requests", all eight',
+        v.search === '' && v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && !v.clear
+          && said(v.pressed) === said(['Approved 8']) && v.heading === '8 approved requests' && v.rows.length === 8
+          && !!box(page) && page.active() === box(page),
+        said({ v, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName ?? null }));
+      await clickIf(page, tabNamed(page, 'Pending'));
+      await pickPay(page, 'Paid');
+      const filterEmpty = look(page);
+      await pickPay(page, 'Any payment');
+      await type(page, 'zzz');
+      const searchEmpty = look(page);
+      await type(page, '');
+      check(`${name}: a filter alone that empties a tab says so in the same words: Pending with Paid, "0 of 2 pending requests `
+          + 'match", "No pending requests match your search or filters." and Clear search and filters',
+        filterEmpty.heading === '0 of 2 pending requests match'
+          && filterEmpty.empty === 'No pending requests match your search or filters.'
+          && said(filterEmpty.emptyButtons) === said(['Clear search and filters']), said(filterEmpty));
+      check(`${name}: a search alone keeps its own text and button, as before: 'No pending requests match "zzz"' with Clear search`,
+        searchEmpty.heading === '0 of 2 pending requests match' && searchEmpty.empty === 'No pending requests match "zzz"'
+          && said(searchEmpty.emptyButtons) === said(['Clear search']), said(searchEmpty));
+      await type(page, 'cruz');
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Not billed');
+      await pickDate(page, 'Today');
+      const allSet = look(page);
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      v = look(page);
+      check(`${name}: Clear filters clears the filters only: with "cruz" typed and all three set, the search stays, and so does Ana `
+          + 'Cruz under "1 of 2 pending requests matches"; focus on the Document select',
+        said(allSet.rows) === said(['Ana Cruz']) && filtersOf(allSet) === 'Barangay Clearance / Not billed / Today'
+          && v.search === 'cruz' && filtersOf(v) === 'Any document / Any payment / Any date' && said(v.rows) === said(['Ana Cruz'])
+          && v.heading === '1 of 2 pending requests matches' && !!docSelect(page) && page.active() === docSelect(page),
+        said({ allSet: filtersOf(allSet), v }));
+      await type(page, '');
+      check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to localStorage`,
+        net.calls.length === sentBefore && store.sets === writesAtOpen && !!docSelect(page),
+        `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, ${store.sets - writesAtOpen} write(s)`);
+
+      // Kept through a tab, a search, Refresh, a failed reload and Back.
+      await clickIf(page, tabNamed(page, 'All'));
+      await pickDoc(page, 'Certificate of Indigency');
+      await pickPay(page, 'Paid');
+      await pickDate(page, 'Choose dates');
+      await typeDate(page, fromInput(page), '2026-08-01');
+      await typeDate(page, toInput(page), '2026-09-21');
+      const SET = 'Certificate of Indigency / Paid / Choose dates 2026-08-01..2026-09-21';
+      v = look(page);
+      check(`${name}: Certificate of Indigency, Paid, 1 Aug to 21 Sep, on All: Ivy Zamora (11:48 PM on 21 Sep) and Lito Gomez, "2 of 16 `
+          + 'requests match"',
+        filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']) && v.heading === '2 of 16 requests match'
+          && v.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 2', said(v));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      const onApproved = look(page);
+      await type(page, 'zamora');
+      const searched = look(page);
+      await type(page, '');
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: kept through a tab and a search: Approved shows Ivy Zamora alone, "1 of 8 approved requests matches"; "zamora" `
+          + 'finds her; the search cleared and All again, the filters are as set, and so are the two rows',
+        filtersOf(onApproved) === SET && said(onApproved.rows) === said(['Ivy Zamora'])
+          && onApproved.heading === '1 of 8 approved requests matches' && filtersOf(searched) === SET
+          && said(searched.rows) === said(['Ivy Zamora']) && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']),
+        said({ onApproved, searched: { filters: filtersOf(searched), rows: searched.rows }, v: filtersOf(v) }));
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { row: !!docSelect(page), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list once, with no filters row while it is out, and keeps every filter and its two rows`,
+        said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests?status=all']) && !reloading.row && reloading.loading
+          && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']) && v.heading === '2 of 16 requests match',
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { row: !!docSelect(page), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails shows no filters row beside the error, and Try again brings it back as it was`,
+        !failedReload.row && failedReload.error === 'Could not load the requests: Internal server error' && filtersOf(v) === SET
+          && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']), said({ failedReload, v }));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Lito Gomez', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail keeps every filter and its rows; only the detail was requested`,
+        opened === 'Request #79' && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez'])
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/79']),
+        said({ opened, v: filtersOf(v), rows: v.rows, calls: listCalls(net.calls.slice(sent)) }));
+
+      // The choices come from the rows as loaded.
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      state.rows.unshift([92, 'pending', ['Paz', 'Lim'], 'Barangay ID', null, '2026-10-12T01:00:00+00:00', 'paz_lim']);
+      state.rows.find((x) => x[0] === 88)[4] = { status: 'VOID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const DOCS17 = 'Any document | Barangay Clearance | Barangay Clearance for Business | Barangay ID | Certificate of Indigency | '
+        + 'efef21 | First-time jobseeker';
+      check(`${name}: the choices are the loaded rows': after a Refresh that brings a "Barangay ID" request and a void charge, Document `
+          + 'offers Barangay ID in its place by name, and Payment offers Void, last',
+        optionsOf(docSelect(page)) === DOCS17 && optionsOf(paySelect(page)) === `${PAYS} | Void`,
+        said({ documents: optionsOf(docSelect(page)), payments: optionsOf(paySelect(page)) }));
+      await pickPay(page, 'Void');
+      v = look(page);
+      check(`${name}: Void shows Carla Santos alone, whose row says "Void", under "1 of 17 requests matches"`,
+        said(v.rows) === said(['Carla Santos']) && said(v.markers) === said(['Void']) && v.heading === '1 of 17 requests matches',
+        said(v));
+      state.rows.find((x) => x[0] === 88)[4] = { status: 'UNPAID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      v = look(page);
+      check(`${name}: a Refresh that leaves no void row takes Void away, and the choice goes back to "Any payment" with all 17 shown, `
+          + 'never a select reading Void over rows it does not hold',
+        optionsOf(paySelect(page)) === PAYS && v.payment === 'Any payment' && v.rows.length === 17 && v.heading === '17 requests'
+          && !v.clear, said(v));
+      await pickDoc(page, 'efef21');
+      const efef = look(page).rows;
+      state.rows.find((x) => x[0] === 84)[3] = 'Barangay Permit';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      v = look(page);
+      check(`${name}: so does a Document choice: with efef21 (Gil Wong's) renamed "Barangay Permit" on the server, a Refresh offers the `
+          + 'new name and not the old, and Document reads "Any document" again, all 17 shown',
+        said(efef) === said(['Gil Wong']) && v.document === 'Any document' && v.rows.length === 17
+          && optionsOf(docSelect(page)) === 'Any document | Barangay Clearance | Barangay Clearance for Business | Barangay ID | '
+            + 'Barangay Permit | Certificate of Indigency | First-time jobseeker',
+        said({ efef, v: filtersOf(v), rows: v.rows.length, documents: optionsOf(docSelect(page)) }));
+
+      // A new visit starts again; nothing was kept in the browser. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the filters is kept in the browser: no localStorage write, sessionStorage empty, no cookie; a new `
+          + 'visit opens with all three at Any, on Pending, "2 pending requests"',
+        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === ''
+          && filtersOf(v) === 'Any document / Any payment / Any date' && !v.clear && v.heading === '2 pending requests',
+        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    // c. The pager counts what the filters leave, and every filter change
+    // goes back to page 1. Forty requests named by their place, "Req 01" to
+    // "Req 40": odd ones Barangay Clearance, even ones Certificate of
+    // Indigency; Paid where the place leaves 1 over 3 (14), Unpaid where it
+    // leaves 2 (13), not billed and pending where it leaves 0 (13); the first
+    // 24 submitted in October (1 to 12 Oct, twice), the rest 1 to 16 Sep.
+    const two = (n) => String(n).padStart(2, '0');
+    const PAGER_LIST = Array.from({ length: 40 }, (_, i) => {
+      const n = i + 1;
+      const charge = n % 3 === 1 ? { status: 'PAID', amount: '50.00' } : n % 3 === 2 ? { status: 'UNPAID', amount: '50.00' } : null;
+      const when = n <= 24 ? `2026-10-${two(1 + ((n - 1) % 12))}T02:00:00+00:00` : `2026-09-${two(n - 24)}T02:00:00+00:00`;
+      return [3000 + n, charge ? 'approved' : 'pending', ['Req', two(n)], n % 2 ? 'Barangay Clearance' : 'Certificate of Indigency',
+        charge, when, `req_${two(n)}`];
+    });
+    //   the change, then what "Showing" said on page 2 before it and must say after it, and the heading after
+    const STEPS = [
+      ['Document "Barangay Clearance"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 20 results', '20 of 40 requests match'],
+      ['Document "Any document"', 'Showing 11 to 20 of 20 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['Payment "Paid"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 requests match'],
+      ['Payment "Any payment"', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['Submitted "This month"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['Submitted "Choose dates", no dates yet', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['From 1 Oct', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['To 12 Oct', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['Clear filters', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+    ];
+    for (const { name, route, token, user, staff } of ROLES) {
+      const state = makeState(PAGER_LIST);
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      await setRows(page, 10);
+      const sent = net.calls.length;
+      const changes = [
+        () => pickDoc(page, 'Barangay Clearance'), () => pickDoc(page, 'Any document'),
+        () => pickPay(page, 'Paid'), () => pickPay(page, 'Any payment'),
+        () => pickDate(page, 'This month'), () => pickDate(page, 'Choose dates'),
+        () => typeDate(page, fromInput(page), '2026-10-01'), () => typeDate(page, toInput(page), '2026-10-12'),
+        () => clickIf(page, buttonNamed(root(), 'Clear filters')),
+      ];
+      const seen = [];
+      for (let i = 0; i < STEPS.length; i += 1) {
+        await press(page, numberButton(page, 2));
+        const before = look(page).showing;
+        await changes[i]();
+        const after = look(page);
+        seen.push({ change: STEPS[i][0], before, after: after.showing, current: after.current, heading: after.heading });
+      }
+      const wrongSteps = seen.filter((s, i) => s.before !== STEPS[i][1] || s.after !== STEPS[i][2] || s.heading !== STEPS[i][3]
+        || said(s.current) !== said(['1']));
+      check(`${name}: every filter change goes back to page 1, from page 2 at 10 a page, and the pager counts what the filters leave: `
+          + 'Document, Payment, a Submitted preset, Choose dates, From, To and Clear filters, each from "Showing 11 to 20 …" to '
+          + '"Showing 1 to 10 of 20, 40, 14, 40, 24, 40, 24, 24, 40 results", with the heading over the same set',
+        wrongSteps.length === 0, said(wrongSteps.length ? wrongSteps : seen.map((s) => s.after)));
+      // With no filters on screen nothing was changed, so "no request" would say nothing.
+      check(`  ${name}: and none of those changes or page presses sent a request`, !!docSelect(page) && net.calls.length === sent,
+        `${net.calls.length - sent} request(s), filters ${docSelect(page) ? 'present' : 'absent'}`);
+      await pickPay(page, 'Paid');
+      await press(page, numberButton(page, 2));
+      const second = look(page);
+      for (const row of state.rows) if (row[0] - 3000 <= 16 && row[4]?.status === 'PAID') row[4] = { status: 'UNPAID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const shrunk = look(page);
+      check(`${name}: kept, and never an empty page past the end: on page 2 of Paid's 14, a Refresh after six were marked unpaid elsewhere `
+          + 'keeps Paid and shows the 8 left on one page, with no pager, never an empty page 2',
+        second.showing === 'Showing 11 to 14 of 14 results' && shrunk.payment === 'Paid' && shrunk.rows.length === 8
+          && shrunk.showing === null && shrunk.heading === '8 of 40 requests match', said({ second: second.showing, shrunk }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. On a phone. jsdom applies no @media rule with a width in it, so
+    // index.css is read as a browser of a given width applies it (section Z's
+    // reading), and the cascade is settled too: of the rules that apply and
+    // set a property, the most specific wins, and of equals the later. Nested
+    // rules are read as a browser reads them: `.dash-side.close section { p {
+    // … } }` is `.dash-side.close section p`, never a bare `p` (eleven blocks
+    // in the file are nested). The row must stack, each field a line of its
+    // own, full width and a finger's 44px tall, and nothing may hide any
+    // field, its label, Clear filters or the hint; above 640px (1280) the row
+    // is as Payments' is.
+    // A selector list split at its top-level commas only.
+    const splitList = (s) => {
+      const out = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim()).filter(Boolean);
+    };
+    const cssRead = (() => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      // Each open block: an @-rule ({ at }), or a style rule with its own
+      // selectors resolved against the rule it is nested in, and its own
+      // declarations, never its nested rules'.
+      const open = [];
+      let from = 0;
+      const own = (block, text) => {
+        const k = text.indexOf(':');
+        if (k > 0) block.decls[text.slice(0, k).trim().toLowerCase()] = text.slice(k + 1).trim().replace(/\s+/g, ' ');
+      };
+      const media = () => open.filter((b) => b.at).map((b) => b.at);
+      const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+          const parent = inRule();
+          if (head.startsWith('@')) {
+            // An @-rule nested in a style rule holds that rule's declarations.
+            const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+            open.push(block);
+            if (parent) rules.push({ ...block, media: media() });
+          } else {
+            const mine = splitList(head);
+            const selectors = parent
+              ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+              : mine;
+            const block = { selectors, decls: {} };
+            open.push(block);
+            rules.push({ ...block, media: media() });
+          }
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          const rest = src.slice(from, i).trim();
+          if (block?.selectors && rest) own(block, rest);
+          from = i + 1;
+        } else if (ch === ';') {
+          const block = open.at(-1);
+          if (block?.selectors) own(block, src.slice(from, i).trim());
+          from = i + 1;
+        }
+      }
+      // A rule's declarations object is its block's, filled as the scan went.
+      rules.forEach((r, i) => { r.order = i; r.selector = r.selectors.join(', '); });
+      return { rules, balanced: open.length === 0 };
+    })();
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    // [ids, classes + attributes + pseudo-classes, types + pseudo-elements];
+    // :not, :is and :has count their most specific argument, :where nothing.
+    const specificity = (selector) => {
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+      s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+        const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+        a += best[0];
+        b += best[1];
+        c += best[2];
+        return ' ';
+      });
+      s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+      s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+      a += (s.match(/#[\w-]+/g) || []).length;
+      b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+      c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+      return [a, b, c];
+    };
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // The value of `prop` a browser `width` wide gives `el`, and the rule it
+    // comes from, or null when no rule sets it.
+    const winning = (width, el, prop) => {
+      let best = null;
+      for (const r of cssRead.rules) {
+        if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+        for (const sel of r.selectors) {
+          if (/::?[\w-]+$/.test(sel) && /::?(before|after|placeholder|first-line|first-letter|-webkit-[\w-]+)$/.test(sel)) continue;
+          if (!tryMatch(el, sel)) continue;
+          const important = /!important$/.test(r.decls[prop]) ? 1 : 0;
+          const rank = [important, ...specificity(sel)];
+          const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+          if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+            best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, ''), selector: sel };
+          }
+        }
+      }
+      return best;
+    };
+    const valueAt = (width, el, prop) => (el ? winning(width, el, prop)?.value ?? null : 'no element');
+    // What would hide `el` at `width`, on it or on anything above it: the
+    // winning display none, visibility hidden, opacity 0, font size 0 or a
+    // clip.
+    const hidersAt = (width, el) => {
+      const found = [];
+      for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+        for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+          ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+          const w = winning(width, node, prop);
+          if (w && bad.test(w.value)) found.push(`${w.selector} => ${prop}: ${w.value}`);
+        }
+      }
+      return found;
+    };
+    seedSession(VALID);
+    resetNet(200, answerFor(makeState(), false));
+    const cardPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await cardPage.settle();
+    await clickIf(cardPage, tabNamed(cardPage, 'All'));
+    await pickDoc(cardPage, 'Barangay Clearance');
+    await pickPay(cardPage, 'Paid');
+    await pickDate(cardPage, 'Choose dates');
+    await typeDate(cardPage, fromInput(cardPage), '2026-10-12');
+    await typeDate(cardPage, toInput(cardPage), '2026-10-01');
+    const rowEl = filtersRow(cardPage);
+    const controls = [docSelect(cardPage), paySelect(cardPage), dateSelect(cardPage), fromInput(cardPage), toInput(cardPage)];
+    const fields = controls.map((c) => c?.closest('.pay-filter') ?? null);
+    const clearButton = buttonNamed(root(), 'Clear filters') ?? null;
+    const hintLine = cardPage.queryAll('[role="status"]').find((el) => el.textContent === HINT) ?? null;
+    const shownAll = [rowEl, ...fields, ...controls, ...controls.map((c) => c?.labels?.[0] ?? null), clearButton, hintLine];
+    const nestedRead = cssRead.rules.some((r) => r.selectors.includes('.dash-side.close section p') && r.decls.opacity === '0')
+      && !cssRead.rules.some((r) => r.selectors.includes('p') && r.decls.opacity === '0');
+    check('index.css reads as a browser applies it, the cascade settled: every brace closed, a nested rule read whole (the collapsed '
+        + 'sidebar\'s ".dash-side.close section p", never a bare "p"); and with every filter set and the dates backwards, the row holds '
+        + 'all five fields, Clear filters and the hint',
+      cssRead.balanced && cssRead.rules.length > 500 && nestedRead && shownAll.every(Boolean),
+      said({ balanced: cssRead.balanced, rules: cssRead.rules.length, nestedRead,
+        missing: shownAll.map((el, i) => (el ? null : i)).filter((i) => i !== null) }));
+    const hidden390 = shownAll.filter(Boolean).flatMap((el) => hidersAt(390, el).map((h) => `${el.tagName} ${h}`));
+    const hidden1280 = shownAll.filter(Boolean).flatMap((el) => hidersAt(1280, el).map((h) => `${el.tagName} ${h}`));
+    check('on a phone (390px) nothing hides the row, a field, its label, Clear filters or the hint, and nothing does at 1280 either',
+      shownAll.every(Boolean) && hidden390.length === 0 && hidden1280.length === 0, said({ hidden390, hidden1280 }));
+    const phone = {
+      row: valueAt(390, rowEl, 'flex-direction'),
+      fields: fields.map((f) => valueAt(390, f, 'flex-direction')),
+      widths: controls.map((c) => valueAt(390, c, 'width')),
+      heights: controls.map((c) => valueAt(390, c, 'height')),
+      clear: valueAt(390, clearButton, 'height'),
+    };
+    check('on a phone (390px) the row stacks: a column, each field its label over its control, every select and date input the full '
+        + 'width and 44px tall, and Clear filters 44px tall: a finger\'s height each',
+      phone.row === 'column' && phone.fields.every((x) => x === 'column') && phone.widths.every((x) => x === '100%')
+        && phone.heights.every((x) => x === '44px') && phone.clear === '44px', said(phone));
+    const wide = {
+      row: valueAt(1280, rowEl, 'flex-direction'),
+      fields: fields.map((f) => valueAt(1280, f, 'flex-direction')),
+      widths: controls.map((c) => valueAt(1280, c, 'width')),
+      heights: controls.map((c) => valueAt(1280, c, 'height')),
+      clear: valueAt(1280, clearButton, 'height'),
+    };
+    check('  above 640px (1280) it is Payments\' row: one line that wraps, each label beside its control, the controls only as wide '
+        + 'as what they hold and 40px tall, Clear filters 40px',
+      wide.row === null && wide.fields.every((x) => x === null) && wide.widths.every((x) => x === 'auto')
+        && wide.heights.every((x) => x === '40px') && wide.clear === '40px', said(wide));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await cardPage.unmount();
+
+    check('section AA sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (F.clock && realNow) F.clock.now = realNow;
+    if (previousTZAA === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAA;
   }
 
   console.error = origError;
