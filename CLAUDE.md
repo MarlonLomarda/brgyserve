@@ -362,7 +362,7 @@ Six rules, **verified across 58 filter states in `fdaf80a` / `7eba429`**. They a
 | **768px** | 1 | `.auth-page` collapses to one column (login / register) |
 | **1045px** | 4 | **the dashboard switch — see below**; the third and fourth only set `scroll-margin-top` on the Payments totals heading and (`eede21f`) the Document requests heading |
 
-Plus one `@media print` and three `prefers-reduced-motion` blocks, which are not width breakpoints. **Since 9 Oct 2026 one more block REUSES those values and adds none:** `@media (min-width: 641px) and (max-width: 1045px)` hides the Payments **Billed** column (it hid the Declared, then the Method column, until `62af41f`). It is Payments-scoped.
+Plus one `@media print` and three `prefers-reduced-motion` blocks, which are not width breakpoints. **Since 9 Oct 2026 more blocks REUSE those values and add none:** `@media (min-width: 641px) and (max-width: 1045px)` hides the Payments **Billed** column (it hid the Declared, then the Method column, until `62af41f`); since 14 Oct two more set the Document requests column widths.
 
 **1045px IS THE DASHBOARD SWITCH, AND IT IS DELIBERATE.** PR #11 (`dde74cd`) added it as the sidebar's show/hide point: **above 1045 the sidebar (`.dash-side`) is the navigation; at 1045 and below it is `display: none` and the drawer is the navigation.** The second block hides `.page-header-wrapper` at the same width. This was a reviewed reversal of the sentence above, not an oversight — see `docs/brgyserve-implementation-log.md` → "PR #11 — Francis's desktop sidebar".
 
