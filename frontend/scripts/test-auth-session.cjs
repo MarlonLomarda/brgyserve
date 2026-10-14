@@ -133,7 +133,16 @@
 // says so, with Try again, and never shows an empty list or "0 bookings"; a
 // 401 ends the session once and goes to the login screen; every way of
 // loading again starts from the loading state; and an older answer that
-// arrives late cannot replace a newer one.
+// arrives late cannot replace a newer one. Then the list's status tabs, for
+// the same three roles: Upcoming, Overdue, Completed, Returned, Cancelled and
+// All in place of the status select, each with its count over the whole
+// list, which is loaded once with ?status=all and split in the browser by
+// each booking's derived status, as its badge reads it; Staff opening on
+// Overdue and the others on Upcoming; the heading and the empty text naming
+// the tab; every row with the columns, badges and actions it had, a row
+// moving tab when an action reloads the list; nothing kept in the browser;
+// and the strip on a narrow phone. utils/rentalList.js is checked case by
+// case first.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -272,6 +281,10 @@ const root = () => dom.window.document.getElementById('root');
   });
   await bundle.write({ file: out, format: 'cjs' });
   await bundle.close();
+  // The zone a formatter built when the bundle loads keeps for the whole run
+  // (constants/rentals.js builds its schedule formatters then): a TZ set
+  // later never reaches it. Section AD reads it.
+  const BUNDLE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
   require(out);
   check('real App + AuthProvider bundled and loaded', typeof globalThis.mountApp === 'function');
 
@@ -8466,6 +8479,576 @@ const root = () => dom.window.document.getElementById('root');
 
     if (previousTZAD === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAD;
+  }
+
+  // =========================================================================
+  // AD (continued). Rental bookings: status tabs with counts
+  // =========================================================================
+  // The list had one status select: "Confirmed / upcoming" for the Secretary
+  // and the Punong Barangay, "Overdue (awaiting return)" for Staff, and six
+  // more, each sending a new GET /rental-requests?status=…. Its first choice
+  // was the STORED status, so it also listed every past confirmed booking,
+  // whose badge reads Overdue or Completed: on the live data (14 Oct 2026),
+  // 15 bookings under "upcoming", none of them upcoming. It now loads every
+  // booking once, GET ?status=all, and six tabs split that list in the
+  // browser with no request: Upcoming, Overdue, Completed, Returned,
+  // Cancelled and All, each with its count over the whole list. A tab holds
+  // the bookings whose DERIVED status (the server's derived_status, which the
+  // badge reads) is its own: Upcoming a confirmed booking whose end is still
+  // ahead, Returned all three return outcomes. The heading names the tab ("3
+  // overdue bookings", "11 bookings" on All), and a tab with nothing in it
+  // says so ("No upcoming bookings."). Staff open on Overdue, the Secretary
+  // and the Punong Barangay on Upcoming, even while it is empty. Every row
+  // keeps its columns, badges and actions; an action that reloads the list
+  // keeps the tab, and a booking whose status it changed shows under its new
+  // tab. The strip is ListTabs, as on Document requests. utils/rentalList.js
+  // is checked case by case, then the real page for the three roles against
+  // eleven stubbed bookings, one or more for every derived status, then a
+  // list with an empty tab, then the strip on a narrow phone. Every request
+  // is answered by the fetch stub; the only writes, the Secretary's cancel
+  // and edit and Staff's return, go to the stub too.
+  console.log('\n--- Rental bookings: status tabs with counts ---');
+  {
+    const previousTZAD2 = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const L = globalThis.rentalList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const KEYS = ['upcoming', 'overdue', 'completed', 'returned', 'cancelled', 'all'];
+    // Counts compared key by key, whatever order they were built in, and
+    // with no key besides the six.
+    const sameCounts = (got, want) => !!got && typeof got === 'object'
+      && said(Object.keys(got).sort()) === said([...KEYS].sort()) && KEYS.every((k) => got[k] === want[k]);
+    const counts = (upcoming, overdue, completed, returned, cancelled, all) =>
+      ({ upcoming, overdue, completed, returned, cancelled, all });
+
+    // a. The helpers on their own.
+    const order = attempt(() => L.RENTAL_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('rental tabs: Upcoming, Overdue, Completed, Returned, Cancelled, All, in that order',
+      order === 'upcoming:Upcoming | overdue:Overdue | completed:Completed | returned:Returned | cancelled:Cancelled | all:All',
+      said(order));
+    const bk = (id, status, derived) => ({ request_id: id, status, ...(derived === undefined ? {} : { derived_status: derived }) });
+    // Every kind of booking, and the tabs it must be in: its derived status
+    // decides, as the badge reads it, falling back to the stored status as
+    // the badge does; a status outside the seven is in All only.
+    const KINDS = [
+      ['confirmed, its end still ahead', bk(1, 'confirmed', 'confirmed'), 'upcoming all'],
+      ['confirmed, a physical item past its end (derived overdue)', bk(2, 'confirmed', 'overdue'), 'overdue all'],
+      ['confirmed, a facility past its end (derived completed)', bk(3, 'confirmed', 'completed'), 'completed all'],
+      ['returned', bk(4, 'returned', 'returned'), 'returned all'],
+      ['returned late', bk(5, 'returned_late', 'returned_late'), 'returned all'],
+      ['returned with an issue', bk(6, 'returned_with_issue', 'returned_with_issue'), 'returned all'],
+      ['cancelled', bk(7, 'cancelled', 'cancelled'), 'cancelled all'],
+      ['confirmed with no derived_status', bk(8, 'confirmed'), 'upcoming all'],
+      ['a status outside the seven', bk(9, 'archived', 'archived'), 'all'],
+    ];
+    const tabsHolding = (b) => KEYS.filter((tab) => attempt(() => L.inTab(b, tab)) === true).join(' ');
+    const wrongKinds = KINDS.filter(([, b, want]) => tabsHolding(b) !== want);
+    check('inTab: each booking is in the tab of its derived status and in All, and nowhere else: a past confirmed booking is '
+        + 'Overdue or Completed, never Upcoming; the three return outcomes are all Returned; an unknown status is in All only',
+      wrongKinds.length === 0, said(wrongKinds.map(([name, b]) => ({ name, in: tabsHolding(b) }))));
+    let got = attempt(() => L.tabCounts(KINDS.map((k) => k[1])));
+    check('rental tab counts over the whole list given: 2 upcoming, 1 overdue, 1 completed, 3 returned, 1 cancelled, 9 in all',
+      sameCounts(got, counts(2, 1, 1, 3, 1, 9)), said(got));
+    got = attempt(() => L.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0)), said(got));
+    const HEADS = [['upcoming', 0, '0 upcoming bookings'], ['upcoming', 1, '1 upcoming booking'],
+      ['overdue', 7, '7 overdue bookings'], ['overdue', 1, '1 overdue booking'], ['completed', 8, '8 completed bookings'],
+      ['returned', 7, '7 returned bookings'], ['cancelled', 6, '6 cancelled bookings'], ['all', 28, '28 bookings'],
+      ['all', 1, '1 booking'], ['all', 1234, '1,234 bookings']];
+    const heads = HEADS.map(([tab, n]) => attempt(() => L.tabHeading(tab, n)));
+    check('the heading for a tab: "0 upcoming bookings", "1 upcoming booking", "7 overdue bookings", "1 overdue booking", '
+        + '"8 completed bookings", "7 returned bookings", "6 cancelled bookings", and on All "28 bookings", "1 booking", "1,234 bookings"',
+      said(heads) === said(HEADS.map((h) => h[2])), said(heads));
+    const EMPTIES = ['No upcoming bookings.', 'No overdue bookings.', 'No completed bookings.', 'No returned bookings.',
+      'No cancelled bookings.', 'No bookings.'];
+    const empties = KEYS.map((tab) => attempt(() => L.emptyText(tab)));
+    check('the empty text names the tab: "No upcoming bookings." … "No cancelled bookings.", and "No bookings." on All',
+      said(empties) === said(EMPTIES), said(empties));
+    const opening = [true, false, undefined].map((canReturn) => attempt(() => L.openingTab(canReturn)));
+    check('the opening tab: Overdue for Staff (canReturn), Upcoming for the others',
+      said(opening) === said(['overdue', 'upcoming', 'upcoming']), said(opening));
+
+    // b. The real page. Eleven bookings in the list's real shape, newest
+    // first as the server sends them, one or more for every derived status: a
+    // past confirmed booking is Overdue (504 a guest's, 505 a resident's with
+    // no online account) or Completed, and the returns carry who took them
+    // back and a note.
+    const STAFF_BY = { user_id: 3, username: 'staff1', profiles: { first_name: 'Sam', last_name: 'Tabuena' } };
+    const ITEMS = {
+      sound: ['Sound System', 'equipment'], court: ['Covered Court', 'facility'], chairs: ['Plastic Chairs', 'furniture'],
+      tent: ['Tent (10x10)', 'equipment'], tables: ['Folding Tables', 'furniture'], hall: ['Barangay Hall', 'facility'],
+    };
+    const ELEVEN = [
+      { id: 501, who: ['Ana', 'Cruz'], item: 'sound', qty: 1, status: 'confirmed', derived: 'confirmed' },
+      { id: 502, who: ['Ben', 'Reyes'], item: 'court', qty: 1, status: 'confirmed', derived: 'confirmed' },
+      { id: 503, who: ['Carla', 'Santos'], item: 'chairs', qty: 20, status: 'confirmed', derived: 'overdue' },
+      { id: 504, guest: ['Maria Lourdes Villanueva-Santos', '09171234567'], item: 'tent', qty: 2, status: 'confirmed', derived: 'overdue' },
+      { id: 505, who: ['Dino', 'Tan'], noAccount: true, item: 'tables', qty: 5, status: 'confirmed', derived: 'overdue' },
+      { id: 506, who: ['Elsa', 'Uy'], item: 'hall', qty: 1, status: 'confirmed', derived: 'completed' },
+      { id: 507, who: ['Fe', 'Villa'], item: 'court', qty: 1, status: 'confirmed', derived: 'completed' },
+      { id: 508, who: ['Gil', 'Wong'], item: 'sound', qty: 1, status: 'returned', derived: 'returned' },
+      { id: 509, who: ['Hana', 'Yap'], item: 'chairs', qty: 30, status: 'returned_late', derived: 'returned_late', note: 'Returned a day late' },
+      { id: 510, who: ['Ivy', 'Zamora'], item: 'tent', qty: 1, status: 'returned_with_issue', derived: 'returned_with_issue', note: 'One pole bent' },
+      { id: 511, who: ['Jun', 'Abad'], item: 'hall', qty: 1, status: 'cancelled', derived: 'cancelled', noCharge: true },
+    ];
+    const RETURNED = ['returned', 'returned_late', 'returned_with_issue'];
+    const toBooking = (r) => {
+      const [itemName, type] = ITEMS[r.item];
+      const person = r.who && { resident_id: 800 + r.id, first_name: r.who[0], middle_name: null, last_name: r.who[1], suffix: null,
+        account: r.noAccount ? null : { username: `res_${r.id}` } };
+      return {
+        request_id: r.id, quantity_requested: r.qty,
+        start_datetime: '2026-10-20T01:00:00+00:00', end_datetime: '2026-10-20T05:00:00+00:00',
+        purpose: `Purpose ${r.id}`, status: r.status, return_note: r.note ?? null,
+        returned_at: RETURNED.includes(r.status) ? '2026-10-05T09:30:00+00:00' : null,
+        resident_id: person ? person.resident_id : null,
+        outside_borrower_name: r.guest ? r.guest[0] : null, outside_borrower_contact: r.guest ? r.guest[1] : null,
+        rental_items: { item_id: 600 + r.id, name: itemName, type, fee: '25.00', quantity_total: 50, quantity_available: 50 },
+        resident_records: person || null,
+        requester: { user_id: 700 + r.id, username: r.guest ? 'secretary1' : `res_${r.id}`, email: null, profiles: null },
+        returned_by: RETURNED.includes(r.status) ? STAFF_BY : null,
+        charges: r.noCharge ? null : { charge_id: 950 + r.id, amount: '25.00', status: r.status === 'cancelled' ? 'VOID' : 'UNPAID',
+          declared_method: null, declared_reference: null, declared_at: null },
+        derived_status: r.derived,
+      };
+    };
+    const nameOf = (r) => (r.guest ? r.guest[0] : `${r.who[0]} ${r.who[1]}`);
+    // What each tab must show, written by hand: its rows, in the order sent,
+    // and its heading.
+    const WANT = {
+      Upcoming: { rows: ['Ana Cruz', 'Ben Reyes'], heading: '2 upcoming bookings' },
+      Overdue: { rows: ['Carla Santos', 'Maria Lourdes Villanueva-Santos', 'Dino Tan'], heading: '3 overdue bookings' },
+      Completed: { rows: ['Elsa Uy', 'Fe Villa'], heading: '2 completed bookings' },
+      Returned: { rows: ['Gil Wong', 'Hana Yap', 'Ivy Zamora'], heading: '3 returned bookings' },
+      Cancelled: { rows: ['Jun Abad'], heading: '1 cancelled booking' },
+      All: { rows: ELEVEN.map(nameOf), heading: '11 bookings' },
+    };
+    const STRIP = 'Upcoming 2 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 11';
+    // Each row on All as a person reads it, as the page drew it before the
+    // tabs: the name and the line under it, the item, schedule, quantity,
+    // purpose and status cells, and the actions cell's buttons. The schedule
+    // is in the zone the bundle loaded in, as the page shows it:
+    // constants/rentals.js builds its schedule formatters once, then, so the
+    // TZ this section sets never reaches them ("Oct 20, 2026, 9:00 AM – 1:00
+    // PM" on a machine in Manila). The return time is formatDate's, which
+    // reads the zone on every call: UTC here.
+    const words = (s) => s.replace(/\s+/g, ' ');
+    const day = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
+    const hour = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
+    const START = new Date('2026-10-20T01:00:00+00:00');
+    const SCHEDULE = words(`${day.format(START)}, ${hour.format(START)} – ${hour.format(new Date('2026-10-20T05:00:00+00:00'))}`);
+    const BY = 'by @staff1 on Oct 5, 2026, 9:30 AM';
+    const STATUS_CELL = {
+      501: 'Confirmed', 502: 'Confirmed', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
+      508: `Returned ${BY}`, 509: `Returned late Note: Returned a day late ${BY}`,
+      510: `Returned with issue Note: One pole bent ${BY}`, 511: 'Cancelled',
+    };
+    const NOTE = (r) => (r.guest ? `Guest · ${r.guest[1]}` : r.noAccount ? 'No online account' : `@res_${r.id}`);
+    const ACTIONS = {
+      Secretary: (r) => (r.status === 'confirmed' ? 'Edit + Cancel' : '(none)'),
+      Staff: (r) => (r.status === 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1]) ? 'Mark returned' : '(none)'),
+      'Punong Barangay': null,
+    };
+    const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], SCHEDULE, String(r.qty), `Purpose ${r.id}`,
+      STATUS_CELL[r.id], ...(ACTIONS[role] ? [ACTIONS[role](r)] : [])].join(' | '));
+    // A cell's words: each element in it read whole (the badge, the note,
+    // "by @staff1 on …"), a space between them; a cell of text alone, its text.
+    const cellWords = (cell) => (!cell ? null : cell.children.length ? [...cell.children].map(text).join(' ') : text(cell));
+    const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
+      const cells = [...tr.children];
+      const actions = cells[6] ? [[...cells[6].querySelectorAll('button')].map((b) => b.textContent).join(' + ') || '(none)'] : [];
+      return [text(cells[0]?.querySelector('strong')), text(cells[0]?.querySelector('.small-note')) ?? '(no note)',
+        ...cells.slice(1, 6).map(cellWords), ...actions].join(' | ');
+    });
+    const headersRead = (page) => page.queryAll('table.data-table thead th').map(text);
+    // The bookings the stub holds, which Refresh and the actions change as the
+    // server would; the list answer is built from them, and filtered by
+    // ?status= as routes/rentalRequests.js filters it.
+    const makeState = (list = ELEVEN) => ({ list: list.map((r) => ({ ...r })) });
+    const listAnswer = (state, status) => {
+      const rows = state.list.map(toBooking);
+      if (!status || status === 'all') return { requests: rows };
+      if (status === 'overdue' || status === 'completed') return { requests: rows.filter((r) => r.derived_status === status) };
+      // A status the route does not know is a 400 there; the stub answers an
+      // empty list rather than crash a page that asks for one.
+      return { requests: rows.filter((r) => r.status === status) };
+    };
+    const answerFor = (state) => (url, method) => {
+      const list = url.match(/\/rental-requests(?:\?status=([a-z_]+))?$/);
+      if (method === 'GET' && list) return listAnswer(state, list[1]);
+      const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+      if (method === 'POST' && act) {
+        const r = state.list.find((x) => x.id === Number(act[1]));
+        if (!r) return undefined;
+        if (act[2] === 'cancel') {
+          r.status = 'cancelled';
+          r.derived = 'cancelled';
+          return { message: `Booking #${r.id} cancelled.` };
+        }
+        r.status = 'returned';
+        r.derived = 'returned';
+        return { message: `Return recorded for booking #${r.id}.` };
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated.' };
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      table: !!page.query('table.data-table'),
+      empty: text(page.query('.empty')),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+      loading: root().textContent.includes('Loading bookings…'),
+      selects: page.queryAll('select').length,
+    });
+    // The requests a step sent to /rental-requests, as "GET /rental-requests?status=all".
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/rental-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, name, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // The select's words, none of which may come back: its first choice's
+    // label was wrong, and every choice sent a request.
+    const OLD_WORDS = ['Confirmed / upcoming', 'Overdue (awaiting return)', 'Completed (facilities)', 'All bookings'];
+    // jsdom has no window.confirm; Cancel asks it first. It answers yes here.
+    const previousConfirm = dom.window.confirm;
+    const asked = [];
+    dom.window.confirm = (message) => { asked.push(message); return true; };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
+      { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, opening: 'Upcoming' },
+    ];
+    for (const { name, route, token, user, opening } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const writesAtOpen = store.sets;
+      let v = look(page);
+      const group = page.query('.pay-tabs');
+      const buttons = tabsOf(page);
+      check(`${name}: six tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
+        v.strip === STRIP && group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status'
+          && buttons.length === 6 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+        said({ strip: v.strip, role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null,
+          pressed: buttons.map((b) => b.getAttribute('aria-pressed')) }));
+      check(`${name}: it opens on ${opening}: ${opening} alone pressed, "${WANT[opening].heading}", and its rows in the order sent`,
+        said(v.pressed) === said([`${opening} ${WANT[opening].rows.length}`]) && v.heading === WANT[opening].heading
+          && said(v.rows) === said(WANT[opening].rows), said(v));
+      check(`${name}: exactly one request on open, GET /rental-requests?status=all`,
+        net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /rental-requests?status=all']),
+        said(net.calls.map((c) => `${c.method} ${c.url}`)));
+      check(`${name}: the status select is gone: no select and no option on the list, and none of its words `
+          + `(${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
+        v.selects === 0 && page.queryAll('option').length === 0 && !OLD_WORDS.some((w) => page.html().includes(w)),
+        said({ selects: v.selects, options: page.queryAll('option').length, words: OLD_WORDS.filter((w) => page.html().includes(w)) }));
+
+      // Every tab in turn, as a person presses them.
+      const sentBefore = net.calls.length;
+      const seen = {};
+      const missing = [];
+      for (const label of Object.keys(WANT)) {
+        const tab = tabNamed(page, label);
+        if (!tab) missing.push(label);
+        await clickIf(page, tab);
+        seen[label] = look(page);
+      }
+      check(`${name}: pressing each of the six tabs in turn sends no request`,
+        missing.length === 0 && net.calls.length === sentBefore,
+        said({ missing, sent: net.calls.slice(sentBefore).map((c) => `${c.method} ${c.url}`) }));
+      const wrongTabs = Object.keys(WANT).filter((label) => label !== 'All').filter((label) => {
+        const s = seen[label];
+        return !(said(s.rows) === said(WANT[label].rows) && s.heading === WANT[label].heading
+          && s.pressed.length === 1 && s.pressed[0].startsWith(`${label} `));
+      });
+      check(`${name}: each status tab shows only its own bookings, in the order sent, under its own heading, and is the one pressed`,
+        wrongTabs.length === 0, said(wrongTabs.map((label) => ({ tab: label, ...seen[label] }))));
+      check(`${name}: a booking stored as confirmed is under the tab its derived status names: Carla Santos (overdue) and `
+          + 'Elsa Uy (completed) are never under Upcoming',
+        !!seen.Upcoming && !seen.Upcoming.rows.includes('Carla Santos') && !seen.Upcoming.rows.includes('Elsa Uy')
+          && seen.Overdue?.rows.includes('Carla Santos') && seen.Completed?.rows.includes('Elsa Uy'),
+        said({ upcoming: seen.Upcoming?.rows, overdue: seen.Overdue?.rows, completed: seen.Completed?.rows }));
+      check(`${name}: All shows every booking, all eleven in the order sent, cancelled and returned included, under "11 bookings"`,
+        said(seen.All?.rows) === said(WANT.All.rows) && seen.All.heading === WANT.All.heading
+          && said(seen.All.pressed) === said(['All 11']), said(seen.All));
+      const strips = [...new Set(Object.values(seen).map((s) => s.strip))];
+      check(`${name}: the counts are the whole list's, and read the same on every tab`, said(strips) === said([STRIP]), said(strips));
+      const wantHeaders = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(ACTIONS[name] ? [''] : [])];
+      check(`${name}: every row keeps its columns, badges, notes and actions (${ACTIONS[name] ? 'Edit and Cancel on the Secretary\'s '
+          + 'confirmed bookings, Mark returned on Staff\'s confirmed equipment and furniture' : 'none for the Punong Barangay, and '
+          + 'no actions column'}): the ${wantHeaders.length} headers and all eleven rows on All`,
+        said(headersRead(page)) === said(wantHeaders) && said(rowsRead(page)) === said(wantRows(name)),
+        said({ headers: headersRead(page), rows: rowsRead(page) }));
+
+      // Refresh on Completed, after a third completed booking has arrived.
+      // The answer is held, so the page can be read while it is out.
+      await clickIf(page, tabNamed(page, 'Completed'));
+      state.list.push({ id: 512, who: ['Kim', 'Bello'], item: 'hall', qty: 1, status: 'confirmed', derived: 'completed' });
+      const STRIP12 = 'Upcoming 2 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 1 · All 12';
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = look(page);
+      const refreshCall = net.calls[sent];
+      release(at, 200, listAnswer(state, 'all'));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, GET ?status=all, with no tabs while it is out, and keeps Completed: `
+          + '"3 completed bookings" with the new count',
+        net.calls.length === sent + 1 && said(listCalls([refreshCall].filter(Boolean))) === said(['GET /rental-requests?status=all'])
+          && reloading.strip === '' && reloading.loading
+          && said(v.pressed) === said(['Completed 3']) && v.heading === '3 completed bookings'
+          && said(v.rows) === said([...WANT.Completed.rows, 'Kim Bello']) && v.strip === STRIP12,
+        said({ reloading, v }));
+
+      // A reload that fails: no tabs and no select; then Try again.
+      const hadTabs = tabsOf(page).length === 6;
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      v = look(page);
+      check(`${name}: a load that fails takes the tabs away: the error and Try again under the heading "Bookings", with no `
+          + 'strip, no select, no rows and no empty text',
+        hadTabs && !page.query('.pay-tabs') && v.heading === 'Bookings' && v.error === 'Could not load the bookings: Network down'
+          && !!tryAgainButton(page) && v.selects === 0 && v.rows.length === 0 && !v.table && v.empty === null,
+        said({ hadTabs, v }));
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, 'all'));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`  ${name}: Try again loads it once, GET ?status=all, and brings the tabs back, still on Completed`,
+        said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all'])
+          && said(v.pressed) === said(['Completed 3']) && v.strip === STRIP12 && v.heading === '3 completed bookings' && !v.error,
+        said(v));
+
+      if (name === 'Secretary') {
+        // Cancel an upcoming booking: the cancel goes to the stub, the list
+        // loads again, once, and the tab stays; the booking is now under
+        // Cancelled.
+        await clickIf(page, tabNamed(page, 'Upcoming'));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Ana Cruz', 'Cancel'));
+        await page.settle();
+        v = look(page);
+        const flash = text(page.query('.alert.success'));
+        check('Secretary: Cancel on an upcoming booking posts the cancel, loads the list again, once, keeps Upcoming, and the '
+            + 'booking leaves it: "1 upcoming booking", Cancelled 2',
+          asked.length === 1 && flash === 'Booking #501 cancelled.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/501/cancel', 'GET /rental-requests?status=all'])
+            && said(v.pressed) === said(['Upcoming 1']) && v.heading === '1 upcoming booking' && said(v.rows) === said(['Ben Reyes'])
+            && v.strip === 'Upcoming 1 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 2 · All 12',
+          said({ asked: asked.length, flash, calls: listCalls(net.calls.slice(sent)), v }));
+        await clickIf(page, tabNamed(page, 'Cancelled'));
+        v = look(page);
+        check('  Secretary: and it is under Cancelled now, with its Cancelled badge and no actions',
+          said(v.rows) === said(['Ana Cruz', 'Jun Abad'])
+            && rowsRead(page)[0] === ['Ana Cruz', '@res_501', 'Sound System', SCHEDULE, '1', 'Purpose 501', 'Cancelled', '(none)'].join(' | '),
+          said({ v, row: rowsRead(page)[0] }));
+
+        // Edit: Back without saving loads nothing; saving loads the list
+        // again, once, and keeps the tab.
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Edit'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        const backCalls = listCalls(net.calls.slice(sent));
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Edit'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        check('Secretary: Edit, then Back to list, loads nothing; Edit and Save changes sends the PUT and loads the list again, '
+            + 'once, and keeps Overdue',
+          panel === 'Edit booking #503' && backCalls.length === 0
+            && said(listCalls(net.calls.slice(sent))) === said(['PUT /rental-requests/503', 'GET /rental-requests?status=all'])
+            && said(v.pressed) === said(['Overdue 3']) && text(page.query('.alert.success')) === 'Booking updated.',
+          said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), v }));
+
+        // Encode walk-in, left without filing: the list is not loaded again.
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const walkIn = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Encode walk-in, then Back to list without filing, keeps Overdue and does not load the list again',
+          walkIn === 'Encode walk-in booking' && said(v.pressed) === said(['Overdue 3'])
+            && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ walkIn, v, calls: net.calls.slice(sent).map((c) => `${c.method} ${c.url}`) }));
+      }
+
+      if (name === 'Staff') {
+        // Mark returned on an overdue booking: Back first, which loads
+        // nothing; then the return goes to the stub, the list loads again,
+        // once, the tab stays, and the booking is under Returned.
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Mark returned'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        const backCalls = listCalls(net.calls.slice(sent));
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Mark returned'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        const posted = net.calls.slice(sent).find((c) => c.method === 'POST');
+        check('Staff: Mark returned, then Back to list, loads nothing; Record return posts the return, loads the list again, '
+            + 'once, keeps Overdue, and the booking leaves it: "2 overdue bookings", Returned 4',
+          panel === 'Mark returned — booking #503' && backCalls.length === 0
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/503/return', 'GET /rental-requests?status=all'])
+            && /"outcome":"returned"/.test(String(posted?.body))
+            && said(v.pressed) === said(['Overdue 2']) && v.heading === '2 overdue bookings'
+            && said(v.rows) === said(['Maria Lourdes Villanueva-Santos', 'Dino Tan'])
+            && v.strip === 'Upcoming 2 · Overdue 2 · Completed 3 · Returned 4 · Cancelled 1 · All 12',
+          said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), body: posted?.body ?? null, v }));
+        await clickIf(page, tabNamed(page, 'Returned'));
+        v = look(page);
+        check('  Staff: and it is under Returned now, with its Returned badge and no Mark returned',
+          said(v.rows) === said(['Carla Santos', 'Gil Wong', 'Hana Yap', 'Ivy Zamora'])
+            && rowsRead(page)[0] === ['Carla Santos', '@res_503', 'Plastic Chairs', SCHEDULE, '20', 'Purpose 503', `Returned ${BY}`,
+              '(none)'].join(' | '),
+          said({ v, row: rowsRead(page)[0] }));
+      }
+
+      if (name === 'Punong Barangay') {
+        // Read-only on every tab.
+        const withButtons = [];
+        for (const label of Object.keys(WANT)) {
+          await clickIf(page, tabNamed(page, label));
+          if (page.queryAll('table.data-table tbody button').length > 0) withButtons.push(label);
+        }
+        check('Punong Barangay: no row on any tab has a button, and there is no Encode walk-in',
+          withButtons.length === 0 && !buttonNamed(root(), 'Encode walk-in'), said(withButtons));
+      }
+
+      check(`${name}: nothing about the tabs is kept in the browser: no localStorage write, sessionStorage empty, no cookie`,
+        store.sets === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+        `${store.sets - writesAtOpen} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. A tab with nothing in it. As on the live data (14 Oct 2026), no
+    // booking is upcoming: the Secretary and the Punong Barangay still open
+    // on Upcoming, dimmed, and the page says so; and a list with no bookings
+    // at all, for Staff, who open on Overdue.
+    const NONE_UPCOMING = ELEVEN.filter((r) => r.derived !== 'confirmed');
+    for (const { name, route, token, user, opening } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, answerFor(makeState(name === 'Staff' ? [] : NONE_UPCOMING)));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const v = look(page);
+      const dimmed = tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty'));
+      if (name === 'Staff') {
+        check('Staff, with no bookings at all: every tab shows 0 and is dimmed, still a button; Overdue, pressed, says '
+            + '"0 overdue bookings" and "No overdue bookings.", with no table',
+          v.strip === 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 0' && dimmed.length === 6
+            && dimmed.every((b) => b.disabled === false) && said(v.pressed) === said(['Overdue 0'])
+            && v.heading === '0 overdue bookings' && v.empty === 'No overdue bookings.' && !v.table,
+          said({ v, dimmed: dimmed.map(text) }));
+        await clickIf(page, tabNamed(page, 'All'));
+        const all = look(page);
+        check('  Staff: and All says "0 bookings" and "No bookings."',
+          all.heading === '0 bookings' && all.empty === 'No bookings.' && !all.table, said(all));
+      } else {
+        check(`${name}, with no upcoming booking (as on the live data): it still opens on ${opening}, "Upcoming 0", the one tab `
+            + 'dimmed, still a button, pressed; "0 upcoming bookings" and "No upcoming bookings.", with no table',
+          v.strip === 'Upcoming 0 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 9'
+            && said(dimmed.map(text)) === said(['Upcoming 0']) && dimmed[0].disabled === false
+            && said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 upcoming bookings'
+            && v.empty === 'No upcoming bookings.' && !v.table,
+          said({ v, dimmed: dimmed.map(text) }));
+      }
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. The strip on a narrow phone, as the Secretary: it is ListTabs, so
+    // where the six tabs do not fit it scrolls inside itself, fades the edge
+    // that has tabs past it, and brings a chosen tab fully into view by moving
+    // the strip, never the page (section W checks the strip in full). jsdom
+    // lays nothing out, so the strip is laid out by hand: 300px holding 588px
+    // of tabs.
+    {
+      const FADE = 24;
+      const WIDTHS = [118, 106, 124, 108, 120, 62];
+      const MAX = WIDTHS.reduce((a, b) => a + b, 0) - 300;
+      const scrolled = [];
+      const proto = dom.window.HTMLElement.prototype;
+      const previousScroll = proto.scrollIntoView;
+      proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState()));
+      const page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await page.settle();
+      const strip = () => page.query('.pay-tabs');
+      const lefts = WIDTHS.map((_, i) => WIDTHS.slice(0, i).reduce((a, b) => a + b, 0));
+      let left = 0;
+      const s = strip();
+      if (s) {
+        const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+        Object.defineProperty(s, 'clientWidth', { configurable: true, get: () => 300 });
+        Object.defineProperty(s, 'scrollWidth', { configurable: true, get: () => 300 + MAX });
+        Object.defineProperty(s, 'scrollLeft', {
+          configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, MAX)); },
+        });
+        s.getBoundingClientRect = () => rect(0, 300);
+        [...s.querySelectorAll('.pay-tab')].forEach((b, i) => {
+          b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + WIDTHS[i] - left);
+        });
+      }
+      dom.window.dispatchEvent(new dom.window.Event('resize'));
+      await page.settle();
+      const narrow = strip()?.getAttribute('data-fade') ?? null;
+      await clickIf(page, tabNamed(page, 'All'));
+      const box = tabNamed(page, 'All')?.getBoundingClientRect();
+      const end = { at: left, left: box?.left ?? null, right: box?.right ?? null, fade: strip()?.getAttribute('data-fade') ?? null };
+      await clickIf(page, tabNamed(page, 'Upcoming'));
+      const first = { at: left, fade: strip()?.getAttribute('data-fade') ?? null };
+      check('narrow phone: the rental tabs scroll inside their strip: "end" faded while they overflow it; All, chosen, scrolls '
+          + 'the strip to its end, in full view; Upcoming back to its start; the page itself never scrolls',
+        !!s && narrow === 'end' && end.at === MAX && end.right !== null && end.right <= 300 && end.left >= FADE
+          && end.fade === 'start' && first.at === 0 && first.fade === 'end' && scrolled.length === 0,
+        said({ narrow, end, first, pageScrolls: scrolled.length }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      if (previousScroll === undefined) delete proto.scrollIntoView;
+      else proto.scrollIntoView = previousScroll;
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section AD\'s tabs sent GETs, and three writes, the Secretary\'s cancel and edit and Staff\'s return, all answered by '
+        + 'the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'PUT', 'POST']),
+      `${methodsSent.length} request(s): ${said(writes)}`);
+
+    dom.window.confirm = previousConfirm;
+    if (previousTZAD2 === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAD2;
   }
 
   console.error = origError;

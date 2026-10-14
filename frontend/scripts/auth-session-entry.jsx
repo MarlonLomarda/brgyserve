@@ -14,6 +14,7 @@ import * as chargeFilters from '../src/utils/chargeFilters.js';
 import * as chargeSearch from '../src/utils/chargeSearch.js';
 import * as chargeTotals from '../src/utils/chargeTotals.js';
 import * as paging from '../src/utils/paging.js';
+import * as rentalList from '../src/utils/rentalList.js';
 import * as requestList from '../src/utils/requestList.js';
 
 globalThis.isTokenExpired = isTokenExpired;
@@ -34,6 +35,9 @@ globalThis.chargeFilters = chargeFilters;
 // The Document requests list's status tabs, counts and heading, checked on
 // their own in section W.
 globalThis.requestList = requestList;
+// The Rental bookings list's status tabs, counts, heading, empty text and
+// opening tab, checked on their own in section AD.
+globalThis.rentalList = rentalList;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.

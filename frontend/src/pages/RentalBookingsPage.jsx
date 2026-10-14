@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListTabs from "../components/ListTabs";
 import ResidentPicker from "../components/ResidentPicker";
 import { formatDate } from "../constants/requestStatus";
 import {
@@ -10,32 +11,32 @@ import {
   isReturnable,
   rentalMeta,
 } from "../constants/rentals";
+import {
+  emptyText,
+  inTab,
+  openingTab,
+  RENTAL_TABS,
+  tabCounts,
+  tabHeading,
+} from "../utils/rentalList";
 
 // All-bookings view, shared by three roles: the Secretary manages
 // (canManage — edit/cancel), Barangay Staff mark physical items returned
 // (canReturn), the Punong Barangay is read-only. Pass the role's title and
 // nav like PaymentsPage.
-
-const FILTERS = [
-  "confirmed",
-  "overdue",
-  "completed",
-  "returned",
-  "returned_late",
-  "returned_with_issue",
-  "cancelled",
-  "all",
-];
-const FILTER_LABELS = {
-  confirmed: "Confirmed / upcoming",
-  overdue: "Overdue (awaiting return)",
-  completed: "Completed (facilities)",
-  returned: "Returned",
-  returned_late: "Returned late",
-  returned_with_issue: "Returned with issue",
-  cancelled: "Cancelled",
-  all: "All bookings",
-};
+//
+// STATUS TABS (14 Oct 2026). The list is loaded once, every booking
+// (?status=all), and six tabs split it in the browser with no further
+// request: Upcoming, Overdue, Completed, Returned, Cancelled and All, each
+// with its count over the whole list (utils/rentalList.js). A booking is in
+// the tab of the status its badge reads, the server's derived_status. They
+// replace a status select whose every choice sent a new request, and whose
+// first choice, "Confirmed / upcoming", asked for the STORED status, so it
+// listed every past confirmed booking too. The strip is the Payments page's
+// type tabs, as components/ListTabs.jsx, as on Document requests. Staff open
+// on Overdue, as the select did; the Secretary and the Punong Barangay on
+// Upcoming. The chosen tab lives through every reload: Refresh, Try again, and
+// the reload after an edit, a return, a cancel or a filed walk-in.
 
 const fullName = (p) => {
   if (!p) return null;
@@ -650,7 +651,8 @@ export default function RentalBookingsPage({
   canReturn = false,
 }) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState(canReturn ? "overdue" : "confirmed");
+  // The chosen status tab: Overdue for Staff, Upcoming for the others.
+  const [tab, setTab] = useState(() => openingTab(canReturn));
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
@@ -669,19 +671,20 @@ export default function RentalBookingsPage({
   // (CLAUDE.md: a list that failed to load), as on Document requests. Every
   // load starts from the loading state, and an older answer that arrives late
   // (Refresh pressed during a reload) is dropped rather than shown over a
-  // newer one.
+  // newer one. It asks for every booking, whatever tab is chosen: a tab only
+  // splits what is loaded, so choosing one sends nothing. load depends on
+  // authFetch alone; the tab in its dependencies would reload on every press.
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     setLoadError(null);
     setRequests(null);
     try {
-      const query = filter === "all" ? "" : `?status=${filter}`;
-      const data = await authFetch(`/rental-requests${query}`);
+      const data = await authFetch("/rental-requests?status=all");
       if (seq === loadSeq.current) setRequests(data.requests);
     } catch (err) {
       if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
-  }, [authFetch, filter]);
+  }, [authFetch]);
 
   useEffect(() => {
     load();
@@ -710,6 +713,11 @@ export default function RentalBookingsPage({
       setBusyId(null);
     }
   }
+
+  // The tab counts come from the whole list, so they read the same on every
+  // tab; the rows and the heading are the chosen tab's.
+  const counts = requests === null ? null : tabCounts(requests);
+  const shown = requests === null ? [] : requests.filter((r) => inTab(r, tab));
 
   return (
     <>
@@ -751,21 +759,9 @@ export default function RentalBookingsPage({
 
           <div className="list-head">
             <h2>
-              {requests === null
-                ? "Bookings"
-                : `${requests.length} booking${requests.length === 1 ? "" : "s"}`}
+              {requests === null ? "Bookings" : tabHeading(tab, shown.length)}
             </h2>
             <div className="head-actions">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                {FILTERS.map((f) => (
-                  <option key={f} value={f}>
-                    {FILTER_LABELS[f]}
-                  </option>
-                ))}
-              </select>
               <button className="btn secondary" onClick={load}>
                 Refresh
               </button>
@@ -787,6 +783,19 @@ export default function RentalBookingsPage({
             </div>
           </div>
 
+          {/* The tabs, under the row that holds Refresh, drawn only once the
+              list has loaded: never while it loads or after it failed, as on
+              Document requests. */}
+          {requests !== null && (
+            <ListTabs
+              label="Status"
+              tabs={RENTAL_TABS}
+              counts={counts}
+              active={tab}
+              onChoose={setTab}
+            />
+          )}
+
           {/* The error first, then loading, then empty, then rows: a load that
               failed shows neither a count nor the empty text. Try again
               repeats the same load, as Refresh does; Refresh above stays
@@ -802,15 +811,9 @@ export default function RentalBookingsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading bookings…</p>
-          ) : requests.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="empty">
-              <p>
-                No{" "}
-                {filter === "all"
-                  ? ""
-                  : `${FILTER_LABELS[filter].toLowerCase()} `}
-                bookings.
-              </p>
+              <p>{emptyText(tab)}</p>
             </div>
           ) : (
             <div className="table-wrap">
@@ -827,9 +830,8 @@ export default function RentalBookingsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => {
-                    const shown = displayStatus(r);
-                    const meta = rentalMeta(shown);
+                  {shown.map((r) => {
+                    const meta = rentalMeta(displayStatus(r));
                     const returnable = isReturnable(r.rental_items?.type);
                     return (
                       <tr key={r.request_id}>
