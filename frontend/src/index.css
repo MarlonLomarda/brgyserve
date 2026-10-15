@@ -4654,6 +4654,19 @@ button.tab:hover:not(:disabled) {
     flex-basis: 100%;
   }
 
+  /* The Rental bookings list's heading too (15 Oct 2026), for the same
+     reason: it names the chosen status tab and, while a search is on, how
+     many match ("9 of 28 bookings match"), so its length changes with every
+     tab and keystroke. Where it sometimes fitted beside Refresh, and Encode
+     walk-in for the Secretary, a tab press or a keystroke moved the strip
+     and the list by 32px (swept pixel by pixel: 342 to 526 for the
+     Secretary, and 320 to 392 for Staff and the Punong Barangay once a
+     search is on). On its own line the row is one height on every tab, with
+     or without a search. Scoped to that page's .list-head. */
+  .rental-bookings-head h2 {
+    flex-basis: 100%;
+  }
+
   .head-actions input {
     width: auto;
     flex: 1 1 200px;

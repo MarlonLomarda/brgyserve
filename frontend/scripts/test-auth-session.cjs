@@ -10431,6 +10431,43 @@ const root = () => dom.window.document.getElementById('root');
         said({ balanced: cssRead.balanced, heading: !!heading, margins }));
       await cssPage.unmount();
 
+      // d. The heading row on a phone. The heading names the tab and, while a
+      // search is on, how many match ("12 of 28 bookings match"), so its
+      // length changes with every tab and keystroke. Where it sometimes fitted
+      // beside Refresh and Encode walk-in (the Secretary's phone, 342 to
+      // 420px), pressing a tab moved the strip and the list by 32px. At 640px
+      // and below the heading now has a line of its own, as on Document
+      // requests (.doc-requests-head h2), so the row is one height on every
+      // tab, with or without a search, for every role; above 640px the row is
+      // as it was. Read from index.css, as in c.
+      console.log('\n--- Rental bookings: the heading row on a phone ---');
+      const FLEX_WIDTHS = [320, 342, 360, 390, 420, 480, 560, 640, 641, 768, 1045, 1046, 1280, 1920];
+      for (const { name, route, token, user } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerForP(makePagerState(LIST_AE)));
+        const p = await globalThis.mountInteractive(root(), route);
+        await p.settle();
+        const h2 = p.query('.list-head h2');
+        const row = h2?.parentElement ?? null;
+        const toolbarRow = box(p)?.closest('.list-head') ?? null;
+        const read = (prop) => Object.fromEntries(FLEX_WIDTHS.map((w) => [w, valueAt(w, h2, prop)]));
+        const basis = read('flex-basis');
+        const flex = read('flex');
+        const wrap = Object.fromEntries(FLEX_WIDTHS.map((w) => [w, valueAt(w, row, 'flex-wrap')]));
+        check(`${name}: the heading row is .list-head.rental-bookings-head, the heading then Refresh${name === 'Secretary'
+          ? ' and Encode walk-in' : ''}; the search row under it is not; and index.css gives the heading a line of its own `
+            + 'at 640px and below (flex-basis 100%, in a row that wraps) and no flex-basis above, so the row is one height on '
+            + 'every tab',
+          !!row && row.classList.contains('list-head') && row.classList.contains('rental-bookings-head')
+            && row.firstElementChild === h2 && !!buttonNamed(row, 'Refresh')
+            && !!buttonNamed(row, 'Encode walk-in') === (name === 'Secretary')
+            && !!toolbarRow && toolbarRow !== row && !toolbarRow.classList.contains('rental-bookings-head')
+            && FLEX_WIDTHS.every((w) => basis[w] === (w <= 640 ? '100%' : null) && flex[w] === null
+              && (w > 640 || wrap[w] === 'wrap')),
+          said({ row: row?.className ?? null, toolbar: toolbarRow?.className ?? null, basis, flex, wrap }));
+        await p.unmount();
+      }
+
       if (previousScroll === undefined) delete proto.scrollIntoView;
       else proto.scrollIntoView = previousScroll;
     }
