@@ -23,6 +23,11 @@
 // the name in the Booked for column, the @account under it, and the item.
 // The row reads the name and the account from here too, so the two cannot
 // disagree.
+//
+// ORDER (15 Oct 2026). The page keeps the list in one order (orderBookings),
+// before the search, the tabs and the pager: the route's, newest start first,
+// with bookings that start together settled by booking number, so the pager
+// never shows a row twice or leaves one out between loads.
 import { displayStatus } from "../constants/rentals";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
 
@@ -94,6 +99,25 @@ export function emptyText(tab) {
 // Barangay on Upcoming, even while it is empty.
 export function openingTab(canReturn) {
   return canReturn ? "overdue" : "upcoming";
+}
+
+// THE LIST'S ONE ORDER. The route sends the bookings newest start first
+// (start_datetime, descending) and orders by nothing else, so bookings that
+// start at the same moment (four on the live list) can come back in another
+// order on every load, and a page could then repeat a row the page before it
+// showed, or leave one out. This keeps the route's order and settles the
+// ties: among bookings that start together, the higher booking number
+// (request_id, the table's key) first. The times are compared, not the text,
+// so one moment written two ways is one start; a start that cannot be read
+// goes last. A new array: the list given is left as it is.
+export function orderBookings(bookings) {
+  const start = (booking) => {
+    const time = Date.parse(booking.start_datetime);
+    return Number.isNaN(time) ? -Infinity : time;
+  };
+  return [...bookings].sort(
+    (a, b) => start(b) - start(a) || b.request_id - a.request_id,
+  );
 }
 
 // A person's name as the list shows it: first, middle and last name, then

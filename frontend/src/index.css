@@ -3034,8 +3034,19 @@ button.pay-tab:hover:not(:disabled) {
   scroll-margin-top: 16px;
 }
 
+/* The Rental bookings list's heading (15 Oct 2026) has the same pager, so it
+   takes the same margins: 16px here, and 126px at 1045px and below, in the
+   block that follows, which already holds the Document requests one. */
+.rental-bookings-head h2 {
+  scroll-margin-top: 16px;
+}
+
 @media (max-width: 1045px) {
   .doc-requests-head h2 {
+    scroll-margin-top: 126px;
+  }
+
+  .rental-bookings-head h2 {
     scroll-margin-top: 126px;
   }
 }

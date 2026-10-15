@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
 import ResidentPicker from "../components/ResidentPicker";
@@ -13,6 +14,7 @@ import {
   rentalMeta,
 } from "../constants/rentals";
 import { searchTerms } from "../utils/chargeSearch";
+import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
   accountHandle,
   bookedForName,
@@ -22,6 +24,7 @@ import {
   matchingBookings,
   noMatchText,
   openingTab,
+  orderBookings,
   RENTAL_TABS,
   searchHeading,
   searchPlaceholder,
@@ -58,6 +61,19 @@ import {
 // reads "4 of 7 overdue bookings match". The search lives through every
 // reload and through Back from a panel, and is kept nowhere in the browser:
 // the barangay hall's PC is shared.
+//
+// PAGES (15 Oct 2026). The Document requests pager, as
+// components/ListPager.jsx, under the rows: "Showing 1 to 25 of 28 results",
+// Rows per page (10, 25, 50 or 100, 25 to start), then Previous, the page
+// numbers and Next. It pages the list already loaded, with no request, and
+// shows from 11 matches. Only the rows drawn are one page: the heading and
+// the tab counts still count every match, and the search runs over the whole
+// list. A tab, a search or a new Rows per page goes back to page 1; Rows per
+// page stays as chosen. Refresh, Try again, Back from a panel and the reload
+// after an action keep the page, and a list that shrank under it lands on its
+// last page. Like the search, neither is kept in the browser. The list is
+// kept in ONE order (orderBookings in utils/rentalList.js), the route's with
+// its ties settled, so a page never repeats a row or leaves one out.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -666,6 +682,11 @@ export default function RentalBookingsPage({
   // while the Edit, Mark returned or walk-in panel takes its place.
   const [query, setQuery] = useState("");
   const searchRef = useRef(null); // the search box, for Clear search
+  // The page of the chosen tab's matches, and how many rows a page holds.
+  // Like the search, both live through every reload and Back from a panel.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const headingRef = useRef(null); // the list's heading, for a page change
   // Numbers each load, so only the newest one may change the list.
   const loadSeq = useRef(0);
 
@@ -680,13 +701,17 @@ export default function RentalBookingsPage({
   // newer one. It asks for every booking, whatever tab is chosen: a tab only
   // splits what is loaded, so choosing one sends nothing. load depends on
   // authFetch alone; the tab in its dependencies would reload on every press.
+  // The list is kept in one order (orderBookings): the route's, newest start
+  // first, with the bookings that start together, which the route leaves in
+  // no fixed order, settled by booking number, so a page shows the same rows
+  // on every load.
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     setLoadError(null);
     setRequests(null);
     try {
       const data = await authFetch("/rental-requests?status=all");
-      if (seq === loadSeq.current) setRequests(data.requests);
+      if (seq === loadSeq.current) setRequests(orderBookings(data.requests));
     } catch (err) {
       if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
@@ -728,6 +753,13 @@ export default function RentalBookingsPage({
   const matching = requests === null ? [] : matchingBookings(requests, query);
   const counts = requests === null ? null : tabCounts(matching);
   const shown = matching.filter((r) => inTab(r, tab));
+  // One page of the tab's matches (utils/paging.js). Only the rows drawn are
+  // a page: the heading and the counts still count every match.
+  const paging = pageOf(shown.length, page, pageSize);
+  const rows = shown.slice(paging.start, paging.end);
+  // A reload that shrank the list lands on its last page, and stays there.
+  // Not while a list is loading: the page must survive the reload itself.
+  if (requests !== null && paging.page !== page) setPage(paging.page);
   // "4 of 7 overdue bookings match": how many of the tab's bookings match, of
   // how many it holds with no search.
   let heading = "Bookings";
@@ -741,11 +773,28 @@ export default function RentalBookingsPage({
       : tabHeading(tab, shown.length);
   }
 
+  // A new search, tab or Rows per page goes back to page 1, as on Document
+  // requests. Rows per page itself stays as chosen through the others.
+  function changeQuery(text) {
+    setQuery(text);
+    setPage(1);
+  }
+
+  function chooseTab(key) {
+    setTab(key);
+    setPage(1);
+  }
+
+  function changePageSize(size) {
+    setPageSize(PAGE_SIZES.includes(size) ? size : PAGE_SIZE);
+    setPage(1);
+  }
+
   // "Clear search", where nothing matches: the search only, and the tab stays.
   // Focus goes to the box, as the Clear (x) button's does: the button pressed
   // is gone once the rows are back.
   function clearSearch() {
-    setQuery("");
+    changeQuery("");
     searchRef.current?.focus();
   }
 
@@ -789,9 +838,13 @@ export default function RentalBookingsPage({
 
           {/* The heading is a polite live region, as on Document requests, so
               a screen reader hears "4 of 7 overdue bookings match" as the
-              search is typed. */}
-          <div className="list-head">
-            <h2 aria-live="polite">{heading}</h2>
+              search is typed. rental-bookings-head: a page change brings the
+              heading into view, and index.css keeps it clear of the sticky
+              header. */}
+          <div className="list-head rental-bookings-head">
+            <h2 ref={headingRef} aria-live="polite">
+              {heading}
+            </h2>
             <div className="head-actions">
               <button className="btn secondary" onClick={load}>
                 Refresh
@@ -825,7 +878,7 @@ export default function RentalBookingsPage({
                 label="Search bookings"
                 placeholder={searchPlaceholder(requests)}
                 value={query}
-                onChange={setQuery}
+                onChange={changeQuery}
                 inputRef={searchRef}
               />
               <ListTabs
@@ -833,7 +886,7 @@ export default function RentalBookingsPage({
                 tabs={RENTAL_TABS}
                 counts={counts}
                 active={tab}
-                onChoose={setTab}
+                onChoose={chooseTab}
               />
             </>
           )}
@@ -885,7 +938,7 @@ export default function RentalBookingsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((r) => {
+                  {rows.map((r) => {
                     const meta = rentalMeta(displayStatus(r));
                     const returnable = isReturnable(r.rental_items?.type);
                     return (
@@ -967,6 +1020,19 @@ export default function RentalBookingsPage({
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* The pager, under the rows, as on Document requests, from 11
+              matches (components/ListPager.jsx). Drawn only once the list has
+              loaded, never while it loads or beside a failed load, as the
+              search and the tabs are. */}
+          {requests !== null && (
+            <ListPager
+              paging={paging}
+              onPage={setPage}
+              onSize={changePageSize}
+              headingRef={headingRef}
+            />
           )}
         </>
       )}

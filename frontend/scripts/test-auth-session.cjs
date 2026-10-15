@@ -8585,7 +8585,11 @@ const root = () => dom.window.document.getElementById('root');
     // first as the server sends them, one or more for every derived status: a
     // past confirmed booking is Overdue (504 a guest's, 505 a resident's with
     // no online account) or Completed, and the returns carry who took them
-    // back and a note.
+    // back and a note. Each starts a day before the one above it (startOf), so
+    // the order sent is also the one order the page keeps since section AE's
+    // pager: newest start first, and the booking number only among bookings
+    // that start together. (They all started at one moment until then, which
+    // that order turns round.)
     const STAFF_BY = { user_id: 3, username: 'staff1', profiles: { first_name: 'Sam', last_name: 'Tabuena' } };
     const ITEMS = {
       sound: ['Sound System', 'equipment'], court: ['Covered Court', 'facility'], chairs: ['Plastic Chairs', 'furniture'],
@@ -8605,13 +8609,17 @@ const root = () => dom.window.document.getElementById('root');
       { id: 511, who: ['Jun', 'Abad'], item: 'hall', qty: 1, status: 'cancelled', derived: 'cancelled', noCharge: true },
     ];
     const RETURNED = ['returned', 'returned_late', 'returned_with_issue'];
+    // 501 starts at 9:00 AM on 20 Oct in Manila, 502 a day earlier, and so on;
+    // each ends four hours after it starts.
+    const startOf = (id) => new Date(Date.UTC(2026, 9, 20 - (id - 501), 1)).toISOString().replace('.000Z', '+00:00');
+    const endOf = (id) => new Date(Date.UTC(2026, 9, 20 - (id - 501), 5)).toISOString().replace('.000Z', '+00:00');
     const toBooking = (r) => {
       const [itemName, type] = ITEMS[r.item];
       const person = r.who && { resident_id: 800 + r.id, first_name: r.who[0], middle_name: null, last_name: r.who[1], suffix: null,
         account: r.noAccount ? null : { username: `res_${r.id}` } };
       return {
         request_id: r.id, quantity_requested: r.qty,
-        start_datetime: '2026-10-20T01:00:00+00:00', end_datetime: '2026-10-20T05:00:00+00:00',
+        start_datetime: startOf(r.id), end_datetime: endOf(r.id),
         purpose: `Purpose ${r.id}`, status: r.status, return_note: r.note ?? null,
         returned_at: RETURNED.includes(r.status) ? '2026-10-05T09:30:00+00:00' : null,
         resident_id: person ? person.resident_id : null,
@@ -8643,13 +8651,13 @@ const root = () => dom.window.document.getElementById('root');
     // is in the zone the bundle loaded in, as the page shows it:
     // constants/rentals.js builds its schedule formatters once, then, so the
     // TZ this section sets never reaches them ("Oct 20, 2026, 9:00 AM – 1:00
-    // PM" on a machine in Manila). The return time is formatDate's, which
-    // reads the zone on every call: UTC here.
+    // PM" for 501 on a machine in Manila). The return time is formatDate's,
+    // which reads the zone on every call: UTC here.
     const words = (s) => s.replace(/\s+/g, ' ');
     const day = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
     const hour = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
-    const START = new Date('2026-10-20T01:00:00+00:00');
-    const SCHEDULE = words(`${day.format(START)}, ${hour.format(START)} – ${hour.format(new Date('2026-10-20T05:00:00+00:00'))}`);
+    const scheduleOf = (id) => words(`${day.format(new Date(startOf(id)))}, ${hour.format(new Date(startOf(id)))} – `
+      + `${hour.format(new Date(endOf(id)))}`);
     const BY = 'by @staff1 on Oct 5, 2026, 9:30 AM';
     const STATUS_CELL = {
       501: 'Confirmed', 502: 'Confirmed', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
@@ -8662,7 +8670,7 @@ const root = () => dom.window.document.getElementById('root');
       Staff: (r) => (r.status === 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1]) ? 'Mark returned' : '(none)'),
       'Punong Barangay': null,
     };
-    const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], SCHEDULE, String(r.qty), `Purpose ${r.id}`,
+    const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], scheduleOf(r.id), String(r.qty), `Purpose ${r.id}`,
       STATUS_CELL[r.id], ...(ACTIONS[role] ? [ACTIONS[role](r)] : [])].join(' | '));
     // A cell's words: each element in it read whole (the badge, the note,
     // "by @staff1 on …"), a space between them; a cell of text alone, its text.
@@ -8876,7 +8884,8 @@ const root = () => dom.window.document.getElementById('root');
         v = look(page);
         check('  Secretary: and it is under Cancelled now, with its Cancelled badge and no actions',
           said(v.rows) === said(['Ana Cruz', 'Jun Abad'])
-            && rowsRead(page)[0] === ['Ana Cruz', '@res_501', 'Sound System', SCHEDULE, '1', 'Purpose 501', 'Cancelled', '(none)'].join(' | '),
+            && rowsRead(page)[0] === ['Ana Cruz', '@res_501', 'Sound System', scheduleOf(501), '1', 'Purpose 501', 'Cancelled',
+              '(none)'].join(' | '),
           said({ v, row: rowsRead(page)[0] }));
 
         // Edit: Back without saving loads nothing; saving loads the list
@@ -8938,8 +8947,8 @@ const root = () => dom.window.document.getElementById('root');
         v = look(page);
         check('  Staff: and it is under Returned now, with its Returned badge and no Mark returned',
           said(v.rows) === said(['Carla Santos', 'Gil Wong', 'Hana Yap', 'Ivy Zamora'])
-            && rowsRead(page)[0] === ['Carla Santos', '@res_503', 'Plastic Chairs', SCHEDULE, '20', 'Purpose 503', `Returned ${BY}`,
-              '(none)'].join(' | '),
+            && rowsRead(page)[0] === ['Carla Santos', '@res_503', 'Plastic Chairs', scheduleOf(503), '20', 'Purpose 503',
+              `Returned ${BY}`, '(none)'].join(' | '),
           said({ v, row: rowsRead(page)[0] }));
       }
 
@@ -9731,6 +9740,700 @@ const root = () => dom.window.document.getElementById('root');
     check('section AE\'s search sent GETs, and two POSTs, the Secretary\'s cancel and Staff\'s return, answered by the fetch stub',
       methodsSent.length > 0 && said(writesAE) === said(['POST', 'POST']),
       `${methodsSent.length} request(s): ${said(writesAE)}`);
+
+    // =======================================================================
+    // AE (continued). Rental bookings: the pager, and one order
+    // =======================================================================
+    // The list drew every booking of a tab on one page: all 28 on All. It
+    // gains the pager section Y checks on Document requests,
+    // components/ListPager.jsx and utils/paging.js as they are: a nav named
+    // "Pagination" under the rows, from 11 matches, "Showing 1 to 25 of 28
+    // results", Rows per page 10, 25, 50 or 100 (25 to start), then Previous,
+    // the page numbers and Next. It pages the list already loaded, with no
+    // request, and only the rows drawn are one page: the heading and the tab
+    // counts still count every match, and the search still runs over the
+    // whole list. A tab, a search or a new Rows per page goes back to page 1,
+    // and Rows per page stays as chosen until a new visit. Refresh, Try again,
+    // Back from a panel and the reload after an action keep the page; a tab
+    // that shrank under it lands on its last page, never an empty one past the
+    // end, and stays there. The route orders the bookings by their start
+    // alone, so bookings that start together can come back in another order on
+    // every load, and a page could repeat a row or leave one out. The page
+    // keeps ONE order (orderBookings in utils/rentalList.js): newest start
+    // first and, among bookings that start together, the higher booking number
+    // first. It is checked case by case, then on the page against the 28
+    // bookings with 10 to 13 sent in a new order on every load, and a second
+    // list, 26 overdue and 4 completed, whose Overdue tab has two pages. Then
+    // the heading's scroll margin, read from index.css. Every request is
+    // answered by the fetch stub; the only writes, the Secretary's cancels and
+    // Staff's returns, go to it too.
+    console.log('\n--- Rental bookings: the pager, and one order ---');
+    {
+      const fs = require('fs');
+      const ids = (list) => (Array.isArray(list) ? list.map((b) => b.request_id) : list);
+      const ordered = (list) => attempt(() => ids(L.orderBookings(list)));
+      const TIES = [10, 11, 12, 13];
+      // A shuffle that is the same on every run, so a failure is too.
+      const seededShuffle = (list, seed) => {
+        const out = [...list];
+        let s = seed;
+        for (let i = out.length - 1; i > 0; i -= 1) {
+          s = (s * 1103515245 + 12345) % 2147483648;
+          const j = s % (i + 1);
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+      };
+      // The 28 with the four that start together (10 to 13) put back in
+      // their place in the order given.
+      const withTies = (list, order) => {
+        const at = list.findIndex((b) => TIES.includes(b.request_id));
+        const rest = list.filter((b) => !TIES.includes(b.request_id));
+        const group = order.map((id) => list.find((b) => b.request_id === id)).filter(Boolean);
+        return [...rest.slice(0, at), ...group, ...rest.slice(at)];
+      };
+
+      // a. orderBookings on its own.
+      const SHUFFLES = {
+        reversed: [...LIST_AE].reverse(),
+        rotated: [...LIST_AE.slice(11), ...LIST_AE.slice(0, 11)],
+        interleaved: [...LIST_AE.filter((_, i) => i % 2 === 0), ...LIST_AE.filter((_, i) => i % 2 === 1)],
+        tiesAscending: withTies(LIST_AE, [10, 11, 12, 13]),
+        seeded: seededShuffle(LIST_AE, 7),
+      };
+      const fromShuffles = Object.fromEntries(Object.entries(SHUFFLES).map(([k, list]) => [k, ordered(list)]));
+      check('orderBookings: the 28 sent in five other orders (reversed, rotated, interleaved, 10 to 13 in ascending order, a '
+          + 'seeded shuffle) come back in one order, the order sent: newest start first, and 13, 12, 11, 10 for the four that '
+          + 'start at 8:00 AM on 26 Sep',
+        Object.values(fromShuffles).every((got) => said(got) === said(SENT)), said(fromShuffles));
+      const given = SHUFFLES.seeded;
+      const before = ids(given);
+      ordered(given);
+      check('  it never changes the list it is given', said(ids(given)) === said(before) && given.length === 28, said(ids(given)));
+      const at = (id, start) => ({ request_id: id, start_datetime: start });
+      let got = ordered([at(5, '2026-09-26T00:00:00+00:00'), at(1, '2026-09-27T00:00:00+00:00'),
+        at(7, '2026-09-26T08:00:00+08:00'), at(6, '2026-09-26T00:00:00.000Z')]);
+      check('  one moment written three ways is one start: 26 Sep 8:00 AM in Manila as "+00:00", "+08:00" and "Z" sorts by '
+          + 'number, 7, 6, 5, after the later start, 1',
+        said(got) === said([1, 7, 6, 5]), said(got));
+      got = ordered([at(8, 'not a date'), at(2, '2026-09-26T00:00:00+00:00'), at(9, null), at(3, '2026-09-25T00:00:00+00:00')]);
+      check('  a start that cannot be read goes after every other, and those by number: 2, 3, then 9, 8; an empty list stays '
+          + 'empty',
+        said(got) === said([2, 3, 9, 8]) && said(ordered([])) === said([]), said(got));
+
+      // b. The real page, for the three roles. The stub sends the four that
+      // start together in a new order on every load, none of them the page's.
+      const TIE_ORDERS = [[10, 11, 12, 13], [12, 10, 13, 11], [11, 13, 10, 12], [13, 11, 12, 10]];
+      const makePagerState = (list, arrange = (l) => l) => ({ list: list.map((b) => ({ ...b })), loads: 0, arrange });
+      const tiesShuffled = (list, n) => withTies(list, TIE_ORDERS[n % TIE_ORDERS.length]);
+      const listAnswerP = (state) => {
+        const n = state.loads;
+        state.loads += 1;
+        return { requests: state.arrange(state.list, n).map((b) => ({ ...b })) };
+      };
+      const answerForP = (state) => (url, method) => {
+        if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerP(state);
+        const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+        if (method === 'POST' && act) {
+          const b = state.list.find((x) => x.request_id === Number(act[1]));
+          if (!b) return undefined;
+          b.status = act[2] === 'cancel' ? 'cancelled' : 'returned';
+          b.derived_status = b.status;
+          return { message: act[2] === 'cancel' ? `Booking #${b.request_id} cancelled.`
+            : `Return recorded for booking #${b.request_id}.` };
+        }
+        if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+        return undefined;
+      };
+      // Thirty more, each its own resident, "Borrower 01" to "Borrower 30", a
+      // day apart, newest first: 1 to 26 overdue Plastic Chairs, 27 to 30
+      // completed Barangay Hall bookings. More overdue ones (31 on) start
+      // earlier still.
+      const manyBooking = (n) => {
+        const tag = String(n).padStart(2, '0');
+        const chairs = n <= 26 || n > 30;
+        const start = new Date(Date.UTC(2026, 9, 12 - n));
+        const iso = (d) => d.toISOString().replace('.000Z', '+00:00');
+        return {
+          request_id: 2000 + n, quantity_requested: 1, start_datetime: iso(start),
+          end_datetime: iso(new Date(start.getTime() + 9 * 3600e3)),
+          purpose: `Purpose ${tag}`, status: 'confirmed', return_note: null, returned_at: null,
+          resident_id: 3000 + n, outside_borrower_name: null, outside_borrower_contact: null,
+          rental_items: chairs
+            ? { item_id: 4, name: 'Plastic Chairs', type: 'furniture', fee: '5.00', quantity_total: 100, quantity_available: 100 }
+            : { item_id: 2, name: 'Barangay Hall', type: 'facility', fee: '500.00', quantity_total: 1, quantity_available: 1 },
+          resident_records: { resident_id: 3000 + n, first_name: 'Borrower', middle_name: null, last_name: tag, suffix: null,
+            account: { username: `borrower_${tag}` } },
+          requester: { user_id: 4000 + n, username: `borrower_${tag}`, email: `borrower_${tag}@example.invalid`,
+            profiles: { first_name: 'Borrower', middle_name: null, last_name: tag, suffix: null } },
+          returned_by: null,
+          charges: { charge_id: 5000 + n, amount: '5.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+            declared_at: null },
+          derived_status: chairs ? 'overdue' : 'completed',
+        };
+      };
+      const MANY = Array.from({ length: 30 }, (_, i) => manyBooking(i + 1));
+      const manyKeys = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => {
+        const n = from + i;
+        return `Borrower ${String(n).padStart(2, '0')} · ${n <= 26 || n > 30 ? 'Plastic Chairs' : 'Barangay Hall'}`;
+      });
+      const pagerOf = (page) => page.query('nav.pay-pager');
+      const sizeSelect = (page) => page.query('.pay-pager select');
+      const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+      const stepButton = (page, label) => (pagerOf(page) ? buttonNamed(pagerOf(page), label) ?? null : null);
+      const listHeading = (page) => page.query('.rental-bookings-head h2');
+      // What the list and its pager say, read the way a person would.
+      const lookP = (page) => ({
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: rowsOf(page),
+        pager: !!pagerOf(page),
+        showing: text(page.query('.pay-pager-count')),
+        bold: page.queryAll('.pay-pager-count strong').map(text),
+        numbers: page.queryAll('.pay-pager-numbers li').map(text).join(' '),
+        current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+        short: text(page.query('.pay-pager-short')),
+        size: sizeSelect(page)?.value ?? null,
+        search: box(page)?.value ?? null,
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+        loading: root().textContent.includes('Loading bookings…'),
+      });
+      // The pager is on page n of m, showing `from` to `to` of `of`: the count
+      // line, the one number marked aria-current="page" and the phone's "Page n
+      // of m" must all say so.
+      const onPage = (v, n, m, from, to, of) => v.showing === `Showing ${from} to ${to} of ${of} results`
+        && said(v.current) === said([String(n)]) && v.short === `Page ${n} of ${m}`;
+      const brief = (v) => ({ showing: v.showing, current: v.current, short: v.short, numbers: v.numbers, size: v.size,
+        rows: v.rows.length ? [v.rows.length, v.rows[0], v.rows.at(-1)] : [] });
+      // Focus first, as a press does in a browser: a dispatched click in jsdom
+      // moves no focus, and some checks are about where focus ends up.
+      const press = async (page, el) => {
+        if (!el) return;
+        el.focus();
+        await page.click(el);
+      };
+      const setRows = async (page, value) => {
+        const select = sizeSelect(page);
+        if (select) {
+          select.value = String(value);
+          select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+      };
+      const badgeOf = (page, key) => text(rowOf(page, key)?.querySelector('.badge'));
+      // jsdom has no scrollIntoView; this one records what asked to be shown.
+      const scrolled = [];
+      const proto = dom.window.HTMLElement.prototype;
+      const previousScroll = proto.scrollIntoView;
+      proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+      const sentP = [];
+
+      for (const { name, route, token, user, opening } of ROLES_AE) {
+        let state = makePagerState(LIST_AE, tiesShuffled);
+        seedSession(token, user);
+        resetNet(200, answerForP(state));
+        let page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        const writesAtOpen = store.sets;
+        const domWritesAtOpen = domStorage.writes;
+        let v = lookP(page);
+        const openCount = TAB_IDS[opening].length;
+        check(`${name}: it opens on ${opening}, whose ${openCount} bookings fit one page, and at 10 matches or fewer there is `
+            + 'no pager: no Pagination nav, no Rows per page, no Previous or Next',
+          said(v.pressed) === said([`${opening} ${openCount}`]) && v.rows.length === openCount && !v.pager && v.size === null
+            && !buttonNamed(root(), 'Previous') && !buttonNamed(root(), 'Next'),
+          said({ pressed: v.pressed, rows: v.rows.length, pager: v.pager, size: v.size }));
+
+        // All: 28 bookings, two pages of 25. From here to the search for
+        // "elena hall" nothing may send a request.
+        const sentBeforePaging = net.calls.length;
+        await clickIf(page, tabNamed(page, 'Completed'));
+        const completed = lookP(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`${name}: Completed's eight fit one page, with no pager; All, 28 bookings at 25 a page: "Showing 1 to 25 of 28 `
+            + 'results", pages "1 2" with 1 the current one, "Page 1 of 2" for a phone, and only the first 25 rows, in the '
+            + 'one order, under "28 bookings"',
+          !completed.pager && completed.rows.length === 8 && v.heading === '28 bookings' && onPage(v, 1, 2, 1, 25, 28)
+            && v.numbers === '1 2' && said(v.rows) === said(keysOf(SENT.slice(0, 25))),
+          said({ completed: { pager: completed.pager, rows: completed.rows.length }, heading: v.heading, ...brief(v) }));
+        const nav = pagerOf(page);
+        const countLine = page.query('.pay-pager-count');
+        check(`${name}: the pager is a nav named "Pagination" right under the rows' table, as on Document requests; its count `
+            + 'line is a polite live region with its three figures in bold: "1", "25", "28"',
+          nav?.getAttribute('aria-label') === 'Pagination' && !!nav.previousElementSibling?.classList.contains('table-wrap')
+            && countLine?.getAttribute('aria-live') === 'polite' && said(v.bold) === said(['1', '25', '28']),
+          said({ label: nav?.getAttribute('aria-label') ?? null, after: nav?.previousElementSibling?.className ?? null,
+            live: countLine?.getAttribute('aria-live') ?? null, bold: v.bold }));
+        const select = sizeSelect(page);
+        const sizeLabel = nav?.querySelector('label') ?? null;
+        const options = select ? [...select.options].map((o) => o.textContent) : null;
+        check(`${name}: Rows per page is a select labelled "Rows per page", offering 10, 25, 50 and 100, with 25 chosen`,
+          !!select && sizeLabel?.textContent === 'Rows per page' && !!select.id && sizeLabel.htmlFor === select.id
+            && said(options) === said(['10', '25', '50', '100']) && select.value === '25',
+          said({ label: sizeLabel?.textContent ?? null, options, value: select?.value ?? null }));
+        const previous = stepButton(page, 'Previous');
+        const next = stepButton(page, 'Next');
+        check(`${name}: on page 1, Previous is aria-disabled, never disabled, and Next is available`,
+          previous?.getAttribute('aria-disabled') === 'true' && !previous.disabled
+            && next?.getAttribute('aria-disabled') !== 'true' && !next?.disabled,
+          said({ previous: previous?.getAttribute('aria-disabled') ?? null, next: next?.getAttribute('aria-disabled') ?? null }));
+
+        scrolled.length = 0;
+        await press(page, next);
+        v = lookP(page);
+        check(`${name}: Next: page 2 shows the last three, Liza Bantilan's Covered Court, Maria Elena Villamor Santos's Barangay `
+            + 'Hall and Teresita Lim Ocampo\'s Folding Tables, "Showing 26 to 28 of 28 results"; the list heading is brought '
+            + 'into view (block "nearest"), and focus stays on Next',
+          onPage(v, 2, 2, 26, 28, 28) && said(v.rows) === said(keysOf([26, 27, 28])) && scrolled.length === 1
+            && !!listHeading(page) && scrolled[0].el === listHeading(page) && scrolled[0].options?.block === 'nearest'
+            && !!next && page.active() === next,
+          said({ ...brief(v), scrolls: scrolled.length, onto: scrolled[0]?.el?.className ?? scrolled[0]?.el?.tagName ?? null,
+            heading: !!listHeading(page), focus: page.active()?.textContent ?? null }));
+        const nextAtEnd = stepButton(page, 'Next');
+        scrolled.length = 0;
+        await press(page, nextAtEnd);
+        v = lookP(page);
+        check(`  ${name}: on the last page Next is aria-disabled, never disabled; pressing it does nothing: no scroll, still page `
+            + '2, and focus stays on it',
+          nextAtEnd?.getAttribute('aria-disabled') === 'true' && !nextAtEnd.disabled && onPage(v, 2, 2, 26, 28, 28)
+            && scrolled.length === 0 && page.active() === nextAtEnd,
+          said({ ...brief(v), scrolls: scrolled.length, next: nextAtEnd?.getAttribute('aria-disabled') ?? null }));
+        scrolled.length = 0;
+        await press(page, numberButton(page, 2));
+        check(`  ${name}: nor does pressing the current page: no scroll, still page 2`,
+          onPage(lookP(page), 2, 2, 26, 28, 28) && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+        const perPage = [];
+        for (const n of [1, 2]) {
+          await press(page, numberButton(page, n));
+          const x = lookP(page);
+          perPage.push({ page: x.current, heading: x.heading, strip: x.strip, rows: x.rows.length });
+        }
+        check(`${name}: the heading and the tab counts are the whole list's on every page: "28 bookings" and "${STRIP28}" on `
+            + 'pages 1 and 2, which draw 25 and 3 rows',
+          perPage.every((p) => p.heading === '28 bookings' && p.strip === STRIP28)
+            && said(perPage.map((p) => [p.page, p.rows])) === said([[['1'], 25], [['2'], 3]]),
+          said(perPage));
+        await press(page, numberButton(page, 1));
+        const previousAtStart = stepButton(page, 'Previous');
+        scrolled.length = 0;
+        await press(page, previousAtStart);
+        v = lookP(page);
+        check(`${name}: on page 1 pressing the unavailable Previous does nothing: no scroll, still page 1, focus stays on it`,
+          onPage(v, 1, 2, 1, 25, 28) && scrolled.length === 0 && !!previousAtStart && page.active() === previousAtStart,
+          said({ ...brief(v), scrolls: scrolled.length }));
+
+        // Rows per page.
+        await press(page, numberButton(page, 2));
+        scrolled.length = 0;
+        await setRows(page, 10);
+        v = lookP(page);
+        check(`${name}: Rows per page 10, from page 2: back to page 1, its first ten rows, "Showing 1 to 10 of 28 results", `
+            + 'pages "1 2 3", and the list heading brought into view, as for a page change',
+          v.size === '10' && onPage(v, 1, 3, 1, 10, 28) && v.numbers === '1 2 3' && said(v.rows) === said(keysOf(SENT.slice(0, 10)))
+            && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+          said({ ...brief(v), scrolls: scrolled.length }));
+        const tens = [];
+        for (const n of [1, 2, 3]) {
+          await press(page, numberButton(page, n));
+          const x = lookP(page);
+          tens.push({ ok: onPage(x, n, 3, (n - 1) * 10 + 1, Math.min(n * 10, 28), 28)
+            && said(x.rows) === said(keysOf(SENT.slice((n - 1) * 10, n * 10))) && x.heading === '28 bookings' && x.strip === STRIP28,
+          ...brief(x) });
+        }
+        check(`${name}: at 10 a page, pages 1, 2 and 3 hold rows 1 to 10, 11 to 20 and 21 to 28, "Showing 21 to 28 of 28 `
+            + 'results" on the last, under "28 bookings" and the same counts on all three',
+          tens.every((t) => t.ok), said(tens));
+        await setRows(page, 50);
+        const at50 = lookP(page);
+        await setRows(page, 100);
+        const at100 = lookP(page);
+        check(`${name}: Rows per page 50, and 100: all 28 on one page, "Showing 1 to 28 of 28 results", a single "1", Previous `
+            + 'and Next both unavailable',
+          at50.size === '50' && onPage(at50, 1, 1, 1, 28, 28) && at50.numbers === '1' && at50.rows.length === 28
+            && at100.size === '100' && onPage(at100, 1, 1, 1, 28, 28) && at100.rows.length === 28
+            && stepButton(page, 'Previous')?.getAttribute('aria-disabled') === 'true'
+            && stepButton(page, 'Next')?.getAttribute('aria-disabled') === 'true',
+          said({ at50: brief(at50), at100: brief(at100) }));
+
+        // A search and a new Rows per page go back to page 1, and Rows per
+        // page stays through a search. "a" is in every booking's text, so all
+        // 28 still match and page 3 still exists: only the reset can move it.
+        await setRows(page, 10);
+        await press(page, numberButton(page, 3));
+        const third = lookP(page);
+        await type(page, 'a');
+        const searched = lookP(page);
+        check(`${name}: a search goes back to page 1 and keeps Rows per page: page 3 at 10 a page, then "a", which all 28 `
+            + 'match: "Showing 1 to 10 of 28 results" under "28 of 28 bookings match"',
+          onPage(third, 3, 3, 21, 28, 28) && searched.size === '10' && onPage(searched, 1, 3, 1, 10, 28)
+            && searched.heading === '28 of 28 bookings match' && said(searched.rows) === said(keysOf(SENT.slice(0, 10))),
+          said({ before: brief(third), after: brief(searched), heading: searched.heading }));
+        await press(page, numberButton(page, 2));
+        await clickIf(page, page.query('button[aria-label="Clear search"]'));
+        v = lookP(page);
+        check(`  ${name}: the Clear (x) button is a search change too: from page 2 back to page 1, still at 10 a page`,
+          v.search === '' && v.size === '10' && onPage(v, 1, 3, 1, 10, 28), said(brief(v)));
+        await press(page, numberButton(page, 2));
+        const second10 = lookP(page);
+        await setRows(page, 25);
+        v = lookP(page);
+        check(`${name}: a new Rows per page goes back to page 1: page 2 at 10, then 25, "Showing 1 to 25 of 28 results", `
+            + 'though a page 2 exists at 25 too',
+          onPage(second10, 2, 3, 11, 20, 28) && v.size === '25' && onPage(v, 1, 2, 1, 25, 28), said({ before: brief(second10),
+            after: brief(v) }));
+
+        // The search runs over the whole list before paging.
+        const allFirst = lookP(page);
+        await type(page, 'elena hall');
+        v = lookP(page);
+        check(`${name}: the search runs over the whole list, not the page shown: Maria Elena Villamor Santos's Barangay Hall `
+            + 'booking is on page 2, not among page 1\'s rows, and "elena hall" finds it: one match, "1 of 28 bookings matches", '
+            + 'and no pager',
+          onPage(allFirst, 1, 2, 1, 25, 28) && !allFirst.rows.includes(rowKey(27)) && said(v.rows) === said(keysOf([27]))
+            && v.heading === '1 of 28 bookings matches' && !v.pager,
+          said({ first: brief(allFirst), searched: { rows: v.rows, heading: v.heading, pager: v.pager } }));
+        await type(page, '');
+        check(`${name}: none of those page, Rows per page, tab and search changes sent a request`,
+          !!pagerOf(page) && net.calls.length === sentBeforePaging,
+          `${net.calls.length - sentBeforePaging} request(s): ${said(listCalls(net.calls.slice(sentBeforePaging)))}`);
+
+        // One order, whatever order the four that start together arrive in.
+        await setRows(page, 10);
+        const pagesNow = async () => {
+          const out = [];
+          for (const n of [1, 2, 3]) {
+            await press(page, numberButton(page, n));
+            out.push(lookP(page).rows);
+          }
+          return out;
+        };
+        const firstLoad = await pagesNow();
+        const loadsBefore = state.loads;
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const secondLoad = await pagesNow();
+        const all28 = secondLoad.flat();
+        check(`${name}: bookings that start together keep one order on every load: at 10 a page, page 1 ends with 13 and page 2 `
+            + 'starts 12, 11, 10, before and after a Refresh that sent the four in another order; the three pages hold all 28 '
+            + 'once each',
+          said(firstLoad) === said([keysOf(SENT.slice(0, 10)), keysOf(SENT.slice(10, 20)), keysOf(SENT.slice(20))])
+            && said(secondLoad) === said(firstLoad) && state.loads === loadsBefore + 1
+            && all28.length === 28 && new Set(all28).size === 28,
+          said({ firstLoad: firstLoad.map((p) => [p[0], p.at(-1)]), secondLoad: secondLoad.map((p) => [p[0], p.at(-1)]),
+            loads: state.loads - loadsBefore, distinct: new Set(all28).size }));
+        await setRows(page, 25);
+
+        // Refresh, a reload that fails, Try again, and Back from a panel.
+        await press(page, numberButton(page, 2));
+        let held = holdNext();
+        let sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const reloading = { pager: !!pagerOf(page), loading: lookP(page).loading };
+        release(held, 200, listAnswerP(state));
+        await page.settle();
+        net.hold = false;
+        v = lookP(page);
+        check(`${name}: Refresh loads the list again, once, with no pager while it is out, and keeps the page: page 2, `
+            + '"Showing 26 to 28 of 28 results", the same three rows',
+          net.calls.length === sent + 1 && !reloading.pager && reloading.loading && onPage(v, 2, 2, 26, 28, 28)
+            && said(v.rows) === said(keysOf([26, 27, 28])),
+          said({ requests: net.calls.length - sent, reloading, after: brief(v) }));
+        held = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(held, 500, { error: 'Internal server error' });
+        await page.settle();
+        const failed = lookP(page);
+        held = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(held, 200, listAnswerP(state));
+        await page.settle();
+        net.hold = false;
+        v = lookP(page);
+        check(`${name}: a reload that fails shows no pager beside the error, and Try again brings it back on the same page: page 2`,
+          !failed.pager && failed.error === 'Could not load the bookings: Internal server error' && failed.rows.length === 0
+            && onPage(v, 2, 2, 26, 28, 28), said({ failed: { pager: failed.pager, error: failed.error }, after: brief(v) }));
+        if (name === 'Secretary') {
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(27), 'Edit'));
+          const opened = text(page.query('.pending-card h3'));
+          await clickIf(page, buttonNamed(root(), '← Back to list'));
+          v = lookP(page);
+          check('Secretary: Back from Edit on page 2, with nothing saved, keeps the page; nothing was requested',
+            opened === 'Edit booking #27' && onPage(v, 2, 2, 26, 28, 28) && said(listCalls(net.calls.slice(sent))) === said([]),
+            said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+          // The reload after an action keeps the page where it still exists.
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(27), 'Cancel'));
+          await page.settle();
+          v = lookP(page);
+          check('Secretary: Cancel on page 2 posts the cancel, loads the list again, once, and keeps the page, which still '
+              + 'exists on All: page 2, with 27 now Cancelled',
+            said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/27/cancel', 'GET /rental-requests?status=all'])
+              && onPage(v, 2, 2, 26, 28, 28) && said(v.rows) === said(keysOf([26, 27, 28])) && badgeOf(page, rowKey(27)) === 'Cancelled',
+            said({ calls: listCalls(net.calls.slice(sent)), after: brief(v), badge: badgeOf(page, rowKey(27)) }));
+        }
+        if (name === 'Staff') {
+          await setRows(page, 10);
+          await press(page, numberButton(page, 2));
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(16), 'Mark returned'));
+          const opened = text(page.query('.pending-card h3'));
+          await clickIf(page, buttonNamed(root(), '← Back to list'));
+          v = lookP(page);
+          check('Staff: Back from Mark returned on page 2 (10 a page), with nothing recorded, keeps the page; nothing was requested',
+            opened === 'Mark returned — booking #16' && onPage(v, 2, 3, 11, 20, 28)
+              && said(listCalls(net.calls.slice(sent))) === said([]),
+            said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(16), 'Mark returned'));
+          if (page.query('.pending-card form')) await page.submit();
+          await page.settle();
+          v = lookP(page);
+          check('Staff: Record return on page 2 posts the return, loads the list again, once, and keeps the page, which still '
+              + 'exists on All: page 2 at 10, with 16 now Returned',
+            said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/16/return', 'GET /rental-requests?status=all'])
+              && onPage(v, 2, 3, 11, 20, 28) && said(v.rows) === said(keysOf(SENT.slice(10, 20)))
+              && badgeOf(page, rowKey(16)) === 'Returned',
+            said({ calls: listCalls(net.calls.slice(sent)), after: brief(v), badge: badgeOf(page, rowKey(16)) }));
+        }
+
+        // Nothing kept in the browser; a new visit starts at 25 a page, page 1.
+        // The second mount does not reseed the session, which would clear storage.
+        const writesAfter = store.sets;
+        const domWritesAfter = domStorage.writes;
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+        resetNet(200, answerForP(makePagerState(LIST_AE, tiesShuffled)));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`${name}: nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through `
+            + 'window or not, sessionStorage empty, no cookie; and a new visit starts again at 25 a page, on page 1',
+          writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+            && dom.window.document.cookie === '' && v.size === '25' && onPage(v, 1, 2, 1, 25, 28),
+          said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+            session: dom.window.sessionStorage.length, after: brief(v) }));
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+
+        // A tab with two pages: 26 overdue and 4 completed.
+        state = makePagerState(MANY);
+        resetNet(200, answerForP(state));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        await press(page, numberButton(page, 2));
+        const allSecond = lookP(page);
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        v = lookP(page);
+        check(`${name}: a tab change goes back to page 1, even where the new tab has a page 2: page 2 of All's 30, then `
+            + 'Overdue, whose 26 open on page 1, "Showing 1 to 25 of 26 results"',
+          onPage(allSecond, 2, 2, 26, 30, 30) && onPage(v, 1, 2, 1, 25, 26) && said(v.rows) === said(manyKeys(1, 25)),
+          said({ before: brief(allSecond), after: brief(v) }));
+        await setRows(page, 10);
+        await press(page, numberButton(page, 3));
+        const overdueThird = lookP(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`  ${name}: and Rows per page stays through it: page 3 of Overdue at 10 a page, then All, "Showing 1 to 10 of 30 `
+            + 'results"',
+          onPage(overdueThird, 3, 3, 21, 26, 26) && v.size === '10' && onPage(v, 1, 3, 1, 10, 30)
+            && said(v.rows) === said(manyKeys(1, 10)),
+          said({ before: brief(overdueThird), after: brief(v) }));
+        if (name !== 'Punong Barangay') {
+          // The reload after an action lands on the last page when the one it
+          // was on is gone, never on an empty page past the end.
+          await setRows(page, 25);
+          await clickIf(page, tabNamed(page, 'Overdue'));
+          await press(page, numberButton(page, 2));
+          const lone = lookP(page);
+          sent = net.calls.length;
+          const label = name === 'Secretary' ? 'Cancel' : 'Mark returned';
+          await clickIf(page, rowButton(page, manyKeys(26, 26)[0], label));
+          if (name === 'Staff' && page.query('.pending-card form')) await page.submit();
+          await page.settle();
+          v = lookP(page);
+          const action = name === 'Secretary' ? 'cancel' : 'return';
+          check(`${name}: when an action empties the last page, the reload lands on the page before, now the last: Overdue's `
+              + `page 2 held Borrower 26 alone; ${action === 'cancel' ? 'cancelled' : 'marked returned'}, the list reloads and `
+              + 'shows page 1, "Showing 1 to 25 of 25 results", never an empty page 2',
+            onPage(lone, 2, 2, 26, 26, 26) && said(lone.rows) === said(manyKeys(26, 26))
+              && said(listCalls(net.calls.slice(sent))) === said([`POST /rental-requests/2026/${action}`,
+                'GET /rental-requests?status=all'])
+              && onPage(v, 1, 1, 1, 25, 25) && v.rows.length === 25 && v.heading === '25 overdue bookings',
+            said({ lone: brief(lone), calls: listCalls(net.calls.slice(sent)), after: brief(v) }));
+        }
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+
+        // A Refresh that shrinks the tab under the page, then one that grows it.
+        state = makePagerState(MANY);
+        resetNet(200, answerForP(state));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        await press(page, numberButton(page, 2));
+        const second = lookP(page);
+        for (const b of state.list.filter((x) => [2024, 2025].includes(x.request_id))) {
+          b.status = 'returned';
+          b.derived_status = 'returned';
+        }
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const shrunk = lookP(page);
+        state.list.push(...[31, 32, 33].map(manyBooking));
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const grown = lookP(page);
+        check(`${name}: a Refresh that shrinks the tab under the page lands on its last page, never an empty one past the end, `
+            + 'and stays there when the tab grows again: on page 2 of Overdue\'s 26, another session records two returns, and '
+            + 'Refresh shows page 1, "Showing 1 to 24 of 24 results"; then three more bookings are overdue, and Refresh still '
+            + 'shows page 1, "Showing 1 to 25 of 27 results"',
+          onPage(second, 2, 2, 26, 26, 26) && onPage(shrunk, 1, 1, 1, 24, 24) && shrunk.rows.length === 24
+            && onPage(grown, 1, 2, 1, 25, 27) && grown.rows.length === 25,
+          said({ second: brief(second), shrunk: brief(shrunk), grown: brief(grown) }));
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      const writesP = sentP.filter((m) => m !== 'GET');
+      check('section AE\'s pager sent GETs, and four POSTs, the Secretary\'s two cancels and Staff\'s two returns, all answered '
+          + 'by the fetch stub',
+        sentP.length > 0 && said(writesP) === said(['POST', 'POST', 'POST', 'POST']),
+        `${sentP.length} request(s): ${said(writesP)}`);
+
+      // c. The heading's scroll margin. A page change brings the heading into
+      // view (ListPager), and at 1045px and below the sticky header (109.6px
+      // at most) would cover it without one: 126px there, as the Payments and
+      // Document requests headings have, and 16px above. jsdom applies no width
+      // media query, so this reads index.css itself, comments stripped, nested
+      // rules resolved (section AA's reader), and tries each rule's selectors
+      // on the page's own heading.
+      const splitList = (s) => {
+        const out = [];
+        let depth = 0;
+        let cur = '';
+        for (const ch of s) {
+          if (ch === '(') depth += 1;
+          if (ch === ')') depth -= 1;
+          if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+        }
+        out.push(cur);
+        return out.map((x) => x.trim()).filter(Boolean);
+      };
+      const cssRead = (() => {
+        const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rules = [];
+        const open = [];
+        let from = 0;
+        const own = (block, decl) => {
+          const k = decl.indexOf(':');
+          if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+        };
+        const media = () => open.filter((b) => b.at).map((b) => b.at);
+        const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+        for (let i = 0; i < src.length; i += 1) {
+          const ch = src[i];
+          if (ch === '{') {
+            const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+            const parent = inRule();
+            if (head.startsWith('@')) {
+              const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+              open.push(block);
+              if (parent) rules.push({ ...block, media: media() });
+            } else {
+              const mine = splitList(head);
+              const selectors = parent
+                ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+                : mine;
+              const block = { selectors, decls: {} };
+              open.push(block);
+              rules.push({ ...block, media: media() });
+            }
+            from = i + 1;
+          } else if (ch === '}') {
+            const block = open.pop();
+            const rest = src.slice(from, i).trim();
+            if (block?.selectors && rest) own(block, rest);
+            from = i + 1;
+          } else if (ch === ';') {
+            const block = open.at(-1);
+            if (block?.selectors) own(block, src.slice(from, i).trim());
+            from = i + 1;
+          }
+        }
+        rules.forEach((r, i) => { r.order = i; });
+        return { rules, balanced: open.length === 0 };
+      })();
+      const appliesAt = (media, width) => media.every((atRule) => {
+        if (!atRule.startsWith('@media')) return !/^@(keyframes|font-face)/.test(atRule);
+        return atRule.slice(6).split(',').some((query) => {
+          if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+          const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          return max.every((x) => width <= x) && min.every((x) => width >= x);
+        });
+      });
+      const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+      const specificity = (selector) => {
+        let a = 0;
+        let b = 0;
+        let c = 0;
+        let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+        s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+          const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+          a += best[0];
+          b += best[1];
+          c += best[2];
+          return ' ';
+        });
+        s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+        s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+        a += (s.match(/#[\w-]+/g) || []).length;
+        b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+        c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+        return [a, b, c];
+      };
+      const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+      // The value of `prop` a browser `width` wide gives `el`, and the rule it
+      // comes from, or null when no rule sets it. Hover, focus and active
+      // rules are skipped: this reads the element at rest.
+      const winning = (width, el, prop) => {
+        let best = null;
+        for (const r of cssRead.rules) {
+          if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+            if (!tryMatch(el, sel)) continue;
+            const important = /!important$/.test(r.decls[prop]) ? 1 : 0;
+            const rank = [important, ...specificity(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, ''), selector: sel };
+            }
+          }
+        }
+        return best;
+      };
+      const valueAt = (width, el, prop) => (el ? winning(width, el, prop)?.value ?? null : 'no element');
+      seedSession(VALID);
+      resetNet(200, answerForP(makePagerState(LIST_AE)));
+      const cssPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await cssPage.settle();
+      const heading = listHeading(cssPage);
+      const MARGIN_WIDTHS = [320, 390, 640, 641, 768, 1045, 1046, 1280, 1920];
+      const margins = Object.fromEntries(MARGIN_WIDTHS.map((w) => [w, valueAt(w, heading, 'scroll-margin-top')]));
+      check('the list heading, the one a page change scrolls to, is the heading row\'s h2, .rental-bookings-head h2, and '
+          + 'index.css gives it a scroll margin of 126px at 1045px and below, under the sticky header, and 16px above, as on '
+          + 'Document requests',
+        cssRead.balanced && !!heading && heading === cssPage.query('.list-head h2')
+          && MARGIN_WIDTHS.every((w) => margins[w] === (w <= 1045 ? '126px' : '16px')),
+        said({ balanced: cssRead.balanced, heading: !!heading, margins }));
+      await cssPage.unmount();
+
+      if (previousScroll === undefined) delete proto.scrollIntoView;
+      else proto.scrollIntoView = previousScroll;
+    }
 
     Object.assign(storageProto, storageOwn);
     dom.window.confirm = previousConfirm;
