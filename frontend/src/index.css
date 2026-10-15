@@ -3206,6 +3206,19 @@ button.pay-tab:hover:not(:disabled) {
     display: block;
     white-space: nowrap;
   }
+
+  /* The returned-by note (15 Oct 2026), two spans: "Returned by @staff1
+     on", 133.9, over the date, at most "May 10, 2026, 12:00 AM", 135.3,
+     which never breaks. Both fit the Status column's 138px of text, so
+     every row breaks the note after "on". */
+  .rental-bookings-table .rental-bookings-return-by {
+    display: block;
+  }
+
+  .rental-bookings-table .rental-bookings-return-at {
+    display: block;
+    white-space: nowrap;
+  }
 }
 
 /* Below the sidebar, 641 to 1045px, Booked for is 16px narrower, so the
@@ -5027,6 +5040,31 @@ button.tab:hover:not(:disabled) {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: #94a3b8;
+  }
+
+  /* The Rental bookings returned-by note (15 Oct 2026) is the line after
+     the payment marker in the Status cell, so on a card it takes a label of
+     its own, "Return", printed from its own data-label as the number's and
+     the marker's are, and stands 8px under the marker, at their size: it
+     cannot read as part of the payment, and a return note follows it under
+     the same label. Where the line does not fit, at 320px, it breaks
+     before the date, which never breaks, never between a time and its PM. */
+  .data-table.stack-narrow .rental-bookings-return {
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .data-table.stack-narrow .rental-bookings-return[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+  }
+
+  .data-table.stack-narrow .rental-bookings-return-at {
+    white-space: nowrap;
   }
 
   /* The View panel on a phone fills the screen. Everything under the header

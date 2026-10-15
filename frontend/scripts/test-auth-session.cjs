@@ -183,8 +183,13 @@
 // spans in every row, the date over the times; none of it on a phone; and
 // the protected col-*, .row-actions, .num, .dash-main and .pending-card
 // rules, the Document requests ones and the heading row's as they were at
-// a52f978. It sits inside section AF's block, to use its bookings, its
-// helpers and its index.css reader.
+// a52f978. Then the returned-by note: "Returned by @staff1 on …" for each of
+// the three return outcomes, where it read "by @staff1 on …" under the
+// payment marker; the line after the marker, which stays under the badge,
+// and before a return note; two spans that break in one place above 640px;
+// on a phone card a label of its own, "Return"; never searched. It sits
+// inside section AF's block, to use its bookings, its helpers and its
+// index.css reader.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -8690,11 +8695,15 @@ const root = () => dom.window.document.getElementById('root');
     const hour = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
     const scheduleOf = (id) => words(`${day.format(new Date(startOf(id)))}, ${hour.format(new Date(startOf(id)))} – `
       + `${hour.format(new Date(endOf(id)))}`);
-    const BY = 'by @staff1 on Oct 5, 2026, 9:30 AM';
+    // Since section AG the returned-by note names the return ("Returned by
+    // @staff1 on …", where it read "by @staff1 on …" under the payment
+    // marker, as if staff1 had marked the payment) and comes before a return
+    // note, so a phone card's "Return" label heads both.
+    const BY = 'Returned by @staff1 on Oct 5, 2026, 9:30 AM';
     const STATUS_CELL = {
       501: 'Confirmed', 502: 'Confirmed', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
-      508: `Returned ${BY}`, 509: `Returned late Note: Returned a day late ${BY}`,
-      510: `Returned with issue Note: One pole bent ${BY}`, 511: 'Cancelled',
+      508: `Returned ${BY}`, 509: `Returned late ${BY} Note: Returned a day late`,
+      510: `Returned with issue ${BY} Note: One pole bent`, 511: 'Cancelled',
     };
     const NOTE = (r) => (r.guest ? `Guest · ${r.guest[1]}` : r.noAccount ? 'No online account' : `@res_${r.id}`);
     const ACTIONS = {
@@ -8705,7 +8714,8 @@ const root = () => dom.window.document.getElementById('root');
     const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], scheduleOf(r.id), String(r.qty), `Purpose ${r.id}`,
       STATUS_CELL[r.id], ...(ACTIONS[role] ? [ACTIONS[role](r)] : [])].join(' | '));
     // A cell's words: each element in it read whole (the badge, the note,
-    // "by @staff1 on …"), a space between them; a cell of text alone, its text.
+    // "Returned by @staff1 on …"), a space between them; a cell of text alone,
+    // its text.
     // Since section AF the Status cell also holds the payment marker
     // (.doc-requests-pay), which is that section's to check: it is left out
     // here, so these rows still read as the page drew them before.
@@ -12755,6 +12765,165 @@ const root = () => dom.window.document.getElementById('root');
 
         check('section AG sent nothing but GETs', sentAG.length > 0 && sentAG.every((m) => m === 'GET'),
           `${sentAG.length} request(s): ${[...new Set(sentAG)].join(', ')}`);
+      }
+
+      // =====================================================================
+      // AG (continued). Rental bookings: the returned-by note
+      // =====================================================================
+      // A returned booking showed, under its status badge, the payment marker
+      // ("Unpaid") and then "by @staff1 on Oct 8, 2026, 1:20 PM", which read,
+      // between the two, as if staff1 had marked the booking unpaid, in a row
+      // and on a phone card, where the line sat under the marker's "Payment"
+      // label. It now names the return, "Returned by @staff1 on Oct 8, 2026,
+      // 1:20 PM", for each of the three outcomes (returned, returned late,
+      // returned with an issue). Only a return writes returned_at
+      // (routes/rentalRequests.js), so no other status shows it. The marker is
+      // still the line under the badge, at one height in every row; the
+      // returned-by note is the next line, and a return note after it. It is
+      // two spans, who and when: above 640px each is a line of its own and the
+      // date never breaks, so every row breaks the note in one place
+      // ("Returned by @staff1 on" over the date); on a phone card the note has
+      // a label of its own, "Return", printed from its data-label as the
+      // number's and the marker's are, so it cannot read as part of the
+      // payment, and a return note follows it there. The search never reads
+      // it. Against section AE's 28 live-shaped bookings, seven of them
+      // returned (four returned, two late, one with an issue), two with a
+      // note; index.css is read with section AF's reader.
+      console.log('\n--- Rental bookings: the returned-by note ---');
+      {
+        // When each returned booking was taken back, as formatDate words it
+        // on this run's clock (UTC, which section AE set), written by hand.
+        const RETURNED_AG = {
+          '#6': 'Oct 5, 2026, 9:00 AM', '#12': 'Sep 26, 2026, 10:00 AM', '#10': 'Sep 26, 2026, 10:00 AM',
+          '#15': 'Sep 19, 2026, 8:00 AM', '#18': 'Sep 6, 2026, 3:00 PM', '#21': 'Aug 23, 2026, 11:00 AM', '#23': 'Aug 9, 2026, 8:00 AM',
+        };
+        const NOTED_AG = { '#10': 'Note: Returned a day after the agreed time', '#15': 'Note: Two tables returned with broken legs' };
+        const PHONES_AG = [320, 390, 640];
+        const WIDE_AG = [641, 768, 1045, 1046, 1280, 1920];
+        const flatAG = (s) => (s === null || s === undefined ? s : String(s).replace(/\s+/g, ' ').trim());
+        const sentNote = [];
+        const kindOf = (el) => (el.classList.contains('badge') ? 'badge' : el.classList.contains('doc-requests-pay') ? 'marker'
+          : el.classList.contains('rental-bookings-return') ? 'return' : el.classList.contains('reason-note') ? 'note' : el.className);
+        const readNotes = (page) => bodyRows(page).map((tr) => {
+          const id = text(numberEls(tr)[0]);
+          const cell = [...tr.children][5] ?? null;
+          const line = cell?.querySelector('.rental-bookings-return') ?? null;
+          return {
+            id, status: text(cell?.querySelector('.badge')), order: cell ? [...cell.children].map(kindOf) : [],
+            line: line ? { text: text(line), cls: line.className, label: line.getAttribute('data-label'),
+              parts: [...line.childNodes].map((n) => (n.nodeType === 1 ? `${n.tagName.toLowerCase()}.${n.className}: ${flatAG(n.textContent)}`
+                : `text "${n.textContent}"`)) } : null,
+            note: text(cell?.querySelector('.reason-note')),
+          };
+        });
+        const orderFor = (id) => (id in RETURNED_AG ? (id in NOTED_AG ? ['badge', 'marker', 'return', 'note'] : ['badge', 'marker', 'return'])
+          : ['badge', 'marker']);
+
+        // a. The real page, for the three roles: All, 100 a page, all 28 drawn.
+        for (const { name, route, token, user } of ROLES_AE) {
+          seedSession(token, user);
+          resetNet(200, answerAF(LIVE28));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          await clickIf(page, tabNamed(page, 'All'));
+          const sizeSelect = page.query('.pay-pager select');
+          if (sizeSelect) {
+            sizeSelect.value = '100';
+            sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+          const read = readNotes(page);
+          const returned = read.filter((r) => r.id in RETURNED_AG);
+          const wrongLines = returned.filter((r) => !r.line || r.line.text !== `Returned by @staff1 on ${RETURNED_AG[r.id]}`
+            || r.line.label !== 'Return' || r.line.cls !== 'muted small-note rental-bookings-return'
+            || said(r.line.parts) !== said(['span.rental-bookings-return-by: Returned by @staff1 on', 'text " "',
+              `span.rental-bookings-return-at: ${RETURNED_AG[r.id]}`]));
+          check(`${name}: every returned booking's note names the return, "Returned by @staff1 on" and when: the four returned (#6 `
+              + '"Returned by @staff1 on Oct 5, 2026, 9:00 AM", #12, #18, #23), the two returned late (#10, #21) and the one returned with '
+              + 'an issue (#15); two spans, who and when, the line labelled "Return" for a phone card',
+            returned.length === 7 && wrongLines.length === 0
+              && said([...new Set(returned.map((r) => r.status))].sort()) === said(['Returned', 'Returned late', 'Returned with issue']),
+            said(wrongLines.length ? wrongLines.slice(0, 3) : returned.map((r) => [r.id, r.status, r.line?.text])));
+          const others = read.filter((r) => !(r.id in RETURNED_AG));
+          const byLines = page.queryAll('table.data-table tbody *').filter((el) => /^by @/.test(flatAG(el.textContent) ?? '')).length;
+          check(`${name}: no other booking has the line (the 21 confirmed, overdue, completed and cancelled ones), and nothing in the `
+              + 'table reads "by @…" any more',
+            others.length === 21 && others.every((r) => r.line === null) && byLines === 0,
+            said({ withLine: others.filter((r) => r.line).map((r) => r.id), byLines }));
+          const wrongOrder = read.filter((r) => said(r.order) !== said(orderFor(r.id)));
+          check(`${name}: in the Status cell the badge comes first and the marker is the next line, as before, at one height in every `
+              + 'row; then the returned-by note, then a return note (#10\'s and #15\'s), never before the badge or between it and the marker',
+            read.length === 28 && wrongOrder.length === 0 && read.filter((r) => r.note).every((r) => r.note === NOTED_AG[r.id]),
+            said(wrongOrder.length ? wrongOrder.slice(0, 4) : returned.map((r) => [r.id, r.order.join(' ')])));
+          // The search never reads it: who returned a booking, the words, or
+          // when.
+          const sentAtSearch = net.calls.length;
+          const found = {};
+          for (const q of ['staff1', 'returned by', 'returned', 'Sep 26, 2026, 10:00']) {
+            await type(page, q);
+            found[q] = bodyRows(page).length;
+          }
+          await type(page, '');
+          check(`${name}: the search never reads the note: "staff1", "returned by", "returned" and "Sep 26, 2026, 10:00" find nothing, `
+              + 'and none of them sends a request',
+            Object.values(found).every((n) => n === 0) && bodyRows(page).length === 28 && net.calls.length === sentAtSearch, said(found));
+          check(`${name}: nothing about it is kept in the browser: no storage write through window or not, sessionStorage empty, no cookie`,
+            store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '',
+            said({ writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+          sentNote.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+
+        // b. The phone card and the wide row, read from index.css.
+        seedSession(VALID);
+        resetNet(200, answerAF(LIVE28));
+        const cardAG = await globalThis.mountInteractive(root(), '/secretary/rentals');
+        await cardAG.settle();
+        await clickIf(cardAG, tabNamed(cardAG, 'Returned'));
+        const linesAG = cardAG.queryAll('table.data-table tbody .rental-bookings-return');
+        const partsAG = linesAG.flatMap((el) => [...el.children]);
+        const phoneAG = PHONES_AG.flatMap((w) => linesAG.map((el) => ({ w, hidden: hidersAF(w, el),
+          label: valueAF(w, el, 'content', true), labelShown: valueAF(w, el, 'display', true), labelSize: valueAF(w, el, 'font-size', true),
+          labelCase: valueAF(w, el, 'text-transform', true), margin: valueAF(w, el, 'margin-top'), size: valueAF(w, el, 'font-size') })));
+        check('on a phone (320, 390 and 640px) the returned-by note is a labelled line of its own on the card, as the number and the '
+            + 'marker are: nothing hides it; its label, "Return", is printed from its data-label as a line of its own, in a card label\'s '
+            + 'style (0.75rem, upper case); and it stands 8px under the marker, at the size of the card\'s other fields (0.9rem)',
+          linesAG.length === 7 && phoneAG.every((p) => p.hidden.length === 0 && p.label === 'attr(data-label)' && p.labelShown === 'block'
+            && p.labelSize === '0.75rem' && p.labelCase === 'uppercase' && p.margin === '8px' && p.size === '0.9rem'),
+          said(phoneAG.filter((p) => p.hidden.length || p.label !== 'attr(data-label)' || p.labelShown !== 'block' || p.margin !== '8px'
+            || p.size !== '0.9rem').slice(0, 4)));
+        const partsPhoneAG = PHONES_AG.flatMap((w) => partsAG.map((sp) => `${sp.className}: ${[valueAF(w, sp, 'display'),
+          valueAF(w, sp, 'white-space')].join('/')}`));
+        check('  and on the card its two spans are left inline, one line of text where it fits ("Returned by @staff1 on Oct 5, 2026, '
+            + '9:00 AM"), and where it does not, at 320px, it breaks before the date, which never breaks (white-space: nowrap), never '
+            + 'between a time and its AM or PM',
+          partsAG.length === 14
+            && said([...new Set(partsPhoneAG)]) === said(['rental-bookings-return-by: /', 'rental-bookings-return-at: /nowrap']),
+          said([...new Set(partsPhoneAG)]));
+        const wideAG = WIDE_AG.map((w) => ({ w, labels: [...new Set(linesAG.map((el) => valueAF(w, el, 'content', true)))],
+          hidden: linesAG.flatMap((el) => hidersAF(w, el)),
+          parts: [...new Set(partsAG.map((sp) => `${sp.className}: ${valueAF(w, sp, 'display')}/${valueAF(w, sp, 'white-space')}`))] }));
+        check('above 640px (641, 768, 1045, 1046, 1280 and 1920) no label is printed and nothing hides it; "Returned by @staff1 on" and '
+            + 'the date are each a line of its own, the date never broken (white-space: nowrap), so every row breaks the note in one place',
+          wideAG.every((r) => said(r.labels) === said([null]) && r.hidden.length === 0
+            && said(r.parts) === said(['rental-bookings-return-by: block/null', 'rental-bookings-return-at: block/nowrap'])),
+          said(wideAG));
+        const noteRules = cssAF.rules.filter((r) => r.selectors.some((s) => /rental-bookings-return/.test(s)));
+        const strayNote = noteRules.filter((r) => !(r.media.some((m) => /max-width:\s*640px/.test(m))
+          ? r.selectors.every((s) => s.startsWith('.data-table.stack-narrow .rental-bookings-return'))
+          : r.media.some((m) => /min-width:\s*641px/.test(m)) && r.selectors.every((s) => s.startsWith('.rental-bookings-table '))));
+        check('index.css: the note\'s rules are this list\'s own: on a phone, in the 640px block, .data-table.stack-narrow '
+            + '.rental-bookings-return; above it, inside an @media (min-width: 641px), the two spans under .rental-bookings-table',
+          noteRules.length >= 4 && strayNote.length === 0,
+          said({ rules: noteRules.map((r) => `${r.media.join(' ')} { ${r.selectors.join(', ')} }`), stray: strayNote.map((r) => r.selectors) }));
+        sentNote.push(...net.calls.map((c) => c.method));
+        await cardAG.unmount();
+
+        check('the returned-by note\'s checks sent nothing but GETs', sentNote.length > 0 && sentNote.every((m) => m === 'GET'),
+          `${sentNote.length} request(s): ${[...new Set(sentNote)].join(', ')}`);
       }
 
       if (previousScrollAF === undefined) delete protoAF.scrollIntoView;

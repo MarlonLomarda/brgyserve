@@ -125,6 +125,11 @@ import {
 // is two spans in every row, the date with its comma and the times
 // (scheduleParts in utils/rentalList.js), each a line of its own there, so
 // every row breaks after the year. On a phone the cards are as they were.
+//
+// RETURNED BY (15 Oct 2026). A returned booking's line after its payment
+// marker names the return, "Returned by @staff1 on Oct 8, 2026, 1:20 PM"
+// (ReturnedBy, below), where it read "by @staff1 on …", as if staff1 had
+// marked the booking unpaid; a return note follows it.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -168,6 +173,31 @@ function PaymentMarker({ booking }) {
       data-label="Payment"
     >
       {marker.label}
+    </div>
+  );
+}
+
+// Who took a returned booking back, and when, the line after its payment
+// marker: "Returned by @staff1 on Oct 8, 2026, 1:20 PM". It read "by @staff1
+// on …" there, as if staff1 had marked the booking unpaid. Only a return
+// writes returned_at (routes/rentalRequests.js), so only a returned, returned
+// late or returned with an issue booking shows it. Two spans, who and when:
+// above 640px each is a line of its own and the date never breaks
+// (index.css), so every row breaks the note in one place. On a phone card the
+// line is labelled from its own data-label ("Return"), so it cannot read as
+// part of the payment above it, and a return note follows it there.
+function ReturnedBy({ booking }) {
+  return (
+    <div
+      className="muted small-note rental-bookings-return"
+      data-label="Return"
+    >
+      <span className="rental-bookings-return-by">
+        Returned by @{booking.returned_by.username} on
+      </span>{" "}
+      <span className="rental-bookings-return-at">
+        {formatDate(booking.returned_at)}
+      </span>
     </div>
   );
 }
@@ -1192,15 +1222,12 @@ export default function RentalBookingsPage({
                             {meta.label}
                           </span>
                           <PaymentMarker booking={r} />
+                          {r.returned_at && r.returned_by?.username && (
+                            <ReturnedBy booking={r} />
+                          )}
                           {r.return_note && (
                             <div className="muted reason-note">
                               Note: {r.return_note}
-                            </div>
-                          )}
-                          {r.returned_at && r.returned_by?.username && (
-                            <div className="muted small-note">
-                              by @{r.returned_by.username} on{" "}
-                              {formatDate(r.returned_at)}
                             </div>
                           )}
                         </td>
