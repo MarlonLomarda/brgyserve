@@ -248,6 +248,22 @@ const localStorageStub = {
 global.localStorage = localStorageStub;
 dom.window.localStorage = localStorageStub;
 
+// The stub counts writes through bare localStorage, which the session uses. A
+// write through window.localStorage, or to sessionStorage, goes to jsdom's own
+// Storage instead: the stub's assignment to window.localStorage does not take,
+// jsdom's accessor having no setter. So writes to jsdom's Storage are counted
+// too, for every "nothing kept in the browser" check (section AE found the
+// gap; the older checks read it since the docs batch after R4).
+const storageProto = dom.window.Storage.prototype;
+const storageOwn = { setItem: storageProto.setItem, removeItem: storageProto.removeItem, clear: storageProto.clear };
+const domStorage = { writes: 0 };
+for (const name of Object.keys(storageOwn)) {
+  storageProto[name] = function counted(...args) {
+    domStorage.writes += 1;
+    return storageOwn[name].apply(this, args);
+  };
+}
+
 // fetch stub: counts calls, records whether each carried a token, and answers
 // with whatever status the current test wants. `reply`, when a test sets one,
 // is the body sent with that status; otherwise a 401 carries the token error.
@@ -2355,10 +2371,12 @@ const root = () => dom.window.document.getElementById('root');
     // second mount does NOT reseed the session, which would clear storage.
     page = await openWith(fresh());
     const writesAtOpen = store.sets;
+    const domWritesAtOpen = domStorage.writes;
     await type(page, 'juan');
     await clickIf(page, tabNamed(page, 'Rentals'));
     await choose(page, 'PAID');
     const writesAfter = store.sets;
+    const domWritesAfter = domStorage.writes;
     await page.unmount();
     resetNet(200, answerFrom(fresh()));
     page = await mountPayments();
@@ -2366,9 +2384,10 @@ const root = () => dom.window.document.getElementById('root');
     check('filters start fresh each time the page opens: after "juan", Rentals and Paid, a new visit shows Needs verification, an empty box and All',
       v.search === '' && said(v.pressed) === said(['All 30']) && page.query('.list-head select')?.value === 'UNPAID'
         && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results'), said(v));
-    check('  and nothing about them was stored in the browser: no localStorage write, sessionStorage empty',
-      writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0,
-      `${writesAfter - writesAtOpen} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+    check('  and nothing about them was stored in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0,
+      `${writesAfter - writesAtOpen} stub write(s), ${domWritesAfter - domWritesAtOpen} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}`);
     await page.unmount();
 
     // Record payment: the reload after it keeps the search.
@@ -2509,6 +2528,7 @@ const root = () => dom.window.document.getElementById('root');
 
     page = await openWith(EIGHTY_NINE());
     const writesAtOpen89 = store.sets;
+    const domWritesAtOpen89 = domStorage.writes;
     await choose(page, 'all');
     v = look(page);
     const sizeSelect = page.query(SIZE);
@@ -2613,9 +2633,11 @@ const root = () => dom.window.document.getElementById('root');
         && afterTab.showing === 'Showing 1 to 10 of 89 results' && afterStatus.showing === 'Showing 1 to 10 of 60 results'
         && afterSearch.showing === 'Showing 1 to 10 of 60 results',
       said([afterTab, afterStatus, afterSearch].map((x) => `${x.size} a page: ${x.showing} (${x.current})`)));
-    check('nothing about the pager is kept in the browser: no localStorage write, sessionStorage empty, no cookie',
-      store.sets === writesAtOpen89 && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
-      `${store.sets - writesAtOpen89} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}, `
+    check('nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty, no cookie',
+      store.sets === writesAtOpen89 && domStorage.writes === domWritesAtOpen89 && dom.window.sessionStorage.length === 0
+        && dom.window.document.cookie === '',
+      `${store.sets - writesAtOpen89} stub write(s), ${domStorage.writes - domWritesAtOpen89} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}, `
         + `cookie ${JSON.stringify(dom.window.document.cookie)}`);
     await page.unmount();
     // A new visit, without reseeding the session (which would clear storage).
@@ -3024,6 +3046,7 @@ const root = () => dom.window.document.getElementById('root');
 
     page = await openQ();
     const writesAtOpenQ = store.sets;
+    const domWritesAtOpenQ = domStorage.writes;
     v = lookQ(page);
     const toolbarQ = page.query('.list-head.pay-toolbar');
     const secondRow = toolbarQ?.nextElementSibling ?? null;
@@ -3230,9 +3253,10 @@ const root = () => dom.window.document.getElementById('root');
     check('Refresh keeps the method and the date: Online pending and Today before and after the reload, "1 of 8 charges matches · ₱300.00 unpaid · billed today"',
       net.calls.length === callsBeforeQ + 1 && v.method === 'Online pending' && v.date === 'Today' && said(v.rows) === said(['Bert Flores'])
         && v.heading === '1 of 8 charges matches · ₱300.00 unpaid · billed today', said(v));
-    check('nothing about the filters is kept in the browser: no localStorage write, sessionStorage empty',
-      store.sets === writesAtOpenQ && dom.window.sessionStorage.length === 0,
-      `${store.sets - writesAtOpenQ} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+    check('nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      store.sets === writesAtOpenQ && domStorage.writes === domWritesAtOpenQ && dom.window.sessionStorage.length === 0,
+      `${store.sets - writesAtOpenQ} stub write(s), ${domStorage.writes - domWritesAtOpenQ} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}`);
     await page.unmount();
     // A new visit, without reseeding the session (which would clear storage).
     resetNet(200, answerFrom(qFresh()));
@@ -3309,6 +3333,7 @@ const root = () => dom.window.document.getElementById('root');
     });
     page = await openQ(PAGING_Q());
     const writesQ = store.sets;
+    const domWritesQ = domStorage.writes;
     await setRows(page, 10);
     const toSecond = () => press(page, numberButton(page, 2));
     await toSecond();
@@ -3336,8 +3361,9 @@ const root = () => dom.window.document.getElementById('root');
         && afterChoose.showing === 'Showing 1 to 10 of 30 results' && afterFrom.showing === 'Showing 1 to 10 of 30 results'
         && afterTo.showing === 'Showing 1 to 10 of 30 results',
       said([onTwo, afterMethod, afterPreset, afterChoose, afterFrom, afterTo].map((x) => `${x.size}: ${x.showing} (${x.current})`)));
-    check('  and still nothing in the browser: no localStorage write, sessionStorage empty',
-      store.sets === writesQ && dom.window.sessionStorage.length === 0, `${store.sets - writesQ} localStorage write(s)`);
+    check('  and still nothing in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      store.sets === writesQ && domStorage.writes === domWritesQ && dom.window.sessionStorage.length === 0,
+      `${store.sets - writesQ} stub write(s), ${domStorage.writes - domWritesQ} jsdom write(s)`);
     await page.unmount();
 
     // A status change keeps the search, the tab and the date.
@@ -3432,6 +3458,7 @@ const root = () => dom.window.document.getElementById('root');
 
     page = await openQ();
     const writesAtOpenR = store.sets;
+    const domWritesAtOpenR = domStorage.writes;
     const toolbarR = page.query(TOOLBAR);
     const panelR = panelOf(page);
     const buttonR = filtersButton(page);
@@ -3524,9 +3551,11 @@ const root = () => dom.window.document.getElementById('root');
     page = await mountPayments();
     const openAtReturn = panelState();
     check('it starts closed on every visit, and nothing about it is kept in the browser: left open, a new visit shows it closed; '
-        + 'no localStorage write, sessionStorage empty',
-      said(openAtLeave) === OPEN && said(openAtReturn) === CLOSED && store.sets === writesAtOpenR && dom.window.sessionStorage.length === 0,
-      said({ openAtLeave, openAtReturn, writes: store.sets - writesAtOpenR, session: dom.window.sessionStorage.length }));
+        + 'no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      said(openAtLeave) === OPEN && said(openAtReturn) === CLOSED && store.sets === writesAtOpenR
+        && domStorage.writes === domWritesAtOpenR && dom.window.sessionStorage.length === 0,
+      said({ openAtLeave, openAtReturn, writes: store.sets - writesAtOpenR, domWrites: domStorage.writes - domWritesAtOpenR,
+        session: dom.window.sessionStorage.length }));
     await page.unmount();
 
     // Record payment: the reload after it leaves the panel as it was.
@@ -5114,6 +5143,7 @@ const root = () => dom.window.document.getElementById('root');
 
       // Typing, a keystroke at a time.
       const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
       let sent = net.calls.length;
       const perKey = [];
       for (const s of ['c', 'cr', 'cru', 'cruz']) {
@@ -5334,17 +5364,19 @@ const root = () => dom.window.document.getElementById('root');
       // Nothing kept in the browser; a new visit starts empty. The second
       // mount does not reseed the session, which would clear storage.
       const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
       resetNet(200, answerFor(makeState(), staff));
       const again = await globalThis.mountInteractive(root(), route);
       await again.settle();
       v = look(again);
-      check(`${name}: nothing about the search is kept in the browser: no localStorage write, sessionStorage empty, and a `
-          + 'new visit opens on Pending with an empty box',
-        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && v.search === ''
+      check(`${name}: nothing about the search is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, and a new visit opens on Pending with an empty box',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0 && v.search === ''
           && said(v.pressed) === said(['Pending 3']) && v.heading === '3 pending requests',
-        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length, v }));
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v }));
       methodsSent.push(...net.calls.map((c) => c.method));
       await again.unmount();
     }
@@ -5523,6 +5555,7 @@ const root = () => dom.window.document.getElementById('root');
       let page = await globalThis.mountInteractive(root(), route);
       await page.settle();
       const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
       let v = look(page);
       check(`${name}: it opens on Pending, whose 6 requests fit one page, and at 10 matches or fewer there is no pager: no `
           + 'Pagination nav, no Rows per page, no Previous or Next',
@@ -5813,6 +5846,7 @@ const root = () => dom.window.document.getElementById('root');
       // Nothing kept in the browser; a new visit starts at 25 a page, page 1.
       // The second mount does not reseed the session, which would clear storage.
       const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
       resetNet(200, answerFor(makeState(), staff));
@@ -5820,11 +5854,11 @@ const root = () => dom.window.document.getElementById('root');
       await page.settle();
       await clickIf(page, tabNamed(page, 'All'));
       v = look(page);
-      check(`${name}: nothing about the pager is kept in the browser: no localStorage write, sessionStorage empty, no cookie; and `
-          + 'a new visit starts again at 25 a page, on page 1',
-        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === ''
-          && v.size === '25' && onPage(v, 1, 4, 1, 25, 77),
-        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length,
+      check(`${name}: nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, no cookie; and a new visit starts again at 25 a page, on page 1',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '' && v.size === '25' && onPage(v, 1, 4, 1, 25, 77),
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen, session: dom.window.sessionStorage.length,
           cookie: dom.window.document.cookie, after: brief(v) }));
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
@@ -6858,6 +6892,7 @@ const root = () => dom.window.document.getElementById('root');
 
       // Document.
       const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
       const sentBefore = net.calls.length;
       await pickDoc(page, 'Barangay Clearance');
       v = look(page);
@@ -7037,9 +7072,11 @@ const root = () => dom.window.document.getElementById('root');
           && v.heading === '1 of 2 pending requests matches' && !!docSelect(page) && page.active() === docSelect(page),
         said({ allSet: filtersOf(allSet), v }));
       await type(page, '');
-      check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to localStorage`,
-        net.calls.length === sentBefore && store.sets === writesAtOpen && !!docSelect(page),
-        `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, ${store.sets - writesAtOpen} write(s)`);
+      check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to the browser's storage, the `
+          + 'session\'s stub or jsdom\'s own',
+        net.calls.length === sentBefore && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && !!docSelect(page),
+        `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, `
+          + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
 
       // Kept through a tab, a search, Refresh, a failed reload and Back.
       await clickIf(page, tabNamed(page, 'All'));
@@ -7141,17 +7178,20 @@ const root = () => dom.window.document.getElementById('root');
       // A new visit starts again; nothing was kept in the browser. The second
       // mount does not reseed the session, which would clear storage.
       const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
       resetNet(200, answerFor(makeState(), staff));
       const again = await globalThis.mountInteractive(root(), route);
       await again.settle();
       v = look(again);
-      check(`${name}: nothing about the filters is kept in the browser: no localStorage write, sessionStorage empty, no cookie; a new `
-          + 'visit opens with all three at Any, on Pending, "2 pending requests"',
-        writesAfter === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === ''
+      check(`${name}: nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on Pending, "2 pending requests"',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === ''
           && filtersOf(v) === 'Any document / Any payment / Any date' && !v.clear && v.heading === '2 pending requests',
-        said({ writes: writesAfter - writesAtOpen, session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
       methodsSent.push(...net.calls.map((c) => c.method));
       await again.unmount();
     }
@@ -7555,6 +7595,7 @@ const root = () => dom.window.document.getElementById('root');
         // Opening and closing.
         const sentAtOpen = net.calls.length;
         const writesAtOpen = store.sets;
+        const domWritesAtOpen = domStorage.writes;
         const s0 = stateOf(page);
         await toggle(page);
         const s1 = stateOf(page);
@@ -7719,10 +7760,11 @@ const root = () => dom.window.document.getElementById('root');
             && afterBoth.label === 'Filters' && isOpen(afterBoth) && bothCleared.search === ''
             && said(bothCleared.rows) === said(['Ana Cruz', 'Ben Reyes']),
           said({ emptied, afterBoth, search: bothCleared.search, rows: bothCleared.rows }));
-        check(`${name}: none of those presses, picks, clears or searches sent a request, and none wrote to localStorage`,
-          net.calls.length === sentAtOpen && store.sets === writesAtOpen,
+        check(`${name}: none of those presses, picks, clears or searches sent a request, and none wrote to the browser's storage, `
+            + 'the session\'s stub or jsdom\'s own',
+          net.calls.length === sentAtOpen && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen,
           `${net.calls.length - sentAtOpen} request(s): ${said(listCalls(net.calls.slice(sentAtOpen)))}, `
-            + `${store.sets - writesAtOpen} write(s)`);
+            + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
 
         // The Payments-style controls keep their names, the panel open or
         // closed.
@@ -7826,10 +7868,11 @@ const root = () => dom.window.document.getElementById('root');
         await again.settle();
         const fresh = stateOf(again);
         check(`${name}: a new visit opens with the panel closed and the button reading "Filters", though it was left open; nothing `
-            + 'about it is in the browser: no localStorage write, sessionStorage empty, no cookie',
+            + 'about it is in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty, no cookie',
           isOpen(leftOpen) && isClosed(fresh) && fresh.label === 'Filters' && store.sets === writesAtOpen
-            && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
-          said({ leftOpen, fresh, writes: store.sets - writesAtOpen, session: dom.window.sessionStorage.length }));
+            && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+          said({ leftOpen, fresh, writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen,
+            session: dom.window.sessionStorage.length }));
         sent.push(...net.calls.map((c) => c.method));
         await again.unmount();
       }
@@ -8095,6 +8138,7 @@ const root = () => dom.window.document.getElementById('root');
         // b. Escape. The page opens on Pending, the panel closed.
         const sentAtB = net.calls.length;
         const writesAtB = store.sets;
+        const domWritesAtB = domStorage.writes;
         const onButton = () => !!filtersButton(page) && page.active() === filtersButton(page);
         const headingAtB = look(page).heading;
         const k1 = await escapeFrom(page, filtersButton(page));
@@ -8166,12 +8210,12 @@ const root = () => dom.window.document.getElementById('root');
           said({ before: { label: kept0.label, heading: kept0.heading, rows: kept0.rows },
             after: { label: kept1.label, heading: kept1.heading, rows: kept1.rows, document: kept1.document,
               payment: kept1.payment, strip: kept1.strip === kept0.strip } }));
-        check(`${name}: none of those Escapes, presses or picks sent a request or wrote to the browser: no localStorage write, `
-            + 'sessionStorage empty, no cookie',
-          net.calls.length === sentAtB && store.sets === writesAtB && dom.window.sessionStorage.length === 0
-            && dom.window.document.cookie === '',
+        check(`${name}: none of those Escapes, presses or picks sent a request or wrote to the browser: no localStorage or `
+            + 'sessionStorage write, through window or not, sessionStorage empty, no cookie',
+          net.calls.length === sentAtB && store.sets === writesAtB && domStorage.writes === domWritesAtB
+            && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
           `${net.calls.length - sentAtB} request(s): ${said(listCalls(net.calls.slice(sentAtB)))}, `
-            + `${store.sets - writesAtB} write(s)`);
+            + `${store.sets - writesAtB} stub write(s), ${domStorage.writes - domWritesAtB} jsdom write(s)`);
         sent.push(...net.calls.map((c) => c.method));
         await page.unmount();
       }
@@ -8807,6 +8851,7 @@ const root = () => dom.window.document.getElementById('root');
       const page = await globalThis.mountInteractive(root(), route);
       await page.settle();
       const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
       let v = look(page);
       const group = page.query('.pay-tabs');
       const buttons = tabsOf(page);
@@ -9017,9 +9062,12 @@ const root = () => dom.window.document.getElementById('root');
           withButtons.length === 0 && !buttonNamed(root(), 'Encode walk-in'), said(withButtons));
       }
 
-      check(`${name}: nothing about the tabs is kept in the browser: no localStorage write, sessionStorage empty, no cookie`,
-        store.sets === writesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
-        `${store.sets - writesAtOpen} localStorage write(s), sessionStorage ${dom.window.sessionStorage.length}`);
+      check(`${name}: nothing about the tabs is kept in the browser: no localStorage or sessionStorage write, through window or `
+          + 'not, sessionStorage empty, no cookie',
+        store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '',
+        `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s), `
+          + `sessionStorage ${dom.window.sessionStorage.length}`);
       methodsSent.push(...net.calls.map((c) => c.method));
       await page.unmount();
     }
@@ -9434,20 +9482,8 @@ const root = () => dom.window.document.getElementById('root');
     const previousConfirm = dom.window.confirm;
     dom.window.confirm = () => true;
     const methodsSent = [];
-    // The stub counts writes through bare localStorage, which the session
-    // uses. A write through window.localStorage, or to sessionStorage, goes to
-    // jsdom's own Storage instead: the stub's assignment to
-    // window.localStorage does not take, jsdom's accessor having no setter. So
-    // writes to jsdom's Storage are counted too, for this section.
-    const storageProto = dom.window.Storage.prototype;
-    const storageOwn = { setItem: storageProto.setItem, removeItem: storageProto.removeItem, clear: storageProto.clear };
-    const domStorage = { writes: 0 };
-    for (const name of Object.keys(storageOwn)) {
-      storageProto[name] = function counted(...args) {
-        domStorage.writes += 1;
-        return storageOwn[name].apply(this, args);
-      };
-    }
+    // Writes to jsdom's own Storage are counted by `domStorage` (top of the
+    // file), beside the stub's.
 
     const ROLES_AE = [
       { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
@@ -12930,7 +12966,6 @@ const root = () => dom.window.document.getElementById('root');
       else protoAF.scrollIntoView = previousScrollAF;
     }
 
-    Object.assign(storageProto, storageOwn);
     dom.window.confirm = previousConfirm;
     if (previousTZAE === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAE;
