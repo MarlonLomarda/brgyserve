@@ -3157,6 +3157,12 @@ button.pay-tab:hover:not(:disabled) {
   visibility: hidden;
 }
 
+/* The Rental bookings filters (15 Oct 2026) carry .doc-requests-filters on
+   their wrapper beside their own .rental-bookings-filters, so these two rules
+   and the 640px block's .doc-requests-filters rules (the phone's Filters
+   button, the panel's margin, Clear filters' 44px and its hidden slot) style
+   both lists: a change to them changes both. */
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only

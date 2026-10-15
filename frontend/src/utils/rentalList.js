@@ -36,9 +36,23 @@
 // list's own function (utils/requestList.js), handed on here as it is: it
 // reads only the charge a row carries, and a booking carries its charge in
 // the same shape a request does.
+//
+// FILTERS (15 Oct 2026). The filters row (components/ListFilters.jsx)
+// narrows what the search leaves, before the tabs split it: Item, Payment and
+// Starts. Their choices are the loaded rows', and each matches what a row
+// shows: the item's whole name, which a booking reads live from its item (a
+// booking stores no copy of it, so a renamed item is one choice under its new
+// name, and a deactivated item is still offered while a booking holds it);
+// the payment marker's word, through the Document requests list's own
+// paymentOptions and matchesPayment, handed on as they are; and the Manila
+// day the booking starts on (a booking runs within one day), through
+// utils/chargeFilters.js's manilaDay and backwards, as they are, with presets
+// both ways, since bookings are made ahead and looked back on. On a phone they
+// sit behind a Filters button, which says how many are on (filterCount).
 import { displayStatus } from "../constants/rentals";
+import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
-import { paymentMarker } from "./requestList";
+import { matchesPayment, paymentMarker, paymentOptions } from "./requestList";
 
 // Where a booking stands with its fee, for the marker under its status badge:
 // { label, className }. The Document requests list's function, as it is, read
@@ -53,7 +67,12 @@ import { paymentMarker } from "./requestList";
 //                             colours (CHARGE_META): "Paid", "Unpaid", or
 //                             "Void", which cancelling a booking leaves of an
 //                             unpaid charge
-export { paymentMarker };
+// The Payment filter's choices and its match are the Document requests
+// list's too, as they are: "Any payment", then Paid, Unpaid, No fee and Not
+// billed, and Void last, only while a loaded booking's marker says Void (on
+// the live list five do); a booking matches a choice when its marker says
+// that word, so the filter and the row cannot disagree.
+export { matchesPayment, paymentMarker, paymentOptions };
 
 export const ALL = "all";
 
@@ -262,4 +281,108 @@ export function searchPlaceholder(bookings) {
       "account" in booking.resident_records,
   );
   return accounts ? "Search name, account or item" : "Search name or item";
+}
+
+// "Any item": no Item filter. Empty, because an item always has a name (the
+// Secretary's form requires one), where "any", the value of the Payment and
+// Starts filters' Any (chargeFilters.js's ANY), could be one.
+export const ANY_ITEM = "";
+
+// The Item choices: "Any item", then each item the loaded bookings hold,
+// once, sorted by name with case ignored ("stick" comes before "Tables"). An
+// item is offered by its name, the words its rows show. A booking reads its
+// item's name live, through its item_id (it stores no copy), so every booking
+// of an item shows the same name, the current one; and no two items, active
+// or not, may share a name (the Secretary's form refuses it, case ignored),
+// so a name is one item. A deactivated item is still offered while a loaded
+// booking holds it: the choices are the bookings', not the active items list.
+export function itemOptions(bookings) {
+  const names = [
+    ...new Set(bookings.map((b) => b.rental_items?.name).filter(Boolean)),
+  ];
+  names.sort((a, b) => a.localeCompare(b, "en"));
+  return [
+    { value: ANY_ITEM, label: "Any item" },
+    ...names.map((name) => ({ value: name, label: name })),
+  ];
+}
+
+// A booking matches an item when its item has that whole name: "Tables"
+// never takes "Folding Tables".
+export function matchesItem(booking, choice) {
+  return choice === ANY_ITEM || booking.rental_items?.name === choice;
+}
+
+// The Starts choices. Bookings are made ahead and looked back on, so the
+// presets go both ways, and each counts today: Next 7 days is today and the 6
+// days after it, Last 7 days today and the 6 before it (Payments' Last 7
+// days), and likewise for 30.
+export const STARTS_OPTIONS = [
+  { value: ANY, label: "Any date" },
+  { value: "today", label: "Today" },
+  { value: "next7", label: "Next 7 days" },
+  { value: "next30", label: "Next 30 days" },
+  { value: "last7", label: "Last 7 days" },
+  { value: "last30", label: "Last 30 days" },
+  { value: "custom", label: "Choose dates" },
+];
+
+// A day plus n days, counted on the calendar (UTC midnights, so no clock's
+// daylight saving can move it). chargeFilters.js's own, which it does not
+// export.
+function addDays(day, n) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// The days a Starts choice covers, { from, to } in Manila days ("YYYY-MM-DD",
+// as chargeFilters.js counts them), either null for no bound; null when it
+// restricts nothing. `today` is a Manila day (chargeFilters.js's
+// manilaToday). Choose dates with no date yet restricts nothing, though it is
+// a filter on.
+export function startsRange(choice, from, to, today) {
+  switch (choice) {
+    case "today":
+      return { from: today, to: today };
+    case "next7":
+      return { from: today, to: addDays(today, 6) };
+    case "next30":
+      return { from: today, to: addDays(today, 29) };
+    case "last7":
+      return { from: addDays(today, -6), to: today };
+    case "last30":
+      return { from: addDays(today, -29), to: today };
+    case "custom":
+      return from || to ? { from: from || null, to: to || null } : null;
+    default:
+      return null;
+  }
+}
+
+// Whether a booking starts within `range` (startsRange's). Both ends are
+// included. The day is the Manila day of start_datetime, whatever clock the
+// viewer's computer keeps; a booking with no start is never guessed into a
+// range, and a start after the end matches nothing, never swapped.
+export function matchesStarts(booking, range) {
+  if (!range) return true;
+  const day = manilaDay(booking.start_datetime);
+  if (!day || backwards(range)) return false;
+  return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+}
+
+// What takes the place of the rows when the filters, with or without a
+// search, leave a tab nothing: 'No overdue bookings match your search or
+// filters.', 'No bookings match your search or filters.' on All. The Payments
+// page's words, naming the tab as this list's other empty texts do. A search
+// alone keeps noMatchText.
+export function filtersNoMatchText(tab) {
+  return `No ${tabWords(tab)}bookings match your search or filters.`;
+}
+
+// How many filters are on, for the "(2)" on a phone's Filters button: each of
+// Item, Payment and Starts that is off its Any choice. From and To are
+// Starts' own ("Choose dates"), so they never count apart from it.
+export function filterCount({ item, payment, date }) {
+  const on = [item !== ANY_ITEM, payment !== ANY, date !== ANY];
+  return on.filter(Boolean).length;
 }

@@ -161,8 +161,18 @@
 // own paymentMarker, and "#12" under the name, with no new column; the search
 // finds a booking by its number, part of it matching, and never by a marker's
 // word; and on a phone card both are labelled, which index.css does (read
-// from the file). It sits inside section AE's block, to use its bookings and
-// helpers.
+// from the file). Then the list's filters row, what sections AA to AC check
+// on Document requests: components/ListFilters.jsx with Item (the loaded
+// bookings' items, by the name each shows, which a booking reads live from
+// its item, so a renamed item is offered once under its new name and a
+// deactivated one while a booking holds it), Payment (the marker's words,
+// matched through the marker) and Starts (the Manila day a booking starts on,
+// with presets both ways, checked on three machine clocks); the list shown is
+// tab AND search AND filters, with the counts, the heading and the pager
+// following; Clear filters and "Clear search and filters"; no request; kept
+// through every reload and nowhere in the browser; and on a phone the Filters
+// button, its count, its panel and Escape. It sits inside section AE's
+// block, to use its bookings and helpers.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -8789,10 +8799,18 @@ const root = () => dom.window.document.getElementById('root');
       check(`${name}: exactly one request on open, GET /rental-requests?status=all`,
         net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /rental-requests?status=all']),
         said(net.calls.map((c) => `${c.method} ${c.url}`)));
-      check(`${name}: the status select is gone: no select and no option on the list, and none of its words `
-          + `(${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
-        v.selects === 0 && page.queryAll('option').length === 0 && !OLD_WORDS.some((w) => page.html().includes(w)),
-        said({ selects: v.selects, options: page.queryAll('option').length, words: OLD_WORDS.filter((w) => page.html().includes(w)) }));
+      // Since section AF the list has a filters row of three selects, Item,
+      // Payment and Starts, each with its visible label; the status select
+      // must still be gone, so no other select, and no option outside them.
+      const filterSelects = page.queryAll('select').filter((s) => s.closest('.pay-filters'));
+      check(`${name}: the status select is gone: the only selects on the list are the filters row's three, labelled Item, Payment `
+          + `and Starts, no option is outside them, and none of its words is anywhere (${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
+        v.selects === 3 && filterSelects.length === 3
+          && said(filterSelects.map((s) => s.labels?.[0]?.textContent ?? null)) === said(['Item', 'Payment', 'Starts'])
+          && page.queryAll('option').every((o) => !!o.closest('.pay-filters')) && !OLD_WORDS.some((w) => page.html().includes(w)),
+        said({ selects: page.queryAll('select').map((s) => s.labels?.[0]?.textContent ?? s.className),
+          outside: page.queryAll('option').filter((o) => !o.closest('.pay-filters')).length,
+          words: OLD_WORDS.filter((w) => page.html().includes(w)) }));
 
       // Every tab in turn, as a person presses them.
       const sentBefore = net.calls.length;
@@ -11061,6 +11079,1336 @@ const root = () => dom.window.document.getElementById('root');
 
       check('section AF\'s marker and number sent nothing but GETs', sentAF.length > 0 && sentAF.every((m) => m === 'GET'),
         `${sentAF.length} request(s): ${[...new Set(sentAF)].join(', ')}`);
+
+      // =====================================================================
+      // AF (continued). Rental bookings: the filters row
+      // =====================================================================
+      // The Rental bookings list gains the filters row section AA checks on
+      // Document requests: components/ListFilters.jsx as it is, under the
+      // search row and over the tabs, drawn only once the list has loaded,
+      // in the page's own wrapper (.rental-bookings-filters), which also
+      // carries .doc-requests-filters, so it looks as that list's does. Three
+      // controls: Item, "Any item" and the item names the loaded rows hold,
+      // sorted by name with case ignored ("stick" between "Plastic Chairs"
+      // and "Tables", as on the live list), matched by the whole name ("Tables"
+      // never takes "Folding Tables"); Payment, "Any payment", Paid, Unpaid, No
+      // fee and Not billed, and Void only while a loaded booking's charge is
+      // void (five live ones are): Document requests' own paymentOptions and
+      // matchesPayment, handed on by utils/rentalList.js, which match through
+      // the row's own marker; and Starts, the Manila day a booking starts on
+      // (a booking runs within one day), with presets both ways, Today, Next 7
+      // days, Next 30 days, Last 7 days and Last 30 days, each counting today,
+      // and "Choose dates", From and To with both ends in (From after To
+      // matches nothing and says so; it is never swapped). The list shown is
+      // tab AND search AND filters: the tab counts, the heading ("3 of 5
+      // upcoming bookings match") and the pager follow them, and every filter
+      // change goes back to page 1. A filter sends no request, lives through
+      // Refresh, Try again, a tab, a search, Back from a panel and the reload
+      // after an action, and is kept nowhere in the browser (jsdom's own
+      // Storage counted, as in section AE); a choice the reloaded list no
+      // longer offers goes back to Any. Where the filters leave a tab empty
+      // the text names the tab, "No overdue bookings match your search or
+      // filters.", with "Clear search and filters", which keeps the tab; a
+      // search alone keeps its own text and Clear search. "Today" is fixed at
+      // 12 Oct 2026, 12:00 in Manila, by the helpers' one clock
+      // (utils/chargeFilters.js); the machine is on Los Angeles time, and the
+      // day checks run again on UTC and on Tokyo time: 7:47 AM on 12 Oct in
+      // Manila is 11 Oct in the first two, and 11:48 PM on 12 Oct is 13 Oct in
+      // Tokyo, so every Manila day has to be the code's own doing. Then the
+      // Filters button on a phone, as section AB and AC check Document
+      // requests': its count, its panel, Escape, its open state kept, and
+      // index.css. utils/rentalList.js is checked case by case; then the real
+      // page for the three roles against fourteen stubbed bookings, and forty
+      // for the pager. Every request is answered by the fetch stub; the only
+      // writes, the Secretary's cancel and Staff's return, go to it too.
+      console.log('\n--- Rental bookings: the filters row ---');
+      {
+        const F = globalThis.chargeFilters || {};
+        const previousTZAF = process.env.TZ;
+        const HOME_ZONE = 'America/Los_Angeles';
+        process.env.TZ = HOME_ZONE;
+        const realNowAF = F.clock?.now;
+        const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+        setNow('2026-10-12T04:00:00Z'); // 12:00 on 12 Oct in Manila, 21:00 on 11 Oct in Los Angeles
+        // Three clocks for the machine: on the first two a Manila morning is
+        // the day before, on the third a Manila night is the day after.
+        const ZONES = ['UTC', 'America/Los_Angeles', 'Asia/Tokyo'];
+        const inZone = (zone, f) => {
+          process.env.TZ = zone;
+          try { return f(); } finally { process.env.TZ = HOME_ZONE; }
+        };
+
+        // a. The helpers on their own.
+        const named = (name) => ({ ...one(2), rental_items: name === undefined ? null : { ...one(2).rental_items, name } });
+        const itemOpts = (list) => attempt(() => L.itemOptions(list).map((o) => `${o.value}=${o.label}`).join(' | '));
+        got = itemOpts(['Tent', 'stick', 'Basketball Court', 'Tables', 'Folding Tables', 'Basketball Court', 'Plastic Chairs']
+          .map(named).concat([named(undefined)]));
+        check('itemOptions: "Any item" first, its value empty, then each item the rows hold, once, sorted by name with case ignored '
+            + '("stick" between "Plastic Chairs" and "Tables", as on the live list), each valued by its name; a row with no item adds '
+            + 'none',
+          got === '=Any item | Basketball Court=Basketball Court | Folding Tables=Folding Tables | Plastic Chairs=Plastic Chairs | '
+            + 'stick=stick | Tables=Tables | Tent=Tent', said(got));
+        got = [itemOpts([]), itemOpts([named('any')])];
+        check('  an empty list offers "Any item" alone; an item named "any" is offered as itself, never taken for Any, whose value is '
+            + 'empty (an item always has a name, and "any" is the value of the Payment and Starts filters\' Any)',
+          said(got) === said(['=Any item', '=Any item | any=any']) && L.ANY_ITEM === '', said({ got, ANY_ITEM: L.ANY_ITEM }));
+        // A booking stores no copy of its item's name: the list embeds the
+        // item live (rental_items, by item_id), so every booking of an item
+        // shows its name as it is now, and a deactivated item (is_active
+        // false, which the list does not even send) is still embedded.
+        const ofItem = (item) => ({ ...one(2), rental_items: { ...one(2).rental_items, ...item } });
+        got = itemOpts([ofItem({ item_id: 5, name: 'Tent' }), ofItem({ item_id: 5, name: 'Tent' }),
+          ofItem({ item_id: 23, name: 'stick', type: 'equipment', fee: '12.00', is_active: false })]);
+        check('  two bookings of one item give one choice, and an item no longer active still gives its own while a booking holds '
+            + 'it: the choices are the loaded bookings\' items, by the name each shows, never the active items list',
+          got === '=Any item | stick=stick | Tent=Tent', said(got));
+        const mi = (name, choice) => attempt(() => L.matchesItem(named(name), choice));
+        got = {
+          any: [mi('Tables', L.ANY_ITEM), mi(undefined, L.ANY_ITEM), mi('any', L.ANY_ITEM)],
+          exact: mi('Tables', 'Tables'), longer: mi('Folding Tables', 'Tables'), shorter: mi('Tables', 'Folding Tables'),
+          cased: mi('tables', 'Tables'), part: mi('Tables', 'Table'), none: mi(undefined, 'Tables'),
+          anyName: [mi('any', 'any'), mi('Tables', 'any')],
+        };
+        check('matchesItem: Any takes every booking, one with no item too; an item takes only bookings of exactly that name: not '
+            + '"Folding Tables" for "Tables", nor the reverse, nor another case, nor part of a name; the item named "any" only its own',
+          said(got) === said({ any: [true, true, true], exact: true, longer: false, shorter: false, cased: false, part: false,
+            none: false, anyName: [true, false] }), said(got));
+        check('paymentOptions and matchesPayment are Document requests\' own functions, handed on as they are: the Payment choices are '
+            + 'the marker\'s own words, and a booking matches the one its own marker shows',
+          typeof L.paymentOptions === 'function' && L.paymentOptions === R.paymentOptions
+            && typeof L.matchesPayment === 'function' && L.matchesPayment === R.matchesPayment,
+          said({ options: L.paymentOptions === R.paymentOptions, matches: L.matchesPayment === R.matchesPayment }));
+        const charged = (charges) => ({ ...one(2), charges });
+        const payOpts = (list) => attempt(() => L.paymentOptions(list).map((o) => `${o.value}=${o.label}`).join(' | '));
+        const FIVE = `${F.ANY}=Any payment | Paid=Paid | Unpaid=Unpaid | No fee=No fee | Not billed=Not billed`;
+        got = [payOpts([charged({ status: 'PAID', amount: 300 }), charged({ status: 'UNPAID', amount: 25 }), charged(null)]),
+          payOpts([charged({ status: 'PAID', amount: 300 }), charged({ status: 'VOID', amount: 500 })])];
+        check('  over bookings: "Any payment", Paid, Unpaid, No fee and Not billed where no booking is void, and Void last where one is, '
+            + 'as cancelling an unpaid booking leaves it (five on the live list)',
+          said(got) === said([FIVE, `${FIVE} | Void=Void`]), said(got));
+        const P_CASES = [
+          ['a booking paid', { status: 'PAID', amount: 300 }, 'Paid'],
+          ['a PAID PHP 0.00 charge', { status: 'PAID', amount: '0.00' }, 'No fee'],
+          ['a booking unpaid', { status: 'UNPAID', amount: 25 }, 'Unpaid'],
+          ['an UNPAID PHP 0.00 charge', { status: 'UNPAID', amount: '0.00' }, 'Unpaid'],
+          ['a cancelled booking\'s voided charge', { status: 'VOID', amount: 500 }, 'Void'],
+          ['no charge', null, 'Not billed'],
+        ];
+        const CHOICES = ['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void'];
+        const wrongP = P_CASES.flatMap(([what, c, want]) => {
+          const b = charged(c);
+          const hits = CHOICES.filter((choice) => attempt(() => L.matchesPayment(b, choice)) === true).join(',');
+          const marker = attempt(() => L.paymentMarker(b).label);
+          return hits === want && attempt(() => L.matchesPayment(b, F.ANY)) === true && marker === want ? []
+            : [`${what}: ${hits || '(none)'}, marker ${marker}`];
+        });
+        check('  each booking matches Any payment and the one choice its marker shows, never another: PHP 0 paid No fee, never Paid; '
+            + 'PHP 0 unpaid Unpaid; a voided charge Void; no charge Not billed', wrongP.length === 0, said(wrongP));
+        got = attempt(() => L.STARTS_OPTIONS.map((o) => `${o.value}=${o.label}`).join(' | '));
+        check('STARTS_OPTIONS: "Any date" (Payments\' Any value), Today, Next 7 days, Next 30 days, Last 7 days, Last 30 days and '
+            + '"Choose dates": both ways, as bookings are made ahead and looked back on',
+          got === `${F.ANY}=Any date | today=Today | next7=Next 7 days | next30=Next 30 days | last7=Last 7 days | last30=Last 30 days | `
+            + 'custom=Choose dates', said(got));
+        const rangeOf = (choice, from, to, today) => attempt(() => L.startsRange(choice, from, to, today));
+        //   the choice, From, To, today, the range it must give
+        const RANGES = [
+          ['today', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-10-12' }],
+          ['next7', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-10-18' }],
+          ['next30', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-11-10' }],
+          ['last7', '', '', '2026-10-12', { from: '2026-10-06', to: '2026-10-12' }],
+          ['last30', '', '', '2026-10-12', { from: '2026-09-13', to: '2026-10-12' }],
+          ['next7', '', '', '2026-12-28', { from: '2026-12-28', to: '2027-01-03' }],
+          ['next30', '', '', '2026-12-28', { from: '2026-12-28', to: '2027-01-26' }],
+          ['last7', '', '', '2026-03-01', { from: '2026-02-23', to: '2026-03-01' }],
+          ['last30', '', '', '2026-03-01', { from: '2026-01-31', to: '2026-03-01' }],
+          ['custom', '2026-10-01', '2026-10-31', '2026-10-12', { from: '2026-10-01', to: '2026-10-31' }],
+          ['custom', '2026-10-01', '', '2026-10-12', { from: '2026-10-01', to: null }],
+          ['custom', '', '2026-10-31', '2026-10-12', { from: null, to: '2026-10-31' }],
+          ['custom', '', '', '2026-10-12', null],
+          [F.ANY, '2026-10-01', '2026-10-31', '2026-10-12', null],
+          ['week', '', '', '2026-10-12', null],
+        ];
+        const wrongR = ZONES.flatMap((zone) => inZone(zone, () => RANGES
+          .filter(([choice, from, to, today, want]) => said(rangeOf(choice, from, to, today)) !== said(want))
+          .map(([choice, from, to, today, want]) => `${zone}: ${choice} ${from}..${to} on ${today}: `
+            + `${said(rangeOf(choice, from, to, today))}, want ${said(want)}`)));
+        check('startsRange counts calendar days in Manila, both ends in, the same on every clock: Today 12 Oct; Next 7 days 12 to 18 '
+            + 'Oct; Next 30 days 12 Oct to 10 Nov; Last 7 days 6 to 12 Oct; Last 30 days 13 Sep to 12 Oct; across a year\'s end (28 '
+            + 'Dec: to 3 Jan, to 26 Jan) and February (1 Mar: from 23 Feb, from 31 Jan); Choose dates as typed, and null with no date; '
+            + 'Any date, and a choice it does not offer (Payments\' "week"), null',
+          wrongR.length === 0, wrongR.length ? said(wrongR.slice(0, 6)) : `${RANGES.length} cases on ${ZONES.length} zones`);
+        const starting = (iso) => ({ ...one(2), start_datetime: iso });
+        //   what, starts at, From, To (From undefined: no range), whether it is in
+        const S_CASES = [
+          ['7:47 AM on 12 Oct in Manila (23:47Z on 11 Oct) is a 12 Oct booking', '2026-10-11T23:47:00+00:00', '2026-10-12',
+            '2026-10-12', true],
+          ['  and not an 11 Oct one', '2026-10-11T23:47:00+00:00', '2026-10-11', '2026-10-11', false],
+          ['11:48 PM on 12 Oct in Manila (15:48Z) stays on 12 Oct', '2026-10-12T15:48:00Z', '2026-10-12', '2026-10-12', true],
+          ['  and is not a 13 Oct one, Tokyo\'s day', '2026-10-12T15:48:00Z', '2026-10-13', '2026-10-13', false],
+          ['  To 12 Oct alone takes it: the end day is in', '2026-10-12T15:48:00Z', null, '2026-10-12', true],
+          ['  From 13 Oct alone does not', '2026-10-12T15:48:00Z', '2026-10-13', null, false],
+          ['00:00 on 6 Oct in Manila (16:00Z on 5 Oct) is in 6 Oct to 12 Oct', '2026-10-05T16:00:00Z', '2026-10-06', '2026-10-12', true],
+          ['23:59 on 5 Oct in Manila is not', '2026-10-05T15:59:00Z', '2026-10-06', '2026-10-12', false],
+          ['From after To (12 Oct to 1 Oct) takes nothing, not 5 Oct', '2026-10-05T04:00:00Z', '2026-10-12', '2026-10-01', false],
+          ['no range takes every booking', '2026-10-05T04:00:00Z', undefined, undefined, true],
+          ['  one with no start too', null, undefined, undefined, true],
+          ['a range never takes a booking with no start', null, '2026-10-01', null, false],
+          ['  nor one whose start does not parse', 'not a date', null, '2026-10-12', false],
+        ];
+        const wrongS = ZONES.flatMap((zone) => inZone(zone, () => S_CASES.map(([what, iso, from, to, want]) => {
+          const res = attempt(() => L.matchesStarts(starting(iso), from === undefined ? null : { from, to }));
+          return res === want ? null : `${zone}: ${what.trim()} -> ${res}`;
+        }).filter(Boolean)));
+        check('matchesStarts counts the Manila day a booking starts on, both ends in, on UTC, Los Angeles and Tokyo time alike: 7:47 '
+            + 'AM on 12 Oct in Manila is 12 Oct (11 Oct in UTC and Los Angeles), 11:48 PM on 12 Oct stays 12 Oct (13 Oct in Tokyo) and To '
+            + '12 Oct takes it; From after To takes nothing; no range takes everything; a range never takes a booking with no start',
+          wrongS.length === 0, wrongS.length ? said(wrongS) : `${S_CASES.length} cases on ${ZONES.length} zones`);
+        //   the preset, starts at, whether it is in, with today 12 Oct in Manila
+        const PRESETS = [
+          ['today', '2026-10-11T16:00:00Z', true], ['today', '2026-10-11T15:59:59Z', false],
+          ['today', '2026-10-12T15:59:59Z', true], ['today', '2026-10-12T16:00:00Z', false],
+          ['next7', '2026-10-11T16:00:00Z', true], ['next7', '2026-10-11T15:59:59Z', false],
+          ['next7', '2026-10-18T15:59:59Z', true], ['next7', '2026-10-18T16:00:00Z', false],
+          ['next30', '2026-11-10T15:59:59Z', true], ['next30', '2026-11-10T16:00:00Z', false],
+          ['last7', '2026-10-05T16:00:00Z', true], ['last7', '2026-10-05T15:59:59Z', false],
+          ['last7', '2026-10-12T15:59:59Z', true], ['last7', '2026-10-12T16:00:00Z', false],
+          ['last30', '2026-09-12T16:00:00Z', true], ['last30', '2026-09-12T15:59:59Z', false],
+        ];
+        const presetIn = (choice, iso) => attempt(() => L.matchesStarts(starting(iso), L.startsRange(choice, '', '', F.manilaToday())));
+        const wrongPresets = ZONES.flatMap((zone) => inZone(zone, () => PRESETS.map(([choice, iso, want]) => {
+          const res = presetIn(choice, iso);
+          return res === want ? null : `${zone}: ${choice} ${iso} -> ${res}`;
+        }).filter(Boolean)));
+        check('  the presets, with chargeFilters\' manilaToday as it is, on each zone, at midnight in Manila: Today takes 00:00 on 12 Oct '
+            + 'and 23:59:59 that night, not 23:59:59 on 11 Oct nor 00:00 on 13 Oct; Next 7 days 00:00 on 12 Oct to 23:59:59 on 18 Oct, '
+            + 'not 00:00 on 19 Oct; Next 30 days to 23:59:59 on 10 Nov, not 00:00 on 11 Nov; Last 7 days from 00:00 on 6 Oct to the end '
+            + 'of 12 Oct; Last 30 days from 00:00 on 13 Sep',
+          wrongPresets.length === 0, said(wrongPresets));
+        setNow('2026-10-12T16:30:00Z'); // 00:30 on 13 Oct in Manila, 09:30 on 12 Oct in Los Angeles
+        const pastMidnight = ZONES.map((zone) => inZone(zone, () => ({
+          zone, today: attempt(() => F.manilaToday()),
+          lastNight: presetIn('today', '2026-10-12T15:48:00Z'), lastNightThisWeek: presetIn('last7', '2026-10-12T15:48:00Z'),
+          nextWeekEnd: presetIn('next7', '2026-10-19T15:59:59Z'), nineteenth: presetIn('next7', '2026-10-18T16:00:00Z'),
+        })));
+        setNow('2026-10-12T04:00:00Z');
+        check('  and the day turns at midnight in Manila, whatever the machine\'s clock says: at 00:30 on 13 Oct in Manila (still 12 Oct '
+            + 'in Los Angeles) Today is 13 Oct, so 11:48 PM on 12 Oct is no longer Today but is in Last 7 days, and Next 7 days runs to '
+            + 'the end of 19 Oct, taking 00:00 on 19 Oct',
+          pastMidnight.every((p) => p.today === '2026-10-13' && p.lastNight === false && p.lastNightThisWeek === true
+            && p.nextWeekEnd === true && p.nineteenth === true), said(pastMidnight));
+        const NOMATCH = [['overdue', 'No overdue bookings match your search or filters.'],
+          ['all', 'No bookings match your search or filters.'], ['upcoming', 'No upcoming bookings match your search or filters.']];
+        got = NOMATCH.map(([tab]) => attempt(() => L.filtersNoMatchText(tab)));
+        check('filtersNoMatchText names the tab, as every empty text of this list does, in Payments\' words: "No overdue bookings match '
+            + 'your search or filters.", on All "No bookings match your search or filters."',
+          said(got) === said(NOMATCH.map((n) => n[1])), said(got));
+        const NOTHING = { item: L.ANY_ITEM, payment: F.ANY, date: F.ANY };
+        //   what, the filters (over NOTHING), the count
+        const COUNTS = [
+          ['nothing on', {}, 0], ['Item', { item: 'Tables' }, 1], ['an item named "any", which is not Any', { item: 'any' }, 1],
+          ['Payment', { payment: 'Unpaid' }, 1], ['a Starts preset', { date: 'next7' }, 1], ['Choose dates', { date: 'custom' }, 1],
+          ['Item and Payment', { item: 'stick', payment: 'Void' }, 2],
+          ['all three', { item: 'Tables', payment: 'No fee', date: 'last30' }, 3],
+        ];
+        const wrongCounts = COUNTS.map(([what, over, want]) => ({ what, got: attempt(() => L.filterCount({ ...NOTHING, ...over })), want }))
+          .filter((c) => c.got !== c.want);
+        check('filterCount counts each of Item, Payment and Starts that is off its Any choice, 0 to 3, for the "(2)" on a phone\'s '
+            + 'Filters button: Choose dates once, its dates being its own; an item named "any" is a choice like any other',
+          wrongCounts.length === 0, wrongCounts.length ? said(wrongCounts) : `${COUNTS.length} cases`);
+
+        // b. The real page. Fourteen bookings, newest start first, about
+        // "today" (12 Oct, 12:00 in Manila): five upcoming, one overdue, two
+        // completed, three returned and three cancelled; six items, one name
+        // inside another ("Tables", "Folding Tables") and one in lower case
+        // ("stick"), as on the live list; every payment state; and starts a
+        // minute either side of Manila's midnights. The derived statuses are
+        // the server's, written in: the page never compares a date with the
+        // clock to place a booking in a tab.
+        const ITEM_F = {
+          court: [11, 'Basketball Court', 'facility', '500.00'], hall: [12, 'Multipurpose Hall', 'facility', '1500.00'],
+          chairs: [13, 'Plastic Chairs', 'furniture', '5.00'], tables: [14, 'Tables', 'furniture', '25.00'],
+          folding: [15, 'Folding Tables', 'furniture', '25.00'], stick: [23, 'stick', 'equipment', '12.00'],
+          sound: [3, 'Sound System', 'equipment', '300.00'], hallRenamed: [12, 'Multi-purpose Hall', 'facility', '1500.00'],
+        };
+        //   id, item, who, Manila day, start, end, stored status, derived status, charge
+        const ROWS_F = [
+          [151, 'court', 'juan', '2026-11-11', '08:00', '12:00', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 500 }],
+          [150, 'folding', 'elena', '2026-11-10', '23:30', '23:59', 'confirmed', 'confirmed', { status: 'PAID', amount: '0.00' }],
+          [149, 'tables', 'lourdes', '2026-10-19', '00:00', '06:00', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 25 }],
+          [148, 'stick', 'liza', '2026-10-18', '23:30', '23:59', 'confirmed', 'confirmed', { status: 'PAID', amount: 12 }],
+          [147, 'chairs', 'tess', '2026-10-12', '23:48', '23:58', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 50 }],
+          [146, 'hall', 'mario', '2026-10-12', '07:47', '10:47', 'confirmed', 'completed', { status: 'PAID', amount: 1500 }],
+          [145, 'folding', 'rodrigo', '2026-10-12', '00:00', '06:00', 'confirmed', 'overdue', { status: 'UNPAID', amount: 25 }],
+          [144, 'tables', 'nino', '2026-10-11', '23:30', '23:59', 'returned', 'returned', { status: 'PAID', amount: 25 }],
+          [143, 'chairs', 'juan', '2026-10-06', '00:00', '08:00', 'returned_late', 'returned_late', { status: 'PAID', amount: 0 }],
+          [142, 'court', 'elena', '2026-10-05', '23:30', '23:59', 'cancelled', 'cancelled', { status: 'VOID', amount: 500 }],
+          [141, 'stick', 'ramon', '2026-09-13', '00:00', '08:00', 'returned_with_issue', 'returned_with_issue',
+            { status: 'UNPAID', amount: 12 }],
+          [140, 'chairs', 'liza', '2026-09-12', '23:30', '23:59', 'cancelled', 'cancelled', null],
+          [139, 'court', 'danilo', '2026-09-01', '08:00', '12:00', 'confirmed', 'completed', { status: 'PAID', amount: 500 }],
+          [138, 'hall', 'rodrigo', '2026-08-20', '13:00', '17:00', 'cancelled', 'cancelled', { status: 'VOID', amount: 1500 }],
+        ];
+        const mnl = (day, hm) => new Date(`${day}T${hm}:00+08:00`).toISOString().replace('.000Z', '+00:00');
+        const asBookingF = ([id, itemKey, who, day, from, to, status, derived, charge]) => {
+          const [itemId, itemName, type, fee] = ITEM_F[itemKey];
+          return {
+            ...asBooking([id, 'court', who, day, 8, 12, 1, `Purpose ${id}`, status, derived]),
+            start_datetime: mnl(day, from), end_datetime: mnl(day, to), return_note: null,
+            rental_items: { item_id: itemId, name: itemName, type, fee, quantity_total: 100, quantity_available: 100 },
+            charges: charge === null ? null
+              : { charge_id: 900 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+          };
+        };
+        // "stick" (item 23) is deactivated: the active items list, GET
+        // /rental-items, which the booking forms read, no longer holds it, but
+        // its bookings (148, 141) still embed it, name and all, as the route's
+        // embed takes no notice of is_active. The list page never asks for
+        // that list; the stub answers it as the route would, active items only.
+        const ACTIVE_F = ['court', 'hall', 'chairs', 'tables', 'folding', 'sound'].map((k) => {
+          const [itemId, itemName, type, fee] = ITEM_F[k];
+          return { item_id: itemId, name: itemName, type, description: null, quantity_total: 100, quantity_available: 100, fee };
+        });
+        // The bookings the stub holds, which Refresh and the actions change
+        // as the server would: a cancel voids an unpaid charge and leaves a
+        // paid one, a return leaves the charge as it was.
+        const makeStateF = (rows = ROWS_F) => ({ rows: rows.map((r) => [...r]) });
+        const listAnswerF = (state) => ({ requests: state.rows.map(asBookingF) });
+        const answerForF = (state) => (url, method) => {
+          if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerF(state);
+          const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+          if (method === 'POST' && act) {
+            const r = state.rows.find((x) => x[0] === Number(act[1]));
+            if (!r) return undefined;
+            if (act[2] === 'cancel') {
+              r[6] = 'cancelled';
+              r[7] = 'cancelled';
+              if (r[8]?.status === 'UNPAID') r[8] = { ...r[8], status: 'VOID' };
+              return { message: `Booking #${r[0]} cancelled.` };
+            }
+            r[6] = 'returned';
+            r[7] = 'returned';
+            return { message: `Return recorded for booking #${r[0]}.` };
+          }
+          if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated.' };
+          if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: ACTIVE_F };
+          return undefined;
+        };
+        // A control found by its visible label, as a person finds it.
+        const labelled = (page, label) => {
+          const found = page.queryAll('label').find((l) => l.textContent === label);
+          return found ? found.control ?? null : null;
+        };
+        const itemSelect = (page) => labelled(page, 'Item');
+        const paySelect = (page) => labelled(page, 'Payment');
+        const dateSelect = (page) => labelled(page, 'Starts');
+        const fromInput = (page) => labelled(page, 'From');
+        const toInput = (page) => labelled(page, 'To');
+        const filtersRow = (page) => itemSelect(page)?.closest('.pay-filters') ?? null;
+        const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+        const optionsOf = (select) => (select ? [...select.options].map((o) => o.textContent).join(' | ') : null);
+        // Choose the option a select shows as `label`, the way a person does.
+        const pick = async (page, select, label) => {
+          const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+          if (option) {
+            select.value = option.value;
+            select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const pickItem = (page, label) => pick(page, itemSelect(page), label);
+        const pickPay = (page, label) => pick(page, paySelect(page), label);
+        const pickDate = (page, label) => pick(page, dateSelect(page), label);
+        // A date typed into From or To: the native setter and an input event.
+        const typeDate = async (page, input, value) => {
+          if (input) {
+            Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+            input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const HINT = 'The start date is after the end date.';
+        // Clear filters keeps its place in the row while no filter is on,
+        // disabled and aria-hidden, so being in the page is not being offered.
+        const clearOffered = (b) => !!b && !b.disabled && b.getAttribute('aria-hidden') !== 'true';
+        // A row's booking number, as a number.
+        const idOf = (tr) => Number((text(numberEls(tr)[0]) || '#0').slice(1));
+        // What the list and its filters say, read the way a person would.
+        const lookF = (page) => {
+          const empty = page.query('.empty');
+          return {
+            heading: text(page.query('.list-head h2')),
+            strip: tabsOf(page).map(text).join(' · '),
+            pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+            rows: bodyRows(page).map(idOf),
+            markers: bodyRows(page).map((tr) => text(markerEls(tr)[0])),
+            empty: text(page.query('.empty p')),
+            emptyButtons: empty ? [...empty.querySelectorAll('button')].map(text) : [],
+            item: chosen(itemSelect(page)),
+            payment: chosen(paySelect(page)),
+            date: chosen(dateSelect(page)),
+            from: fromInput(page)?.value ?? null,
+            to: toInput(page)?.value ?? null,
+            clear: clearOffered(buttonNamed(root(), 'Clear filters')),
+            hint: page.queryAll('[role="status"]').some((el) => el.textContent === HINT),
+            search: box(page)?.value ?? null,
+            showing: text(page.query('.pay-pager-count')),
+            current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+            error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+            loading: root().textContent.includes('Loading bookings…'),
+          };
+        };
+        // The three filters as one line: "Plastic Chairs / Unpaid / Choose dates 2026-10-01..2026-10-31".
+        const filtersOf = (v) => `${v.item} / ${v.payment} / ${v.date}${v.from !== null ? ` ${v.from}..${v.to}` : ''}`;
+        // Focus first, as a press does in a browser (section Y).
+        const press = async (page, el) => {
+          if (!el) return;
+          el.focus();
+          await page.click(el);
+        };
+        const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+        const setRows = async (page, value) => {
+          const select = page.query('.pay-pager select');
+          if (select) {
+            select.value = String(value);
+            select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const rowButtonF = (page, id, label) => {
+          const tr = bodyRows(page).find((x) => idOf(x) === id);
+          return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+        };
+        const sentF = [];
+
+        const STRIP14 = 'Upcoming 5 · Overdue 1 · Completed 2 · Returned 3 · Cancelled 3 · All 14';
+        const ALL14 = ROWS_F.map((r) => r[0]);
+        const ITEMS_F = 'Any item | Basketball Court | Folding Tables | Multipurpose Hall | Plastic Chairs | stick | Tables';
+        const PAYS_F = 'Any payment | Paid | Unpaid | No fee | Not billed | Void';
+        const STARTS_F = 'Any date | Today | Next 7 days | Next 30 days | Last 7 days | Last 30 days | Choose dates';
+        // What each choice shows on All, worked out by hand from ROWS_F, in
+        // the one order.
+        const BY_ITEM = { 'Basketball Court': [151, 142, 139], 'Folding Tables': [150, 145], 'Multipurpose Hall': [146, 138],
+          'Plastic Chairs': [147, 143, 140], stick: [148, 141], Tables: [149, 144] };
+        const BY_PAY = {
+          Paid: { rows: [148, 146, 144, 139], strip: 'Upcoming 1 · Overdue 0 · Completed 2 · Returned 1 · Cancelled 0 · All 4' },
+          Unpaid: { rows: [151, 149, 147, 145, 141], strip: 'Upcoming 3 · Overdue 1 · Completed 0 · Returned 1 · Cancelled 0 · All 5' },
+          'No fee': { rows: [150, 143], strip: 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2' },
+          'Not billed': { rows: [140], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 1 · All 1' },
+          Void: { rows: [142, 138], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 2 · All 2' },
+        };
+        const BY_DATE = {
+          Today: [147, 146, 145], 'Next 7 days': [148, 147, 146, 145], 'Next 30 days': [150, 149, 148, 147, 146, 145],
+          'Last 7 days': [147, 146, 145, 144, 143], 'Last 30 days': [147, 146, 145, 144, 143, 142, 141],
+          oct12: [147, 146, 145], fromOct19: [151, 150, 149], toOct11: [144, 143, 142, 141, 140, 139, 138],
+        };
+        const PRESET_LABELS = ['Today', 'Next 7 days', 'Next 30 days', 'Last 7 days', 'Last 30 days'];
+        const OCTOBER = [149, 148, 147, 146, 145, 144, 143, 142];
+
+        for (const { name, route, token, user, opening } of ROLES_AE) {
+          const state = makeStateF();
+          const openRows = opening === 'Overdue' ? [145] : [151, 150, 149, 148, 147];
+          const openingHeading = opening === 'Overdue' ? '1 overdue booking' : '5 upcoming bookings';
+          seedSession(token, user);
+          resetNet(200, answerForF(state));
+          // The first open, held, then failing; then Try again.
+          let at = holdNext();
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const openingLook = { row: !!itemSelect(page), loading: lookF(page).loading };
+          release(at, 500, { error: 'Network down' });
+          await page.settle();
+          const failedOpen = { row: !!itemSelect(page), error: lookF(page).error };
+          at = holdNext();
+          await clickIf(page, tryAgainButton(page));
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          check(`${name}: like the search and the tabs, the filters row is not drawn while the list loads or after a load fails: no `
+              + 'Item select under "Loading bookings…", none beside the error; Try again brings the row back',
+            !openingLook.row && openingLook.loading && !failedOpen.row && failedOpen.error === 'Could not load the bookings: Network down'
+              && !!itemSelect(page) && !!paySelect(page) && !!dateSelect(page),
+            said({ openingLook, failedOpen, after: !!itemSelect(page) }));
+
+          // Where it sits, what it holds, and how it opens.
+          const row = filtersRow(page);
+          const searchRow = box(page)?.closest('.list-head') ?? null;
+          const wrap = row?.closest('.rental-bookings-filters') ?? null;
+          check(`${name}: the row sits where Document requests' does, under the search row and over the tabs, in the page's own `
+              + 'wrapper (.rental-bookings-filters), not part of a .list-head and holding no heading, so the list heading is still the '
+              + 'heading row\'s',
+            !!row && !!wrap && !!searchRow && follows(searchRow, wrap) && !searchRow.contains(row) && follows(row, page.query('.pay-tabs'))
+              && !row.closest('.list-head') && !row.querySelector('h1, h2, h3, h4, h5, h6')
+              && text(page.query('.list-head h2')) === openingHeading,
+            said({ row: row?.className ?? null, wrap: wrap?.className ?? null, inHead: !!row?.closest('.list-head') }));
+          const selects = [itemSelect(page), paySelect(page), dateSelect(page)];
+          const namedOk = selects.map((s, i) => !!s && s.tagName === 'SELECT' && s.labels?.length === 1
+            && s.labels[0].textContent === ['Item', 'Payment', 'Starts'][i] && !!s.id && s.labels[0].htmlFor === s.id
+            && !!row && row.contains(s));
+          check(`${name}: three native selects, each named by its own visible label, "Item", "Payment" and "Starts", in that order (the `
+              + 'label for= its select\'s id, the three ids different)',
+            namedOk.every(Boolean) && new Set(selects.map((s) => s?.id)).size === 3 && follows(selects[0], selects[1])
+              && follows(selects[1], selects[2]), said({ namedOk, ids: selects.map((s) => s?.id ?? null) }));
+          let v = lookF(page);
+          check(`${name}: they open on "Any item", "Any payment" and "Any date", with no From or To, no Clear filters and no hint, and `
+              + `the list as before: ${opening}, "${openingHeading}", "${STRIP14}"`,
+            v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+              && !v.clear && !v.hint && v.heading === openingHeading && v.strip === STRIP14 && said(v.rows) === said(openRows), said(v));
+          check(`${name}: Item offers "Any item" and the six items the loaded rows hold, sorted by name with case ignored: "${ITEMS_F}"`,
+            optionsOf(itemSelect(page)) === ITEMS_F, said(optionsOf(itemSelect(page))));
+          check(`${name}: Payment offers "${PAYS_F}", Void last because two loaded bookings' charges are void; Starts offers "${STARTS_F}"`,
+            optionsOf(paySelect(page)) === PAYS_F && optionsOf(dateSelect(page)) === STARTS_F,
+            said({ payment: optionsOf(paySelect(page)), starts: optionsOf(dateSelect(page)) }));
+          const hintBox = row?.nextElementSibling ?? null;
+          check(`${name}: under the row the hint is in the page, empty, a polite status, so it is heard when its words appear`,
+            !!hintBox && hintBox.getAttribute('role') === 'status' && hintBox.textContent === '' && !!hintBox.id,
+            said({ role: hintBox?.getAttribute('role') ?? null, text: hintBox?.textContent ?? null }));
+
+          // Item, on the opening tab, then on All.
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          const sentBefore = net.calls.length;
+          await pickItem(page, 'Tables');
+          v = lookF(page);
+          const TABLES_STRIP = 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2';
+          if (opening === 'Overdue') {
+            check('Staff: Item "Tables" on Overdue, which holds one booking of Folding Tables: not it, though its name holds "Tables": '
+                + '"0 of 1 overdue booking match", "No overdue bookings match your search or filters." with Clear search and filters; '
+                + `the counts follow, "${TABLES_STRIP}"; Clear filters appears`,
+              v.rows.length === 0 && v.heading === '0 of 1 overdue booking match'
+                && v.empty === 'No overdue bookings match your search or filters.'
+                && said(v.emptyButtons) === said(['Clear search and filters']) && v.strip === TABLES_STRIP && v.clear, said(v));
+          } else {
+            check(`${name}: Item "Tables" on Upcoming: #149 alone, not #150, whose "Folding Tables" holds the name; "1 of 5 upcoming `
+                + `bookings matches"; the counts follow, "${TABLES_STRIP}"; and Clear filters appears`,
+              said(v.rows) === said([149]) && v.heading === '1 of 5 upcoming bookings matches' && v.strip === TABLES_STRIP && v.clear,
+              said(v));
+          }
+          await clickIf(page, tabNamed(page, 'All'));
+          const perItem = {};
+          for (const label of Object.keys(BY_ITEM)) {
+            await pickItem(page, label);
+            perItem[label] = lookF(page).rows;
+          }
+          const wrongItems = Object.keys(BY_ITEM).filter((label) => said(perItem[label]) !== said(BY_ITEM[label]));
+          check(`${name}: on All each item shows exactly its own bookings, in the one order: Basketball Court 3, Folding Tables 2, `
+              + 'Multipurpose Hall 2, Plastic Chairs 3, stick 2, Tables 2 (never the Folding Tables)',
+            wrongItems.length === 0, said(wrongItems.map((label) => ({ label, got: perItem[label], want: BY_ITEM[label] }))));
+          const offeredItems = optionsOf(itemSelect(page))?.split(' | ') ?? [];
+          check(`${name}: Item still lists a deactivated item that old bookings use: "stick" is deactivated (the active items list, `
+              + 'GET /rental-items, no longer holds it), but a booking reads its item\'s name live, so #148 and #141 still name it, '
+              + 'Item offers it once, and choosing it shows those two; the list asked for no items list, its choices being its own '
+              + 'bookings\'',
+            offeredItems.filter((o) => o === 'stick').length === 1 && said(perItem.stick) === said([148, 141])
+              && !ACTIVE_F.some((i) => i.name === 'stick') && !net.calls.some((c) => c.url.endsWith('/rental-items')),
+            said({ offeredItems, stick: perItem.stick, itemsAsked: net.calls.filter((c) => c.url.endsWith('/rental-items')).length }));
+          await pickItem(page, 'Plastic Chairs');
+          const chairsHeading = lookF(page).heading;
+          await pickItem(page, 'Any item');
+          v = lookF(page);
+          check(`${name}: on All, "3 of 14 bookings match" for Plastic Chairs; back on "Any item", all fourteen, "14 bookings", every `
+              + 'count as before, and no Clear filters',
+            chairsHeading === '3 of 14 bookings match' && said(v.rows) === said(ALL14) && v.heading === '14 bookings'
+              && v.strip === STRIP14 && !v.clear, said({ chairsHeading, v }));
+
+          // Payment.
+          const perPay = {};
+          for (const label of Object.keys(BY_PAY)) {
+            await pickPay(page, label);
+            const x = lookF(page);
+            perPay[label] = { rows: x.rows, strip: x.strip, heading: x.heading, markers: [...new Set(x.markers)] };
+          }
+          const wrongPays = Object.keys(BY_PAY).filter((label) => said(perPay[label].rows) !== said(BY_PAY[label].rows)
+            || perPay[label].strip !== BY_PAY[label].strip
+            || perPay[label].heading !== `${BY_PAY[label].rows.length} of 14 bookings ${BY_PAY[label].rows.length === 1 ? 'matches' : 'match'}`);
+          check(`${name}: on All each Payment choice shows its bookings, the counts and the heading following it: Paid 4 (never the PHP 0 `
+              + 'paid #150 or #143), Unpaid 5, No fee 2, Not billed 1 (#140), Void 2 (the cancelled #142 and #138)',
+            wrongPays.length === 0, said(wrongPays.map((label) => ({ label, got: perPay[label], want: BY_PAY[label] }))));
+          check(`${name}: the filter and the row never disagree: every row a choice shows has that word under its badge, and no other`,
+            Object.keys(BY_PAY).every((label) => said(perPay[label].markers) === said([label])),
+            said(Object.fromEntries(Object.keys(BY_PAY).map((label) => [label, perPay[label].markers]))));
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          await pickPay(page, 'Unpaid');
+          v = lookF(page);
+          check(`${name}: a filter and a tab together: Upcoming with Unpaid shows #151, #149 and #147 under "3 of 5 upcoming bookings `
+              + 'match"',
+            said(v.rows) === said([151, 149, 147]) && v.heading === '3 of 5 upcoming bookings match'
+              && said(v.pressed) === said(['Upcoming 3']), said(v));
+
+          // Starts, on three clocks.
+          await clickIf(page, tabNamed(page, 'All'));
+          await pickPay(page, 'Any payment');
+          const byZone = {};
+          for (const zone of ZONES) {
+            process.env.TZ = zone;
+            const seen = {};
+            for (const label of PRESET_LABELS) {
+              await pickDate(page, label);
+              seen[label] = lookF(page).rows;
+            }
+            await pickDate(page, 'Choose dates');
+            await typeDate(page, fromInput(page), '2026-10-12');
+            await typeDate(page, toInput(page), '2026-10-12');
+            seen.oct12 = lookF(page).rows;
+            await typeDate(page, fromInput(page), '2026-10-19');
+            await typeDate(page, toInput(page), '');
+            seen.fromOct19 = lookF(page).rows;
+            await typeDate(page, fromInput(page), '');
+            await typeDate(page, toInput(page), '2026-10-11');
+            seen.toOct11 = lookF(page).rows;
+            await typeDate(page, toInput(page), '');
+            byZone[zone] = seen;
+          }
+          process.env.TZ = HOME_ZONE;
+          const wrongDates = ZONES.flatMap((zone) => Object.keys(BY_DATE)
+            .filter((k) => said(byZone[zone][k]) !== said(BY_DATE[k])).map((k) => ({ zone, k, got: byZone[zone][k] })));
+          check(`${name}: Starts in Manila days, on UTC, Los Angeles and Tokyo time alike: Today, #147 (11:48 PM, Tokyo's 13 Oct), #146 `
+              + '(7:47 AM, 11 Oct in UTC and Los Angeles) and #145 (00:00), not #144 (11:30 PM on 11 Oct); Next 7 days adds #148 (11:30 '
+              + 'PM on 18 Oct), not #149 (00:00 on 19 Oct); Next 30 days adds #149 and #150 (10 Nov), not #151 (11 Nov); Last 7 days '
+              + '#147 to #143 (00:00 on 6 Oct), not #142 (11:30 PM on 5 Oct); Last 30 days adds #142 and #141 (00:00 on 13 Sep), not '
+              + '#140 (11:30 PM on 12 Sep)',
+            wrongDates.filter((w) => PRESET_LABELS.includes(w.k)).length === 0,
+            said(wrongDates.filter((w) => PRESET_LABELS.includes(w.k))));
+          check(`${name}: Choose dates, both ends in, on all three: 12 Oct to 12 Oct takes #147, #146 and #145; From 19 Oct alone #151, `
+              + '#150 and #149; To 11 Oct alone the seven from #144 down',
+            wrongDates.filter((w) => !PRESET_LABELS.includes(w.k)).length === 0,
+            said(wrongDates.filter((w) => !PRESET_LABELS.includes(w.k))));
+          await pickDate(page, 'Today');
+          v = lookF(page);
+          check(`${name}: Today on All: "3 of 14 bookings match", and the counts follow the date, "Upcoming 1 · Overdue 1 · Completed 1 `
+              + '· Returned 0 · Cancelled 0 · All 3"',
+            v.heading === '3 of 14 bookings match'
+              && v.strip === 'Upcoming 1 · Overdue 1 · Completed 1 · Returned 0 · Cancelled 0 · All 3', said(v));
+          await pickDate(page, 'Choose dates');
+          const fromBox = fromInput(page);
+          const toBox = toInput(page);
+          v = lookF(page);
+          check(`${name}: Choose dates brings From and To, date inputs labelled "From" and "To", both described by the hint; with neither `
+              + 'set it restricts nothing ("14 bookings") but is a filter on (Clear filters shows)',
+            fromBox?.type === 'date' && toBox?.type === 'date' && !!hintBox?.id && fromBox.getAttribute('aria-describedby') === hintBox.id
+              && toBox.getAttribute('aria-describedby') === hintBox.id && v.heading === '14 bookings' && v.rows.length === 14 && v.clear,
+            said({ from: fromBox?.type ?? null, to: toBox?.type ?? null, heading: v.heading, clear: v.clear }));
+          await pickItem(page, 'Basketball Court');
+          await pickPay(page, 'Paid');
+          await typeDate(page, fromInput(page), '2026-10-12');
+          await typeDate(page, toInput(page), '2026-10-01');
+          v = lookF(page);
+          check(`${name}: From after To (12 Oct to 1 Oct) is never swapped and takes nothing: the hint "${HINT}", "0 of 14 bookings `
+              + 'match", and "No bookings match your search or filters." with Clear search and filters',
+            v.hint && v.from === '2026-10-12' && v.to === '2026-10-01' && v.rows.length === 0 && v.heading === '0 of 14 bookings match'
+              && v.empty === 'No bookings match your search or filters.' && said(v.emptyButtons) === said(['Clear search and filters']),
+            said(v));
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          v = lookF(page);
+          check(`${name}: Clear filters puts all three back to Any, every one, takes From, To and the hint away, and goes itself; focus `
+              + 'moves to the Item select rather than being dropped; the tab stays: All, "14 bookings"',
+            v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+              && !v.hint && !v.clear && !!itemSelect(page) && page.active() === itemSelect(page)
+              && said(v.pressed) === said(['All 14']) && v.heading === '14 bookings',
+            said({ v, focus: page.active()?.tagName ?? null }));
+
+          // A tab, filters and a search together; then the empty texts.
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          await pickPay(page, 'Unpaid');
+          const oneFilter = lookF(page);
+          await type(page, 'maria');
+          const withSearch = lookF(page);
+          await pickDate(page, 'Next 7 days');
+          const nothingLeft = lookF(page);
+          check(`${name}: tab, filters and search together: Upcoming with Unpaid, #151, #149 and #147, "3 of 5 upcoming bookings match"; `
+              + 'with "maria" as well, #149 alone (Maria Lourdes Villanueva-Santos), "1 of 5 upcoming bookings matches", the counts '
+              + 'following both; with Next 7 days too nothing is left (#149 starts on 19 Oct): "0 of 5 upcoming bookings match", and '
+              + 'in place of the rows "No upcoming bookings match your search or filters." with one button, Clear search and filters',
+            said(oneFilter.rows) === said([151, 149, 147]) && oneFilter.heading === '3 of 5 upcoming bookings match'
+              && said(withSearch.rows) === said([149]) && withSearch.heading === '1 of 5 upcoming bookings matches'
+              && withSearch.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1'
+              && nothingLeft.rows.length === 0 && nothingLeft.heading === '0 of 5 upcoming bookings match'
+              && nothingLeft.empty === 'No upcoming bookings match your search or filters.'
+              && said(nothingLeft.emptyButtons) === said(['Clear search and filters']),
+            said({ oneFilter, withSearch, nothingLeft }));
+          await clickIf(page, page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search and filters') : null);
+          v = lookF(page);
+          check(`${name}: Clear search and filters empties the search and puts every filter back to Any, keeps the tab (Upcoming), and `
+              + 'puts focus in the search box: "5 upcoming bookings", all five',
+            v.search === '' && filtersOf(v) === 'Any item / Any payment / Any date' && !v.clear
+              && said(v.pressed) === said(['Upcoming 5']) && v.heading === '5 upcoming bookings' && v.rows.length === 5
+              && !!box(page) && page.active() === box(page),
+            said({ v, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName ?? null }));
+          await clickIf(page, tabNamed(page, 'Overdue'));
+          await pickPay(page, 'Paid');
+          const filterEmpty = lookF(page);
+          await pickPay(page, 'Any payment');
+          await type(page, 'zzz');
+          const searchEmpty = lookF(page);
+          await type(page, '');
+          check(`${name}: a filter alone that empties a tab says so in the same words: Overdue with Paid, "0 of 1 overdue booking `
+              + 'match", "No overdue bookings match your search or filters." and Clear search and filters',
+            filterEmpty.heading === '0 of 1 overdue booking match'
+              && filterEmpty.empty === 'No overdue bookings match your search or filters.'
+              && said(filterEmpty.emptyButtons) === said(['Clear search and filters']), said(filterEmpty));
+          check(`${name}: a search alone keeps its own text and button, as before: 'No overdue bookings match "zzz"' with Clear search`,
+            searchEmpty.heading === '0 of 1 overdue booking match' && searchEmpty.empty === 'No overdue bookings match "zzz"'
+              && said(searchEmpty.emptyButtons) === said(['Clear search']), said(searchEmpty));
+          await clickIf(page, tabNamed(page, 'All'));
+          await type(page, 'juan');
+          await pickItem(page, 'Basketball Court');
+          await pickPay(page, 'Unpaid');
+          const allSet = lookF(page);
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          v = lookF(page);
+          check(`${name}: Clear filters clears the filters only: with "juan" typed, Basketball Court and Unpaid set (#151), the search `
+              + 'stays, and so do his two bookings, #151 and #143, under "2 of 14 bookings match"; focus on the Item select',
+            said(allSet.rows) === said([151]) && v.search === 'juan' && filtersOf(v) === 'Any item / Any payment / Any date'
+              && said(v.rows) === said([151, 143]) && v.heading === '2 of 14 bookings match' && !!itemSelect(page)
+              && page.active() === itemSelect(page),
+            said({ allSet: allSet.rows, v }));
+          await type(page, '');
+          check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to the browser's storage, the `
+              + 'session\'s stub or jsdom\'s own',
+            net.calls.length === sentBefore && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && !!itemSelect(page),
+            `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, `
+              + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+          // Kept through a tab, a search, Refresh, a failed reload and Back.
+          await pickItem(page, 'Plastic Chairs');
+          await pickPay(page, 'Unpaid');
+          await pickDate(page, 'Choose dates');
+          await typeDate(page, fromInput(page), '2026-10-01');
+          await typeDate(page, toInput(page), '2026-10-31');
+          const SET = 'Plastic Chairs / Unpaid / Choose dates 2026-10-01..2026-10-31';
+          v = lookF(page);
+          check(`${name}: Plastic Chairs, Unpaid, 1 to 31 Oct, on All: #147 alone, "1 of 14 bookings matches"`,
+            filtersOf(v) === SET && said(v.rows) === said([147]) && v.heading === '1 of 14 bookings matches'
+              && v.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1', said(v));
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          const onUpcoming = lookF(page);
+          await type(page, 'teresita');
+          const searched = lookF(page);
+          await type(page, '');
+          await clickIf(page, tabNamed(page, 'All'));
+          v = lookF(page);
+          check(`${name}: kept through a tab and a search: Upcoming shows #147, "1 of 5 upcoming bookings matches"; "teresita", its `
+              + 'borrower, still finds it; the search cleared and All again, the filters are as set, and so is the row',
+            filtersOf(onUpcoming) === SET && said(onUpcoming.rows) === said([147])
+              && onUpcoming.heading === '1 of 5 upcoming bookings matches' && filtersOf(searched) === SET
+              && said(searched.rows) === said([147]) && filtersOf(v) === SET && said(v.rows) === said([147]),
+            said({ onUpcoming: onUpcoming.rows, searched: searched.rows, v: filtersOf(v) }));
+          at = holdNext();
+          let sent = net.calls.length;
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          const reloading = { row: !!itemSelect(page), loading: lookF(page).loading };
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          v = lookF(page);
+          check(`${name}: Refresh loads the list once, with no filters row while it is out, and keeps every filter and its row`,
+            said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all']) && !reloading.row && reloading.loading
+              && filtersOf(v) === SET && said(v.rows) === said([147]) && v.heading === '1 of 14 bookings matches',
+            said({ reloading, v }));
+          at = holdNext();
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          release(at, 500, { error: 'Internal server error' });
+          await page.settle();
+          const failedReload = { row: !!itemSelect(page), error: lookF(page).error };
+          at = holdNext();
+          await clickIf(page, tryAgainButton(page));
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          v = lookF(page);
+          check(`${name}: a reload that fails shows no filters row beside the error, and Try again brings it back as it was`,
+            !failedReload.row && failedReload.error === 'Could not load the bookings: Internal server error' && filtersOf(v) === SET
+              && said(v.rows) === said([147]), said({ failedReload, v }));
+          if (name !== 'Punong Barangay') {
+            const label = name === 'Secretary' ? 'Edit' : 'Mark returned';
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 147, label));
+            const opened = text(page.query('.pending-card h3'));
+            await clickIf(page, buttonNamed(root(), '← Back to list'));
+            v = lookF(page);
+            check(`${name}: Back from ${label}, with nothing ${name === 'Secretary' ? 'saved' : 'recorded'}, keeps every filter and its `
+                + 'row; nothing was requested',
+              opened === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147') && filtersOf(v) === SET
+                && said(v.rows) === said([147]) && said(listCalls(net.calls.slice(sent))) === said([]),
+              said({ opened, v: filtersOf(v), rows: v.rows, calls: listCalls(net.calls.slice(sent)) }));
+          }
+
+          // The reload after an action keeps the filters and the tab.
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          await pickPay(page, 'Unpaid');
+          if (name === 'Secretary') {
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 147, 'Cancel'));
+            await page.settle();
+            v = lookF(page);
+            check('Secretary: Cancel with Unpaid on posts the cancel, loads the list again, once, and keeps the filter and the tab: '
+                + '#147, its charge now void as the route leaves an unpaid one, has left Unpaid: #151, #149, #145 and #141, "4 of 14 '
+                + 'bookings match"',
+              said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/147/cancel', 'GET /rental-requests?status=all'])
+                && v.payment === 'Unpaid' && said(v.rows) === said([151, 149, 145, 141]) && v.heading === '4 of 14 bookings match'
+                && said(v.pressed) === said(['All 4']), said({ calls: listCalls(net.calls.slice(sent)), v }));
+          }
+          if (name === 'Staff') {
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 145, 'Mark returned'));
+            if (page.query('.pending-card form')) await page.submit();
+            await page.settle();
+            v = lookF(page);
+            check('Staff: Record return with Unpaid on posts the return, loads the list again, once, and keeps the filter and the tab: '
+                + '#145, returned and still unpaid, is still shown, now counted under Returned: "Upcoming 3 · Overdue 0 · Completed 0 '
+                + '· Returned 2 · Cancelled 0 · All 5"',
+              said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/145/return', 'GET /rental-requests?status=all'])
+                && v.payment === 'Unpaid' && said(v.rows) === said([151, 149, 147, 145, 141])
+                && v.strip === 'Upcoming 3 · Overdue 0 · Completed 0 · Returned 2 · Cancelled 0 · All 5'
+                && said(v.pressed) === said(['All 5']), said({ calls: listCalls(net.calls.slice(sent)), v }));
+          }
+
+          // The choices come from the rows as loaded.
+          await pickPay(page, 'Void');
+          const voidRows = lookF(page).rows;
+          for (const r of state.rows) if (r[8]?.status === 'VOID') r[8] = { ...r[8], status: 'PAID' };
+          state.rows.unshift([152, 'sound', 'nino', '2026-11-12', '08:00', '12:00', 'confirmed', 'confirmed',
+            { status: 'UNPAID', amount: 300 }]);
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          v = lookF(page);
+          check(`${name}: the choices are the loaded rows': after a Refresh that brings a Sound System booking and leaves no void charge, `
+              + 'Item offers Sound System in its place by name, Payment no longer offers Void, and the Void choice goes back to "Any '
+              + 'payment" with all fifteen shown, never a select reading Void over rows it does not hold',
+            voidRows.length > 0 && optionsOf(itemSelect(page)) === 'Any item | Basketball Court | Folding Tables | Multipurpose Hall | '
+              + 'Plastic Chairs | Sound System | stick | Tables'
+              && optionsOf(paySelect(page)) === 'Any payment | Paid | Unpaid | No fee | Not billed' && v.payment === 'Any payment'
+              && v.rows.length === 15 && v.heading === '15 bookings' && !v.clear,
+            said({ voidRows, items: optionsOf(itemSelect(page)), payments: optionsOf(paySelect(page)), v }));
+          await pickItem(page, 'Multipurpose Hall');
+          const hallRows = lookF(page).rows;
+          for (const r of state.rows) if (r[1] === 'hall') r[1] = 'hallRenamed';
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          v = lookF(page);
+          const renamedOptions = optionsOf(itemSelect(page)) ?? '';
+          await pickItem(page, 'Multi-purpose Hall');
+          const renamedRows = lookF(page).rows;
+          const renamedCells = bodyRows(page).map((tr) => text(tr.children[1]));
+          await pickItem(page, 'Any item');
+          check(`${name}: a renamed item shows once, under its current name: with Multipurpose Hall renamed "Multi-purpose Hall" on the `
+              + 'server, a Refresh brings every booking of it under the new name, read live from the item (a booking stores no copy of '
+              + 'it), so Item offers "Multi-purpose Hall" once and "Multipurpose Hall" no more; the choice the reload no longer offers '
+              + 'goes back to "Any item", all fifteen shown; and the new name, chosen, takes both its bookings, the August one too '
+              + '(#146 and #138), each row naming it',
+            said(hallRows) === said([146, 138]) && v.item === 'Any item' && v.rows.length === 15
+              && renamedOptions === 'Any item | Basketball Court | Folding Tables | Multi-purpose Hall | Plastic Chairs | Sound System | '
+                + 'stick | Tables'
+              && said(renamedRows) === said([146, 138]) && said(renamedCells) === said(['Multi-purpose Hall', 'Multi-purpose Hall']),
+            said({ hallRows, v: filtersOf(v), rows: v.rows.length, items: renamedOptions, renamedRows, renamedCells }));
+
+          // A new visit starts again; nothing was kept in the browser. The
+          // second mount does not reseed the session, which would clear storage.
+          const writesAfter = store.sets;
+          const domWritesAfter = domStorage.writes;
+          sentF.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+          resetNet(200, answerForF(makeStateF()));
+          const again = await globalThis.mountInteractive(root(), route);
+          await again.settle();
+          v = lookF(again);
+          check(`${name}: nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window or `
+              + `not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on ${opening}, "${openingHeading}"`,
+            writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '' && filtersOf(v) === 'Any item / Any payment / Any date' && !v.clear
+              && v.heading === openingHeading,
+            said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+              session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
+          sentF.push(...net.calls.map((c) => c.method));
+          await again.unmount();
+        }
+
+        // c. The pager counts what the filters leave, and every filter change
+        // goes back to page 1. Forty bookings, numbered 3001 to 3040, all
+        // Juan's and overdue: odd ones Plastic Chairs, even ones Tables; Paid
+        // where the number leaves 1 over 3 (14), Unpaid where it leaves 2
+        // (13), no charge where it leaves 0 (13); the first 24 start in
+        // October (1 to 12 Oct, twice), the rest 1 to 16 Sep.
+        const two = (n) => String(n).padStart(2, '0');
+        const PAGER40 = Array.from({ length: 40 }, (_, i) => {
+          const n = i + 1;
+          const charge = n % 3 === 1 ? { status: 'PAID', amount: 50 } : n % 3 === 2 ? { status: 'UNPAID', amount: 50 } : null;
+          const day = n <= 24 ? `2026-10-${two(1 + ((n - 1) % 12))}` : `2026-09-${two(n - 24)}`;
+          return [3000 + n, n % 2 ? 'chairs' : 'tables', 'juan', day, '08:00', '12:00', 'confirmed', 'overdue', charge];
+        });
+        //   the change, then what "Showing" said on page 2 before it and must say after it, and the heading after
+        const STEPS_F = [
+          ['Item "Plastic Chairs"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 20 results', '20 of 40 bookings match'],
+          ['Item "Any item"', 'Showing 11 to 20 of 20 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['Payment "Paid"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 bookings match'],
+          ['Payment "Any payment"', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['Starts "Last 7 days"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 bookings match'],
+          ['Starts "Choose dates", no dates yet', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['From 1 Oct', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 bookings match'],
+          ['To 12 Oct', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 24 results', '24 of 40 bookings match'],
+          ['Clear filters', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+        ];
+        for (const { name, route, token, user } of ROLES_AE) {
+          const state = makeStateF(PAGER40);
+          seedSession(token, user);
+          resetNet(200, answerForF(state));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          await clickIf(page, tabNamed(page, 'All'));
+          await setRows(page, 10);
+          const sent = net.calls.length;
+          const changes = [
+            () => pickItem(page, 'Plastic Chairs'), () => pickItem(page, 'Any item'),
+            () => pickPay(page, 'Paid'), () => pickPay(page, 'Any payment'),
+            () => pickDate(page, 'Last 7 days'), () => pickDate(page, 'Choose dates'),
+            () => typeDate(page, fromInput(page), '2026-10-01'), () => typeDate(page, toInput(page), '2026-10-12'),
+            () => clickIf(page, buttonNamed(root(), 'Clear filters')),
+          ];
+          const seen = [];
+          for (let i = 0; i < STEPS_F.length; i += 1) {
+            await press(page, numberButton(page, 2));
+            const before = lookF(page).showing;
+            await changes[i]();
+            const after = lookF(page);
+            seen.push({ change: STEPS_F[i][0], before, after: after.showing, current: after.current, heading: after.heading });
+          }
+          const wrongSteps = seen.filter((s, i) => s.before !== STEPS_F[i][1] || s.after !== STEPS_F[i][2] || s.heading !== STEPS_F[i][3]
+            || said(s.current) !== said(['1']));
+          check(`${name}: every filter change goes back to page 1, from page 2 at 10 a page, and the pager counts what the filters leave: `
+              + 'Item, Payment, a Starts preset, Choose dates, From, To and Clear filters, each from "Showing 11 to …" to "Showing 1 to '
+              + '10 of 20, 40, 14, 40, 14, 40, 24, 24, 40 results", with the heading over the same set',
+            wrongSteps.length === 0, said(wrongSteps.length ? wrongSteps : seen.map((s) => s.after)));
+          // With no filters on screen nothing was changed, so "no request" would say nothing.
+          check(`  ${name}: and none of those changes or page presses sent a request`, !!itemSelect(page) && net.calls.length === sent,
+            `${net.calls.length - sent} request(s), filters ${itemSelect(page) ? 'present' : 'absent'}`);
+          await pickPay(page, 'Paid');
+          await press(page, numberButton(page, 2));
+          const second = lookF(page);
+          for (const r of state.rows) if (r[0] - 3000 <= 16 && r[8]?.status === 'PAID') r[8] = { ...r[8], status: 'UNPAID' };
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          const shrunk = lookF(page);
+          check(`${name}: kept, and never an empty page past the end: on page 2 of Paid's 14, a Refresh after six were marked unpaid `
+              + 'elsewhere keeps Paid and shows the 8 left on one page, with no pager, never an empty page 2',
+            second.showing === 'Showing 11 to 14 of 14 results' && shrunk.payment === 'Paid' && shrunk.rows.length === 8
+              && shrunk.showing === null && shrunk.heading === '8 of 40 bookings match', said({ second: second.showing, shrunk }));
+          sentF.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+        const writesF = sentF.filter((m) => m !== 'GET');
+        check('section AF\'s filters row sent GETs, and two POSTs, the Secretary\'s cancel and Staff\'s return, answered by the fetch stub',
+          sentF.length > 0 && said(writesF) === said(['POST', 'POST']), `${sentF.length} request(s): ${said(writesF)}`);
+
+        // d. The Filters button on a phone, as sections AB and AC check
+        // Document requests'. At 640px and below the row and its hint are a
+        // panel behind one full-width "Filters" button, which counts the
+        // filters that are on ("Filters (2)", From and To counting once, with
+        // Starts) and opens and closes the panel in place, by its button and
+        // by Escape (in the open panel or on the button; never from the
+        // search box or a tab); its open state is the page's, kept through
+        // every reload and Back and never in the browser; Clear filters keeps
+        // its place while nothing is on, disabled and hidden. Above 640px no
+        // button and the row as it was. jsdom applies no width media query,
+        // so index.css is read with section AF's reader.
+        console.log('\n--- Rental bookings: the Filters button ---');
+        {
+          const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+          const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+          // The panel the button names, found the way a screen reader finds it.
+          const panelOf = (page) => {
+            const id = filtersButton(page)?.getAttribute('aria-controls');
+            return id ? dom.window.document.getElementById(id) : null;
+          };
+          const slotOf = () => buttonNamed(root(), 'Clear filters') ?? null;
+          const stateOf = (page) => {
+            const b = filtersButton(page);
+            const p = panelOf(page);
+            return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+              open: !!p && p.classList.contains('is-open') };
+          };
+          const isOpen = (s) => s.expanded === 'true' && s.open;
+          const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+          // What is drawn of the three, each found on its own.
+          const drawn = (page) => ({ button: !!filtersButton(page), panel: !!page.query('.pay-filters-panel'), slot: !!slotOf() });
+          const none = (d) => !d.button && !d.panel && !d.slot;
+          const toggle = (page) => press(page, filtersButton(page));
+          // Opened or closed by its button only when it is not so already, so
+          // a page that ignores an Escape fails that one check and not every
+          // check after it.
+          const openIt = async (page) => { if (!isOpen(stateOf(page))) await toggle(page); };
+          const closeIt = async (page) => { if (isOpen(stateOf(page))) await toggle(page); };
+          // Escape where focus is, after focusing `el` ('nothing': with nothing
+          // focused): whether the element took focus, and whether the key went
+          // on to the document.
+          const escapeFrom = async (page, el) => {
+            if (el === 'nothing') page.active()?.blur?.();
+            else el?.focus();
+            const focused = el === 'nothing' ? page.active() === dom.window.document.body : !!el && page.active() === el;
+            let reached = false;
+            const spy = (e) => { if (e.key === 'Escape') reached = true; };
+            dom.window.document.addEventListener('keydown', spy);
+            if (focused) await page.key('Escape');
+            await page.settle();
+            dom.window.document.removeEventListener('keydown', spy);
+            return { focused, reached: focused ? reached : null };
+          };
+          const sentB = [];
+
+          for (const { name, route, token, user } of ROLES_AE) {
+            const st = makeStateF();
+            seedSession(token, user);
+            resetNet(200, answerForF(st));
+            let at = holdNext();
+            const page = await globalThis.mountInteractive(root(), route);
+            await page.settle();
+            const whileLoading = { ...drawn(page), loading: lookF(page).loading };
+            release(at, 500, { error: 'Network down' });
+            await page.settle();
+            const afterFailure = { ...drawn(page), error: lookF(page).error };
+            at = holdNext();
+            await clickIf(page, tryAgainButton(page));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            const loaded = drawn(page);
+            check(`${name}: the Filters button, its panel and the Clear filters slot are not drawn while the list loads or beside a `
+                + 'failed load, as the filters row is not; Try again brings all three',
+              none(whileLoading) && whileLoading.loading && none(afterFailure)
+                && afterFailure.error === 'Could not load the bookings: Network down' && loaded.button && loaded.panel && loaded.slot,
+              said({ whileLoading, afterFailure, loaded }));
+
+            // The button and the panel it names.
+            const button = filtersButton(page);
+            const panel = panelOf(page);
+            const wrap = button?.closest('.rental-bookings-filters') ?? null;
+            const searchRow = box(page)?.closest('.list-head') ?? null;
+            const sameId = panel ? [...dom.window.document.querySelectorAll('[id]')].filter((el) => el.id === panel.id).length : 0;
+            check(`${name}: "Filters" is a real button, type="button", named by its own text, with aria-expanded="false" and `
+                + 'aria-controls naming the panel, whose id no other element has; the button is over the panel and outside it, both in '
+                + 'the page\'s filters wrapper (which carries .doc-requests-filters for its look) between the search row and the tabs',
+              !!button && button.tagName === 'BUTTON' && button.getAttribute('type') === 'button' && button.textContent === 'Filters'
+                && !button.hasAttribute('aria-label') && button.getAttribute('aria-expanded') === 'false' && !!panel
+                && button.getAttribute('aria-controls') === panel.id && sameId === 1 && !panel.contains(button)
+                && follows(button, panel) && !!wrap && wrap.classList.contains('doc-requests-filters') && wrap.contains(panel)
+                && follows(searchRow, wrap) && follows(wrap, page.query('.pay-tabs')),
+              said({ button: button ? { text: button.textContent, expanded: button.getAttribute('aria-expanded'),
+                controls: button.getAttribute('aria-controls') } : null, panel: panel?.id ?? null, sameId,
+              wrap: wrap?.className ?? null }));
+            const hint = panel?.querySelector('[role="status"]') ?? null;
+            const held = [itemSelect(page), paySelect(page), dateSelect(page), slotOf(), hint];
+            check(`${name}: the panel holds the three selects, the Clear filters slot and the hint, and nothing else of the list: no `
+                + 'heading, no search box, no tab',
+              !!panel && held.every((el) => !!el && panel.contains(el))
+                && !panel.querySelector('h1, h2, h3, h4, h5, h6, input[type="search"], .pay-tabs'),
+              said({ held: held.map((el) => !!el && !!panel && panel.contains(el)) }));
+
+            // Opening and closing, and Escape.
+            const sentAtOpen = net.calls.length;
+            const writesAtOpen = store.sets;
+            const domWritesAtOpen = domStorage.writes;
+            const s0 = stateOf(page);
+            await toggle(page);
+            const s1 = stateOf(page);
+            const focusAfterOpen = !!filtersButton(page) && page.active() === filtersButton(page);
+            await toggle(page);
+            const s2 = stateOf(page);
+            await toggle(page);
+            const s3 = stateOf(page);
+            check(`${name}: a press opens the panel in place (aria-expanded="true", the panel open) and focus stays on the button; a `
+                + 'second press closes it and a third opens it again',
+              isClosed(s0) && isOpen(s1) && focusAfterOpen && isClosed(s2) && isOpen(s3), said({ s0, s1, focusAfterOpen, s2, s3 }));
+            const onButton = () => !!filtersButton(page) && page.active() === filtersButton(page);
+            await closeIt(page);
+            const k1 = await escapeFrom(page, filtersButton(page));
+            const closedEscape = { ...stateOf(page), onButton: onButton(), ...k1 };
+            check(`${name}: with the panel closed, Escape does nothing: on the Filters button the panel stays closed, focus stays on `
+                + 'the button, and the key goes on unstopped',
+              isClosed(closedEscape) && closedEscape.onButton && k1.focused && k1.reached === true, said(closedEscape));
+            await openIt(page);
+            const k2 = await escapeFrom(page, itemSelect(page));
+            const fromSelect = { ...stateOf(page), onButton: onButton(), ...k2 };
+            check(`${name}: open, Escape from the Item select closes the panel and puts focus back on the Filters button, and the key `
+                + 'goes no further, as on Document requests and Payments',
+              isClosed(fromSelect) && fromSelect.onButton && k2.focused && k2.reached === false, said(fromSelect));
+            await openIt(page);
+            const k3 = await escapeFrom(page, filtersButton(page));
+            const fromButton = { ...stateOf(page), onButton: onButton(), ...k3 };
+            check(`${name}: open, Escape on the Filters button itself closes the panel and leaves focus on the button`,
+              isClosed(fromButton) && fromButton.onButton && k3.focused && k3.reached === false, said(fromButton));
+            await openIt(page);
+            const elsewhere = [];
+            let k = await escapeFrom(page, box(page));
+            elsewhere.push({ what: 'the search box', ...stateOf(page), stays: page.active() === box(page), ...k });
+            const allTab = tabNamed(page, 'All');
+            k = await escapeFrom(page, allTab);
+            elsewhere.push({ what: 'the All tab', ...stateOf(page), stays: page.active() === allTab, ...k });
+            k = await escapeFrom(page, 'nothing');
+            elsewhere.push({ what: 'nothing focused', ...stateOf(page), stays: page.active() === dom.window.document.body, ...k });
+            check(`${name}: open, Escape anywhere else leaves it open: from the search box, from a tab, and with nothing focused; focus `
+                + 'stays where it was',
+              elsewhere.length === 3 && elsewhere.every((x) => isOpen(x) && x.stays && x.focused), said(elsewhere));
+
+            // Clear filters with nothing on: its place kept, nothing to press.
+            const idle = slotOf();
+            const lastInRow = itemSelect(page)?.closest('.pay-filters')?.lastElementChild ?? null;
+            idle?.focus();
+            const idleFocused = !!idle && page.active() === idle;
+            check(`${name}: with nothing on, Clear filters keeps its place, the row's last control, but disabled and `
+                + 'aria-hidden="true": focus cannot reach it',
+              !!idle && idle === lastInRow && idle.disabled && idle.getAttribute('aria-hidden') === 'true' && !idleFocused,
+              said({ idle: idle ? { disabled: idle.disabled, hidden: idle.getAttribute('aria-hidden') } : null, idleFocused }));
+
+            // The count, as filters are chosen in the open panel.
+            await clickIf(page, tabNamed(page, 'All'));
+            const steps = [];
+            const note = (what) => {
+              const s = stateOf(page);
+              steps.push({ what, label: s.label, open: isOpen(s) });
+            };
+            note('nothing on');
+            await pickPay(page, 'Unpaid');
+            note('Payment Unpaid');
+            const live = slotOf();
+            const liveNow = { offered: clearOffered(live), disabled: live?.disabled ?? null };
+            live?.focus();
+            const liveFocused = !!live && page.active() === live;
+            await pickItem(page, 'Plastic Chairs');
+            note('Item Plastic Chairs');
+            await pickDate(page, 'Next 7 days');
+            note('Starts Next 7 days');
+            await pickDate(page, 'Choose dates');
+            note('Choose dates, no date yet');
+            await typeDate(page, fromInput(page), '2026-10-01');
+            note('From 1 Oct');
+            await typeDate(page, toInput(page), '2026-10-31');
+            note('To 31 Oct');
+            const threeOn = lookF(page);
+            const rangeInPanel = [fromInput(page), toInput(page)].every((el) => !!el && !!panelOf(page) && panelOf(page).contains(el));
+            await pickItem(page, 'Any item');
+            note('Item back to Any');
+            await pickPay(page, 'Any payment');
+            note('Payment back to Any');
+            const datesOnly = lookF(page);
+            await pickDate(page, 'Any date');
+            note('Starts back to Any');
+            const COUNTED = ['Filters', 'Filters (1)', 'Filters (2)', 'Filters (3)', 'Filters (3)', 'Filters (3)', 'Filters (3)',
+              'Filters (2)', 'Filters (1)', 'Filters'];
+            check(`${name}: the button counts the filters that are on as they are chosen in the panel: "Filters", "(1)" with Payment, `
+                + '"(2)" with Item, "(3)" with Next 7 days, still "(3)" for Choose dates with no date, with From, and with From and To, '
+                + 'which are one filter, Starts; then "(2)", "(1)" for the dates alone, and "Filters"',
+              said(steps.map((s) => s.label)) === said(COUNTED), said(steps.map((s) => `${s.what}: ${s.label}`)));
+            check(`${name}: the panel stays open through every one of those choices: a pick never closes it`,
+              steps.length === COUNTED.length && steps.every((s) => s.open), said(steps.filter((s) => !s.open).map((s) => s.what)));
+            check(`${name}: with a filter on, Clear filters is a normal button again, enabled and not aria-hidden, and it takes focus`,
+              liveNow.offered && liveFocused, said({ liveNow, liveFocused }));
+            check(`${name}: chosen in the panel, they filter as in the row: Plastic Chairs, Unpaid, 1 to 31 Oct, #147 alone, From and To `
+                + 'inside the panel; those dates alone, the eight that start in October',
+              said(threeOn.rows) === said([147]) && rangeInPanel && said(datesOnly.rows) === said(OCTOBER)
+                && datesOnly.heading === '8 of 14 bookings match',
+              said({ threeOn: threeOn.rows, rangeInPanel, datesOnly: datesOnly.rows }));
+
+            // The count follows Clear filters and "Clear search and filters".
+            await pickItem(page, 'stick');
+            await pickPay(page, 'Paid');
+            await pickDate(page, 'Last 30 days');
+            const beforeClear = stateOf(page);
+            await press(page, slotOf());
+            const afterClear = stateOf(page);
+            const clearedSlot = slotOf();
+            check(`${name}: Clear filters, pressed in the open panel, takes "Filters (3)" back to "Filters", leaves the panel open and `
+                + 'puts focus on the Item select; its slot is disabled and aria-hidden again',
+              beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!itemSelect(page)
+                && page.active() === itemSelect(page) && !!clearedSlot && clearedSlot.disabled
+                && clearedSlot.getAttribute('aria-hidden') === 'true',
+              said({ beforeClear, afterClear, focus: page.active()?.tagName ?? null }));
+            await clickIf(page, tabNamed(page, 'Overdue'));
+            await type(page, 'rodrigo');
+            await pickPay(page, 'Paid');
+            const emptied = { ...stateOf(page), empty: lookF(page).empty };
+            const emptyBox = page.query('.empty');
+            await clickIf(page, emptyBox ? buttonNamed(emptyBox, 'Clear search and filters') : null);
+            const bothCleared = lookF(page);
+            const afterBoth = stateOf(page);
+            check(`${name}: "Clear search and filters" takes the count back too: "Filters (1)" over "No overdue bookings match your search `
+                + 'or filters.", then "Filters", the search empty, the overdue booking back, and the panel as it was, open',
+              emptied.label === 'Filters (1)' && emptied.empty === 'No overdue bookings match your search or filters.'
+                && afterBoth.label === 'Filters' && isOpen(afterBoth) && bothCleared.search === ''
+                && said(bothCleared.rows) === said([145]),
+              said({ emptied, afterBoth, search: bothCleared.search, rows: bothCleared.rows }));
+            // With no button on screen nothing was pressed, so "no request" would say nothing.
+            check(`${name}: none of those presses, Escapes, picks, clears or searches sent a request, and none wrote to the browser's `
+                + 'storage',
+              !!filtersButton(page) && net.calls.length === sentAtOpen && store.sets === writesAtOpen
+                && domStorage.writes === domWritesAtOpen,
+              `${net.calls.length - sentAtOpen} request(s), ${store.sets - writesAtOpen} stub write(s), `
+                + `${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+            // Open, it stays open through a tab, a search, Refresh, a failed
+            // reload and Try again, and Back from a panel; closed, it stays
+            // closed.
+            const keptOpen = [];
+            const keep = (list, what) => list.push({ what, ...stateOf(page) });
+            await clickIf(page, tabNamed(page, 'Upcoming'));
+            keep(keptOpen, 'a tab');
+            await type(page, 'liza');
+            keep(keptOpen, 'a search');
+            await type(page, '');
+            const callsBefore = net.calls.length;
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            const duringRefresh = drawn(page);
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptOpen, 'Refresh');
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            release(at, 500, { error: 'Internal server error' });
+            await page.settle();
+            const besideError = drawn(page);
+            at = holdNext();
+            await clickIf(page, tryAgainButton(page));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptOpen, 'a failed reload, then Try again');
+            const panelLabel = { Secretary: 'Edit', Staff: 'Mark returned' }[name];
+            let openedPanel = null;
+            if (panelLabel) {
+              await clickIf(page, rowButtonF(page, 147, panelLabel));
+              openedPanel = text(page.query('.pending-card h3'));
+              await clickIf(page, buttonNamed(root(), '← Back to list'));
+              keep(keptOpen, `Back from ${panelLabel}`);
+            }
+            const reloadCalls = listCalls(net.calls.slice(callsBefore));
+            check(`${name}: open, the panel stays open through a tab, a search, Refresh, a reload that fails and Try again`
+                + `${panelLabel ? `, and Back from ${panelLabel}` : ''}, though the button is not drawn while the list reloads: the `
+                + 'open state is the page\'s',
+              keptOpen.length === (panelLabel ? 5 : 4) && keptOpen.every((s) => isOpen(s)) && none(duringRefresh) && none(besideError)
+                && (!panelLabel || openedPanel === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147'))
+                && said(reloadCalls) === said(['GET /rental-requests?status=all', 'GET /rental-requests?status=all',
+                  'GET /rental-requests?status=all']),
+              said({ keptOpen, duringRefresh, besideError, openedPanel, reloadCalls }));
+            await toggle(page);
+            const keptClosed = [];
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptClosed, 'Refresh');
+            await clickIf(page, tabNamed(page, 'All'));
+            keep(keptClosed, 'a tab');
+            await type(page, 'nino');
+            keep(keptClosed, 'a search');
+            await type(page, '');
+            if (panelLabel) {
+              await clickIf(page, rowButtonF(page, 147, panelLabel));
+              await clickIf(page, buttonNamed(root(), '← Back to list'));
+              keep(keptClosed, `Back from ${panelLabel}`);
+            }
+            check(`${name}: closed, it stays closed through Refresh, a tab, a search${panelLabel ? ' and Back from a panel' : ''}`,
+              keptClosed.length === (panelLabel ? 4 : 3) && keptClosed.every((s) => isClosed(s)), said(keptClosed));
+
+            // A new visit starts closed; nothing about it was kept.
+            await toggle(page);
+            const leftOpen = stateOf(page);
+            sentB.push(...net.calls.map((c) => c.method));
+            await page.unmount();
+            resetNet(200, answerForF(makeStateF()));
+            const again = await globalThis.mountInteractive(root(), route);
+            await again.settle();
+            const fresh = stateOf(again);
+            check(`${name}: a new visit opens with the panel closed and the button reading "Filters", though it was left open; nothing `
+                + 'about it is in the browser: no storage write through window or not, sessionStorage empty, no cookie',
+              isOpen(leftOpen) && isClosed(fresh) && fresh.label === 'Filters' && store.sets === writesAtOpen
+                && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+              said({ leftOpen, fresh, writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+            sentB.push(...net.calls.map((c) => c.method));
+            await again.unmount();
+          }
+
+          // e. index.css, read with section AF's reader: the button and the
+          // panel at 640px and below, neither above it, and Clear filters'
+          // place, all from Document requests' .doc-requests-filters rules,
+          // which the rental wrapper carries.
+          seedSession(VALID);
+          resetNet(200, answerForF(makeStateF()));
+          const cssPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+          await cssPage.settle();
+          const tb = filtersButton(cssPage);
+          const pn = panelOf(cssPage);
+          const idleSlot = slotOf();
+          const PHONE_WIDTHS = [320, 390, 640];
+          const WIDE_WIDTHS = [641, 768, 1045, 1046, 1280, 1920];
+          // Every property a rule that applies at `width` and matches `el`
+          // sets, with the value that wins.
+          const styleOf = (width, el) => {
+            if (!el) return null;
+            const hits = cssAF.rules.filter((r) => appliesAF(r.media, width) && r.selectors.some((s) => matchAF(el, s)));
+            const props = [...new Set(hits.flatMap((r) => Object.keys(r.decls)))].sort();
+            return Object.fromEntries(props.map((p) => [p, valueAF(width, el, p)]));
+          };
+          // The rules that apply at `width` and read the panel or its open state.
+          const panelRules = (width) => (pn ? cssAF.rules.filter((r) => appliesAF(r.media, width)
+            && r.selectors.some((s) => /pay-filters-panel|is-open/.test(s) && matchAF(pn, s))).map((r) => r.selectors.join(', '))
+            : ['no panel']);
+          const phoneClosed = PHONE_WIDTHS.map((w) => ({ w, button: [valueAF(w, tb, 'display'), valueAF(w, tb, 'width'),
+            valueAF(w, tb, 'height')], fill: valueAF(w, tb, 'background'), panel: valueAF(w, pn, 'display'),
+          slot: valueAF(w, idleSlot, 'display') }));
+          const wideClosed = WIDE_WIDTHS.map((w) => ({ w, button: valueAF(w, tb, 'display'), panelRules: panelRules(w),
+            slot: [valueAF(w, idleSlot, 'visibility'), valueAF(w, idleSlot, 'display')] }));
+          const styleClosed = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+          await toggle(cssPage);
+          const phoneOpen = PHONE_WIDTHS.map((w) => ({ w, panel: valueAF(w, pn, 'display'), fill: valueAF(w, tb, 'background') }));
+          const wideOpen = WIDE_WIDTHS.map((w) => ({ w, button: valueAF(w, tb, 'display'), panelRules: panelRules(w) }));
+          const styleOpen = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+          const opened = stateOf(cssPage);
+          await pickPay(cssPage, 'Unpaid');
+          const liveSlot = slotOf();
+          const liveRead = [...PHONE_WIDTHS, ...WIDE_WIDTHS].map((w) => ({ w, display: valueAF(w, liveSlot, 'display'),
+            visibility: valueAF(w, liveSlot, 'visibility'), height: valueAF(w, liveSlot, 'height') }));
+          const layered = [390, 1280].flatMap((w) => [tb, pn, liveSlot].map((el) => ({ w, el: el?.className ?? null,
+            z: valueAF(w, el, 'z-index'), position: valueAF(w, el, 'position') })));
+          check('on a phone (320, 390 and 640px) the Filters button is drawn, the full width and a finger\'s 44px tall; closed, the '
+              + 'panel it controls is not drawn; and Clear filters, with nothing on, is not drawn in it',
+            !!tb && !!pn && !!idleSlot && phoneClosed.every((r) => said(r.button) === said(['flex', '100%', '44px'])
+              && r.panel === 'none' && r.slot === 'none'), said(phoneClosed));
+          check('  open, the panel is drawn there (a block: Payments\' card) and the button keeps the open fill, #eff6ff, as Document '
+              + 'requests\' and Payments\' Filters buttons do, white at rest when closed',
+            isOpen(opened) && phoneOpen.every((r) => r.panel === 'block' && r.fill === '#eff6ff')
+              && phoneClosed.every((r) => r.fill === '#fff'), said({ opened, phoneOpen, closedFill: phoneClosed.map((r) => r.fill) }));
+          check('above 640px (641, 768, 1045, 1046, 1280 and 1920) the button is not drawn, and no rule there reads the panel or its '
+              + 'open state: the panel is the row as it was, styled the same open or closed',
+            !!pn && [...wideClosed, ...wideOpen].every((r) => r.button === 'none' && r.panelRules.length === 0)
+              && said(styleClosed) === said(styleOpen),
+            said({ wideClosed: wideClosed.map((r) => [r.w, r.button, r.panelRules]), wideOpen: wideOpen.map((r) => [r.w, r.button,
+              r.panelRules]) }));
+          check('  and there, with nothing on, Clear filters keeps its place in the row, hidden: visibility hidden, never display none, '
+              + 'which would give its place up, so the first filter never makes the row taller',
+            !!idleSlot && wideClosed.every((r) => r.slot[0] === 'hidden' && r.slot[1] !== 'none'),
+            said(wideClosed.map((r) => [r.w, ...r.slot])));
+          check('with a filter on, nothing hides Clear filters at any width, and on a phone it is a finger\'s 44px tall',
+            !!liveSlot && clearOffered(liveSlot) && liveRead.every((r) => r.display !== 'none' && r.visibility === null)
+              && liveRead.filter((r) => r.w <= 640).every((r) => r.height === '44px'), said(liveRead));
+          check('the button, the panel and Clear filters stay in the page\'s flow: no z-index and no position of their own, at 390 or '
+              + '1280', !!tb && !!pn && !!liveSlot && layered.every((r) => r.z === null && r.position === null), said(layered));
+          const cssText = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+          const breakpoints = [...new Set([...cssText.matchAll(/@media[^{]*/g)]
+            .flatMap((m) => [...m[0].matchAll(/(\d+)px/g)].map((x) => Number(x[1]))))].sort((a, b) => a - b);
+          check('index.css gains no breakpoint (its @media widths are still 480, 560, 640, 641, 768 and 1045px), no CSS variable and '
+              + 'no rule for the rental filters of their own: their look is Document requests\' .doc-requests-filters rules',
+            said(breakpoints) === said([480, 560, 640, 641, 768, 1045]) && !/var\(--/.test(cssText)
+              && !/(^|[;{\s])--[\w-]+\s*:/.test(cssText) && !cssAF.rules.some((r) => r.selectors.some((s) => s.includes('rental-bookings-filters'))),
+            said({ breakpoints, own: cssAF.rules.filter((r) => r.selectors.some((s) => s.includes('rental-bookings-filters')))
+              .map((r) => r.selectors.join(', ')) }));
+          sentB.push(...net.calls.map((c) => c.method));
+          await cssPage.unmount();
+          const writesB = sentB.filter((m) => m !== 'GET');
+          check('section AF\'s Filters button sent nothing but GETs', sentB.length > 0 && writesB.length === 0,
+            `${sentB.length} request(s): ${[...new Set(sentB)].join(', ')}`);
+        }
+
+        if (F.clock && realNowAF) F.clock.now = realNowAF;
+        process.env.TZ = previousTZAF;
+      }
+
       if (previousScrollAF === undefined) delete protoAF.scrollIntoView;
       else protoAF.scrollIntoView = previousScrollAF;
     }

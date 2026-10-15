@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
@@ -13,23 +14,34 @@ import {
   isReturnable,
   rentalMeta,
 } from "../constants/rentals";
+import { ANY, backwards, manilaToday } from "../utils/chargeFilters";
 import { searchTerms } from "../utils/chargeSearch";
 import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
   accountHandle,
+  ANY_ITEM,
   bookedForName,
   bookingNumber,
   emptyText,
+  filterCount,
+  filtersNoMatchText,
   inTab,
   isGuest,
+  itemOptions,
+  matchesItem,
+  matchesPayment,
+  matchesStarts,
   matchingBookings,
   noMatchText,
   openingTab,
   orderBookings,
   paymentMarker,
+  paymentOptions,
   RENTAL_TABS,
   searchHeading,
   searchPlaceholder,
+  STARTS_OPTIONS,
+  startsRange,
   tabCounts,
   tabHeading,
 } from "../utils/rentalList";
@@ -87,6 +99,23 @@ import {
 // the name. The search reads the number and never the marker. They carry the
 // Document requests number's and marker's classes, so they look as those do,
 // and on a phone card each is labelled from its own data-label (index.css).
+//
+// FILTERS (15 Oct 2026). The Document requests filters row, as
+// components/ListFilters.jsx, between the search and the tabs: Item (the
+// items the loaded rows hold, by the name each row shows), Payment (the
+// marker's words, matched through the marker itself) and Starts (the Manila
+// day a booking starts on, with presets both ways and "Choose dates";
+// utils/rentalList.js). The list shown is tab AND search AND filters: the
+// tab counts, the heading ("3 of 5 upcoming bookings match") and the pager
+// follow the search and the filters, and any filter change goes back to page
+// 1, with no request. Like the search, the filters live through every reload
+// and Back from a panel, a choice a reload no longer offers goes back to Any,
+// and nothing is kept in the browser. On a phone the row is a panel behind a
+// "Filters" button that counts the filters on ("Filters (2)") and opens it in
+// place; whether it is open lives here too, closed on every visit. The
+// wrapper carries the Document requests filters' class as well as its own,
+// so the button, the panel and Clear filters' kept place look as they do
+// there (index.css).
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -716,6 +745,21 @@ export default function RentalBookingsPage({
   // Like the search, both live through every reload and Back from a panel.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // The filters: Item, Payment and Starts (its choice, and From and To under
+  // "Choose dates"). Like the search, they live here, so they outlive the list
+  // while a panel takes its place; every visit starts them at Any, and none
+  // is kept in the browser.
+  const [itemChoice, setItemChoice] = useState(ANY_ITEM);
+  const [paymentChoice, setPaymentChoice] = useState(ANY);
+  const [dateChoice, setDateChoice] = useState(ANY);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  // Whether a phone's Filters panel is open. Here, not in the filters row,
+  // which is not drawn while the list loads or while a panel takes its place,
+  // so it lives through those as the filters do: closed on every visit, kept
+  // through Refresh, Try again, a tab, a search and Back, and kept nowhere in
+  // the browser.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const headingRef = useRef(null); // the list's heading, for a page change
   // Numbers each load, so only the newest one may change the list.
   const loadSeq = useRef(0);
@@ -775,12 +819,33 @@ export default function RentalBookingsPage({
     }
   }
 
-  // The search runs over the whole list, then the tabs split what matches.
-  // The tab counts come from every match, so they read the same on every tab
-  // and follow the search; the rows and the heading are the chosen tab's.
-  // With no search every booking matches, as before.
+  // The search runs over the whole list, then the filters over what it
+  // leaves, then the tabs split what matches. The tab counts come from every
+  // match, so they read the same on every tab and follow the search and the
+  // filters; the rows and the heading are the chosen tab's. With no search
+  // and no filter every booking matches, as before. "Today" is read on every
+  // render, as on Document requests, so a page left open past midnight in
+  // Manila moves its presets on with the day.
   const searching = searchTerms(query).length > 0;
-  const matching = requests === null ? [] : matchingBookings(requests, query);
+  const range = startsRange(dateChoice, from, to, manilaToday());
+  // A filter that restricts something: "Choose dates" with no date is on
+  // (Clear filters shows) but restricts nothing.
+  const filtered =
+    itemChoice !== ANY_ITEM || paymentChoice !== ANY || range !== null;
+  // How many filters are on: the "(2)" on a phone's Filters button, and Clear
+  // filters is offered while it is above 0.
+  const filtersOn = filterCount({
+    item: itemChoice,
+    payment: paymentChoice,
+    date: dateChoice,
+  });
+  const searched = requests === null ? [] : matchingBookings(requests, query);
+  const matching = searched.filter(
+    (r) =>
+      matchesItem(r, itemChoice) &&
+      matchesPayment(r, paymentChoice) &&
+      matchesStarts(r, range),
+  );
   const counts = requests === null ? null : tabCounts(matching);
   const shown = matching.filter((r) => inTab(r, tab));
   // One page of the tab's matches (utils/paging.js). Only the rows drawn are
@@ -790,24 +855,74 @@ export default function RentalBookingsPage({
   // A reload that shrank the list lands on its last page, and stays there.
   // Not while a list is loading: the page must survive the reload itself.
   if (requests !== null && paging.page !== page) setPage(paging.page);
+  // The Item and Payment choices are the loaded rows', made by
+  // utils/rentalList.js. A choice a reload no longer offers (its item
+  // renamed, the last void charge no longer void) goes back to Any, and the
+  // page to 1: a select never reads a choice over rows that do not hold it.
+  const itemChoices = requests === null ? null : itemOptions(requests);
+  const paymentChoices = requests === null ? null : paymentOptions(requests);
+  if (itemChoices && !itemChoices.some((o) => o.value === itemChoice)) {
+    setItemChoice(ANY_ITEM);
+    setPage(1);
+  }
+  if (
+    paymentChoices &&
+    !paymentChoices.some((o) => o.value === paymentChoice)
+  ) {
+    setPaymentChoice(ANY);
+    setPage(1);
+  }
   // "4 of 7 overdue bookings match": how many of the tab's bookings match, of
-  // how many it holds with no search.
+  // how many it holds with no search and no filter.
   let heading = "Bookings";
   if (requests !== null) {
-    heading = searching
-      ? searchHeading(
-          tab,
-          shown.length,
-          requests.filter((r) => inTab(r, tab)).length,
-        )
-      : tabHeading(tab, shown.length);
+    heading =
+      searching || filtered
+        ? searchHeading(
+            tab,
+            shown.length,
+            requests.filter((r) => inTab(r, tab)).length,
+          )
+        : tabHeading(tab, shown.length);
   }
 
-  // A new search, tab or Rows per page goes back to page 1, as on Document
-  // requests. Rows per page itself stays as chosen through the others.
+  // A new search, tab, filter or Rows per page goes back to page 1, as on
+  // Document requests. Rows per page itself stays as chosen through the
+  // others.
   function changeQuery(text) {
     setQuery(text);
     setPage(1);
+  }
+
+  // Item, Payment, Starts, From and To.
+  function narrowBy(set, value) {
+    set(value);
+    setPage(1);
+  }
+
+  function resetFilters() {
+    setItemChoice(ANY_ITEM);
+    setPaymentChoice(ANY);
+    setDateChoice(ANY);
+    setFrom("");
+    setTo("");
+  }
+
+  // "Clear filters" in the row: the filters only; the search and the tab
+  // stay. The row moves focus to its first select (components/ListFilters).
+  function clearFilters() {
+    resetFilters();
+    setPage(1);
+  }
+
+  // "Clear search and filters", where they leave the tab nothing: the search
+  // and the filters, as on Document requests; the tab stays. Focus goes to
+  // the box: the button pressed is gone once the rows are back.
+  function clearSearchAndFilters() {
+    setQuery("");
+    resetFilters();
+    setPage(1);
+    searchRef.current?.focus();
   }
 
   function chooseTab(key) {
@@ -897,10 +1012,11 @@ export default function RentalBookingsPage({
             </div>
           </div>
 
-          {/* The search, then the tabs, under the row that holds Refresh, so a
-              reload leaves Refresh where it was: both are drawn only once the
-              list has loaded, never while it loads or after it failed, as on
-              Document requests. */}
+          {/* The search, the filters, then the tabs, under the row that holds
+              Refresh, so a reload leaves Refresh where it was: all three are
+              drawn only once the list has loaded, never while it loads or
+              after it failed, as on Document requests. The filters' wrapper
+              carries that list's class too, for its look (index.css). */}
           {requests !== null && (
             <>
               <ListToolbar
@@ -910,6 +1026,41 @@ export default function RentalBookingsPage({
                 value={query}
                 onChange={changeQuery}
                 inputRef={searchRef}
+              />
+              <ListFilters
+                className="rental-bookings-filters doc-requests-filters"
+                selects={[
+                  {
+                    label: "Item",
+                    value: itemChoice,
+                    options: itemChoices,
+                    onChange: (value) => narrowBy(setItemChoice, value),
+                  },
+                  {
+                    label: "Payment",
+                    value: paymentChoice,
+                    options: paymentChoices,
+                    onChange: (value) => narrowBy(setPaymentChoice, value),
+                  },
+                  {
+                    label: "Starts",
+                    value: dateChoice,
+                    options: STARTS_OPTIONS,
+                    onChange: (value) => narrowBy(setDateChoice, value),
+                  },
+                ]}
+                range={{
+                  shown: dateChoice === "custom",
+                  from,
+                  to,
+                  onFrom: (value) => narrowBy(setFrom, value),
+                  onTo: (value) => narrowBy(setTo, value),
+                  reversed: backwards(range),
+                }}
+                count={filtersOn}
+                onClear={clearFilters}
+                open={filtersOpen}
+                onToggle={() => setFiltersOpen((open) => !open)}
               />
               <ListTabs
                 label="Status"
@@ -925,8 +1076,11 @@ export default function RentalBookingsPage({
               failed shows neither a count nor the empty text. Try again
               repeats the same load, as Refresh does; Refresh above stays
               usable. The markup is the Document requests page's. A tab with
-              no bookings keeps its own text; one whose bookings a search
-              hides says so, naming the tab, and offers to clear the search. */}
+              no bookings keeps its own text; one whose bookings the filters
+              hide, with or without a search, says so in Document requests'
+              words, naming the tab, and offers to clear the search and the
+              filters; one whose bookings a search alone hides says so, naming
+              the tab, and offers to clear the search. */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
@@ -938,6 +1092,17 @@ export default function RentalBookingsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading bookings…</p>
+          ) : shown.length === 0 && filtered ? (
+            <div className="empty">
+              <p>{filtersNoMatchText(tab)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearchAndFilters}
+              >
+                Clear search and filters
+              </button>
+            </div>
           ) : shown.length === 0 && searching ? (
             <div className="empty">
               <p>{noMatchText(tab, query)}</p>
