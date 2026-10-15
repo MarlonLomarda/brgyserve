@@ -174,6 +174,18 @@
 // button, its count, its panel and Escape. It sits inside section AE's
 // block, to use its bookings and helpers.
 //
+// Section AG is the Rental bookings table's columns, for the same three
+// roles: what section AC checks on Document requests. Above 640px the table
+// is .rental-bookings-table, table-layout fixed, with a width for every
+// column but Purpose, which takes the rest, each width holding what was
+// measured in Chrome on the 28 live-shaped bookings, and the table fitting
+// beside Chrome's scrollbar at 1280 and 1024; the Schedule cell the same two
+// spans in every row, the date over the times; none of it on a phone; and
+// the protected col-*, .row-actions, .num, .dash-main and .pending-card
+// rules, the Document requests ones and the heading row's as they were at
+// a52f978. It sits inside section AF's block, to use its bookings, its
+// helpers and its index.css reader.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -12407,6 +12419,342 @@ const root = () => dom.window.document.getElementById('root');
 
         if (F.clock && realNowAF) F.clock.now = realNowAF;
         process.env.TZ = previousTZAF;
+      }
+
+      // =====================================================================
+      // AG. Rental bookings: columns that keep their places
+      // =====================================================================
+      // Above 640px the list's table sized its columns to the rows drawn, so
+      // they moved whenever the tab, the page, a search or a filter changed
+      // (by up to 219.5px between All's two pages); the schedule broke
+      // wherever the width fell ("Sep 24, / 2026, / 8:00 AM / – 8:00 PM"),
+      // differently from row to row; and where a filter left a tab one row, a
+      // header wrapped and that row sat 16px lower. The table is now
+      // .rental-bookings-table (this table alone), table-layout: fixed, with a
+      // width for every column but Purpose, which takes the rest and never
+      // less than its heading, 88px: the table is never narrower than the
+      // widths and 88. What each width must hold was measured in Chrome
+      // (Segoe UI) on the 28 live-shaped bookings, and over every day and
+      // minute of 2026, with the cell's 32px of padding (the actions cell's
+      // 24, and each button's 8px margin):
+      //   Booked for  the guest's line, "Guest · +639281112233", 133.84,
+      //               whole: 165.84; and a name on one line up to 176px from
+      //               1046px (208), up to 160 at 641 to 1045px (192)
+      //   Item        "Sinulog Costume Set" on two lines, 85.01: 117.01
+      //   Schedule    the times on one line, at most "12:00 AM – 12:00 AM",
+      //               143.31: 175.31, under the date with its comma, at most
+      //               "May 10, 2026,", 92.83
+      //   Qty         "100", 24.59: 56.59 (its heading, 24.27)
+      //   Status      the "Returned with issue" badge, 136.03: 168.03
+      //   actions     Edit and Cancel side by side, 55.11 and 73.05: 168.16
+      //               (Staff's Mark returned, 124.2: 156.2)
+      // And the table fits the barangay's screens beside the 15px scrollbar
+      // Chrome draws on Windows: 1001px of room at 1280 with the sidebar open,
+      // 975 at 1024. The Schedule cell is two spans in every row, the date with
+      // its comma and the times, each a line of its own above 640px and never
+      // broken, its words formatSchedule's. On a phone (640px and below) none
+      // of it applies, and no rule in the 640px block names the table. The
+      // protected col-*, .row-actions (its three exceptions among them), .num,
+      // .dash-main and .pending-card rules, the Document requests ones
+      // (.doc-requests-*) and this list's heading row's (.rental-bookings-head)
+      // are as they were at a52f978 (R3), read with git. jsdom applies no
+      // width media query, so index.css is read with section AF's reader; the
+      // section sits inside section AF's block for that, its 28 live-shaped
+      // bookings and its helpers.
+      console.log('\n--- Rental bookings: fixed columns ---');
+      {
+        const { execFileSync } = require('child_process');
+        const PINNED_REV = 'a52f978';
+        const WIDE = [641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440, 1920];
+        const PHONES = [320, 390, 640];
+        const NEED = { booked: 165.84, item: 117.01, schedule: 175.31, qty: 56.59, status: 168.03, actions: 168.16 };
+        // A name on one line up to 176px from 1046px, up to 160 below the
+        // sidebar, 641 to 1045px.
+        const BOOKED_FROM = { wide: 208, narrow: 192 };
+        const PURPOSE_FLOOR = 88;
+        // The room beside Chrome's 15px scrollbar: at 1280, the sidebar open,
+        // and at 1024, below it.
+        const ROOM = { 1280: 1001, 1024: 975 };
+        const px = (v) => (typeof v === 'string' && /^\d+(\.\d+)?px$/.test(v) ? Number.parseFloat(v) : null);
+        const sum = (list) => list.reduce((a, b) => a + b, 0);
+        const sentAG = [];
+        // The rule that gives `el` its `prop` at `width`, the cascade's winner,
+        // with the @media it sits in, read as valueAF reads its value.
+        const ruleAG = (width, el, prop) => {
+          if (!el) return null;
+          let best = null;
+          for (const r of cssAF.rules) {
+            if (!(prop in r.decls) || !appliesAF(r.media, width)) continue;
+            for (const sel of r.selectors) {
+              if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+              if (/::?(before|after|placeholder|first-line|first-letter)$/.test(sel) || !matchAF(el, sel)) continue;
+              const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specAF(sel)];
+              const better = !best || rank[0] - best.rank[0] || bySpecAF(rank.slice(1), best.rank.slice(1));
+              if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+                best = { rank, order: r.order, selector: sel, media: r.media, value: r.decls[prop] };
+              }
+            }
+          }
+          return best;
+        };
+        // The schedule as formatSchedule (constants/rentals.js) writes it, in
+        // the zone the bundle loaded in, where its formatters were built:
+        // [the date with its comma, the times].
+        const dayAG = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
+        const hourAG = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
+        const scheduleWant = (b) => [`${dayAG.format(new Date(b.start_datetime))},`,
+          `${hourAG.format(new Date(b.start_datetime))} – ${hourAG.format(new Date(b.end_datetime))}`];
+        const flat = (s) => (s === null || s === undefined ? s : String(s).replace(/\s+/g, ' ').trim());
+        const byNumberAG = (id) => LIVE28.find((b) => `#${b.request_id}` === id) ?? null;
+        // The actions each role's rows have: the Secretary's Edit and Cancel
+        // on every booking stored as confirmed, Staff's Mark returned on those
+        // of equipment and furniture, none for the Punong Barangay.
+        const actionsAG = {
+          Secretary: (b) => (b.status === 'confirmed' ? 'Edit + Cancel' : '(none)'),
+          Staff: (b) => (b.status === 'confirmed' && ['equipment', 'furniture'].includes(b.rental_items.type) ? 'Mark returned' : '(none)'),
+        };
+
+        // The helper on its own: scheduleParts splits formatSchedule's text
+        // into the date with its comma and the times.
+        const partsAG = (b) => attempt(() => L.scheduleParts(b));
+        const helperAG = [one(2), one(18), one(10)].map((b) => ({ id: b.request_id, got: partsAG(b), want: scheduleWant(b) }));
+        const missingAG = [{ ...one(2), start_datetime: null }, { ...one(2), end_datetime: null }].map(partsAG);
+        check('scheduleParts: the date with its comma and the times, as formatSchedule writes them ("Oct 10, 2026," and "8:00 AM – '
+            + '5:00 PM"), so the two with a space between are its whole text; null with no start or no end (formatSchedule\'s "—")',
+          helperAG.every((c) => !!c.got && typeof c.got === 'object' && flat(c.got.date) === flat(c.want[0])
+            && flat(c.got.times) === flat(c.want[1])) && missingAG.every((m) => m === null),
+          said({ helperAG, missingAG }));
+
+        // a. The real page, for the three roles: All, 100 a page, all 28 drawn.
+        for (const { name, route, token, user } of ROLES_AE) {
+          seedSession(token, user);
+          resetNet(200, answerAF(LIVE28));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          await clickIf(page, tabNamed(page, 'All'));
+          const sizeSelect = page.query('.pay-pager select');
+          if (sizeSelect) {
+            sizeSelect.value = '100';
+            sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+          const withActions = name !== 'Punong Barangay';
+          const tbl = page.query('table.data-table');
+          const ths = tbl ? [...tbl.querySelectorAll('thead th')] : [];
+          const HEADS = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(withActions ? [''] : [])];
+          const SIZED = ['rental-bookings-booked', 'rental-bookings-item', 'rental-bookings-schedule', 'rental-bookings-qty', null,
+            'rental-bookings-status', ...(withActions ? ['rental-bookings-actions'] : [])];
+          const headClasses = ths.map((th) => th.className);
+          check(`${name}: the list's table is .rental-bookings-table, beside data-table and stack-narrow, with its ${HEADS.length} headers `
+              + `as before, each sized one carrying its class (rental-bookings-booked, -item, -schedule, -qty beside num, -status${withActions
+                ? ', -actions' : ''}) and Purpose none`,
+            !!tbl && ['data-table', 'stack-narrow', 'rental-bookings-table'].every((c) => tbl.classList.contains(c))
+              && said(ths.map(text)) === said(HEADS)
+              && ths.every((th, i) => (SIZED[i] ? th.classList.contains(SIZED[i]) : th.className === ''))
+              && ths[3]?.classList.contains('num'),
+            said({ table: tbl?.className ?? null, headers: ths.map(text), classes: headClasses }));
+
+          // b. index.css for this role's own elements, as a browser of each
+          // width applies it.
+          const sized = ths.filter((_, i) => SIZED[i]);
+          const thPurpose = ths[4] ?? null;
+          const wideRead = WIDE.map((w) => ({
+            w,
+            layout: valueAF(w, tbl, 'table-layout'),
+            min: px(valueAF(w, tbl, 'min-width')),
+            widths: sized.map((th) => px(valueAF(w, th, 'width'))),
+            purpose: valueAF(w, thPurpose, 'width'),
+          }));
+          check(`${name}: above 640px (641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440 and 1920) the columns are fixed: table-layout `
+              + `fixed; Booked for, Item, Schedule, Qty, Status${withActions ? ' and the actions column' : ''} each a width in px; Purpose `
+              + 'none, so it takes the rest; and the table never narrower than those and Purpose\'s 88px',
+            sized.length === SIZED.filter(Boolean).length && wideRead.every((r) => r.layout === 'fixed'
+              && r.widths.every((x) => x !== null) && r.purpose === null && r.min === sum(r.widths) + PURPOSE_FLOOR),
+            said(wideRead.map((r) => [r.w, r.layout, r.widths.join('/'), r.purpose, r.min])));
+          const short = wideRead.flatMap((r) => {
+            const [booked, item, schedule, qty, status, actions] = r.widths;
+            const bookedFloor = r.w >= 1046 ? BOOKED_FROM.wide : BOOKED_FROM.narrow;
+            const bad = [booked >= NEED.booked && booked >= bookedFloor ? null : `Booked for ${booked}`,
+              item >= NEED.item ? null : `Item ${item}`, schedule >= NEED.schedule ? null : `Schedule ${schedule}`,
+              qty >= NEED.qty ? null : `Qty ${qty}`, status >= NEED.status ? null : `Status ${status}`,
+              !withActions || actions >= NEED.actions ? null : `actions ${actions}`].filter(Boolean);
+            return bad.length ? [`${r.w}: ${bad.join(', ')}`] : [];
+          });
+          check(`${name}: each width holds what was measured in Chrome: Booked for the guest's line whole (165.84) and a name on one `
+              + 'line up to 176px from 1046px (208) and 160 below (192); Item "Sinulog Costume Set" on two lines (117.01); Schedule the '
+              + 'widest times of the day on one line (175.31); Qty "100" (56.59); Status the "Returned with issue" badge (168.03)'
+              + `${withActions ? '; the actions column Edit and Cancel side by side (168.16)' : ''}`,
+            short.length === 0, short.length ? said(short) : said(wideRead.map((r) => [r.w, r.widths.join('/')])));
+          const narrowest = { 1280: px(valueAF(1280, tbl, 'min-width')), 1024: px(valueAF(1024, tbl, 'min-width')) };
+          check(`${name}: at its narrowest the table fits beside Chrome's 15px scrollbar: ${narrowest[1280]}px at 1280 (the sidebar open; `
+              + `1001 of room) and ${narrowest[1024]}px at 1024 (975)`,
+            narrowest[1280] !== null && narrowest[1280] <= ROOM[1280] && narrowest[1024] !== null && narrowest[1024] <= ROOM[1024],
+            said(narrowest));
+          const origins = WIDE.flatMap((w) => [[tbl, 'table-layout'], [tbl, 'min-width'], ...sized.map((th) => [th, 'width'])]
+            .map(([el, prop]) => {
+              const win = ruleAG(w, el, prop);
+              return { w, prop, el: el?.textContent?.slice(0, 12) ?? null, selector: win?.selector ?? null, media: win?.media ?? [] };
+            }));
+          const stray = origins.filter((o) => !o.selector || !o.selector.startsWith('.rental-bookings-table')
+            || !o.media.some((m) => /min-width:\s*641px/.test(m)));
+          check(`${name}: every one of those values comes from a rule of this table's own, .rental-bookings-table first in its `
+              + 'selector, inside an @media (min-width: 641px)',
+            origins.length === WIDE.length * (2 + sized.length) && stray.length === 0, said(stray.slice(0, 6)));
+          const phoneRead = PHONES.map((w) => ({ w, layout: valueAF(w, tbl, 'table-layout'), min: valueAF(w, tbl, 'min-width'),
+            widths: ths.map((th) => valueAF(w, th, 'width')) }));
+          check(`${name}: on a phone (320, 390 and 640px) none of it applies: no table-layout, no min-width and no header width reach `
+              + 'the table, which is cards as before',
+            ths.length === HEADS.length && phoneRead.every((r) => r.layout === null && r.min === null && r.widths.every((x) => x === null)),
+            said(phoneRead));
+
+          // c. The Schedule cell, the same in every row: the date with its
+          // comma, a space, the times; two spans and nothing else.
+          const rows = bodyRows(page);
+          const shapes = rows.map((tr) => {
+            const id = text(numberEls(tr)[0]);
+            const b = byNumberAG(id);
+            const cell = [...tr.children][2] ?? null;
+            const kids = cell ? [...cell.childNodes] : [];
+            const [day, times] = b ? scheduleWant(b) : [null, null];
+            return { id, label: cell?.getAttribute('data-label') ?? null,
+              nodes: kids.map((n) => (n.nodeType === 1 ? `${n.tagName.toLowerCase()}.${n.className}` : `text "${n.textContent}"`)),
+              day: flat(cell?.children[0]?.textContent), times: flat(cell?.children[1]?.textContent),
+              ok: !!b && kids.length === 3 && kids[0].nodeType === 1 && kids[0].tagName === 'SPAN'
+                && kids[0].className === 'rental-bookings-date' && kids[1].nodeType === 3 && kids[1].textContent === ' '
+                && kids[2].nodeType === 1 && kids[2].tagName === 'SPAN' && kids[2].className === 'rental-bookings-times'
+                && flat(kids[0].textContent) === flat(day) && flat(kids[2].textContent) === flat(times)
+                && flat(cell.textContent) === flat(`${day} ${times}`) && /\d{4},$/.test(kids[0].textContent) };
+          });
+          check(`${name}: every row's Schedule cell is the same two spans, the date with its comma ("Sep 26, 2026,") then a space then `
+              + 'the times ("8:00 AM – 5:00 PM"), and nothing else; its words are formatSchedule\'s, as before',
+            shapes.length === 28 && shapes.every((s) => s.ok && s.label === 'Schedule'),
+            said(shapes.filter((s) => !s.ok || s.label !== 'Schedule').slice(0, 4)));
+          const spans = rows.flatMap((tr) => [...([...tr.children][2]?.children ?? [])]);
+          const spanRead = (w) => spans.map((sp) => [valueAF(w, sp, 'display'), valueAF(w, sp, 'white-space')].join('/'));
+          const spanWide = WIDE.map((w) => ({ w, read: [...new Set(spanRead(w))] }));
+          const spanPhone = PHONES.map((w) => ({ w, read: [...new Set(spanRead(w))] }));
+          check(`${name}: above 640px each of the two is a line of its own and never breaks (display: block, white-space: nowrap), so `
+              + 'every row breaks after the year; on a phone neither is set, so the card reads one line of text, as before',
+            spans.length === 56 && spanWide.every((r) => said(r.read) === said(['block/nowrap']))
+              && spanPhone.every((r) => said(r.read) === said(['/']))
+              && spans.every((sp) => [641, 1280, 1920].every((w) => (ruleAG(w, sp, 'display')?.selector ?? '').startsWith('.rental-bookings-table'))),
+            said({ spans: spans.length, spanWide: spanWide.slice(0, 3), spanPhone }));
+
+          // d. Nothing else on the list changed: the heading, the counts, the
+          // pager, the filters, the actions; no request; nothing kept.
+          const actionsRead = withActions ? rows.map((tr) => [...([...tr.children][6]?.querySelectorAll('button') ?? [])]
+            .map((x) => x.textContent).join(' + ') || '(none)') : null;
+          const actionsWant = withActions ? rows.map((tr) => actionsAG[name](byNumberAG(text(numberEls(tr)[0])) ?? {})) : null;
+          const filterLabels = page.queryAll('.pay-filters select').map((s) => s.labels?.[0]?.textContent ?? null);
+          check(`${name}: the rest of the list is as it was: "28 bookings", the counts "${STRIP28}", the pager's "Showing 1 to 28 of 28 `
+              + 'results", the filters Item, Payment and Starts, every row\'s actions as before'
+              + `${withActions ? '' : ' (none, and no actions column)'}, and one request, the first GET`,
+            text(page.query('.list-head h2')) === '28 bookings' && tabsOf(page).map(text).join(' · ') === STRIP28
+              && text(page.query('.pay-pager-count')) === 'Showing 1 to 28 of 28 results'
+              && said(filterLabels) === said(['Item', 'Payment', 'Starts'])
+              && (withActions ? said(actionsRead) === said(actionsWant) : page.queryAll('table.data-table tbody button').length === 0)
+              && net.calls.length === 1 && net.calls[0].method === 'GET' && /\/rental-requests\?status=all$/.test(net.calls[0].url),
+            said({ heading: text(page.query('.list-head h2')), strip: tabsOf(page).map(text).join(' · '),
+              showing: text(page.query('.pay-pager-count')), filterLabels, actions: actionsRead?.slice(0, 6) ?? null,
+              calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+          check(`${name}: nothing about it is kept in the browser: no storage write through window or not, sessionStorage empty, no cookie`,
+            store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '',
+            said({ writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+          sentAG.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+
+        // e. index.css as a whole, the source, and another page's table.
+        const tableRules = cssAF.rules.filter((r) => r.selectors.some((s) => s.includes('rental-bookings-table')));
+        const inPhoneBlock = cssAF.rules.filter((r) => r.media.some((m) => /max-width:\s*640px/.test(m))
+          && r.selectors.some((s) => s.includes('rental-bookings-table')));
+        check('index.css: every rule that names .rental-bookings-table is this table\'s, each of its selectors starting with it, and sits '
+            + 'inside an @media (min-width: 641px); none is in the 640px block',
+          tableRules.length > 0 && inPhoneBlock.length === 0
+            && tableRules.every((r) => r.media.some((m) => /min-width:\s*641px/.test(m))
+              && r.selectors.every((s) => s.startsWith('.rental-bookings-table'))),
+          said({ rules: tableRules.map((r) => `${r.media.join(' ')} { ${r.selectors.join(', ')} }`),
+            inPhoneBlock: inPhoneBlock.map((r) => r.selectors.join(', ')) }));
+        // Every style rule of a stylesheet, comments gone and line endings and
+        // spaces tidied: the @-rules round it, its selector, its declarations.
+        const rulesOfAG = (src) => {
+          const css = src.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
+          const out = [];
+          const open = [];
+          let from = 0;
+          for (let i = 0; i < css.length; i += 1) {
+            const ch = css[i];
+            if (ch === '{') {
+              open.push({ head: css.slice(from, i).trim().replace(/\s+/g, ' '), decls: [] });
+              from = i + 1;
+            } else if (ch === ';' || ch === '}') {
+              const decl = css.slice(from, i).trim().replace(/\s+/g, ' ');
+              if (decl && open.length) open.at(-1).decls.push(decl);
+              from = i + 1;
+              const block = ch === '}' ? open.pop() : null;
+              if (block && !block.head.startsWith('@')) {
+                out.push({ at: open.filter((b) => b.head.startsWith('@')).map((b) => b.head), selector: block.head, decls: block.decls });
+              }
+            }
+          }
+          return out;
+        };
+        let pinnedCssAG = null;
+        try {
+          pinnedCssAG = execFileSync('git', ['show', `${PINNED_REV}:frontend/src/index.css`],
+            { cwd: path.join(HERE, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch {
+          pinnedCssAG = null;
+        }
+        const nowCssAG = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8');
+        const KEPT = [
+          ['the col-*, .row-actions (its three exceptions among them), .num, .dash-main and .pending-card rules',
+            /\.col-[\w-]+|row-actions|\.num\b|\.dash-main\b|\.pending-card\b/, 20],
+          ['the Document requests rules (.doc-requests-*)', /\.doc-requests-/, 20],
+          ['the heading row\'s rules (.rental-bookings-head)', /\.rental-bookings-head\b/, 3],
+        ];
+        for (const [what, re, least] of KEPT) {
+          const now = rulesOfAG(nowCssAG).filter((r) => re.test(r.selector));
+          const then = pinnedCssAG === null ? null : rulesOfAG(pinnedCssAG).filter((r) => re.test(r.selector));
+          let firstDiff = -1;
+          for (let i = 0; then && i < Math.max(now.length, then.length); i += 1) {
+            if (said(now[i]) !== said(then[i])) { firstDiff = i; break; }
+          }
+          check(`${what} are as they were at ${PINNED_REV} (R3, read with git): the same rules in the same order, under the same @media, `
+              + 'with the same declarations',
+            !!then && then.length >= least && firstDiff === -1,
+            then === null ? `git could not read ${PINNED_REV}:frontend/src/index.css`
+              : firstDiff === -1 ? `${now.length} rules, the same`
+                : said({ at: firstDiff, now: now[firstDiff] ?? null, then: then[firstDiff] ?? null, counts: [now.length, then.length] }));
+        }
+        const srcRootAG = path.join(HERE, '..', 'src');
+        const sourceFilesAG = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory()
+          ? sourceFilesAG(path.join(dir, d.name)) : /\.jsx?$/.test(d.name) ? [path.join(dir, d.name)] : []));
+        const codeOfAG = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        const carriersAG = sourceFilesAG(srcRootAG).flatMap((f) => {
+          const n = (codeOfAG(fs.readFileSync(f, 'utf8')).match(/rental-bookings-table/g) || []).length;
+          return n ? [`${path.relative(srcRootAG, f).replace(/\\/g, '/')}: ${n}`] : [];
+        });
+        seedSession(RES_TOKEN, RES_USER);
+        resetNet(200, (url, method) => (method === 'GET' && url.includes('/rental-requests/mine')
+          ? { requests: LIVE28.slice(0, 4) } : undefined));
+        const mineAG = await globalThis.mountInteractive(root(), '/resident/rentals');
+        await mineAG.settle();
+        const mineTableAG = mineAG.query('table.data-table');
+        const mineClassAG = mineTableAG?.className ?? null;
+        sentAG.push(...net.calls.map((c) => c.method));
+        await mineAG.unmount();
+        check('.rental-bookings-table is this table\'s alone: the source names it once, in RentalBookingsPage.jsx, and the resident\'s '
+            + 'My rentals table, which shares .data-table and .row-actions with it, does not carry it',
+          said(carriersAG) === said(['pages/RentalBookingsPage.jsx: 1']) && !!mineTableAG
+            && !mineTableAG.classList.contains('rental-bookings-table'),
+          said({ carriers: carriersAG, mineClass: mineClassAG }));
+
+        check('section AG sent nothing but GETs', sentAG.length > 0 && sentAG.every((m) => m === 'GET'),
+          `${sentAG.length} request(s): ${[...new Set(sentAG)].join(', ')}`);
       }
 
       if (previousScrollAF === undefined) delete protoAF.scrollIntoView;

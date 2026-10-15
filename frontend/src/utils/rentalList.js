@@ -49,7 +49,12 @@
 // utils/chargeFilters.js's manilaDay and backwards, as they are, with presets
 // both ways, since bookings are made ahead and looked back on. On a phone they
 // sit behind a Filters button, which says how many are on (filterCount).
-import { displayStatus } from "../constants/rentals";
+//
+// COLUMNS (15 Oct 2026). Above 640px the table's columns have fixed widths
+// (index.css), so each row's schedule is drawn as two lines, the date with
+// its comma over the times (scheduleParts), the break in the same place in
+// every row.
+import { displayStatus, formatSchedule } from "../constants/rentals";
 import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
 import { matchesPayment, paymentMarker, paymentOptions } from "./requestList";
@@ -214,6 +219,20 @@ export function accountHandle(record) {
 // thousands separator.
 export function bookingNumber(booking) {
   return `#${booking.request_id}`;
+}
+
+// The Schedule column's two lines: the date with its comma, "Sep 24, 2026,",
+// and the times, "8:00 AM – 8:00 PM", cut from formatSchedule's own text
+// (constants/rentals.js) after its last comma, so the row's words stay
+// formatSchedule's: the two with a space between are the whole of it. Above
+// 640px each is a line of its own (index.css), so every row breaks after the
+// year. null when the booking has no start or no end, where formatSchedule
+// writes "—".
+export function scheduleParts(booking) {
+  const text = formatSchedule(booking.start_datetime, booking.end_datetime);
+  const cut = text.lastIndexOf(", ");
+  if (cut < 0) return null;
+  return { date: text.slice(0, cut + 1), times: text.slice(cut + 2) };
 }
 
 // What a search reads of one booking: what its row shows of who and what,

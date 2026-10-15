@@ -3141,6 +3141,90 @@ button.pay-tab:hover:not(:disabled) {
   }
 }
 
+/* The Rental bookings columns (15 Oct 2026). Above 640px the columns stand
+   in the same places on every tab, page, search and filter result: the
+   layout is fixed, so these widths decide the columns, not the rows drawn
+   (which moved them by up to 219.5px between two pages of the list). Each
+   width holds the widest of the 28 live-shaped bookings, and of every day
+   and minute of 2026, measured in Chrome, and the cell's 32px of padding:
+     Booked for 208  a name up to 176px on one line ("Rodrigo Cempron
+                     Bautista", 189.4, takes two); 192 at 1045px and below,
+                     up to 160; the guest's line, 133.8, whole
+     Item       118  "Sinulog Costume Set" on two lines, 85.0
+     Schedule   176  the date with its comma over the times, each a line
+                     that never breaks: at most "May 10, 2026," 92.8 and
+                     "12:00 AM – 12:00 AM" 143.3
+     Qty         58  "100", 24.6, and its heading
+     Status     170  the "Returned with issue" badge, 136.0
+     actions    170  Edit and Cancel side by side, 144.2 with their margins
+                     (Staff's Mark returned, 132.2)
+   Purpose has no width: it takes the rest, never under 88px, its heading
+   whole, because the table is never narrower than the others and 88; below
+   that the table scrolls in its card, as it did. At its narrowest, 988px
+   (972 at 1045px and below), it fits beside Chrome's 15px scrollbar at 1280
+   with the sidebar open (1001 of room) and at 1024 (975). The Punong
+   Barangay's table has no actions column, so it is 170px narrower: the
+   :has() rules add that column where it is drawn. .row-actions' 200px floor
+   does not bind a fixed column, so the actions column needs no exception.
+   Phones keep their cards: nothing here applies at 640px and below. */
+@media (min-width: 641px) {
+  .rental-bookings-table {
+    table-layout: fixed;
+    min-width: 818px;
+  }
+
+  .rental-bookings-table:has(th.rental-bookings-actions) {
+    min-width: 988px;
+  }
+
+  .rental-bookings-table th.rental-bookings-booked {
+    width: 208px;
+  }
+
+  .rental-bookings-table th.rental-bookings-item {
+    width: 118px;
+  }
+
+  .rental-bookings-table th.rental-bookings-schedule {
+    width: 176px;
+  }
+
+  .rental-bookings-table th.rental-bookings-qty {
+    width: 58px;
+  }
+
+  .rental-bookings-table th.rental-bookings-status {
+    width: 170px;
+  }
+
+  .rental-bookings-table th.rental-bookings-actions {
+    width: 170px;
+  }
+
+  .rental-bookings-table .rental-bookings-date,
+  .rental-bookings-table .rental-bookings-times {
+    display: block;
+    white-space: nowrap;
+  }
+}
+
+/* Below the sidebar, 641 to 1045px, Booked for is 16px narrower, so the
+   table fits from 1006px instead of 1022px, 1024 among them. The range
+   reuses this file's 641 and 1045; it adds no breakpoint. */
+@media (min-width: 641px) and (max-width: 1045px) {
+  .rental-bookings-table {
+    min-width: 802px;
+  }
+
+  .rental-bookings-table:has(th.rental-bookings-actions) {
+    min-width: 972px;
+  }
+
+  .rental-bookings-table th.rental-bookings-booked {
+    width: 192px;
+  }
+}
+
 /* The Document requests filters (14 Oct 2026). Above 640px the row is
    always shown, as Payments' is: the phone's Filters button is not drawn
    (the 640px block draws it), and the panel round the row has no rules up

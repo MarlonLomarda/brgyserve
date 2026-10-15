@@ -38,6 +38,7 @@ import {
   paymentMarker,
   paymentOptions,
   RENTAL_TABS,
+  scheduleParts,
   searchHeading,
   searchPlaceholder,
   STARTS_OPTIONS,
@@ -116,6 +117,14 @@ import {
 // wrapper carries the Document requests filters' class as well as its own,
 // so the button, the panel and Clear filters' kept place look as they do
 // there (index.css).
+//
+// COLUMNS (15 Oct 2026). Above 640px the table keeps its columns in the same
+// places on every tab, page, search and filter result: it is
+// .rental-bookings-table, with fixed widths set through its header cells'
+// classes (index.css); Purpose has none and takes the rest. The Schedule cell
+// is two spans in every row, the date with its comma and the times
+// (scheduleParts in utils/rentalList.js), each a line of its own there, so
+// every row breaks after the year. On a phone the cards are as they were.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -1120,22 +1129,25 @@ export default function RentalBookingsPage({
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="data-table stack-narrow">
+              <table className="data-table stack-narrow rental-bookings-table">
                 <thead>
                   <tr>
-                    <th>Booked for</th>
-                    <th>Item</th>
-                    <th>Schedule</th>
-                    <th className="num">Qty</th>
+                    <th className="rental-bookings-booked">Booked for</th>
+                    <th className="rental-bookings-item">Item</th>
+                    <th className="rental-bookings-schedule">Schedule</th>
+                    <th className="num rental-bookings-qty">Qty</th>
                     <th>Purpose</th>
-                    <th>Status</th>
-                    {(canManage || canReturn) && <th></th>}
+                    <th className="rental-bookings-status">Status</th>
+                    {(canManage || canReturn) && (
+                      <th className="rental-bookings-actions"></th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => {
                     const meta = rentalMeta(displayStatus(r));
                     const returnable = isReturnable(r.rental_items?.type);
+                    const schedule = scheduleParts(r);
                     return (
                       <tr key={r.request_id}>
                         <td>
@@ -1156,7 +1168,18 @@ export default function RentalBookingsPage({
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>
                         <td data-label="Schedule">
-                          {formatSchedule(r.start_datetime, r.end_datetime)}
+                          {schedule ? (
+                            <>
+                              <span className="rental-bookings-date">
+                                {schedule.date}
+                              </span>{" "}
+                              <span className="rental-bookings-times">
+                                {schedule.times}
+                              </span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="num" data-label="Qty">
                           {r.quantity_requested}
