@@ -154,6 +154,16 @@
 // and the reload after an action. utils/rentalList.js's new helpers are
 // checked case by case first.
 //
+// Section AF is the Rental bookings list's payment marker and booking
+// number, for the same three roles: what section Z checks on Document
+// requests. Every row says "Paid", "No fee", "Unpaid", "Void" or "Not billed"
+// under its status badge, read from its charge alone by Document requests'
+// own paymentMarker, and "#12" under the name, with no new column; the search
+// finds a booking by its number, part of it matching, and never by a marker's
+// word; and on a phone card both are labelled, which index.css does (read
+// from the file). It sits inside section AE's block, to use its bookings and
+// helpers.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -8674,7 +8684,11 @@ const root = () => dom.window.document.getElementById('root');
       STATUS_CELL[r.id], ...(ACTIONS[role] ? [ACTIONS[role](r)] : [])].join(' | '));
     // A cell's words: each element in it read whole (the badge, the note,
     // "by @staff1 on …"), a space between them; a cell of text alone, its text.
-    const cellWords = (cell) => (!cell ? null : cell.children.length ? [...cell.children].map(text).join(' ') : text(cell));
+    // Since section AF the Status cell also holds the payment marker
+    // (.doc-requests-pay), which is that section's to check: it is left out
+    // here, so these rows still read as the page drew them before.
+    const cellWords = (cell) => (!cell ? null : cell.children.length
+      ? [...cell.children].filter((el) => !el.classList.contains('doc-requests-pay')).map(text).join(' ') : text(cell));
     const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
       const cells = [...tr.children];
       const actions = cells[6] ? [[...cells[6].querySelectorAll('button')].map((b) => b.textContent).join(' + ') || '(none)'] : [];
@@ -9263,18 +9277,20 @@ const root = () => dom.window.document.getElementById('root');
       said(got) === said(['@mevsantos', null, null, null, null]), said(got));
     const parts = (b) => attempt(() => L.searchParts(b));
     got = [one(2), one(7), one(3), one(4)].map(parts);
+    // Since section AF the row shows the booking number under the name, and
+    // the search reads it there.
     check('searchParts, what a booking\'s search reads: the name as the row shows it, the @account the row shows under it, '
-        + 'and the item: "Maria Elena Villamor Santos", "@mevsantos", "Plastic Chairs"; Rodrigo, with no account, his name and '
-        + 'item only; a guest, the name and item, never the contact number; a walk-in, the resident\'s own account, never the '
-        + 'filer\'s',
-      said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', 'Plastic Chairs'],
-        ['Rodrigo Cempron Bautista', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', 'Sound System'],
-        ['Teresita Lim Ocampo', '@tess_ocampo', 'Barangay Hall']]), said(got));
+        + 'the booking number under them, and the item: "Maria Elena Villamor Santos", "@mevsantos", "#2", "Plastic Chairs"; '
+        + 'Rodrigo, with no account, his name, number and item only; a guest, the name, number and item, never the contact '
+        + 'number; a walk-in, the resident\'s own account, never the filer\'s',
+      said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', '#2', 'Plastic Chairs'],
+        ['Rodrigo Cempron Bautista', '#7', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', '#3', 'Sound System'],
+        ['Teresita Lim Ocampo', '@tess_ocampo', '#4', 'Barangay Hall']]), said(got));
     const withheld = { ...one(2), resident_records: withoutAccount(one(2).resident_records) };
     got = parts(withheld);
     check('  a resident record that carries no account key shows no handle and reads none, although the requester is that '
         + 'same account ("mevsantos" filed it): the search never reads the requester',
-      said(got) === said(['Maria Elena Villamor Santos', 'Plastic Chairs']) && withheld.requester.username === 'mevsantos',
+      said(got) === said(['Maria Elena Villamor Santos', '#2', 'Plastic Chairs']) && withheld.requester.username === 'mevsantos',
       said(got));
     const leaks = LIST_AE.flatMap((b) => {
       const all = attempt(() => L.searchParts(b).join('\n'));
@@ -9574,11 +9590,12 @@ const root = () => dom.window.document.getElementById('root');
             walkIn: keysOf([4, 12, 21, 28]), self: keysOf([1, 10, 18, 25]) }),
         said({ notes, accounts }));
 
-      // What a search never reaches.
+      // What a search never reaches. The booking number was here ("27") until
+      // section AF put it in the row, where the search reads it.
       const NEVER = ['birthday', 'reception', 'fiesta', 'wake', 'seminar', '09171234567', '0917', '+639281112233',
         '9281112233', '639190001122', 'example.invalid', 'overdue', 'completed', 'returned', 'cancelled', 'confirmed',
         'upcoming', 'guest', 'online', 'account', 'secretary1', 'secretario', 'staff1', 'tabuena', 'broken', 'agreed', 'oct',
-        '2026', '27', '60'];
+        '2026', '60'];
       const leaked = [];
       for (const q of NEVER) {
         const rows = await rowsFor(q);
@@ -9587,8 +9604,8 @@ const root = () => dom.window.document.getElementById('root');
       check(`${name}: never matched: a purpose ("birthday", "reception", "fiesta", "wake", "seminar"), a guest's contact `
           + 'number, whole or in part ("09171234567", "0917", "+639281112233", "9281112233", "639190001122"), an email '
           + '("example.invalid"), a status word, "guest", "online", "account", the filer ("secretary1", "secretario"), the '
-          + 'returner ("staff1", "tabuena"), a return note ("broken", "agreed"), the schedule ("oct", "2026"), the booking '
-          + 'number ("27") or a quantity ("60")',
+          + 'returner ("staff1", "tabuena"), a return note ("broken", "agreed"), the schedule ("oct", "2026") or a quantity '
+          + '("60")',
         leaked.length === 0 && !!box(page), said(leaked));
       // With no box on screen nothing was typed, so "no request" would say nothing.
       check(`${name}: and none of those ${Object.keys(found).length + 5 + NEVER.length} searches sent a request`,
@@ -10470,6 +10487,582 @@ const root = () => dom.window.document.getElementById('root');
 
       if (previousScroll === undefined) delete proto.scrollIntoView;
       else proto.scrollIntoView = previousScroll;
+    }
+
+    // =======================================================================
+    // AF. Rental bookings: the payment marker and the booking number
+    // =======================================================================
+    // Every row of the Rental bookings list now says where the booking stands
+    // with its fee, and which booking it is, as section Z checks on Document
+    // requests. The marker is that list's own function, paymentMarker in
+    // utils/requestList.js, imported as it is (utils/rentalList.js hands it
+    // on): it reads only the charge the row carries (the list's projection,
+    // MANAGE_FIELDS, embeds one per booking, an object since
+    // charges.rental_request_id is UNIQUE), never the booking's status and
+    // never the item's fee, which is what the item costs today. "Paid" (a PAID
+    // charge above PHP 0), "No fee" (a PAID charge of PHP 0, which a free
+    // item's booking is given), "Unpaid" (an UNPAID charge, PHP 0 included),
+    // "Void" (a VOID charge: cancelling a booking voids its unpaid charge, as
+    // it did five live bookings') and "Not billed" (no charge at all: only a
+    // booking cancelled before rentals were billed, as live booking 9 was). It
+    // is a line under the status badge, before a return note. The number is
+    // "#12", as the Edit and Mark returned panels name a booking, a line of its
+    // own under the Booked for name and its note. Neither is a new column, and
+    // neither is a <strong>, so a row's first <strong> is still the name that
+    // sections AD and AE find it by. The search reads the number, "12" or
+    // "#12", part of it matching as on Payments and Document requests ("1"
+    // finds every number holding a 1, "#1" those that start with one), and
+    // never the marker's words. On a phone each has a card label of its own
+    // from its data-label, which index.css prints with the Document requests
+    // number's and marker's rules, reused by name; jsdom applies no width media
+    // query, so index.css is read from the file. utils/rentalList.js is checked
+    // case by case, then the real page for the three roles against thirteen
+    // stubbed bookings, every state among them, then section AE's 28 with the
+    // charges the live list carries, then index.css. Every request is answered
+    // by the fetch stub, and only GETs are sent.
+    console.log('\n--- Rental bookings: the payment marker and the booking number ---');
+    {
+      const R = globalThis.requestList || {};
+      const CS = globalThis.chargeSearch || {};
+      const fs = require('fs');
+
+      // a. The helpers on their own.
+      const numbers = [12, 9, 1234].map((id) => attempt(() => L.bookingNumber({ request_id: id })));
+      check('bookingNumber: the number as the Edit and Mark returned panels name a booking, "#12", "#9", and "#1234" with no '
+          + 'thousands separator', said(numbers) === said(['#12', '#9', '#1234']), said(numbers));
+      check('paymentMarker is Document requests\' own function, imported as it is: utils/rentalList.js hands on '
+          + 'utils/requestList.js\'s, so a booking and a request whose charges are alike read the same words',
+        typeof L.paymentMarker === 'function' && L.paymentMarker === R.paymentMarker,
+        said({ rental: typeof L.paymentMarker, same: L.paymentMarker === R.paymentMarker }));
+      // A booking of the list's shape (section AE's booking 2) with the
+      // charges embed given (undefined: no charges key at all), and fields
+      // over it, as "label (colour class)".
+      const bookingWith = (charges, over = {}) => {
+        const b = { ...one(2), ...over };
+        if (charges === undefined) delete b.charges;
+        else b.charges = charges;
+        return b;
+      };
+      const markerOf = (charges, over) => attempt(() => {
+        const m = L.paymentMarker(bookingWith(charges, over));
+        return m ? `${m.label} (${m.className})` : m;
+      });
+      const MARKER_CASES = [
+        ['no charge, null, absent or an empty list, is "Not billed"', [null, undefined, []], 'Not billed (gray)'],
+        ['a PAID charge above PHP 0, as a number, as a string, or inside a list, is "Paid", green',
+          [{ status: 'PAID', amount: 500 }, { status: 'PAID', amount: '300.00' }, [{ status: 'PAID', amount: '25.00' }]],
+          'Paid (status-claimed)'],
+        ['a PAID charge of PHP 0, 0, "0.00" or "0", is "No fee", never "Paid"',
+          [{ status: 'PAID', amount: 0 }, { status: 'PAID', amount: '0.00' }, { status: 'PAID', amount: '0' }], 'No fee (gray)'],
+        ['a PAID charge with no amount, a null one or a blank one is "Paid", never "No fee"',
+          [{ status: 'PAID' }, { status: 'PAID', amount: null }, { status: 'PAID', amount: '' }], 'Paid (status-claimed)'],
+        ['an UNPAID charge is "Unpaid", amber, PHP 0 included, and whatever the borrower declared',
+          [{ status: 'UNPAID', amount: 300 }, { status: 'UNPAID', amount: '0.00' },
+            { status: 'UNPAID', amount: '25.00', declared_method: 'onsite' }], 'Unpaid (status-pending)'],
+        ['a VOID charge, which cancelling leaves of an unpaid one, is "Void", never "Unpaid", "Paid" or "No fee", PHP 0 included',
+          [{ status: 'VOID', amount: '500.00' }, { status: 'VOID', amount: 0 }], 'Void (status-cancelled)'],
+        ['a charge status outside the three is shown as it is, never blank and never "Unpaid"',
+          [{ status: 'REFUNDED', amount: '5.00' }], 'REFUNDED (gray)'],
+      ];
+      for (const [what, inputs, want] of MARKER_CASES) {
+        const got = inputs.map((c) => markerOf(c));
+        check(`rental paymentMarker: ${what}`, got.every((g) => g === want), said(got));
+      }
+      const itemNow = (fee) => ({ rental_items: { ...one(2).rental_items, fee } });
+      const SOURCE_CASES = [
+        ['no charge, on a booking whose item is free today (fee "0.00"), is "Not billed", never "No fee": the item\'s fee is '
+          + 'what it costs now, not what the booking was billed', null, itemNow('0.00'), 'Not billed (gray)'],
+        ['a PAID PHP 0 charge on a booking whose item costs PHP 300.00 today is "No fee"', { status: 'PAID', amount: '0.00' },
+          itemNow('300.00'), 'No fee (gray)'],
+        ['a cancelled booking whose charge was paid first is "Paid": cancelling leaves a PAID charge alone',
+          { status: 'PAID', amount: '300.00' }, { status: 'cancelled', derived_status: 'cancelled' }, 'Paid (status-claimed)'],
+        ['a returned booking still unpaid is "Unpaid": the booking\'s status is never read', { status: 'UNPAID', amount: '25.00' },
+          { status: 'returned', derived_status: 'returned' }, 'Unpaid (status-pending)'],
+      ];
+      const wrongSources = SOURCE_CASES.map(([what, c, over, want]) => ({ what, got: markerOf(c, over), want }))
+        .filter((x) => x.got !== x.want);
+      check('rental paymentMarker reads the charge alone: never the item\'s fee today, never the booking\'s status (a free item\'s '
+          + 'booking with no charge, a PHP 0 charge on an item that costs PHP 300 now, a cancelled booking paid first, a returned '
+          + 'one still unpaid)', wrongSources.length === 0, wrongSources.length ? said(wrongSources) : `${SOURCE_CASES.length} cases`);
+      got = [one(2), one(7), one(3), one(4)].map(parts);
+      check('searchParts reads the booking number under the name and the account, before the item: "Maria Elena Villamor '
+          + 'Santos", "@mevsantos", "#2", "Plastic Chairs"; for Rodrigo, with no account, and for a guest, after the name',
+        said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', '#2', 'Plastic Chairs'],
+          ['Rodrigo Cempron Bautista', '#7', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', '#3', 'Sound System'],
+          ['Teresita Lim Ocampo', '@tess_ocampo', '#4', 'Barangay Hall']]), said(got));
+      // The number in a search, against the Payments search's own rule for its
+      // charge number (utils/chargeSearch.js, "#" and the number, matched as
+      // part of the text), which Document requests follows (section Z). The
+      // name, the account and the item hold no digit.
+      const IDS_N = [112, 61, 21, 19, 12, 11, 10, 9, 1, 121];
+      const numbered = IDS_N.map((id) => ({ ...bookingWith(null), request_id: id,
+        resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null,
+          account: { username: 'ana_cruz' } },
+        rental_items: { ...one(2).rental_items, name: 'Covered Court' } }));
+      const QUERIES = ['12', '#12', '1', '#1', '21', '121', '  #12 '];
+      const bookingIds = (q) => attempt(() => L.matchingBookings(numbered, q).map((b) => b.request_id));
+      const chargeIds = (q) => attempt(() => IDS_N.filter((id) => CS.matchesTerms(
+        CS.chargeSearchText({ charge_id: id }, { name: 'Ana Cruz', forText: 'Covered Court' }), CS.searchTerms(q))));
+      const byNumber = Object.fromEntries(QUERIES.map((q) => [q, bookingIds(q)]));
+      check('matchingBookings reads the number: "12" finds 112, 12 and 121, "#12" 12 and 121; part of a number matches: "1" finds '
+          + 'every number holding a 1 (all but 9), "#1" those that start with one (112, 19, 12, 11, 10, 1, 121); "21" 21 and 121, '
+          + '"121" 121 alone',
+        said(byNumber) === said({ 12: [112, 12, 121], '#12': [12, 121], 1: [112, 61, 21, 19, 12, 11, 10, 1, 121],
+          '#1': [112, 19, 12, 11, 10, 1, 121], 21: [21, 121], 121: [121], '  #12 ': [12, 121] }), said(byNumber));
+      const unlikePayments = QUERIES.filter((q) => said(bookingIds(q)) !== said(chargeIds(q)));
+      check('  the Payments search\'s rule for its charge number, exactly, as on Document requests: each of those searches finds '
+          + 'the bookings whose numbers are the numbers of the charges it finds on Payments',
+        unlikePayments.length === 0, said(QUERIES.map((q) => ({ q, bookings: bookingIds(q), charges: chargeIds(q) }))));
+      // One booking in each state; no name or item holds a marker's word.
+      const STATES = [[1, { status: 'PAID', amount: '300.00' }], [2, { status: 'PAID', amount: '0.00' }],
+        [3, { status: 'UNPAID', amount: '300.00' }], [4, { status: 'VOID', amount: '300.00' }], [5, null]]
+        .map(([id, charge]) => ({ ...numbered[0], request_id: id, charges: charge && { charge_id: 900 + id, ...charge } }));
+      const WORDS = ['paid', 'unpaid', 'no fee', 'fee', 'not billed', 'billed', 'void'];
+      const byWord = Object.fromEntries(WORDS.map((w) => [w, attempt(() => L.matchingBookings(STATES, w).map((b) => b.request_id))]));
+      const markersHeld = STATES.map((b) => attempt(() => L.paymentMarker(b).label));
+      check('the marker\'s words are never searched: "paid", "unpaid", "no fee", "fee", "not billed", "billed" and "void" find '
+          + 'nothing, in a list holding a booking in each state',
+        said(markersHeld) === said(['Paid', 'No fee', 'Unpaid', 'Void', 'Not billed'])
+          && Object.values(byWord).every((list) => Array.isArray(list) && list.length === 0), said({ markersHeld, byWord }));
+
+      // b. The real page. Thirteen bookings of the list's shape (section AE's
+      // asBooking), newest start first, every payment state among them; the
+      // charge arrives as one object, as the live list sends it. 61's item
+      // costs PHP 25.00 today and its charge PHP 0.00 (No fee); 19's charge is
+      // an unpaid PHP 0.00 (Unpaid); 12's borrower declared paying onsite,
+      // which pays nothing; 9 has no charge, as live booking 9; 8 was cancelled
+      // unpaid, its charge voided; 1 was paid, then cancelled; 7 was returned
+      // late with a note, still unpaid. The names, accounts and items hold no
+      // digit and no marker word.
+      //   id, item, who, Manila day, start and end hour, quantity, purpose, stored status, derived status
+      const ROWS_AF = [
+        [112, 'court', 'juan', '2026-10-20', 8, 12, 1, 'Purok 1 general assembly', 'confirmed', 'confirmed'],
+        [61, 'chairs', 'elena', '2026-10-19', 13, 18, 40, 'Birthday party', 'confirmed', 'confirmed'],
+        [21, 'sound', 'lourdes', '2026-10-18', 14, 22, 1, 'Wedding reception program', 'confirmed', 'confirmed'],
+        [19, 'costume', 'mario', '2026-10-10', 8, 20, 2, 'School cultural presentation', 'confirmed', 'overdue'],
+        [12, 'tables', 'liza', '2026-10-09', 7, 16, 8, 'Purok 3 fiesta lunch', 'confirmed', 'overdue'],
+        [11, 'hall', 'tess', '2026-10-08', 9, 12, 1, 'Senior citizens association meeting', 'confirmed', 'completed'],
+        [10, 'court', 'rodrigo', '2026-10-07', 15, 19, 1, 'Zumba for the women\'s group', 'confirmed', 'completed'],
+        [9, 'hall', 'nino', '2026-10-02', 13, 17, 1, 'Bible study', 'cancelled', 'cancelled'],
+        [8, 'costume', 'ramon', '2026-10-01', 8, 20, 3, 'Street dancing', 'cancelled', 'cancelled'],
+        [7, 'chairs', 'juan', '2026-09-26', 8, 17, 40, 'Family reunion', 'returned_late', 'returned_late'],
+        [6, 'tables', 'elena', '2026-09-20', 7, 16, 3, 'Fiesta', 'returned', 'returned'],
+        [2, 'sound', 'liza', '2026-09-12', 18, 22, 1, 'Birthday', 'returned_with_issue', 'returned_with_issue'],
+        [1, 'court', 'tess', '2026-09-05', 15, 19, 1, 'Liga practice', 'cancelled', 'cancelled'],
+      ];
+      const CHARGE_AF = {
+        112: { status: 'UNPAID', amount: 300 }, 61: { status: 'PAID', amount: '0.00' }, 21: { status: 'PAID', amount: 300 },
+        19: { status: 'UNPAID', amount: '0.00' },
+        12: { status: 'UNPAID', amount: '200.00', declared_method: 'onsite', declared_at: '2026-10-09T03:00:00+00:00' },
+        11: { status: 'PAID', amount: 0 }, 10: { status: 'PAID', amount: 500 }, 9: null, 8: { status: 'VOID', amount: '450.00' },
+        7: { status: 'UNPAID', amount: '1000.00' }, 6: { status: 'PAID', amount: '75.00' }, 2: { status: 'PAID', amount: null },
+        1: { status: 'PAID', amount: '300.00' },
+      };
+      // The marker each must show, written by hand.
+      const MARKER_AF = { 112: 'Unpaid', 61: 'No fee', 21: 'Paid', 19: 'Unpaid', 12: 'Unpaid', 11: 'No fee', 10: 'Paid',
+        9: 'Not billed', 8: 'Void', 7: 'Unpaid', 6: 'Paid', 2: 'Paid', 1: 'Paid' };
+      const NOTE_AF = { 7: 'Returned a day after the agreed time' };
+      const asBookingAF = (row) => {
+        const b = asBooking(row);
+        const charge = CHARGE_AF[row[0]];
+        return { ...b, return_note: NOTE_AF[row[0]] ?? null,
+          charges: charge === null ? null
+            : { charge_id: 900 + row[0], declared_method: null, declared_reference: null, declared_at: null, ...charge } };
+      };
+      const LIST13 = ROWS_AF.map(asBookingAF);
+      const answerAF = (list) => (url, method) => (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)
+        ? { requests: list.map((b) => ({ ...b })) } : undefined);
+      const nameAF = (id) => SHOWN_AS[ROWS_AF.find((r) => r[0] === id)[2]];
+      const wantRowAF = (id) => `${nameAF(id)} | #${id} | ${MARKER_AF[id]}`;
+      const TAB_AF = { Upcoming: [112, 61, 21], Overdue: [19, 12], Completed: [11, 10], Returned: [7, 6, 2],
+        Cancelled: [9, 8, 1], All: ROWS_AF.map((r) => r[0]) };
+      const STRIP13 = 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 3 · Cancelled 3 · All 13';
+      const bodyRows = (page) => page.queryAll('table.data-table tbody tr');
+      const numberEls = (tr) => tr.querySelectorAll('.doc-requests-number');
+      const markerEls = (tr) => tr.querySelectorAll('.doc-requests-pay');
+      // Each row as a person reads its name, its number and its marker.
+      const readRowAF = (tr) => `${text(tr.querySelector('strong'))} | ${text(numberEls(tr)[0]) ?? '(no number)'} | `
+        + `${text(markerEls(tr)[0]) ?? '(no marker)'}`;
+      const lookAF = (page) => ({
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: bodyRows(page).map(readRowAF),
+        showing: text(page.query('.pay-pager-count')),
+      });
+      const after = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+      const TONES = { Paid: 'charge-word status-claimed', Unpaid: 'charge-word status-pending', Void: 'charge-word status-cancelled',
+        'No fee': 'charge-word gray', 'Not billed': 'charge-word gray' };
+      // The actions each role's rows had before the marker: the Secretary's
+      // Edit and Cancel on every booking stored as confirmed, Staff's Mark
+      // returned on stored-confirmed equipment and furniture, and none, with
+      // no actions column, for the Punong Barangay.
+      const CONFIRMED_AF = [112, 61, 21, 19, 12, 11, 10];
+      const RETURNABLE_AF = [61, 21, 19, 12];
+      const ACTIONS_AF = {
+        Secretary: (id) => (CONFIRMED_AF.includes(id) ? 'Edit + Cancel' : '(none)'),
+        Staff: (id) => (RETURNABLE_AF.includes(id) ? 'Mark returned' : '(none)'),
+      };
+      // jsdom has no scrollIntoView, and the pager calls it on a Rows per page
+      // change (part c); this one does nothing.
+      const protoAF = dom.window.HTMLElement.prototype;
+      const previousScrollAF = protoAF.scrollIntoView;
+      protoAF.scrollIntoView = function scrollIntoView() {};
+      const sentAF = [];
+
+      for (const { name, route, token, user, opening } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerAF(LIST13));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        let v = lookAF(page);
+        const openIds = TAB_AF[opening];
+        check(`${name}: on open, ${opening}: each row shows its number under the name and its marker under the badge `
+            + `(${openIds.map(wantRowAF).join('; ')}); the heading, the counts and the one request as before the marker`,
+          said(v.rows) === said(openIds.map(wantRowAF)) && v.heading === `${openIds.length} ${opening.toLowerCase()} bookings`
+            && v.strip === STRIP13 && net.calls.length === 1 && /\/rental-requests\?status=all$/.test(net.calls[0].url),
+          said({ v, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+
+        const sentAtAll = net.calls.length;
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookAF(page);
+        check(`${name}: on All every row shows its number and its marker, each where its charge says so: Unpaid, No fee, Paid, `
+            + 'Not billed and Void',
+          said(v.rows) === said(TAB_AF.All.map(wantRowAF)), said(v.rows));
+        const rowById = (id) => bodyRows(page).find((tr) => text(numberEls(tr)[0]) === `#${id}`) ?? null;
+        const markerById = (id) => text(rowById(id) && markerEls(rowById(id))[0]);
+        check(`${name}: each state on a row of its own: 21 "Paid", 61 "No fee", 112 "Unpaid", 9 "Not billed", 8 "Void"`,
+          markerById(21) === 'Paid' && markerById(61) === 'No fee' && markerById(112) === 'Unpaid'
+            && markerById(9) === 'Not billed' && markerById(8) === 'Void',
+          said([21, 61, 112, 9, 8].map((id) => [id, markerById(id)])));
+        check(`${name}: a PAID PHP 0.00 charge reads "No fee", never "Paid": 61 (amount "0.00", its item PHP 25.00 today) and 11 `
+            + '(amount 0)', markerById(61) === 'No fee' && markerById(11) === 'No fee', said([markerById(61), markerById(11)]));
+        check(`${name}: an UNPAID charge reads "Unpaid": 19 (PHP 0.00, never "No fee"), 12 (its borrower declared paying onsite) `
+            + 'and 7 (returned late, still unpaid)',
+          [19, 12, 7].every((id) => markerById(id) === 'Unpaid'), said([19, 12, 7].map(markerById)));
+        check(`${name}: only the booking with no charge reads "Not billed" (9, as live booking 9); the cancelled booking whose `
+            + 'unpaid charge was voided reads "Void" (8), and the one paid before it was cancelled "Paid" (1)',
+          markerById(9) === 'Not billed' && markerById(8) === 'Void' && markerById(1) === 'Paid'
+            && v.rows.filter((r) => r.endsWith('| Not billed')).length === 1, said([9, 8, 1].map(markerById)));
+        check(`${name}: All, 13 bookings: heading "13 bookings", every count, and the pager's "Showing 1 to 13 of 13 results", as `
+            + 'before the marker; no request sent by the tab',
+          v.heading === '13 bookings' && v.strip === STRIP13 && v.showing === 'Showing 1 to 13 of 13 results'
+            && net.calls.length === sentAtAll, said({ heading: v.heading, strip: v.strip, showing: v.showing }));
+
+        // Where the two sit in the row, and what the row keeps.
+        const withActions = name !== 'Punong Barangay';
+        const heads = page.queryAll('table.data-table thead th').map(text);
+        const wantHeads = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(withActions ? [''] : [])];
+        const shapes = bodyRows(page).map((tr) => {
+          const cells = [...tr.children];
+          const num = numberEls(tr);
+          const mark = markerEls(tr);
+          const strongs = [...tr.querySelectorAll('strong')];
+          const note = cells[0]?.querySelector('.small-note') ?? null;
+          const badge = cells[5]?.querySelector('.badge') ?? null;
+          return {
+            cells: cells.length,
+            firstStrong: text(strongs[0]),
+            oneEach: num.length === 1 && mark.length === 1,
+            numberCell: num[0]?.closest('td') === cells[0],
+            markerCell: mark[0]?.closest('td') === cells[5],
+            // after the name and the line under it
+            numberAfter: after(strongs[0], num[0]) && !!note && after(note, num[0]),
+            // the next line after the badge, before a return note
+            markerNext: !!badge && !!mark[0] && badge.nextElementSibling === mark[0],
+            noStrong: !!num[0] && !!mark[0] && !num[0].closest('strong') && !num[0].querySelector('strong')
+              && !mark[0].closest('strong') && !mark[0].querySelector('strong'),
+            labels: `${num[0]?.getAttribute('data-label')}/${mark[0]?.getAttribute('data-label')}`,
+            tone: mark[0] ? [...mark[0].classList].filter((c) => c !== 'doc-requests-pay').sort().join(' ') : null,
+            actions: withActions ? [...(cells[6]?.querySelectorAll('button') || [])].map((b) => b.textContent).join(' + ')
+              || '(none)' : null,
+          };
+        });
+        check(`${name}: no new column: the same ${wantHeads.length} headers, and ${wantHeads.length} cells in every row`,
+          said(heads) === said(wantHeads) && shapes.every((s) => s.cells === wantHeads.length),
+          said({ heads, cells: shapes.map((s) => s.cells) }));
+        check(`${name}: the number is in the Booked for cell, after the name and the line under it, and the marker in the Status `
+            + 'cell, the next line after the badge (before 7\'s return note); one of each per row, neither a <strong>, so the '
+            + 'row\'s first <strong> is still the name',
+          shapes.length === 13 && shapes.every((s, i) => s.oneEach && s.numberCell && s.markerCell && s.numberAfter
+            && s.markerNext && s.noStrong && s.firstStrong === nameAF(TAB_AF.All[i])), said(shapes));
+        check(`${name}: on a phone card they are labelled "Booking" and "Payment" (data-label), and the marker takes the charge `
+            + 'colours of .charge-word: Paid green, Unpaid amber, Void, No fee and Not billed slate',
+          shapes.length === 13 && shapes.every((s, i) => s.labels === 'Booking/Payment'
+            && s.tone === TONES[MARKER_AF[TAB_AF.All[i]]]), said(shapes.map((s) => [s.labels, s.tone])));
+        check(withActions
+          ? `${name}: the actions are as before the marker: ${name === 'Secretary' ? 'Edit and Cancel on every booking stored as '
+            + 'confirmed' : 'Mark returned on stored-confirmed equipment and furniture'}, none on the others`
+          : 'Punong Barangay: no actions column and no button in any row, as before the marker',
+        withActions ? said(shapes.map((s) => s.actions)) === said(TAB_AF.All.map(ACTIONS_AF[name]))
+          : page.queryAll('table.data-table tbody button').length === 0 && shapes.every((s) => s.actions === null),
+        said(shapes.map((s) => s.actions)));
+
+        // Every tab: each row's number and marker, and nothing sent.
+        const sentTabs = net.calls.length;
+        const wrongTabs = [];
+        for (const [label, ids] of Object.entries(TAB_AF)) {
+          await clickIf(page, tabNamed(page, label));
+          const x = lookAF(page);
+          if (said(x.rows) !== said(ids.map(wantRowAF)) || x.strip !== STRIP13) wrongTabs.push({ label, rows: x.rows, strip: x.strip });
+        }
+        check(`${name}: on every one of the six tabs, every row shows its own number and marker under the same counts, and `
+            + 'pressing them sends nothing', wrongTabs.length === 0 && net.calls.length === sentTabs,
+        said({ wrongTabs, sent: net.calls.length - sentTabs }));
+
+        // The search, on All.
+        await clickIf(page, tabNamed(page, 'All'));
+        const sentSearch = net.calls.length;
+        const found = async (q) => {
+          await type(page, q);
+          return bodyRows(page).map((tr) => text(numberEls(tr)[0]));
+        };
+        const hits = {
+          n12: await found('12'), hash12: await found('#12'), n21: await found('21'), n1: await found('1'), hash1: await found('#1'),
+          withWord: await found('12 tables'), otherWord: await found('12 court'), spaced: await found('  #12 '),
+        };
+        check(`${name}: a search finds a booking by its number: "12" finds #112 and #12, "#12" #12 alone, "21" #21 alone`,
+          said(hits.n12) === said(['#112', '#12']) && said(hits.hash12) === said(['#12']) && said(hits.n21) === said(['#21']),
+          said(hits));
+        check(`${name}: part of a number matches, as on Payments and Document requests: "1" finds #112, #61, #21, #19, #12, #11, `
+            + '#10 and #1; "#1" the numbers that start with 1: #112, #19, #12, #11, #10 and #1',
+          said(hits.n1) === said(['#112', '#61', '#21', '#19', '#12', '#11', '#10', '#1'])
+            && said(hits.hash1) === said(['#112', '#19', '#12', '#11', '#10', '#1']), said(hits));
+        check(`${name}: the number is one more word of the search: "12 tables" finds #12 (Liza Bantilan's Folding Tables), "12 `
+            + 'court" #112 (Juan Santos Dela Cruz\'s Covered Court), "  #12 " #12',
+          said(hits.withWord) === said(['#12']) && said(hits.otherWord) === said(['#112']) && said(hits.spaced) === said(['#12']),
+          said(hits));
+        await type(page, '1');
+        v = lookAF(page);
+        check(`${name}: with "1", the heading and the counts follow the search as they do for a name: "8 of 13 bookings match", `
+            + '"Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8"',
+          v.heading === '8 of 13 bookings match'
+            && v.strip === 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8',
+          said({ heading: v.heading, strip: v.strip }));
+        const wordHits = {};
+        for (const q of WORDS) wordHits[q] = await found(q);
+        check(`${name}: the marker's words find nothing: "paid", "unpaid", "no fee", "fee", "not billed", "billed", "void"`,
+          Object.values(wordHits).every((list) => list.length === 0) && !!box(page), said(wordHits));
+        await type(page, '');
+        check(`${name}: none of those searches sent a request`, !!box(page) && net.calls.length === sentSearch,
+          `${net.calls.length - sentSearch} request(s)`);
+        sentAF.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // c. Section AE's 28, shaped like the live list, with the charges the
+      // live list carries: an earlier read-only capture of the charges list
+      // (12 Oct 2026) holds 27 rental charges, 17 PAID, 5 UNPAID and 5 VOID,
+      // the VOID ones on cancelled bookings and none of PHP 0, and live
+      // booking 9 has none. Here the 15 stored as confirmed carry 12 PAID and
+      // 3 UNPAID (4 and 14, completed; 5, overdue), the 7 returns 5 PAID and 2
+      // UNPAID (15, with an issue; 21, late), the cancelled 13, 17, 22, 26 and
+      // 28 a VOID each, and 9 nothing. The counts, written by hand: All Paid
+      // 17, Unpaid 5, Void 5, Not billed 1; no No fee, as on the live list.
+      const UNPAID28 = [4, 14, 5, 15, 21];
+      const charge28 = (b) => (b.request_id === 9 ? null : { charge_id: 900 + b.request_id,
+        amount: (Number(b.rental_items.fee) * b.quantity_requested).toFixed(2),
+        status: b.status === 'cancelled' ? 'VOID' : UNPAID28.includes(b.request_id) ? 'UNPAID' : 'PAID',
+        declared_method: null, declared_reference: null, declared_at: null });
+      const LIVE28 = LIST_AE.map((b) => ({ ...b, charges: charge28(b) }));
+      const WANT28 = {
+        Upcoming: {}, Overdue: { Paid: 6, Unpaid: 1 }, Completed: { Paid: 6, Unpaid: 2 }, Returned: { Paid: 5, Unpaid: 2 },
+        Cancelled: { Void: 5, 'Not billed': 1 }, All: { Paid: 17, Unpaid: 5, Void: 5, 'Not billed': 1 },
+      };
+      const tally = (labels) => labels.reduce((m, l) => ({ ...m, [l]: (m[l] || 0) + 1 }), {});
+      const sameTally = (a, b) => said(Object.keys(a).sort().map((k) => [k, a[k]])) === said(Object.keys(b).sort().map((k) => [k, b[k]]));
+      for (const { name, route, token, user } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerAF(LIVE28));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        const sizeSelect = page.query('.pay-pager select');
+        if (sizeSelect) {
+          sizeSelect.value = '100';
+          sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+        const counted = {};
+        for (const label of Object.keys(WANT28)) {
+          await clickIf(page, tabNamed(page, label));
+          counted[label] = tally(bodyRows(page).map((tr) => text(markerEls(tr)[0]) ?? '(no marker)'));
+        }
+        const off = Object.keys(WANT28).filter((label) => !sameTally(counted[label], WANT28[label]));
+        check(`${name}: over the 28 live-shaped bookings, at 100 a page, the markers count as the live list's charges do: All Paid `
+            + '17, Unpaid 5, Void 5, Not billed 1 and no No fee; Overdue Paid 6, Unpaid 1; Completed Paid 6, Unpaid 2; Returned '
+            + 'Paid 5, Unpaid 2; Cancelled Void 5, Not billed 1',
+          off.length === 0, said({ counted, off }));
+        await clickIf(page, tabNamed(page, 'All'));
+        const allNumbers = bodyRows(page).map((tr) => text(numberEls(tr)[0]));
+        await type(page, '27');
+        const n27 = bodyRows(page).map(readRowAF);
+        await type(page, '');
+        check(`${name}: All shows every number in the one order, #1 first, then #2 to #9, #13, #12, #11, #10, #14 … #28, under `
+            + '"28 bookings"; "27" finds booking 27 alone, Maria Elena Villamor Santos\'s Barangay Hall, Paid',
+          said(allNumbers) === said(SENT.map((id) => `#${id}`)) && lookAF(page).heading === '28 bookings'
+            && said(n27) === said(['Maria Elena Villamor Santos | #27 | Paid']), said({ first: allNumbers.slice(0, 14), n27 }));
+        sentAF.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // d. The phone card. jsdom applies no width media query, so index.css
+      // is read as a browser of a given width applies it, the cascade settled
+      // and nested rules read whole (section AA's reader), and a rule for
+      // ::before is tried on the element it belongs to.
+      const splitAF = (s) => {
+        const out = [];
+        let depth = 0;
+        let cur = '';
+        for (const ch of s) {
+          if (ch === '(') depth += 1;
+          if (ch === ')') depth -= 1;
+          if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+        }
+        out.push(cur);
+        return out.map((x) => x.trim()).filter(Boolean);
+      };
+      const cssAF = (() => {
+        const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rules = [];
+        const open = [];
+        let from = 0;
+        const own = (block, decl) => {
+          const k = decl.indexOf(':');
+          if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+        };
+        const media = () => open.filter((b) => b.at).map((b) => b.at);
+        const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+        for (let i = 0; i < src.length; i += 1) {
+          const ch = src[i];
+          if (ch === '{') {
+            const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+            const parent = inRule();
+            if (head.startsWith('@')) {
+              const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+              open.push(block);
+              if (parent) rules.push({ ...block, media: media() });
+            } else {
+              const mine = splitAF(head);
+              const selectors = parent
+                ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+                : mine;
+              const block = { selectors, decls: {} };
+              open.push(block);
+              rules.push({ ...block, media: media() });
+            }
+            from = i + 1;
+          } else if (ch === '}') {
+            const block = open.pop();
+            const rest = src.slice(from, i).trim();
+            if (block?.selectors && rest) own(block, rest);
+            from = i + 1;
+          } else if (ch === ';') {
+            const block = open.at(-1);
+            if (block?.selectors) own(block, src.slice(from, i).trim());
+            from = i + 1;
+          }
+        }
+        rules.forEach((r, i) => { r.order = i; });
+        return { rules, balanced: open.length === 0 };
+      })();
+      const appliesAF = (media, width) => media.every((atRule) => {
+        if (!atRule.startsWith('@media')) return !/^@(keyframes|font-face)/.test(atRule);
+        return atRule.slice(6).split(',').some((query) => {
+          if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+          const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          return max.every((x) => width <= x) && min.every((x) => width >= x);
+        });
+      });
+      const bySpecAF = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+      const specAF = (selector) => {
+        let a = 0;
+        let b = 0;
+        let c = 0;
+        let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+        s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+          const best = splitAF(inner).map(specAF).sort(bySpecAF).at(-1) || [0, 0, 0];
+          a += best[0];
+          b += best[1];
+          c += best[2];
+          return ' ';
+        });
+        s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+        s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+        a += (s.match(/#[\w-]+/g) || []).length;
+        b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+        c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+        return [a, b, c];
+      };
+      const matchAF = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+      // The value of `prop` a browser `width` wide gives `el` (with
+      // `before`, its ::before), or null when no rule sets it. Hover, focus
+      // and active rules are skipped: this reads the element at rest.
+      const valueAF = (width, el, prop, before = false) => {
+        if (!el) return 'no element';
+        let best = null;
+        for (const r of cssAF.rules) {
+          if (!(prop in r.decls) || !appliesAF(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+            const pseudo = sel.match(/^(.*?)::?(before|after|placeholder|first-line|first-letter)$/);
+            if (before ? !pseudo || pseudo[2] !== 'before' || !matchAF(el, pseudo[1]) : !!pseudo || !matchAF(el, sel)) continue;
+            const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specAF(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpecAF(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, '') };
+            }
+          }
+        }
+        return best?.value ?? null;
+      };
+      // What would hide `el` at `width`, on it or on anything above it up to
+      // the table: a display of none, a visibility of hidden, an opacity or
+      // font size of 0, or a clip.
+      const hidersAF = (width, el) => {
+        const out = [];
+        for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+          for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+            ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+            const w = valueAF(width, node, prop);
+            if (w && bad.test(w)) out.push(`${node.tagName}.${[...node.classList].join('.')} ${prop}: ${w}`);
+          }
+          if (node.tagName === 'TABLE') break;
+        }
+        return out;
+      };
+      seedSession(VALID);
+      resetNet(200, answerAF(LIST13));
+      const cardPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await cardPage.settle();
+      await clickIf(cardPage, tabNamed(cardPage, 'All'));
+      const itemCell = cardPage.query('table.data-table tbody td[data-label="Item"]');
+      check('index.css reads as a browser applies it: every brace closed, and a rental cell\'s card label ("Item") printed from '
+          + 'its data-label at 390px and not at 1280px, so what follows is measured right',
+        cssAF.balanced && cssAF.rules.length > 500 && !!itemCell && valueAF(390, itemCell, 'content', true) === 'attr(data-label)'
+          && valueAF(1280, itemCell, 'content', true) === null,
+        said({ balanced: cssAF.balanced, rules: cssAF.rules.length, at390: valueAF(390, itemCell, 'content', true) }));
+      const partsAF = cardPage.queryAll('table.data-table tbody .doc-requests-number, table.data-table tbody .doc-requests-pay');
+      const readAt = (width) => partsAF.map((el) => ({ el: `${el.getAttribute('data-label')} "${text(el)}"`,
+        hidden: hidersAF(width, el), label: valueAF(width, el, 'content', true), labelShown: valueAF(width, el, 'display', true) }));
+      const phoneAF = readAt(390);
+      check('on a phone (390px) nothing hides the number or the marker in any row, and each card prints its label from '
+          + 'data-label ("Booking", "Payment"), shown as a line of its own',
+        partsAF.length === 26 && phoneAF.every((p) => p.hidden.length === 0 && p.label === 'attr(data-label)'
+          && p.labelShown === 'block'),
+        said(phoneAF.filter((p) => p.hidden.length || p.label !== 'attr(data-label)' || p.labelShown !== 'block').slice(0, 4)));
+      const wideAF = readAt(1280);
+      check('  above 640px (1280) nothing hides them either, and no label is printed: the data-label is inert there',
+        partsAF.length === 26 && wideAF.every((p) => p.hidden.length === 0 && p.label === null),
+        said(wideAF.filter((p) => p.hidden.length || p.label !== null).slice(0, 4)));
+      sentAF.push(...net.calls.map((c) => c.method));
+      await cardPage.unmount();
+
+      check('section AF\'s marker and number sent nothing but GETs', sentAF.length > 0 && sentAF.every((m) => m === 'GET'),
+        `${sentAF.length} request(s): ${[...new Set(sentAF)].join(', ')}`);
+      if (previousScrollAF === undefined) delete protoAF.scrollIntoView;
+      else protoAF.scrollIntoView = previousScrollAF;
     }
 
     Object.assign(storageProto, storageOwn);

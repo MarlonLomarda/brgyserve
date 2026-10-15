@@ -3071,6 +3071,11 @@ button.pay-tab:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* The Rental bookings rows (15 Oct 2026) carry these two classes as well, so
+   their booking number and payment marker look as the Document requests
+   ones do, here and on a phone card (the 640px .stack-narrow block): a change
+   to either rule changes both lists. */
+
 /* The Document requests columns (14 Oct 2026). Above 640px the columns stand
    in the same places on every tab, page, search and filter result: the
    layout is fixed, so these widths decide the columns, not the rows drawn

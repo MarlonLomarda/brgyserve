@@ -28,8 +28,32 @@
 // before the search, the tabs and the pager: the route's, newest start first,
 // with bookings that start together settled by booking number, so the pager
 // never shows a row twice or leaves one out between loads.
+//
+// PAYMENT AND NUMBER (15 Oct 2026). Each row also shows its booking number,
+// "#12" as the Edit and Mark returned panels name it (bookingNumber), which
+// the search reads too, and where the booking stands with its fee
+// (paymentMarker), which it does not. The marker is the Document requests
+// list's own function (utils/requestList.js), handed on here as it is: it
+// reads only the charge a row carries, and a booking carries its charge in
+// the same shape a request does.
 import { displayStatus } from "../constants/rentals";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
+import { paymentMarker } from "./requestList";
+
+// Where a booking stands with its fee, for the marker under its status badge:
+// { label, className }. The Document requests list's function, as it is, read
+// from the charge alone (the list embeds one per booking), never from the
+// booking's status and never from its item's fee, which is what the item
+// costs today, not what the booking was billed:
+//   no charge                 "Not billed": every booking is billed when it is
+//                             made, so only one cancelled before rentals were
+//                             billed has none (live booking 9)
+//   a PAID charge of PHP 0    "No fee": a free item's booking is billed so
+//   any other charge          its status in the charge badges' words and
+//                             colours (CHARGE_META): "Paid", "Unpaid", or
+//                             "Void", which cancelling a booking leaves of an
+//                             unpaid charge
+export { paymentMarker };
 
 export const ALL = "all";
 
@@ -166,18 +190,28 @@ export function accountHandle(record) {
   return record.account?.username ? `@${record.account.username}` : null;
 }
 
+// The booking's number as its row shows it under the name, and as the Edit
+// and Mark returned panels name the booking ("Edit booking #12"): "#12". No
+// thousands separator.
+export function bookingNumber(booking) {
+  return `#${booking.request_id}`;
+}
+
 // What a search reads of one booking: what its row shows of who and what,
 // each its own part. The name in the Booked for column (bookedForName); the
 // @account the row shows under it, and only there (a guest's row shows
-// "Guest" and the contact number instead); and the item. NEVER the purpose or
-// a return note, which are free text; never a guest's contact number, which
-// the row shows but is a phone number, not a name; never an email, the filer
-// or the returner; never a status, whose words would match every row of a
-// tab; and never the words "Guest" and "No online account".
+// "Guest" and the contact number instead); the booking number under them,
+// "#12", so "12" and "#12" find it and part of it matches, as the Payments
+// search reads its charge number; and the item. NEVER the purpose or a return
+// note, which are free text; never a guest's contact number, which the row
+// shows but is a phone number, not a name; never an email, the filer or the
+// returner; never a status or the payment marker, whose words would match
+// every row of a tab; and never the words "Guest" and "No online account".
 export function searchParts(booking) {
   return [
     bookedForName(booking),
     isGuest(booking) ? null : accountHandle(booking.resident_records),
+    bookingNumber(booking),
     booking.rental_items?.name,
   ].filter(Boolean);
 }

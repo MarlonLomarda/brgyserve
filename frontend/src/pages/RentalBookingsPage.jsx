@@ -18,6 +18,7 @@ import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
   accountHandle,
   bookedForName,
+  bookingNumber,
   emptyText,
   inTab,
   isGuest,
@@ -25,6 +26,7 @@ import {
   noMatchText,
   openingTab,
   orderBookings,
+  paymentMarker,
   RENTAL_TABS,
   searchHeading,
   searchPlaceholder,
@@ -74,6 +76,17 @@ import {
 // last page. Like the search, neither is kept in the browser. The list is
 // kept in ONE order (orderBookings in utils/rentalList.js), the route's with
 // its ties settled, so a page never repeats a row or leaves one out.
+//
+// PAYMENT AND NUMBER (15 Oct 2026). Every row shows its booking number, "#12"
+// as the Edit and Mark returned panels name it, on a line of its own under
+// the name, and under the status badge where the booking stands with its
+// fee: "Paid", "No fee", "Unpaid", "Void" or "Not billed", read from its
+// charge alone by the Document requests list's own function
+// (utils/rentalList.js). Both sit in cells the table already had, so it has
+// no new column, and neither is a <strong>: a row's first <strong> is still
+// the name. The search reads the number and never the marker. They carry the
+// Document requests number's and marker's classes, so they look as those do,
+// and on a phone card each is labelled from its own data-label (index.css).
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -100,6 +113,23 @@ function AccountNote({ record }) {
   return (
     <div className="muted small-note">
       {accountHandle(record) || "No online account"}
+    </div>
+  );
+}
+
+// Where the booking stands with its fee, under its status badge, in the
+// colours .charge-word gives the charge's own status words. The class is the
+// Document requests marker's, reused by name, so the two look the same;
+// data-label is the phone card's label for it, and above 640px nothing reads
+// it.
+function PaymentMarker({ booking }) {
+  const marker = paymentMarker(booking);
+  return (
+    <div
+      className={`charge-word ${marker.className} doc-requests-pay`}
+      data-label="Payment"
+    >
+      {marker.label}
     </div>
   );
 }
@@ -952,6 +982,12 @@ export default function RentalBookingsPage({
                           ) : (
                             <AccountNote record={r.resident_records} />
                           )}
+                          <div
+                            className="muted doc-requests-number"
+                            data-label="Booking"
+                          >
+                            {bookingNumber(r)}
+                          </div>
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>
                         <td data-label="Schedule">
@@ -967,6 +1003,7 @@ export default function RentalBookingsPage({
                           <span className={`badge ${meta.className}`}>
                             {meta.label}
                           </span>
+                          <PaymentMarker booking={r} />
                           {r.return_note && (
                             <div className="muted reason-note">
                               Note: {r.return_note}
