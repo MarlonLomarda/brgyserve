@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListTabs from "../components/ListTabs";
+import ListToolbar from "../components/ListToolbar";
 import ResidentPicker from "../components/ResidentPicker";
 import { formatDate } from "../constants/requestStatus";
 import {
@@ -11,11 +12,19 @@ import {
   isReturnable,
   rentalMeta,
 } from "../constants/rentals";
+import { searchTerms } from "../utils/chargeSearch";
 import {
+  accountHandle,
+  bookedForName,
   emptyText,
   inTab,
+  isGuest,
+  matchingBookings,
+  noMatchText,
   openingTab,
   RENTAL_TABS,
+  searchHeading,
+  searchPlaceholder,
   tabCounts,
   tabHeading,
 } from "../utils/rentalList";
@@ -37,35 +46,29 @@ import {
 // on Overdue, as the select did; the Secretary and the Punong Barangay on
 // Upcoming. The chosen tab lives through every reload: Refresh, Try again, and
 // the reload after an edit, a return, a cancel or a filed walk-in.
-
-const fullName = (p) => {
-  if (!p) return null;
-  const name = [p.first_name, p.middle_name, p.last_name]
-    .filter(Boolean)
-    .join(" ");
-  if (!name) return null;
-  return p.suffix ? `${name}, ${p.suffix}` : name;
-};
-
-const isGuest = (booking) => Boolean(booking.outside_borrower_name);
+//
+// SEARCH (15 Oct 2026). The Document requests search box, as
+// components/ListToolbar.jsx, in a row of its own between the row that holds
+// Refresh and the tabs. It filters the loaded list as you type, with no
+// request, over what a row shows of who and what: the name in the Booked for
+// column, the @account under it where the row shows one, and the item
+// (utils/rentalList.js); never the purpose or a guest's contact number. The
+// search runs over the whole list and the tabs split what matches, so their
+// counts follow it; the chosen tab stays. While a search is on, the heading
+// reads "4 of 7 overdue bookings match". The search lives through every
+// reload and through Back from a panel, and is kept nowhere in the browser:
+// the barangay hall's PC is shared.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
 // Three forms and nothing else: 09XXXXXXXXX, 639XXXXXXXXX, +639XXXXXXXXX.
 const PH_MOBILE_RE = /^(09\d{9}|\+?639\d{9})$/;
 
-// WHO THE BOOKING IS FOR — the borrower, not the requester. Since migration
-// 022 a row names its borrower directly (resident_records for a resident,
-// outside_borrower_name for a guest) and the requester is only who FILED it;
-// for a walk-in that is the Secretary. The requester's profile is kept as a
-// last fallback for rows the server did not embed a borrower on.
+// WHO THE BOOKING IS FOR — the borrower, not the requester: bookedForName in
+// utils/rentalList.js, which the search reads too, so a search finds a booking
+// by exactly the name its row shows. "—" when there is nothing to name.
 function residentName(booking) {
-  return (
-    fullName(booking.resident_records) ||
-    booking.outside_borrower_name ||
-    fullName(booking.requester?.profiles) ||
-    (booking.requester?.username ? `@${booking.requester.username}` : "—")
-  );
+  return bookedForName(booking) || "—";
 }
 
 // The handle beneath the borrower's name is the BORROWER'S account, never the
@@ -74,14 +77,13 @@ function residentName(booking) {
 // arrives inside resident_records when the server sends it; this tests the
 // key, not the viewer's role. Null means the resident has no online account,
 // said plainly rather than left blank. Guests never reach this: they have no
-// resident record, and their row says "Guest" instead.
+// resident record, and their row says "Guest" instead. The handle is
+// accountHandle's (utils/rentalList.js), which the search reads too.
 function AccountNote({ record }) {
   if (!record || !("account" in record)) return null;
   return (
     <div className="muted small-note">
-      {record.account?.username
-        ? `@${record.account.username}`
-        : "No online account"}
+      {accountHandle(record) || "No online account"}
     </div>
   );
 }
@@ -660,6 +662,10 @@ export default function RentalBookingsPage({
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
   const [encoding, setEncoding] = useState(false); // walk-in panel open
+  // The search, as typed. Here rather than in the box, so it outlives the list
+  // while the Edit, Mark returned or walk-in panel takes its place.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null); // the search box, for Clear search
   // Numbers each load, so only the newest one may change the list.
   const loadSeq = useRef(0);
 
@@ -714,10 +720,34 @@ export default function RentalBookingsPage({
     }
   }
 
-  // The tab counts come from the whole list, so they read the same on every
-  // tab; the rows and the heading are the chosen tab's.
-  const counts = requests === null ? null : tabCounts(requests);
-  const shown = requests === null ? [] : requests.filter((r) => inTab(r, tab));
+  // The search runs over the whole list, then the tabs split what matches.
+  // The tab counts come from every match, so they read the same on every tab
+  // and follow the search; the rows and the heading are the chosen tab's.
+  // With no search every booking matches, as before.
+  const searching = searchTerms(query).length > 0;
+  const matching = requests === null ? [] : matchingBookings(requests, query);
+  const counts = requests === null ? null : tabCounts(matching);
+  const shown = matching.filter((r) => inTab(r, tab));
+  // "4 of 7 overdue bookings match": how many of the tab's bookings match, of
+  // how many it holds with no search.
+  let heading = "Bookings";
+  if (requests !== null) {
+    heading = searching
+      ? searchHeading(
+          tab,
+          shown.length,
+          requests.filter((r) => inTab(r, tab)).length,
+        )
+      : tabHeading(tab, shown.length);
+  }
+
+  // "Clear search", where nothing matches: the search only, and the tab stays.
+  // Focus goes to the box, as the Clear (x) button's does: the button pressed
+  // is gone once the rows are back.
+  function clearSearch() {
+    setQuery("");
+    searchRef.current?.focus();
+  }
 
   return (
     <>
@@ -757,10 +787,11 @@ export default function RentalBookingsPage({
         <>
           {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
 
+          {/* The heading is a polite live region, as on Document requests, so
+              a screen reader hears "4 of 7 overdue bookings match" as the
+              search is typed. */}
           <div className="list-head">
-            <h2>
-              {requests === null ? "Bookings" : tabHeading(tab, shown.length)}
-            </h2>
+            <h2 aria-live="polite">{heading}</h2>
             <div className="head-actions">
               <button className="btn secondary" onClick={load}>
                 Refresh
@@ -783,23 +814,36 @@ export default function RentalBookingsPage({
             </div>
           </div>
 
-          {/* The tabs, under the row that holds Refresh, drawn only once the
-              list has loaded: never while it loads or after it failed, as on
+          {/* The search, then the tabs, under the row that holds Refresh, so a
+              reload leaves Refresh where it was: both are drawn only once the
+              list has loaded, never while it loads or after it failed, as on
               Document requests. */}
           {requests !== null && (
-            <ListTabs
-              label="Status"
-              tabs={RENTAL_TABS}
-              counts={counts}
-              active={tab}
-              onChoose={setTab}
-            />
+            <>
+              <ListToolbar
+                className="rental-bookings-toolbar"
+                label="Search bookings"
+                placeholder={searchPlaceholder(requests)}
+                value={query}
+                onChange={setQuery}
+                inputRef={searchRef}
+              />
+              <ListTabs
+                label="Status"
+                tabs={RENTAL_TABS}
+                counts={counts}
+                active={tab}
+                onChoose={setTab}
+              />
+            </>
           )}
 
           {/* The error first, then loading, then empty, then rows: a load that
               failed shows neither a count nor the empty text. Try again
               repeats the same load, as Refresh does; Refresh above stays
-              usable. The markup is the Document requests page's. */}
+              usable. The markup is the Document requests page's. A tab with
+              no bookings keeps its own text; one whose bookings a search
+              hides says so, naming the tab, and offers to clear the search. */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
@@ -811,6 +855,17 @@ export default function RentalBookingsPage({
             </>
           ) : requests === null ? (
             <p className="muted">Loading bookings…</p>
+          ) : shown.length === 0 && searching ? (
+            <div className="empty">
+              <p>{noMatchText(tab, query)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearch}
+              >
+                Clear search
+              </button>
+            </div>
           ) : shown.length === 0 ? (
             <div className="empty">
               <p>{emptyText(tab)}</p>

@@ -144,6 +144,16 @@
 // and the strip on a narrow phone. utils/rentalList.js is checked case by
 // case first.
 //
+// Section AE is the Rental bookings list's search box, for the same three
+// roles: what section X checks on Document requests. components/ListToolbar.jsx
+// over the list already loaded, matching only what a row shows of who and
+// what (the name the Booked for column shows, the @account under it where the
+// row shows one, and the item), never the purpose or a guest's contact
+// number; the tab counts and the heading following it; no request per
+// keystroke; and the search kept through Refresh, Try again, Back from a panel
+// and the reload after an action. utils/rentalList.js's new helpers are
+// checked case by case first.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -9049,6 +9059,683 @@ const root = () => dom.window.document.getElementById('root');
     dom.window.confirm = previousConfirm;
     if (previousTZAD2 === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAD2;
+  }
+
+  // =========================================================================
+  // AE. Rental bookings: the search box
+  // =========================================================================
+  // The Rental bookings list (RentalBookingsPage: the Secretary's
+  // /secretary/rentals and the homes of Staff and the Punong Barangay) gains
+  // the search box section X checks on Document requests:
+  // components/ListToolbar.jsx as it is, in a row of its own under the row
+  // that holds the heading and Refresh and over the status tabs, drawn only
+  // once the list has loaded. It filters the list already loaded, as you
+  // type, with no request, through utils/chargeSearch.js's normalise,
+  // searchTerms and matchesTerms as they are, over what utils/rentalList.js
+  // says a row shows of who and what: the name the Booked for column shows (a
+  // resident's, or a guest's), the @account under it where the row shows
+  // one, and the item. The route sends ONE projection to all three roles
+  // (MANAGE_FIELDS in routes/rentalRequests.js), so all three receive the
+  // borrower's account, and all three rows show it and find it. NEVER the
+  // purpose, a guest's contact number (which the row shows, "Guest · 09…"),
+  // an email, a status word, the words "Guest" and "No online account", the
+  // filer, the returner or a return note. The search runs over the whole list
+  // and the tabs split what matches: their counts follow it, a tab left with
+  // none is dimmed, the chosen tab stays, and while a search is on the heading
+  // reads "N of M <tab> bookings match". It lives through Refresh, Try again,
+  // Back from a panel and the reload after an action, and is kept nowhere in
+  // the browser. The helpers are checked case by case, then the real page for
+  // the three roles against 28 stubbed bookings. Every request is answered by
+  // the fetch stub; the only writes, the Secretary's cancel and Staff's
+  // return, go to it too.
+  console.log('\n--- Rental bookings: the search box ---');
+  {
+    const previousTZAE = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const L = globalThis.rentalList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // 28 bookings in the list's real shape (MANAGE_FIELDS, the same for the
+    // three roles), with the derived_status the server adds. Their statuses
+    // are the live list's on 14 Oct 2026: 7 overdue, 8 completed, none
+    // upcoming, 7 returned (4 returned, 2 late, 1 with an issue) and 6
+    // cancelled. Newest start first, as the server sends them; 10 to 13 start
+    // at the same moment and are sent 13, 12, 11, 10. A resident with an
+    // account files their own booking (the requester is that account), except
+    // 4, a walk-in the Secretary filed for Teresita, who has one; Rodrigo and
+    // Mario have no online account, and their bookings and the guests' were
+    // filed by the Secretary. The purposes, contact numbers, emails, return
+    // notes, the filer and the returner read like real ones, so a search that
+    // reached them would find something.
+    const RES = {
+      juan: [101, 'Juan', 'Santos', 'Dela Cruz', 'jdelacruz'],
+      rodrigo: [102, 'Rodrigo', 'Cempron', 'Bautista', null],
+      elena: [103, 'Maria Elena', 'Villamor', 'Santos', 'mevsantos'],
+      liza: [104, 'Liza', null, 'Bantilan', 'liza_b'],
+      mario: [105, 'Mario', 'Uy', 'Dagohoy', null],
+      tess: [106, 'Teresita', 'Lim', 'Ocampo', 'tess_ocampo'],
+      nino: [107, 'Niño', 'Salazar', 'Peñaflor', 'nino_p'],
+    };
+    const GUESTS = {
+      lourdes: ['Maria Lourdes Villanueva-Santos', '09171234567'],
+      ramon: ['Ramon Tagalog', '+639281112233'],
+      danilo: ['Danilo Escabas', '639190001122'],
+    };
+    // Who each row names, written out by hand, as the Booked for column shows it.
+    const SHOWN_AS = {
+      juan: 'Juan Santos Dela Cruz', rodrigo: 'Rodrigo Cempron Bautista', elena: 'Maria Elena Villamor Santos',
+      liza: 'Liza Bantilan', mario: 'Mario Uy Dagohoy', tess: 'Teresita Lim Ocampo', nino: 'Niño Salazar Peñaflor',
+      lourdes: 'Maria Lourdes Villanueva-Santos', ramon: 'Ramon Tagalog', danilo: 'Danilo Escabas',
+    };
+    const ITEM_AE = {
+      court: [1, 'Covered Court', 'facility'], hall: [2, 'Barangay Hall', 'facility'], sound: [3, 'Sound System', 'equipment'],
+      chairs: [4, 'Plastic Chairs', 'furniture'], tent: [5, 'Tent (10x10)', 'equipment'],
+      tables: [6, 'Folding Tables', 'furniture'], costume: [7, 'Sinulog Costume Set', 'equipment'],
+    };
+    //   id, item, who, Manila day, start and end hour, quantity, purpose,
+    //   stored status, derived status, and 'walk-in' when the Secretary filed
+    //   it for a resident who has an account
+    const ROWS_AE = [
+      [1, 'court', 'juan', '2026-10-11', 13, 17, 1, 'Youth council basketball league opening', 'confirmed', 'completed'],
+      [2, 'chairs', 'elena', '2026-10-10', 8, 17, 60, 'Birthday party', 'confirmed', 'overdue'],
+      [3, 'sound', 'lourdes', '2026-10-09', 14, 22, 1, 'Wedding reception program', 'confirmed', 'overdue'],
+      [4, 'hall', 'tess', '2026-10-08', 9, 12, 1, 'Senior citizens association monthly meeting', 'confirmed', 'completed',
+        'walk-in'],
+      [5, 'tent', 'mario', '2026-10-07', 6, 18, 2, 'Wake', 'confirmed', 'overdue'],
+      [6, 'tables', 'liza', '2026-10-05', 7, 16, 8, 'Purok 3 fiesta lunch', 'returned', 'returned'],
+      [7, 'court', 'rodrigo', '2026-10-04', 15, 19, 1, 'Zumba for the women\'s group', 'confirmed', 'completed'],
+      [8, 'costume', 'ramon', '2026-10-03', 8, 20, 3, 'School cultural presentation', 'confirmed', 'overdue'],
+      [9, 'court', 'nino', '2026-10-02', 13, 17, 1, 'Bible study', 'cancelled', 'cancelled'],
+      [13, 'tent', 'liza', '2026-09-26', 8, 17, 1, 'Medical mission registration area', 'cancelled', 'cancelled'],
+      [12, 'sound', 'tess', '2026-09-26', 8, 17, 1, 'Purok 5 talent show', 'returned', 'returned'],
+      [11, 'court', 'elena', '2026-09-26', 8, 12, 1, 'Barangay clean-up drive assembly', 'confirmed', 'completed'],
+      [10, 'chairs', 'juan', '2026-09-26', 8, 17, 40, 'Family reunion', 'returned_late', 'returned_late'],
+      [14, 'hall', 'mario', '2026-09-20', 14, 18, 1, 'Christening', 'confirmed', 'completed'],
+      [15, 'tables', 'rodrigo', '2026-09-19', 6, 15, 10, 'Fiesta', 'returned_with_issue', 'returned_with_issue'],
+      [16, 'chairs', 'nino', '2026-09-14', 7, 12, 25, 'Prayer meeting', 'confirmed', 'overdue'],
+      [17, 'court', 'danilo', '2026-09-13', 16, 20, 1, 'Inter-barangay volleyball friendly', 'cancelled', 'cancelled'],
+      [18, 'sound', 'juan', '2026-09-06', 18, 22, 1, 'Birthday', 'returned', 'returned'],
+      [19, 'hall', 'liza', '2026-09-05', 8, 17, 1, 'Livelihood training on soap making', 'confirmed', 'completed'],
+      [20, 'tent', 'elena', '2026-08-30', 6, 18, 1, 'Graduation party', 'confirmed', 'overdue'],
+      [21, 'costume', 'tess', '2026-08-23', 8, 18, 2, 'Sinulog sa Ubujan street dancing', 'returned_late', 'returned_late'],
+      [22, 'court', 'mario', '2026-08-16', 7, 11, 1, 'Liga practice', 'cancelled', 'cancelled'],
+      [23, 'chairs', 'rodrigo', '2026-08-09', 9, 15, 30, 'Despedida', 'returned', 'returned'],
+      [24, 'hall', 'nino', '2026-08-02', 13, 17, 1, 'Homeowners association election', 'confirmed', 'completed'],
+      [25, 'tables', 'juan', '2026-07-26', 7, 16, 6, 'Fiesta', 'confirmed', 'overdue'],
+      [26, 'court', 'liza', '2026-07-19', 15, 19, 1, 'Basketball', 'cancelled', 'cancelled'],
+      [27, 'hall', 'elena', '2026-07-12', 8, 12, 1, 'Seminar', 'confirmed', 'completed'],
+      [28, 'tables', 'tess', '2026-07-05', 18, 22, 4, 'Anniversary', 'cancelled', 'cancelled'],
+    ];
+    const RETURNS_AE = ['returned', 'returned_late', 'returned_with_issue'];
+    const NOTES_AE = { 10: 'Returned a day after the agreed time', 15: 'Two tables returned with broken legs' };
+    const FILER = { user_id: 1, username: 'secretary1', email: 'secretary1@example.invalid',
+      profiles: { first_name: 'Ana', middle_name: null, last_name: 'Secretario', suffix: null } };
+    const RETURNER = { user_id: 3, username: 'staff1', profiles: { first_name: 'Sam', last_name: 'Tabuena' } };
+    const manilaIso = (day, hour) => new Date(`${day}T${String(hour).padStart(2, '0')}:00:00+08:00`).toISOString()
+      .replace('.000Z', '+00:00');
+    const asBooking = ([id, itemKey, who, day, from, to, qty, purpose, status, derived, filed]) => {
+      const [itemId, itemName, type] = ITEM_AE[itemKey];
+      const r = RES[who];
+      const guest = GUESTS[who];
+      const person = r && { resident_id: r[0], first_name: r[1], middle_name: r[2], last_name: r[3], suffix: null,
+        account: r[4] ? { username: r[4] } : null };
+      const own = r && r[4] && filed !== 'walk-in';
+      return {
+        request_id: id, quantity_requested: qty, start_datetime: manilaIso(day, from), end_datetime: manilaIso(day, to),
+        purpose, status, return_note: NOTES_AE[id] ?? null,
+        returned_at: RETURNS_AE.includes(status) ? manilaIso(day, to + 1) : null,
+        resident_id: person ? person.resident_id : null,
+        outside_borrower_name: guest ? guest[0] : null, outside_borrower_contact: guest ? guest[1] : null,
+        rental_items: { item_id: itemId, name: itemName, type, fee: '25.00', quantity_total: 100, quantity_available: 100 },
+        resident_records: person || null,
+        requester: own ? { user_id: 700 + r[0], username: r[4], email: `${r[4]}@example.invalid`,
+          profiles: { first_name: r[1], middle_name: r[2], last_name: r[3], suffix: null } } : FILER,
+        returned_by: RETURNS_AE.includes(status) ? RETURNER : null,
+        charges: { charge_id: 900 + id, amount: '25.00', status: status === 'cancelled' ? 'VOID' : 'PAID',
+          declared_method: null, declared_reference: null, declared_at: null },
+        derived_status: derived,
+      };
+    };
+    const LIST_AE = ROWS_AE.map(asBooking);
+    const SENT = ROWS_AE.map((r) => r[0]);
+    // A row as the tests name it: who it is for and the item, "Liza Bantilan ·
+    // Covered Court", which is one row in the 28.
+    const rowKey = (id) => {
+      const r = ROWS_AE.find((x) => x[0] === id);
+      return `${SHOWN_AS[r[2]]} · ${ITEM_AE[r[1]][1]}`;
+    };
+    const keysOf = (ids) => ids.map(rowKey);
+    // What each tab holds, in the order sent, written out by hand.
+    const TAB_IDS = {
+      Upcoming: [], Overdue: [2, 3, 5, 8, 16, 20, 25], Completed: [1, 4, 7, 11, 14, 19, 24, 27],
+      Returned: [6, 12, 10, 15, 18, 21, 23], Cancelled: [9, 13, 17, 22, 26, 28], All: SENT,
+    };
+    const STRIP28 = 'Upcoming 0 · Overdue 7 · Completed 8 · Returned 7 · Cancelled 6 · All 28';
+    // "santos": Juan Santos Dela Cruz, Maria Elena Villamor Santos and Maria
+    // Lourdes Villanueva-Santos.
+    const SANTOS = [1, 2, 3, 11, 10, 18, 20, 25, 27];
+    const STRIP_SANTOS = 'Upcoming 0 · Overdue 4 · Completed 3 · Returned 2 · Cancelled 0 · All 9';
+
+    // a. utils/rentalList.js: who a row is for, its account, and what a
+    // booking's search reads.
+    const one = (id) => LIST_AE.find((b) => b.request_id === id);
+    // A resident record as a projection that withholds the account would send
+    // it: no account key at all.
+    const withoutAccount = (record) => {
+      const copy = { ...record };
+      delete copy.account;
+      return copy;
+    };
+    let got = [one(2), one(7), one(3)].map((b) => attempt(() => L.bookedForName(b)));
+    check('bookedForName, the name in the Booked for column: a resident\'s first, middle and last name, "Maria Elena Villamor '
+        + 'Santos" and "Rodrigo Cempron Bautista"; a guest\'s name as typed, "Maria Lourdes Villanueva-Santos"',
+      said(got) === said(['Maria Elena Villamor Santos', 'Rodrigo Cempron Bautista', 'Maria Lourdes Villanueva-Santos']), said(got));
+    const bare = { ...one(2), resident_records: null, outside_borrower_name: null };
+    got = [
+      { ...one(2), resident_records: { ...one(2).resident_records, suffix: 'Jr.' } },
+      bare,
+      { ...bare, requester: { ...bare.requester, profiles: null } },
+      { ...bare, requester: null },
+    ].map((b) => attempt(() => L.bookedForName(b)));
+    check('  a suffix after a comma, "Maria Elena Villamor Santos, Jr."; a row with no borrower (none on the live list) '
+        + 'falls back to the requester\'s name, then "@username"; with nothing to name, null, never "—" or "@undefined"',
+      said(got) === said(['Maria Elena Villamor Santos, Jr.', 'Maria Elena Villamor Santos', '@mevsantos', null]), said(got));
+    got = [one(2), one(3), one(7)].map((b) => attempt(() => L.isGuest(b)));
+    check('isGuest: a booking with a guest\'s name is a guest\'s; a resident\'s, with or without an account, is not',
+      said(got) === said([false, true, false]), said(got));
+    got = [one(2).resident_records, one(7).resident_records, { ...one(2).resident_records, account: undefined },
+      withoutAccount(one(2).resident_records), null]
+      .map((rec) => attempt(() => L.accountHandle(rec)));
+    check('accountHandle, the line under a resident\'s name: "@mevsantos"; none for a resident with no online account '
+        + '(the row says so in words), for a record that carries no account key, and for no record',
+      said(got) === said(['@mevsantos', null, null, null, null]), said(got));
+    const parts = (b) => attempt(() => L.searchParts(b));
+    got = [one(2), one(7), one(3), one(4)].map(parts);
+    check('searchParts, what a booking\'s search reads: the name as the row shows it, the @account the row shows under it, '
+        + 'and the item: "Maria Elena Villamor Santos", "@mevsantos", "Plastic Chairs"; Rodrigo, with no account, his name and '
+        + 'item only; a guest, the name and item, never the contact number; a walk-in, the resident\'s own account, never the '
+        + 'filer\'s',
+      said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', 'Plastic Chairs'],
+        ['Rodrigo Cempron Bautista', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', 'Sound System'],
+        ['Teresita Lim Ocampo', '@tess_ocampo', 'Barangay Hall']]), said(got));
+    const withheld = { ...one(2), resident_records: withoutAccount(one(2).resident_records) };
+    got = parts(withheld);
+    check('  a resident record that carries no account key shows no handle and reads none, although the requester is that '
+        + 'same account ("mevsantos" filed it): the search never reads the requester',
+      said(got) === said(['Maria Elena Villamor Santos', 'Plastic Chairs']) && withheld.requester.username === 'mevsantos',
+      said(got));
+    const leaks = LIST_AE.flatMap((b) => {
+      const all = attempt(() => L.searchParts(b).join('\n'));
+      if (typeof all !== 'string' || all.startsWith('threw')) return [`${b.request_id}: ${all}`];
+      return [b.purpose, b.outside_borrower_contact, b.requester?.email, b.status, b.derived_status, b.return_note,
+        'Guest', 'online', 'secretary1', 'Secretario', 'staff1', 'Tabuena']
+        .filter(Boolean).filter((s) => all.toLowerCase().includes(s.toLowerCase())).map((s) => `${b.request_id}: ${s}`);
+    });
+    check('  no booking\'s text holds its purpose, a contact number, an email, a status, a return note, "Guest", the "No '
+        + 'online account" note, the filer or the returner', leaks.length === 0, said(leaks));
+    const matched = (query) => attempt(() => L.matchingBookings(LIST_AE, query).map((b) => b.request_id));
+    got = { blank: matched(''), spaces: matched('   '), nino: matched('NIÑO'), words: matched('chairs  SANTOS'),
+      account: matched('mevsantos'), contact: matched('0917'), purpose: matched('birthday') };
+    check('matchingBookings: a blank search, or spaces only, keeps all 28 in the order sent; "NIÑO" finds 9, 16 and 24; '
+        + '"chairs  SANTOS" 2 and 10; "mevsantos" 2, 11, 20 and 27; a contact number\'s "0917" and a purpose\'s "birthday" '
+        + 'nothing',
+      said(got) === said({ blank: SENT, spaces: SENT, nino: [9, 16, 24], words: [2, 10], account: [2, 11, 20, 27],
+        contact: [], purpose: [] }), said(got));
+    const HEADS = [
+      ['overdue', 4, 7, '4 of 7 overdue bookings match'], ['overdue', 1, 7, '1 of 7 overdue bookings matches'],
+      ['overdue', 0, 1, '0 of 1 overdue booking match'], ['overdue', 1, 1, '1 of 1 overdue booking matches'],
+      ['upcoming', 0, 0, '0 of 0 upcoming bookings match'], ['all', 12, 28, '12 of 28 bookings match'],
+      ['all', 1, 28, '1 of 28 bookings matches'], ['all', 1234, 2345, '1,234 of 2,345 bookings match'],
+    ];
+    const heads = HEADS.map(([tab, n, m]) => attempt(() => L.searchHeading(tab, n, m)));
+    check('searchHeading, Document requests\' words for the tab: "4 of 7 overdue bookings match", "1 of 7 overdue bookings '
+        + 'matches", "0 of 1 overdue booking match", "0 of 0 upcoming bookings match", "12 of 28 bookings match" on All, '
+        + '"1,234 of 2,345"',
+      said(heads) === said(HEADS.map((h) => h[3])), said(heads));
+    const NONE = [['overdue', 'zzz', 'No overdue bookings match "zzz"'], ['all', 'zzz', 'No bookings match "zzz"'],
+      ['returned', '  Dela   CRUZ ', 'No returned bookings match "Dela CRUZ"']];
+    const nones = NONE.map(([tab, q]) => attempt(() => L.noMatchText(tab, q)));
+    check('noMatchText names the tab, as the empty text without a search does, and quotes the search as typed, spaces '
+        + 'tidied: \'No overdue bookings match "zzz"\', on All \'No bookings match "zzz"\'',
+      said(nones) === said(NONE.map((n) => n[2])), said(nones));
+    const noKeys = LIST_AE.map((b) => (b.resident_records ? { ...b, resident_records: withoutAccount(b.resident_records) } : b));
+    const holders = [LIST_AE, noKeys, LIST_AE.filter((b) => b.outside_borrower_name), []]
+      .map((list) => attempt(() => L.searchPlaceholder(list)));
+    check('searchPlaceholder promises an account only where the rows carry one: "Search name, account or item" for the list '
+        + 'every role receives; "Search name or item" for one whose records carry no account, for guests only, and for none',
+      said(holders) === said(['Search name, account or item', 'Search name or item', 'Search name or item',
+        'Search name or item']), said(holders));
+
+    // b. The real page, for the three roles.
+    const makeStateAE = () => ({ rows: ROWS_AE.map((r) => [...r]) });
+    const listAnswerAE = (state) => ({ requests: state.rows.map(asBooking) });
+    const answerForAE = (state) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerAE(state);
+      const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+      if (method === 'POST' && act) {
+        const r = state.rows.find((x) => x[0] === Number(act[1]));
+        if (!r) return undefined;
+        r[8] = act[2] === 'cancel' ? 'cancelled' : 'returned';
+        r[9] = r[8];
+        return { message: act[2] === 'cancel' ? `Booking #${r[0]} cancelled.` : `Return recorded for booking #${r[0]}.` };
+      }
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search bookings"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const xButton = (page) => page.query('button[aria-label="Clear search"]');
+    // Typed the way a keystroke types (the native setter and an input event);
+    // with no box on screen, nothing is typed.
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const emptyClear = (page) => (page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search') ?? null : null);
+    const rowsOf = (page) => page.queryAll('table.data-table tbody tr')
+      .map((tr) => `${text(tr.querySelector('strong'))} · ${text(tr.children[1])}`);
+    const rowOf = (page, key) => page.queryAll('table.data-table tbody tr')
+      .find((tr) => `${text(tr.querySelector('strong'))} · ${text(tr.children[1])}` === key) ?? null;
+    const rowButton = (page, key, label) => {
+      const tr = rowOf(page, key);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    const noteOf = (page, key) => {
+      const tr = rowOf(page, key);
+      return tr ? (text(tr.querySelector('.small-note')) ?? '(no note)') : null;
+    };
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      search: box(page)?.value ?? null,
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      dimmed: tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty')).map(text),
+      rows: rowsOf(page),
+      empty: text(page.query('.empty p')),
+      clearSearch: !!emptyClear(page),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+      loading: root().textContent.includes('Loading bookings…'),
+    });
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/rental-'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    // jsdom has no window.confirm; Cancel asks it first. It answers yes here.
+    const previousConfirm = dom.window.confirm;
+    dom.window.confirm = () => true;
+    const methodsSent = [];
+    // The stub counts writes through bare localStorage, which the session
+    // uses. A write through window.localStorage, or to sessionStorage, goes to
+    // jsdom's own Storage instead: the stub's assignment to
+    // window.localStorage does not take, jsdom's accessor having no setter. So
+    // writes to jsdom's Storage are counted too, for this section.
+    const storageProto = dom.window.Storage.prototype;
+    const storageOwn = { setItem: storageProto.setItem, removeItem: storageProto.removeItem, clear: storageProto.clear };
+    const domStorage = { writes: 0 };
+    for (const name of Object.keys(storageOwn)) {
+      storageProto[name] = function counted(...args) {
+        domStorage.writes += 1;
+        return storageOwn[name].apply(this, args);
+      };
+    }
+
+    const ROLES_AE = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
+      { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, opening: 'Upcoming' },
+    ];
+    for (const { name, route, token, user, opening } of ROLES_AE) {
+      const state = makeStateAE();
+      seedSession(token, user);
+      resetNet(200, answerForAE(state));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const firstOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the tabs, the search box is not drawn while the list loads or after a load fails: no box under `
+          + '"Loading bookings…", none beside the error, and Try again brings it back with the tabs',
+        !firstOpen.box && !firstOpen.strip && firstOpen.loading && !failedOpen.box && !failedOpen.strip
+          && failedOpen.error === 'Could not load the bookings: Network down' && !!box(page) && !!page.query('.pay-tabs'),
+        said({ firstOpen, failedOpen, after: { box: !!box(page), strip: !!page.query('.pay-tabs') } }));
+
+      const input = box(page);
+      const wrapper = input?.closest('[role="search"]') ?? null;
+      const icon = wrapper?.querySelector('svg') ?? null;
+      const headRow = page.query('.list-head h2')?.closest('.list-head') ?? null;
+      const toolbar = input?.closest('.list-head') ?? null;
+      check(`${name}: the box is the one Payments and Document requests have: type="search" in a role="search" wrapper, `
+          + 'named "Search bookings", reading "Search name, account or item", no browser autocomplete or spellcheck, its '
+          + 'icon hidden from screen readers, empty, no Clear (x)',
+        input?.type === 'search' && !!wrapper && input.getAttribute('aria-label') === 'Search bookings'
+          && input.getAttribute('placeholder') === 'Search name, account or item' && input.getAttribute('autocomplete') === 'off'
+          && input.getAttribute('spellcheck') === 'false' && icon?.getAttribute('aria-hidden') === 'true'
+          && input.value === '' && !xButton(page),
+        said({ type: input?.type ?? null, label: input?.getAttribute('aria-label') ?? null,
+          placeholder: input?.getAttribute('placeholder') ?? null, autocomplete: input?.getAttribute('autocomplete') ?? null,
+          spellcheck: input?.getAttribute('spellcheck') ?? null, icon: icon?.getAttribute('aria-hidden') ?? null, x: !!xButton(page) }));
+      check(`${name}: it has a row of its own, under the row with the heading and Refresh and over the tabs, and is no form`,
+        !!toolbar && !!headRow && toolbar !== headRow && follows(headRow, toolbar) && follows(toolbar, page.query('.pay-tabs'))
+          && !input.closest('form') && !!buttonNamed(headRow, 'Refresh') && !buttonNamed(toolbar, 'Refresh'),
+        said({ toolbar: toolbar?.className ?? null, head: headRow?.className ?? null }));
+      check(`${name}: the heading is a polite live region, as on Document requests, so the count is heard as you type`,
+        headRow?.querySelector('h2')?.getAttribute('aria-live') === 'polite',
+        said({ ariaLive: headRow?.querySelector('h2')?.getAttribute('aria-live') ?? null }));
+      let v = look(page);
+      const openingReads = opening === 'Overdue'
+        ? v.heading === '7 overdue bookings' && said(v.rows) === said(keysOf(TAB_IDS.Overdue))
+        : v.heading === '0 upcoming bookings' && v.empty === 'No upcoming bookings.' && v.rows.length === 0 && !v.clearSearch;
+      check(`${name}: with nothing typed the list reads as it did: ${opening} chosen, `
+          + `${opening === 'Overdue' ? '"7 overdue bookings" and its seven rows' : '"0 upcoming bookings" and "No upcoming bookings."'}, `
+          + 'every count over the 28',
+        openingReads && said(v.pressed) === said([`${opening} ${TAB_IDS[opening].length}`]) && v.strip === STRIP28, said(v));
+
+      // Typing, a keystroke at a time.
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      let sent = net.calls.length;
+      const perKey = [];
+      for (const s of ['s', 'sa', 'san', 'sant', 'santo', 'santos']) {
+        await type(page, s);
+        perKey.push(net.calls.length - sent);
+      }
+      v = look(page);
+      check(`${name}: each keystroke filters at once and sends nothing: "s" to "santos", no request after any`,
+        net.calls.length === sent && perKey.every((n) => n === 0) && v.search === 'santos', said({ perKey, search: v.search }));
+      if (opening === 'Overdue') {
+        check(`${name}: on Overdue, "santos" leaves its four Santos rows; Overdue stays chosen, and the heading reads "4 of 7 `
+            + 'overdue bookings match"',
+          said(v.rows) === said(keysOf([2, 3, 20, 25])) && said(v.pressed) === said(['Overdue 4'])
+            && v.heading === '4 of 7 overdue bookings match', said(v));
+      } else {
+        check(`${name}: on Upcoming, which holds none, "santos" keeps Upcoming chosen: "0 of 0 upcoming bookings match", and `
+            + 'in place of the rows \'No upcoming bookings match "santos"\' with a Clear search button',
+          said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 of 0 upcoming bookings match'
+            && v.empty === 'No upcoming bookings match "santos"' && v.clearSearch && v.rows.length === 0, said(v));
+      }
+      check(`${name}: the counts follow the search, "${STRIP_SANTOS}", and the tabs left with none are dimmed, still buttons`,
+        v.strip === STRIP_SANTOS && said(v.dimmed) === said(['Upcoming 0', 'Cancelled 0'])
+          && tabsOf(page).length === 6 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
+
+      // The tabs split what matches.
+      sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      const onAll = look(page);
+      await clickIf(page, tabNamed(page, 'Cancelled'));
+      const onCancelled = look(page);
+      check(`${name}: a tab press splits what matches and sends nothing: All shows the nine Santos rows, in the order sent, `
+          + 'under "9 of 28 bookings match"',
+        said(onAll.rows) === said(keysOf(SANTOS)) && onAll.heading === '9 of 28 bookings match'
+          && said(onAll.pressed) === said(['All 9']), said(onAll));
+      check(`${name}: Cancelled, where none match: "0 of 6 cancelled bookings match", and in place of the rows 'No cancelled `
+          + 'bookings match "santos"\' with a Clear search button',
+        onCancelled.heading === '0 of 6 cancelled bookings match' && onCancelled.empty === 'No cancelled bookings match "santos"'
+          && onCancelled.clearSearch && onCancelled.rows.length === 0 && !page.query('table.data-table')
+          && said(onCancelled.pressed) === said(['Cancelled 0']) && net.calls.length === sent, said(onCancelled));
+      await clickIf(page, emptyClear(page));
+      v = look(page);
+      check(`${name}: that Clear search empties the box, leaves focus in it and keeps Cancelled: its six rows, under the `
+          + 'heading it had before, "6 cancelled bookings", and every count back',
+        v.search === '' && !!box(page) && page.active() === box(page) && said(v.pressed) === said(['Cancelled 6'])
+          && said(v.rows) === said(keysOf(TAB_IDS.Cancelled)) && v.heading === '6 cancelled bookings' && v.strip === STRIP28
+          && net.calls.length === sent, said(v));
+
+      // An empty tab: its own text with no search, the search's with one.
+      await clickIf(page, tabNamed(page, 'Upcoming'));
+      const noSearch = look(page);
+      await type(page, 'zzz');
+      const zzz = look(page);
+      check(`${name}: an empty tab with no search keeps its text, "0 upcoming bookings" and "No upcoming bookings.", with no `
+          + 'Clear search',
+        noSearch.heading === '0 upcoming bookings' && noSearch.empty === 'No upcoming bookings.' && !noSearch.clearSearch,
+        said(noSearch));
+      check(`${name}: with "zzz", matching nothing: "0 of 0 upcoming bookings match", 'No upcoming bookings match "zzz"' `
+          + 'with Clear search, and all six tabs dimmed',
+        zzz.heading === '0 of 0 upcoming bookings match' && zzz.empty === 'No upcoming bookings match "zzz"' && zzz.clearSearch
+          && zzz.dimmed.length === 6 && said(zzz.pressed) === said(['Upcoming 0']), said(zzz));
+
+      // What a search finds, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const rowsFor = async (q) => {
+        await type(page, q);
+        return look(page).rows;
+      };
+      sent = net.calls.length;
+      const found = {
+        name: await rowsFor('rodrigo'), middle: await rowsFor('cempron'), first: await rowsFor('elena'),
+        guest: await rowsFor('lourdes'), guests: await rowsFor('tagalog'), cased: await rowsFor('  RODRIGO   bautista '),
+        accents: await rowsFor('nino'), accented: await rowsFor('PEÑAFLOR'),
+        item: await rowsFor('chairs'), items: await rowsFor('COVERED court'), hall: await rowsFor('barangay'),
+        words: await rowsFor('santos chairs'), reversed: await rowsFor('chairs santos'), apart: await rowsFor('juan tent'),
+        later: await rowsFor('elena hall'),
+      };
+      check(`${name}: by the name the row shows, first, middle or last: "rodrigo" and "cempron" find Rodrigo Cempron Bautista's `
+          + 'three bookings, "elena" Maria Elena Villamor Santos\'s four, in the order sent',
+        said(found.name) === said(keysOf([7, 15, 23])) && said(found.middle) === said(keysOf([7, 15, 23]))
+          && said(found.first) === said(keysOf([2, 11, 20, 27])), said(found));
+      check(`${name}: by a guest's name as typed: "lourdes" finds Maria Lourdes Villanueva-Santos, "tagalog" Ramon Tagalog`,
+        said(found.guest) === said(keysOf([3])) && said(found.guests) === said(keysOf([8])), said(found));
+      check(`${name}: by the item: "chairs" finds the four Plastic Chairs bookings, "COVERED court" the seven Covered Court `
+          + 'ones, and "barangay" the five Barangay Hall ones, never 11 or 17, whose purposes say "Barangay"',
+        said(found.item) === said(keysOf([2, 10, 16, 23])) && said(found.items) === said(keysOf([1, 7, 9, 11, 17, 22, 26]))
+          && said(found.hall) === said(keysOf([4, 14, 19, 24, 27])), said(found));
+      check(`${name}: case, accents and extra spaces do not matter: "  RODRIGO   bautista " finds Rodrigo's three, "nino" and `
+          + '"PEÑAFLOR" Niño Salazar Peñaflor\'s three',
+        said(found.cased) === said(keysOf([7, 15, 23])) && said(found.accents) === said(keysOf([9, 16, 24]))
+          && said(found.accented) === said(keysOf([9, 16, 24])), said(found));
+      check(`${name}: several words must all match the same booking, in any order, across its name and item: "santos chairs" `
+          + 'and "chairs santos" find Maria Elena\'s and Juan\'s chairs, "juan tent" nothing',
+        said(found.words) === said(keysOf([2, 10])) && said(found.reversed) === said(keysOf([2, 10]))
+          && Array.isArray(found.apart) && found.apart.length === 0, said(found));
+      check(`${name}: "elena hall" finds Maria Elena Villamor Santos's Barangay Hall booking, 27, the 27th row on All`,
+        said(found.later) === said(keysOf([27])) && SENT.indexOf(27) === 26, said(found.later));
+
+      // The account: found exactly where the row shows it. The route sends
+      // the same projection to the three roles, so each one's rows show it.
+      await type(page, '');
+      const notes = {
+        elena: noteOf(page, rowKey(2)), rodrigo: noteOf(page, rowKey(7)), tess: noteOf(page, rowKey(4)),
+        guest: noteOf(page, rowKey(3)),
+      };
+      const accounts = {
+        mevsantos: await rowsFor('mevsantos'), handle: await rowsFor('@liza_b'), walkIn: await rowsFor('tess_ocampo'),
+        self: await rowsFor('jdelacruz'),
+      };
+      check(`${name}: the rows show the resident's account under the name ("@mevsantos"; "@tess_ocampo" on a walk-in the `
+          + 'Secretary filed; Rodrigo "No online account"; a guest "Guest · 09171234567"), and a search finds it there: '
+          + '"mevsantos", "@liza_b", "tess_ocampo" and "jdelacruz" each find that resident\'s bookings',
+        said(notes) === said({ elena: '@mevsantos', rodrigo: 'No online account', tess: '@tess_ocampo',
+          guest: 'Guest · 09171234567' })
+          && said(accounts) === said({ mevsantos: keysOf([2, 11, 20, 27]), handle: keysOf([6, 13, 19, 26]),
+            walkIn: keysOf([4, 12, 21, 28]), self: keysOf([1, 10, 18, 25]) }),
+        said({ notes, accounts }));
+
+      // What a search never reaches.
+      const NEVER = ['birthday', 'reception', 'fiesta', 'wake', 'seminar', '09171234567', '0917', '+639281112233',
+        '9281112233', '639190001122', 'example.invalid', 'overdue', 'completed', 'returned', 'cancelled', 'confirmed',
+        'upcoming', 'guest', 'online', 'account', 'secretary1', 'secretario', 'staff1', 'tabuena', 'broken', 'agreed', 'oct',
+        '2026', '27', '60'];
+      const leaked = [];
+      for (const q of NEVER) {
+        const rows = await rowsFor(q);
+        if (rows.length > 0) leaked.push({ q, rows: rows.length });
+      }
+      check(`${name}: never matched: a purpose ("birthday", "reception", "fiesta", "wake", "seminar"), a guest's contact `
+          + 'number, whole or in part ("09171234567", "0917", "+639281112233", "9281112233", "639190001122"), an email '
+          + '("example.invalid"), a status word, "guest", "online", "account", the filer ("secretary1", "secretario"), the '
+          + 'returner ("staff1", "tabuena"), a return note ("broken", "agreed"), the schedule ("oct", "2026"), the booking '
+          + 'number ("27") or a quantity ("60")',
+        leaked.length === 0 && !!box(page), said(leaked));
+      // With no box on screen nothing was typed, so "no request" would say nothing.
+      check(`${name}: and none of those ${Object.keys(found).length + 5 + NEVER.length} searches sent a request`,
+        !!box(page) && net.calls.length === sent, `${net.calls.length - sent} request(s), box ${box(page) ? 'present' : 'absent'}`);
+
+      // Escape and the Clear (x) button.
+      await clickIf(page, tabNamed(page, 'Overdue'));
+      await type(page, 'elena');
+      const x = xButton(page);
+      box(page)?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape in the box empties it, keeps focus in it, and brings Overdue's seven rows back`,
+        !!x && v.search === '' && page.active() === box(page) && said(v.rows) === said(keysOf(TAB_IDS.Overdue))
+          && v.heading === '7 overdue bookings', said(v));
+      await type(page, 'elena');
+      const x2 = xButton(page);
+      await clickIf(page, x2);
+      v = look(page);
+      check(`${name}: the Clear (x) button, there while the box has text, does the same: a type="button" named "Clear `
+          + 'search"; pressed, the box is empty, focus is in it and the button is gone',
+        !!x2 && x2.type === 'button' && x2.getAttribute('aria-label') === 'Clear search' && v.search === ''
+          && page.active() === box(page) && !xButton(page) && said(v.rows) === said(keysOf(TAB_IDS.Overdue)), said(v));
+      await type(page, 'elena');
+      tabNamed(page, 'Overdue')?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape clears only while the box has focus: pressed on a tab, the box keeps "elena" and its two rows`,
+        page.active() === tabNamed(page, 'Overdue') && v.search === 'elena' && said(v.rows) === said(keysOf([2, 20])), said(v));
+
+      // Back from a panel: the Secretary's Edit and Encode walk-in, Staff's
+      // Mark returned. The Punong Barangay has none.
+      await type(page, 'santos');
+      const SANTOS_OVERDUE = keysOf([2, 3, 20, 25]);
+      const kept = (s) => s.search === 'santos' && said(s.pressed) === said(['Overdue 4'])
+        && said(s.rows) === said(SANTOS_OVERDUE) && s.heading === '4 of 7 overdue bookings match';
+      if (name === 'Secretary') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Edit'));
+        const opened = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back from Edit, with nothing saved, keeps the search and the tab: "santos" in the box, Overdue '
+            + 'chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested',
+          opened === 'Edit booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const walkIn = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('  Secretary: and so does Back from Encode walk-in, which asked only for the rental items',
+          walkIn === 'Encode walk-in booking' && kept(v)
+            && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-items']),
+          said({ walkIn, v, calls: listCalls(net.calls.slice(sent)) }));
+      }
+      if (name === 'Staff') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Mark returned'));
+        const opened = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Staff: Back from Mark returned, with nothing recorded, keeps the search and the tab: "santos" in the box, '
+            + 'Overdue chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested',
+          opened === 'Mark returned — booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+      }
+
+      // Refresh, then a reload that fails, then Try again.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, and keeps the search: no box and no tabs while it is out, then `
+          + '"santos" still in the box, Overdue chosen, "4 of 7 overdue bookings match"',
+        said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all']) && !reloading.box
+          && !reloading.strip && reloading.loading && kept(v),
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails takes the box away with the tabs, and Try again brings it back with "santos" in it`,
+        !failedReload.box && !failedReload.strip && failedReload.error === 'Could not load the bookings: Internal server error'
+          && kept(v), said({ failedReload, v }));
+
+      // The reload after an action keeps the search and the tab.
+      if (name === 'Secretary') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Cancel'));
+        await page.settle();
+        v = look(page);
+        check('Secretary: Cancel posts the cancel, loads the list again, once, and keeps the search and the tab: "santos" on '
+            + 'Overdue, which booking 2 has left: "3 of 6 overdue bookings match", and Cancelled 1 in the strip',
+          said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/cancel', 'GET /rental-requests?status=all'])
+            && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
+            && v.heading === '3 of 6 overdue bookings match'
+            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 2 · Cancelled 1 · All 9',
+          said({ calls: listCalls(net.calls.slice(sent)), v }));
+      }
+      if (name === 'Staff') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Mark returned'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        check('Staff: Record return posts the return, loads the list again, once, and keeps the search and the tab: "santos" '
+            + 'on Overdue, which booking 2 has left: "3 of 6 overdue bookings match", and Returned 3 in the strip',
+          said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/return', 'GET /rental-requests?status=all'])
+            && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
+            && v.heading === '3 of 6 overdue bookings match'
+            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 0 · All 9',
+          said({ calls: listCalls(net.calls.slice(sent)), v }));
+      }
+
+      // Nothing kept in the browser; a new visit starts empty. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerForAE(makeStateAE()));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the search is kept in the browser: no localStorage or sessionStorage write, through `
+          + `window or not, sessionStorage empty, no cookie, and a new visit opens on ${opening} with an empty box`,
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '' && v.search === ''
+          && said(v.pressed) === said([`${opening} ${TAB_IDS[opening].length}`]) && v.strip === STRIP28,
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    const writesAE = methodsSent.filter((m) => m !== 'GET');
+    check('section AE\'s search sent GETs, and two POSTs, the Secretary\'s cancel and Staff\'s return, answered by the fetch stub',
+      methodsSent.length > 0 && said(writesAE) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${said(writesAE)}`);
+
+    Object.assign(storageProto, storageOwn);
+    dom.window.confirm = previousConfirm;
+    if (previousTZAE === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAE;
   }
 
   console.error = origError;
