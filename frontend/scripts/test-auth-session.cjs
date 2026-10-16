@@ -191,6 +191,13 @@
 // inside section AF's block, to use its bookings, its helpers and its
 // index.css reader.
 //
+// Section AH is the Terms of Use and the Help Center on rental bookings, read
+// in /login's modals and in docs/legal-copy.md, their source of truth: a
+// booking is confirmed as soon as it is submitted, if it is free, and neither
+// says the Barangay approves, reviews or declines one; section 8's other two
+// paragraphs and the other two answers about bookings are as they were; and
+// the markdown and the two modals say the same, block for block.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -12969,6 +12976,180 @@ const root = () => dom.window.document.getElementById('root');
     dom.window.confirm = previousConfirm;
     if (previousTZAE === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAE;
+  }
+
+  // =========================================================================
+  // AH. Terms of Use and Help Center: a booking is confirmed at once
+  // =========================================================================
+  // A rental booking is confirmed by the system the moment it is submitted,
+  // when the facility or the units asked for are free; nobody approves it
+  // (routes/rentalRequests.js inserts it as confirmed, processed_by_user_id
+  // null). The Terms of Use said, in section 8, that a booking is "confirmed
+  // only when the Barangay approves the booking" and "may be declined", and
+  // the Help Center answered "How do I book a facility?" with "The Barangay
+  // reviews and confirms it. A booking is not confirmed until it is
+  // approved." Both now say a booking is confirmed at once. The modals are
+  // read as a person reads them, opened from /login's legal links, heading by
+  // heading and paragraph by paragraph. docs/legal-copy.md is their source of
+  // truth, each body that file transcribed by hand, so it is read from disk
+  // and must say the same, word for word. The rest of section 8 and the other
+  // two answers about bookings stay as they were.
+  console.log('\n--- Terms of Use and Help Center: a booking is confirmed at once ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const words = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    const T_NEW = 'A booking is confirmed as soon as you submit it, if the facility or the number of items you ask for '
+      + 'is free for that date and time; otherwise it is refused with the reason. The Barangay may change or cancel a '
+      + 'confirmed booking where the facility or item is needed for official use. You can check the status of your '
+      + 'booking under My rentals.';
+    const T_KEPT = [
+      'You are responsible for the facility or item during the period booked. The conditions of use, when it must be '
+        + 'returned, and any charge for late return or damage are agreed with the Barangay at the time of booking.',
+      'The portal does not calculate or apply such charges automatically. Where one applies, the Barangay Treasurer '
+        + 'records it against your account and it appears among your charges.',
+    ];
+    const H_NEW = 'Sign in, open the bookings section, choose the facility or item, and give the date and time. If it '
+      + 'is free, the booking is confirmed at once and its fee appears under My rentals.';
+    const H_GROUP = [
+      { q: 'How do I book a facility?', a: [H_NEW] },
+      { q: 'My requested time was not available.', a: ['A facility cannot be booked for two overlapping periods. '
+        + 'Choose another slot, or ask the Barangay Office what is free.'] },
+      { q: 'What happens when I return the item or facility?', a: ['Barangay staff record the return in the portal.',
+        'Whether there is any charge for returning late or for damage depends on what was agreed with the Barangay '
+          + 'when you booked. The portal does not work such charges out on its own — if one applies, the Treasurer '
+          + 'records it and it appears among your charges.'] },
+    ];
+    // What the two said before, word for word.
+    const OLD = [
+      'are confirmed only when the Barangay approves the booking',
+      'a booking may be declined or cancelled by the Barangay',
+      'The Barangay reviews and confirms it.',
+      'A booking is not confirmed until it is approved.',
+    ];
+    // The sentences, block by block, that tie a booking, a facility or a
+    // rental to an approval, a review, an endorsement or a refusal.
+    const approvalSentences = (blocks) => blocks.flatMap((b) => words(b.text).split(/(?<=[.!?])\s+/))
+      .filter((s) => /\b(book\w*|facilit\w*|rental\w*|reserv\w*)\b/i.test(s) && /(approv|declin|review|endors)/i.test(s));
+    const oldIn = (blocks) => OLD.filter((o) => blocks.some((b) => words(b.text).includes(o)));
+    // An element's text as it reads on screen: a <br /> is a line break, so
+    // a space between the words on either side of it.
+    const shown = (el) => {
+      const copy = el.cloneNode(true);
+      for (const br of copy.querySelectorAll('br')) br.replaceWith(' ');
+      return words(copy.textContent);
+    };
+    // A modal's body as the page shows it: each heading, paragraph and list
+    // item in order, with its text.
+    const openLegal = async (link) => {
+      seedSession(null);
+      resetNet(200);
+      const page = await globalThis.mountInteractive(root(), '/login');
+      await page.settle();
+      const opener = page.queryAll('.legal-links a').find((a) => a.textContent.trim() === link);
+      if (opener) await page.click(opener);
+      const body = page.query('.legal-modal-body');
+      const blocks = body ? [...body.querySelectorAll('h2, h3, h4, p, li')]
+        .map((el) => ({ tag: el.tagName.toLowerCase(), text: shown(el) })) : [];
+      const sent = net.calls.length;
+      await page.unmount();
+      return { blocks, sent };
+    };
+    // One part of docs/legal-copy.md ("## TERMS OF USE", "## HELP CENTER") in
+    // the same blocks: a heading by its #s, a paragraph's lines joined by
+    // spaces, each "- " item a block of its own, the ** and * marks dropped.
+    const mdBlocks = (part) => {
+      const src = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+      const lines = src.split('\n');
+      const start = lines.indexOf(`## ${part}`);
+      const blocks = [];
+      let para = null;
+      const plain = (s) => words(s.replace(/\*\*?/g, ''));
+      const flush = () => {
+        if (para) blocks.push({ tag: para.tag, text: plain(para.lines.join(' ')) });
+        para = null;
+      };
+      for (let i = start + 1; start >= 0 && i < lines.length && !/^## /.test(lines[i]); i += 1) {
+        const line = lines[i];
+        const heading = line.match(/^(#{3,4}) (.*)$/);
+        if (heading) {
+          flush();
+          blocks.push({ tag: `h${heading[1].length}`, text: plain(heading[2]) });
+        } else if (!line.trim() || /^-{3,}$/.test(line.trim())) {
+          // A blank line ends a paragraph; so does a "---" rule between parts.
+          flush();
+        } else if (/^- /.test(line)) {
+          flush();
+          para = { tag: 'li', lines: [line.slice(2)] };
+        } else {
+          if (!para) para = { tag: 'p', lines: [] };
+          para.lines.push(line.trim());
+        }
+      }
+      flush();
+      return blocks;
+    };
+    // The blocks under a heading, up to the next heading of a level in `stop`.
+    const under = (blocks, tag, title, stop) => {
+      const i = blocks.findIndex((b) => b.tag === tag && b.text === title);
+      if (i < 0) return [];
+      const out = [];
+      for (let j = i + 1; j < blocks.length && !stop.includes(blocks[j].tag); j += 1) out.push(blocks[j]);
+      return out;
+    };
+    const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
+
+    const terms = await openLegal('Terms of Use');
+    const help = await openLegal('Help Center');
+    const termsMd = mdBlocks('TERMS OF USE');
+    const helpMd = mdBlocks('HELP CENTER');
+    const t8 = under(terms.blocks, 'h3', '8. Facility bookings', ['h2', 'h3']);
+    const t8Md = under(termsMd, 'h3', '8. Facility bookings', ['h2', 'h3']);
+    const hBook = under(help.blocks, 'h3', 'Facility bookings', ['h2', 'h3']);
+    const hBookMd = under(helpMd, 'h3', 'Facility bookings', ['h2', 'h3']);
+    const wantT8 = [T_NEW, ...T_KEPT].map((t) => `p: ${t}`);
+    const wantBook = H_GROUP.flatMap(({ q, a }) => [`h4: ${q}`, ...a.map((t) => `p: ${t}`)]);
+
+    check('Terms of Use, section 8, as /login\'s modal shows it (TermsOfUse.jsx): "A booking is confirmed as soon as you '
+        + 'submit it, …" where it said a booking waits for the Barangay\'s approval, then its other two paragraphs as '
+        + 'they were',
+      said(lines(t8)) === said(wantT8), said(lines(t8)));
+    check('  and section 8 has no sentence tying a booking to an approval, a review or a refusal, and none of the old '
+        + 'words ("confirmed only when the Barangay approves the booking", "may be declined or cancelled by the Barangay")',
+      t8.length > 0 && approvalSentences(t8).length === 0 && oldIn(t8).length === 0,
+      said({ approval: approvalSentences(t8), old: oldIn(t8) }));
+    check('Help Center, as the modal shows it (HelpCenter.jsx): "How do I book a facility?" is answered "Sign in, … If it '
+        + 'is free, the booking is confirmed at once and its fee appears under My rentals."; the question and the other '
+        + 'two answers about bookings as they were',
+      said(lines(hBook)) === said(wantBook), said(lines(hBook)));
+    check('  and no answer about bookings says the Barangay reviews, confirms or approves a booking ("The Barangay '
+        + 'reviews and confirms it.", "A booking is not confirmed until it is approved.")',
+      hBook.length > 0 && approvalSentences(hBook).length === 0 && oldIn(hBook).length === 0,
+      said({ approval: approvalSentences(hBook), old: oldIn(hBook) }));
+    check('neither modal, read whole, has a sentence tying a booking to an approval, a review or a refusal',
+      terms.blocks.length > 20 && help.blocks.length > 20
+        && approvalSentences(terms.blocks).length === 0 && approvalSentences(help.blocks).length === 0,
+      said({ terms: approvalSentences(terms.blocks), help: approvalSentences(help.blocks) }));
+    check('docs/legal-copy.md, the modals\' source of truth, reads the same new words: section 8 and the Help Center\'s '
+        + 'answers about bookings, and neither part has a sentence tying a booking to an approval',
+      said(lines(t8Md)) === said(wantT8) && said(lines(hBookMd)) === said(wantBook)
+        && approvalSentences(termsMd).length === 0 && approvalSentences(helpMd).length === 0
+        && oldIn(termsMd).length === 0 && oldIn(helpMd).length === 0,
+      said({ t8Md: lines(t8Md), hBookMd: lines(hBookMd), approval: [...approvalSentences(termsMd), ...approvalSentences(helpMd)] }));
+    // The h2 is the modal's title, which the markdown carries as its "##".
+    const termsBody = lines(terms.blocks.filter((b) => b.tag !== 'h2'));
+    const helpBody = lines(help.blocks.filter((b) => b.tag !== 'h2'));
+    const firstDiff = (a, b) => {
+      const i = a.findIndex((x, k) => x !== b[k]);
+      return i < 0 && a.length === b.length ? null : { at: i < 0 ? Math.min(a.length, b.length) : i, jsx: a[i], md: b[i] };
+    };
+    check('docs/legal-copy.md\'s TERMS OF USE and the Terms of Use modal say the same, block for block (no drift between '
+        + 'the markdown and TermsOfUse.jsx)',
+      termsBody.length > 20 && firstDiff(termsBody, lines(termsMd)) === null, said(firstDiff(termsBody, lines(termsMd))));
+    check('docs/legal-copy.md\'s HELP CENTER and the Help Center modal say the same, block for block (no drift between '
+        + 'the markdown and HelpCenter.jsx)',
+      helpBody.length > 20 && firstDiff(helpBody, lines(helpMd)) === null, said(firstDiff(helpBody, lines(helpMd))));
+    check('opening the two modals sent no request', terms.sent === 0 && help.sent === 0, said({ terms: terms.sent, help: help.sent }));
   }
 
   console.error = origError;

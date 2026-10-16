@@ -312,10 +312,11 @@ Requirements, fees, and processing times are set by the Barangay.
 
 ### 8. Facility bookings
 
-Facilities are booked for a specific date and time and are confirmed only when
-the Barangay approves the booking. Overlapping bookings for the same facility
-and period are not accepted, and a booking may be declined or cancelled by the
-Barangay where the facility is needed for official use.
+A booking is confirmed as soon as you submit it, if the facility or the number
+of items you ask for is free for that date and time; otherwise it is refused
+with the reason. The Barangay may change or cancel a confirmed booking where the
+facility or item is needed for official use. You can check the status of your
+booking under My rentals.
 
 You are responsible for the facility or item during the period booked. The
 conditions of use, when it must be returned, and any charge for late return or
@@ -513,9 +514,9 @@ GCash reference number.
 
 #### How do I book a facility?
 
-Sign in, open the bookings section, choose the facility, and give the date and
-time. The Barangay reviews and confirms it. A booking is not confirmed until it
-is approved.
+Sign in, open the bookings section, choose the facility or item, and give the
+date and time. If it is free, the booking is confirmed at once and its fee
+appears under My rentals.
 
 #### My requested time was not available.
 

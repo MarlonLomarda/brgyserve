@@ -176,9 +176,9 @@ export default function HelpCenter() {
 
       <h4>How do I book a facility?</h4>
       <p>
-        Sign in, open the bookings section, choose the facility, and give the
-        date and time. The Barangay reviews and confirms it. A booking is not
-        confirmed until it is approved.
+        Sign in, open the bookings section, choose the facility or item, and
+        give the date and time. If it is free, the booking is confirmed at once
+        and its fee appears under My rentals.
       </p>
 
       <h4>My requested time was not available.</h4>

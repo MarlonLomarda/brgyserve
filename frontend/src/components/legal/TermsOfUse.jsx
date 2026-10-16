@@ -111,11 +111,11 @@ export default function TermsOfUse() {
 
       <h3>8. Facility bookings</h3>
       <p>
-        Facilities are booked for a specific date and time and are confirmed
-        only when the Barangay approves the booking. Overlapping bookings for
-        the same facility and period are not accepted, and a booking may be
-        declined or cancelled by the Barangay where the facility is needed for
-        official use.
+        A booking is confirmed as soon as you submit it, if the facility or the
+        number of items you ask for is free for that date and time; otherwise
+        it is refused with the reason. The Barangay may change or cancel a
+        confirmed booking where the facility or item is needed for official
+        use. You can check the status of your booking under My rentals.
       </p>
       <p>
         You are responsible for the facility or item during the period booked.
