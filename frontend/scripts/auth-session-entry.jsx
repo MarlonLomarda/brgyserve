@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
+import * as bookingTimes from '../src/utils/bookingTimes.js';
 import * as chargeMethod from '../src/utils/chargeMethod.js';
 import * as chargeFilters from '../src/utils/chargeFilters.js';
 import * as chargeSearch from '../src/utils/chargeSearch.js';
@@ -38,6 +39,9 @@ globalThis.requestList = requestList;
 // The Rental bookings list's status tabs, counts, heading, empty text and
 // opening tab, checked on their own in section AD.
 globalThis.rentalList = rentalList;
+// The booking form's earliest date and time checks, checked on their own in
+// section AJ.
+globalThis.bookingTimes = bookingTimes;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.

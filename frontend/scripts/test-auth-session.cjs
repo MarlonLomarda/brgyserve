@@ -208,6 +208,15 @@
 // load of nothing is still a real empty state; and neither page stores an
 // empty list for one it could not load, nor anything in the browser.
 //
+// Section AJ is Book a rental's dates and times, in Manila time whatever the
+// computer's clock: the date field's earliest day is today in Manila, and
+// before the form sends anything it refuses a start already past (a date
+// before today included) and an end not after the start, in the server's
+// order and the server's own words, shown under the time fields, with no
+// request sent; valid times send one; the server's own refusal is still
+// shown. utils/bookingTimes.js is checked case by case first, at fixed
+// moments, and everything runs on a UTC clock and a Los Angeles one.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -13556,6 +13565,248 @@ const root = () => dom.window.document.getElementById('root');
       said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
     check('section AI\'s loads sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
       `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+  }
+
+  // =========================================================================
+  // AJ. Book a rental: Manila time, and the times checked before sending
+  // =========================================================================
+  // The date field's earliest day was today in UTC (new Date().toISOString()),
+  // so from midnight to 8 AM in Manila it offered yesterday; and the form sent
+  // any times it was given, a start already past or an end not after the
+  // start included, for the server to refuse. A booking runs within one
+  // Manila day: the server builds its start and end from one date and two
+  // times at +08:00 (parseBookingBody in backend/src/routes/rentalRequests.js)
+  // and refuses an end not after the start, then a start not ahead of now.
+  // The form now does the same before it sends anything: its earliest day is
+  // today in Manila, and it checks the times as the server will, in the
+  // server's order and words, showing the sentence by the time fields and
+  // sending nothing (utils/bookingTimes.js, with utils/chargeFilters.js's
+  // manilaDay and its one clock, which this section fixes). The server stays
+  // the authority: its own refusal is still shown. Everything runs on two
+  // machine clocks, UTC and Los Angeles, where the computer's own day is not
+  // Manila's.
+  console.log('\n--- Book a rental: Manila time, and the times checked before sending ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const B = globalThis.bookingTimes || {};
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const previousTZAJ = process.env.TZ;
+    // The section's own clock between zone changes; deleting TZ would not
+    // bring the machine's zone back (it keeps the last one set).
+    const HOME_ZONE = 'UTC';
+    process.env.TZ = HOME_ZONE;
+    const PAST = 'The booking must start in the future';
+    const END = 'End time must be after the start time (bookings run within one day)';
+    const ZONES = ['UTC', 'America/Los_Angeles'];
+    // An instant's hour on this machine's clock, so each zone is seen to take.
+    const HOUR_AT_17Z = { UTC: 17, 'America/Los_Angeles': 10 };
+    const onZones = (f) => Object.fromEntries(ZONES.map((zone) => {
+      process.env.TZ = zone;
+      try { return [zone, f()]; } finally { process.env.TZ = HOME_ZONE; }
+    }));
+    const call = (name, ...args) => {
+      try { return typeof B[name] === 'function' ? B[name](...args) : `${name} is not exported`; } catch (e) { return `threw: ${e.message}`; }
+    };
+    const kept = { sets: 0, dom: domStorage.writes };
+
+    // a. The zones take, and the sentences are the server's.
+    const tookZones = onZones(() => new Date('2026-10-15T17:00:00Z').getHours());
+    check('the machine\'s clock moves for this section: 17:00 UTC reads 17:00 on a UTC clock and 10:00 on a Los Angeles one',
+      ZONES.every((z) => tookZones[z] === HOUR_AT_17Z[z]), said(tookZones));
+    const route = fs.readFileSync(path.join(HERE, '..', '..', 'backend', 'src', 'routes', 'rentalRequests.js'), 'utf8');
+    check('the form\'s two sentences are the server\'s, word for word, as parseBookingBody (backend/src/routes/'
+        + 'rentalRequests.js) sends them: "The booking must start in the future" and "End time must be after the start '
+        + 'time (bookings run within one day)"',
+      B.PAST_START === PAST && B.END_NOT_AFTER_START === END && route.includes(`'${PAST}'`) && route.includes(`'${END}'`),
+      said({ PAST_START: B.PAST_START ?? null, END_NOT_AFTER_START: B.END_NOT_AFTER_START ?? null }));
+
+    // b. The earliest day, today in Manila at a given moment, on both clocks.
+    const MIN_CASES = [
+      { now: '2026-10-15T17:00:00Z', want: '2026-10-16', note: '16 Oct, 01:00 in Manila; still 15 Oct in UTC and Los Angeles' },
+      { now: '2026-10-16T15:59:59Z', want: '2026-10-16', note: '16 Oct, 23:59:59 in Manila' },
+      { now: '2026-10-16T16:00:00Z', want: '2026-10-17', note: '17 Oct, 00:00 in Manila' },
+    ];
+    for (const { now, want, note } of MIN_CASES) {
+      const got = onZones(() => call('earliestBookingDate', new Date(now)));
+      check(`earliestBookingDate at ${now} (${note}) is ${want}, on a UTC clock and a Los Angeles one`,
+        ZONES.every((z) => got[z] === want), said(got));
+    }
+
+    // c. The times, checked as the server will: the end first, then the
+    // start, against a fixed moment, on both clocks.
+    const AT_10 = '2026-10-16T02:00:00Z'; // 16 Oct, 10:00 in Manila
+    const AT_01 = '2026-10-15T17:00:00Z'; // 16 Oct, 01:00 in Manila; 15 Oct in UTC
+    const TIME_CASES = [
+      { name: 'today, a start already past (09:00, at 10:00)', f: ['2026-10-16', '09:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'today, a start this very minute (10:00, at 10:00: the server refuses a start not ahead of now)',
+        f: ['2026-10-16', '10:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'today, a start a minute ahead (10:01, at 10:00) passes', f: ['2026-10-16', '10:01', '11:00'], now: AT_10, want: null },
+      { name: 'a date before today (15 Oct, at 10:00 on 16 Oct)', f: ['2026-10-15', '09:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'a date before today, its times not yet filled in', f: ['2026-10-15', '', ''], now: AT_10, want: PAST },
+      { name: 'tomorrow, the end equal to the start (09:00 to 09:00)', f: ['2026-10-17', '09:00', '09:00'], now: AT_10, want: END },
+      { name: 'tomorrow, the end before the start (13:00 to 09:00: a booking never runs past midnight)',
+        f: ['2026-10-17', '13:00', '09:00'], now: AT_10, want: END },
+      { name: 'today, a start already past and the end before it: the end is the server\'s first check, so it answers',
+        f: ['2026-10-16', '09:00', '08:00'], now: AT_10, want: END },
+      { name: 'tomorrow, 09:00 to 11:00 passes', f: ['2026-10-17', '09:00', '11:00'], now: AT_10, want: null },
+      { name: 'today, 10:30 to 23:59 passes', f: ['2026-10-16', '10:30', '23:59'], now: AT_10, want: null },
+      { name: 'at 01:00 on 16 Oct in Manila (15 Oct in UTC), 16 Oct at 00:30 has passed',
+        f: ['2026-10-16', '00:30', '02:00'], now: AT_01, want: PAST },
+      { name: 'at 01:00 on 16 Oct in Manila, 15 Oct at 23:00 has passed, though it is still 15 Oct in UTC',
+        f: ['2026-10-15', '23:00', '23:30'], now: AT_01, want: PAST },
+      { name: 'at 01:00 on 16 Oct in Manila, 16 Oct at 01:30 is ahead and passes',
+        f: ['2026-10-16', '01:30', '03:00'], now: AT_01, want: null },
+      { name: 'at 23:59:59 on 16 Oct in Manila, 17 Oct at 00:00 is ahead and passes',
+        f: ['2026-10-17', '00:00', '01:00'], now: '2026-10-16T15:59:59Z', want: null },
+      { name: 'no date yet: nothing to check', f: ['', '09:00', '11:00'], now: AT_10, want: null },
+      { name: 'today, its times not yet filled in: left to the form\'s required fields and the server',
+        f: ['2026-10-16', '', ''], now: AT_10, want: null },
+    ];
+    for (const { name, f: [date, start, end], now, want } of TIME_CASES) {
+      const got = onZones(() => call('bookingTimeError', { date, start_time: start, end_time: end }, new Date(now)));
+      check(`bookingTimeError: ${name}: ${want === null ? 'no message' : `"${want}"`}, on a UTC clock and a Los Angeles one`,
+        ZONES.every((z) => got[z] === want), said(got));
+    }
+
+    // d. The real form, as a resident, at 00:30 on 1 Jan 2027 in Manila: on
+    // these two clocks it is still 31 Dec. The booking form is the page's only
+    // form, so it is submitted as a press of Book now would.
+    const ITEMS = [
+      { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
+    ];
+    const CONFLICT = 'The Covered Court is already booked from 9:00 AM to 11:00 AM on Jan 1, 2027';
+    const booked = (body) => ({
+      message: 'Booking confirmed',
+      request: { request_id: 990, status: 'confirmed', start_datetime: `${body.date}T${body.start_time}:00+08:00`,
+        end_datetime: `${body.date}T${body.end_time}:00+08:00`, quantity_requested: body.quantity_requested,
+        purpose: body.purpose, rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } },
+    });
+    const bodyOf = (c) => { try { return JSON.parse(c?.body || ''); } catch { return null; } };
+    for (const zone of ZONES) {
+      process.env.TZ = zone;
+      setNow('2026-12-31T16:30:00Z');
+      seedSession(RES_TOKEN, RES_USER);
+      let postAnswer = 'confirm';
+      resetNet(200, (url, method) => {
+        if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+        if (method === 'POST' && /\/rental-requests$/.test(url)) {
+          const last = net.calls.at(-1);
+          return postAnswer === 'confirm' ? booked(bodyOf(last)) : { error: CONFLICT };
+        }
+        return undefined;
+      });
+      const page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+      await page.settle();
+      const posts = () => net.calls.filter((c) => c.method === 'POST');
+      // The form back, when a booking went through where it should not have.
+      const toForm = async () => {
+        const again = buttonNamed(root(), 'Book another');
+        if (again) await page.click(again);
+      };
+      const fillIn = async (date, start, end) => {
+        await toForm();
+        const select = page.query('select[name="item_id"]');
+        if (select && select.value !== '21') {
+          select.value = '21';
+          select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          await page.settle();
+        }
+        for (const [name, value] of [['date', date], ['start_time', start], ['end_time', end]]) {
+          if (page.query(`input[name="${name}"]`)) await page.fill(`input[name="${name}"]`, value);
+        }
+        const purpose = page.query('textarea[name="purpose"]');
+        if (purpose && !purpose.value) {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Basketball practice');
+          purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        }
+        await page.settle();
+      };
+      const press = async () => { if (page.query('form')) await page.submit(); };
+      // The time message, where it must be: the line straight after the time
+      // fields' grid; and the card's other messages, above the fields.
+      const view = () => ({
+        message: text(page.query('.section-card .grid-2 + [role="alert"]')),
+        others: page.queryAll('.section-card .alert.error')
+          .filter((el) => el !== page.query('.section-card .grid-2 + [role="alert"]')).map(text),
+        posts: posts().length,
+        bookNow: buttonNamed(root(), 'Book now') ? !buttonNamed(root(), 'Book now').disabled : null,
+        confirmed: text(page.query('.section-card h3')) === 'Booking confirmed',
+      });
+      const refused = (v, want, postsBefore) => v.message === want && v.others.length === 0 && v.posts === postsBefore
+        && v.bookNow === true && !v.confirmed;
+
+      const min = page.query('input[name="date"]')?.getAttribute('min') ?? null;
+      check(`${zone}: the date field's earliest day is 2027-01-01, today in Manila at 00:30, never 2026-12-31, the day on `
+          + 'this computer\'s clock', min === '2027-01-01', said(min));
+
+      await fillIn('2027-01-01', '00:15', '02:00');
+      await press();
+      let v = view();
+      check(`${zone}: today, a start already past (00:15, at 00:30): "${PAST}" straight under the time fields, and no `
+          + 'booking request sent (0 POSTs); Book now stays pressable',
+        refused(v, PAST, 0), said(v));
+
+      await fillIn('2026-12-31', '10:00', '12:00');
+      await press();
+      v = view();
+      check(`${zone}: 31 Dec, the computer's today but yesterday in Manila: "${PAST}", and 0 POSTs`, refused(v, PAST, 0), said(v));
+
+      await fillIn('2027-01-01', '00:30', '02:00');
+      await press();
+      v = view();
+      check(`${zone}: a start this very minute (00:30, at 00:30): "${PAST}", and 0 POSTs`, refused(v, PAST, 0), said(v));
+
+      await fillIn('2027-01-01', '09:00', '09:00');
+      await press();
+      v = view();
+      check(`${zone}: the end equal to the start (09:00 to 09:00): "${END}", and 0 POSTs`, refused(v, END, 0), said(v));
+
+      await fillIn('2027-01-01', '13:00', '09:00');
+      await press();
+      const endBefore = view();
+      await fillIn('2027-01-01', '13:00', '15:00');
+      const corrected = view();
+      check(`${zone}: the end before the start (13:00 to 09:00): "${END}", and 0 POSTs; changing the end time takes the `
+          + 'message away before anything is pressed',
+        refused(endBefore, END, 0) && corrected.message === null && corrected.posts === 0,
+        said({ endBefore, corrected }));
+
+      await fillIn('2027-01-01', '09:00', '11:00');
+      await press();
+      v = view();
+      const sentBody = bodyOf(posts()[0]);
+      check(`${zone}: valid times (1 Jan 2027, 09:00 to 11:00) send exactly one booking request, with the form's date and `
+          + 'times as typed, and the booking is confirmed',
+        v.posts === 1 && /\/rental-requests$/.test(posts()[0]?.url || '') && sentBody?.date === '2027-01-01'
+          && sentBody?.start_time === '09:00' && sentBody?.end_time === '11:00' && sentBody?.item_id === 21 && v.confirmed,
+        said({ v, sentBody }));
+
+      // e. The server is still the authority: a refusal the form cannot
+      // foresee (the slot is taken) is shown as it always was.
+      await toForm();
+      postAnswer = 'conflict';
+      net.status = 409;
+      await fillIn('2027-01-01', '09:00', '11:00');
+      await press();
+      v = view();
+      check(`${zone}: a valid booking the server refuses (409, the slot is taken) sends one request and shows the server's `
+          + 'own words above the fields, with no time message, the form still there',
+        v.posts === 2 && v.others.includes(CONFLICT) && v.message === null && !v.confirmed && v.bookNow === true,
+        said(v));
+      kept.sets += store.sets;
+      await page.unmount();
+    }
+    process.env.TZ = HOME_ZONE;
+    if (F.clock && realNow) F.clock.now = realNow;
+
+    check('section AJ kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    if (previousTZAJ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAJ;
   }
 
   console.error = origError;
