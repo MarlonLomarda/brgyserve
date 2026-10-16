@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import PayMenu from "../components/PayMenu";
@@ -10,21 +10,46 @@ import {
 } from "../constants/rentals";
 import { isNoFeeCharge } from "../utils/chargeMethod";
 
+// Why a load failed, for "Could not load your bookings: …". The server's own
+// message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// A copy of the Rental bookings page's function, which the Document requests
+// and Payments pages and Book a rental each copy too.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function MyRentalsPage() {
   const { authFetch } = useAuth();
-  const [requests, setRequests] = useState(null); // null = loading
-  const [error, setError] = useState("");
+  const [requests, setRequests] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  // Numbers each load, so only the newest one may change the list.
+  const loadSeq = useRef(0);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the server's bare message sat over "You haven't booked anything
+  // yet." and the Book a facility link while the page knew nothing, which
+  // reads as nothing booked. requests now stays null and the error, with Try
+  // again, takes the place of the rows and the empty text (CLAUDE.md: a list
+  // that failed to load), as on Rental bookings. Every load starts from the
+  // loading state (the first open, Refresh, Try again, the reload after a
+  // payment and the one back from PayMongo), and an older answer that arrives
+  // late is dropped rather than shown over a newer one.
   const load = useCallback(async () => {
-    setError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setRequests(null);
     try {
       const data = await authFetch("/rental-requests/mine");
-      setRequests(data.requests);
+      if (seq === loadSeq.current) setRequests(data.requests);
     } catch (err) {
-      setError(err.message);
-      setRequests([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
   }, [authFetch]);
 
@@ -150,9 +175,36 @@ export default function MyRentalsPage() {
   return (
     <>
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-      {error && <div className="alert error">{error}</div>}
 
-      {requests === null ? (
+      {/* The heading row is drawn whatever the list's state, so Refresh is
+          there while it loads, after it failed and over an empty list, as on
+          Rental bookings. The heading counts the bookings only once they have
+          loaded; until then it reads "Bookings". */}
+      <div className="list-head">
+        <h2>
+          {requests === null
+            ? "Bookings"
+            : `${requests.length} booking${requests.length === 1 ? "" : "s"}`}
+        </h2>
+        <button className="btn secondary" onClick={load}>
+          Refresh
+        </button>
+      </div>
+
+      {/* The error first, then loading, then empty, then rows: a load that
+          failed shows neither a count nor the empty text, nor a Pay button.
+          Try again repeats the same load, as Refresh does. The markup is the
+          Rental bookings page's. */}
+      {loadError ? (
+        <>
+          <div className="alert error" role="alert">
+            Could not load your bookings: {loadError}
+          </div>
+          <button type="button" className="btn secondary" onClick={load}>
+            Try again
+          </button>
+        </>
+      ) : requests === null ? (
         <p className="muted">Loading your bookings…</p>
       ) : requests.length === 0 ? (
         <div className="empty">
@@ -163,14 +215,6 @@ export default function MyRentalsPage() {
         </div>
       ) : (
         <>
-          <div className="list-head">
-            <h2>
-              {requests.length} booking{requests.length === 1 ? "" : "s"}
-            </h2>
-            <button className="btn secondary" onClick={load}>
-              Refresh
-            </button>
-          </div>
           <div className="table-wrap">
             <table className="data-table stack-narrow my-rentals-table">
               <thead>

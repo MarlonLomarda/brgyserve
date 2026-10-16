@@ -198,6 +198,16 @@
 // paragraphs and the other two answers about bookings are as they were; and
 // the markdown and the two modals say the same, block for block.
 //
+// Section AI is the resident's My rentals and Book a rental: what section AD
+// checks on Rental bookings. A load that fails (a 500, a server that cannot
+// be reached, an answer with no message) says so, in Rental bookings' words,
+// with Try again, and never shows an empty list, a Pay button or the booking
+// form; a 401 ends the session once and goes to the login screen; every way
+// of loading again starts from the loading state, which clears on a failure;
+// an older answer that arrives late cannot replace a newer one; a successful
+// load of nothing is still a real empty state; and neither page stores an
+// empty list for one it could not load, nor anything in the browser.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -13150,6 +13160,402 @@ const root = () => dom.window.document.getElementById('root');
         + 'the markdown and HelpCenter.jsx)',
       helpBody.length > 20 && firstDiff(helpBody, lines(helpMd)) === null, said(firstDiff(helpBody, lines(helpMd))));
     check('opening the two modals sent no request', terms.sent === 0 && help.sent === 0, said({ terms: terms.sent, help: help.sent }));
+  }
+
+  // =========================================================================
+  // AI. My rentals and Book a rental: a failed load is an error, never empty
+  // =========================================================================
+  // The resident's two rental pages had the defect section AD fixed on Rental
+  // bookings. My rentals (/resident/rentals) stored an empty list when
+  // GET /rental-requests/mine failed, so the server's bare message sat over
+  // "You haven't booked anything yet." and a "Book a facility" link, which
+  // reads as nothing booked, with no Try again; and Refresh left the old rows
+  // on screen while it was out, so an older answer that arrived late could
+  // replace a newer one. Book a rental (/resident/book-rental) did the same
+  // with GET /rental-items: the message over "Nothing is currently available
+  // for rental.". Each page makes that one load and no other. A failed load
+  // must say so, in Rental bookings' words, with Try again, and show nothing
+  // that reads as empty: no rows, no count, no Pay button, no empty text and
+  // no booking form; every load starts from the loading state, which clears
+  // when it fails; an older answer is dropped. A successful load of nothing is
+  // still a real empty state. A 401 ends the session once, in authFetch, and
+  // the login screen takes the page's place. Every request is answered by the
+  // fetch stub, and only GETs are sent.
+  console.log('\n--- My rentals and Book a rental: a failed load is an error, never an empty list ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The page's words with a space between neighbouring elements' text, so
+    // that \b finds the edge between "Refresh" and "0 bookings".
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // seedSession clears the stub's count for each page, so each page's writes
+    // are added up as it closes; jsdom's own Storage is counted for the run.
+    const kept = { sets: 0, dom: domStorage.writes };
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const isMine = (call) => call?.method === 'GET' && /\/rental-requests\/mine$/.test(call.url);
+    const isItems = (call) => call?.method === 'GET' && /\/rental-items$/.test(call.url);
+    // My rentals' bookings, in GET /rental-requests/mine's shape (RENTAL_FIELDS
+    // in routes/rentalRequests.js); both unpaid, so each row has a Pay menu.
+    const booking = (id, name) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-10-20T01:00:00+00:00',
+      end_datetime: '2026-10-20T05:00:00+00:00', purpose: `Purpose ${id}`, status: 'confirmed', return_note: null,
+      returned_at: null, rental_items: { item_id: 600 + id, name, type: 'equipment', fee: '25.00' },
+      charges: { charge_id: 950 + id, amount: '25.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+    });
+    const MINE_TWO = () => [booking(411, 'Sound System'), booking(412, 'Folding Tables')];
+    // Book a rental's items, in GET /rental-items' shape (the active ones).
+    const item = (id, name, type, fee, total) => ({ item_id: id, name, type, description: null, quantity_total: total,
+      quantity_available: total, fee });
+    const ITEMS_TWO = () => [item(21, 'Covered Court', 'facility', '300.00', 1),
+      item(22, 'Plastic Chairs', 'furniture', '5.00', 100)];
+    const answerWith = (mine, items) => (url) => {
+      if (/\/rental-requests\/mine$/.test(url)) return { requests: mine };
+      if (/\/rental-items$/.test(url)) return { rental_items: items };
+      return undefined;
+    };
+
+    // What My rentals shows, read the way a person would.
+    const mineView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load your bookings')) ?? null,
+        alerts: page.queryAll('.alert.error').map(text),
+        tryAgain: !!tryAgainButton(page),
+        refresh: !!buttonNamed(root(), 'Refresh'),
+        rows: page.queryAll('table.my-rentals-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        pay: page.queryAll('.pay-menu').length,
+        zero: /\b0 bookings?\b/.test(all),
+        empty: all.includes('You haven\'t booked anything yet.'),
+        // The empty state's link, in the page's own column: the resident's
+        // navigation has a "Book a facility" item of its own.
+        bookLink: page.queryAll('.dash-main a').some((a) => text(a) === 'Book a facility'),
+        loading: all.includes('Loading your bookings…'),
+      };
+    };
+    // The error with Try again, alone: no rows, no Pay menu, no count, no
+    // empty text or link, no loading line, and no second, bare message.
+    const mineErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && v.pay === 0 && !v.zero && !v.empty && !v.bookLink && !v.loading;
+    const mineLoadingOnly = (v) => v.loading && !v.error && v.alerts.length === 0 && !v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && v.pay === 0 && !v.zero && !v.empty && !v.bookLink;
+    const mineTwo = (v) => said(v.rows) === said(['Sound System', 'Folding Tables']) && v.heading === '2 bookings'
+      && v.pay === 2 && v.refresh && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading && !v.empty;
+
+    // What Book a rental shows: its card, the form's fields and Book now.
+    const bookView = (page) => {
+      const all = spaced(root());
+      return {
+        title: text(page.query('.section-card h3')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the rental items')) ?? null,
+        alerts: page.queryAll('.alert.error').map(text),
+        tryAgain: !!tryAgainButton(page),
+        fields: page.queryAll('.section-card select, .section-card input, .section-card textarea').length,
+        bookNow: !!buttonNamed(root(), 'Book now'),
+        empty: all.includes('Nothing is currently available for rental.'),
+        loading: all.includes('Loading rental items…'),
+      };
+    };
+    const bookErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.title === 'Book a facility or item'
+      && v.fields === 0 && !v.bookNow && !v.empty && !v.loading;
+    const bookLoadingOnly = (v) => v.loading && !v.error && v.alerts.length === 0 && !v.tryAgain && v.fields === 0
+      && !v.bookNow && !v.empty;
+    const bookForm = (v) => v.fields >= 5 && v.bookNow && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading
+      && !v.empty;
+    const methodsSent = [];
+    const finish = async (pg) => {
+      methodsSent.push(...net.calls.map((c) => c.method));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+
+    // --- My rentals ---
+    // a. A successful load reads as it always has: one request, the rows.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith(MINE_TWO(), ITEMS_TWO()));
+    let page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineOk = mineView(page);
+    check('My rentals: a successful load shows its two bookings under "2 bookings", each with its Pay menu, from one GET of '
+        + '/rental-requests/mine, with no error',
+      mineTwo(mineOk) && net.calls.length === 1 && isMine(net.calls[0]),
+      said({ mineOk, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+    await finish(page);
+
+    // b. The first open fails: the loading state while it is out, then the
+    // error, with Try again, and nothing else.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    let at = holdNext();
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineOpening = mineView(page);
+    const mineFirst = net.calls[0];
+    release(at, 500, { error: 'Network down' });
+    await page.settle();
+    const mineFailed = mineView(page);
+    check('My rentals: the first open shows "Loading your bookings…" while the list is out, and when it fails (a 500), '
+        + '"Could not load your bookings: Network down" with a Try again button',
+      mineLoadingOnly(mineOpening) && isMine(mineFirst)
+        && mineFailed.error === 'Could not load your bookings: Network down' && mineFailed.tryAgain,
+      `${said(mineOpening)} then ${said(mineFailed)}`);
+    check('  My rentals: and no "You haven\'t booked anything yet.", no "Book a facility" link, no "0 bookings", no rows, '
+        + 'no Pay button and no "Loading…" beside it: it cannot read as nothing booked',
+      mineErrorOnly(mineFailed), said(mineFailed));
+
+    // c. Try again repeats the same load; its rows replace the error.
+    at = holdNext();
+    let sent = net.calls.length;
+    await clickIf(page, tryAgainButton(page));
+    const mineRetrying = mineView(page);
+    const mineRetryCall = net.calls[sent];
+    release(at, 200, { requests: MINE_TWO() });
+    await page.settle();
+    const mineRetried = mineView(page);
+    check('My rentals: Try again loads the list again, once, shows the loading state while it is out, then the two bookings',
+      net.calls.length === sent + 1 && isMine(mineRetryCall) && mineLoadingOnly(mineRetrying) && mineTwo(mineRetried),
+      `${mineRetryCall?.url ?? 'no request'} ${said(mineRetrying)} then ${said(mineRetried)}`);
+
+    // d. Refresh over loaded rows, failing: the loading state, then the
+    // error, and never the old rows.
+    at = holdNext();
+    sent = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const mineRefreshing = mineView(page);
+    const mineRefreshCall = net.calls[sent];
+    release(at, 500, { error: 'Internal server error' });
+    await page.settle();
+    const mineRefreshFailed = mineView(page);
+    check('My rentals: Refresh shows the loading state, not the old rows, while it is out, and when it fails, "Could not '
+        + 'load your bookings: Internal server error", never the old rows or their Pay menus',
+      isMine(mineRefreshCall) && mineLoadingOnly(mineRefreshing)
+        && mineRefreshFailed.error === 'Could not load your bookings: Internal server error'
+        && mineErrorOnly(mineRefreshFailed),
+      `${said(mineRefreshing)} then ${said(mineRefreshFailed)}`);
+    check('  My rentals: Refresh stays on screen beside the error, and loads the list again too',
+      mineRefreshFailed.refresh, said(mineRefreshFailed));
+
+    // e. Two loads out at once, Try again and then Refresh before it has
+    // answered, the older answer last: it is dropped.
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at + 1, 200, { requests: MINE_TWO() });
+    await page.settle();
+    release(at, 200, { requests: MINE_TWO().slice(0, 1) });
+    await page.settle();
+    const mineRaced = mineView(page);
+    check('My rentals: an older answer that arrives last cannot replace the newer list: both bookings stay',
+      isMine(net.calls.at(-2)) && isMine(net.calls.at(-1)) && mineTwo(mineRaced), said(mineRaced));
+
+    // f. The same, Refresh pressed twice, with the older load failing last.
+    at = holdNext();
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at + 1, 200, { requests: MINE_TWO() });
+    await page.settle();
+    release(at, 500, { error: 'boom' });
+    await page.settle();
+    const mineRacedFail = mineView(page);
+    check('  My rentals: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list',
+      mineTwo(mineRacedFail), said(mineRacedFail));
+
+    // g. No bookings, loaded successfully, is a real empty state.
+    at = holdNext();
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at, 200, { requests: [] });
+    await page.settle();
+    net.hold = false;
+    const mineNone = mineView(page);
+    check('My rentals: a successful load of no bookings says "0 bookings" over "You haven\'t booked anything yet." and the '
+        + '"Book a facility" link, with Refresh above and no error',
+      mineNone.heading === '0 bookings' && mineNone.empty && mineNone.bookLink && mineNone.refresh && !mineNone.error
+        && mineNone.alerts.length === 0 && !mineNone.tryAgain && !mineNone.loading && mineNone.rows.length === 0,
+      said(mineNone));
+    await finish(page);
+
+    // h. A server that cannot be reached: Rental bookings' wording.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    net.fail = true;
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineUnreachable = mineView(page);
+    check('My rentals: a server that cannot be reached gets "Could not load your bookings: the server did not respond", '
+        + 'never "Cannot reach the server" or "Failed to fetch"',
+      mineUnreachable.error === 'Could not load your bookings: the server did not respond' && mineErrorOnly(mineUnreachable)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(mineUnreachable));
+    net.fail = false;
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    release(at, 200, { requests: MINE_TWO() });
+    await page.settle();
+    net.hold = false;
+    check('  My rentals: and Try again recovers once the server answers', mineTwo(mineView(page)), said(mineView(page)));
+    await finish(page);
+
+    // i. An error answer with no message in it.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineBare = mineView(page);
+    check('  My rentals: so does an error answer with no message in it, never "Request failed (502)"',
+      mineBare.error === 'Could not load your bookings: the server did not respond' && mineErrorOnly(mineBare)
+        && !/Request failed/.test(root().textContent), said(mineBare));
+    await finish(page);
+
+    // j. A 401: the session ends once and the login screen takes the page's
+    // place, as on every page (authFetch, section C).
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(401);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineEnded = mineView(page);
+    check('My rentals: a 401 ends the session once and shows the login screen, with no "You haven\'t booked anything '
+        + 'yet.", no Pay button and no list error',
+      store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+        && !mineEnded.empty && !mineEnded.error && mineEnded.pay === 0 && mineEnded.rows.length === 0 && isMine(net.calls[0]),
+      `${store.removes} teardown(s) ${said(mineEnded)}`);
+    await finish(page);
+
+    // --- Book a rental ---
+    // k. A successful load shows the form, from one request.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith(MINE_TWO(), ITEMS_TWO()));
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookOk = bookView(page);
+    const optionNames = page.queryAll('select[name="item_id"] option').map(text);
+    check('Book a rental: a successful load shows the form, its items offered, from one GET of /rental-items, with no error',
+      bookForm(bookOk) && optionNames.length === 3 && optionNames[1].startsWith('Covered Court')
+        && net.calls.length === 1 && isItems(net.calls[0]),
+      said({ bookOk, optionNames, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+    await finish(page);
+
+    // l. The first open fails.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    at = holdNext();
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookOpening = bookView(page);
+    const bookFirst = net.calls[0];
+    release(at, 500, { error: 'Network down' });
+    await page.settle();
+    const bookFailed = bookView(page);
+    check('Book a rental: the first open shows "Loading rental items…" while the items are out, and when it fails (a 500), '
+        + '"Could not load the rental items: Network down" with a Try again button',
+      bookLoadingOnly(bookOpening) && isItems(bookFirst)
+        && bookFailed.error === 'Could not load the rental items: Network down' && bookFailed.tryAgain,
+      `${said(bookOpening)} then ${said(bookFailed)}`);
+    check('  Book a rental: and no "Nothing is currently available for rental.", no booking form (no field, no Book now) '
+        + 'and no "Loading…" beside it: it cannot read as nothing to rent',
+      bookErrorOnly(bookFailed), said(bookFailed));
+
+    // m. Try again repeats the same load, and submits nothing.
+    at = holdNext();
+    sent = net.calls.length;
+    await clickIf(page, tryAgainButton(page));
+    const bookRetrying = bookView(page);
+    const bookRetryCall = net.calls[sent];
+    release(at, 200, { rental_items: ITEMS_TWO() });
+    await page.settle();
+    const bookRetried = bookView(page);
+    check('Book a rental: Try again loads the items again, once (a GET; it submits nothing), shows the loading state while '
+        + 'they are out, then the form',
+      net.calls.length === sent + 1 && isItems(bookRetryCall) && bookLoadingOnly(bookRetrying) && bookForm(bookRetried),
+      `${bookRetryCall ? `${bookRetryCall.method} ${bookRetryCall.url}` : 'no request'} ${said(bookRetrying)} then `
+        + said(bookRetried));
+    net.hold = false;
+    await finish(page);
+
+    // n. A server that cannot be reached.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    net.fail = true;
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookUnreachable = bookView(page);
+    check('Book a rental: a server that cannot be reached gets "Could not load the rental items: the server did not '
+        + 'respond", never "Cannot reach the server" or "Failed to fetch"',
+      bookUnreachable.error === 'Could not load the rental items: the server did not respond'
+        && bookErrorOnly(bookUnreachable) && !/Cannot reach the server|Failed to fetch/.test(root().textContent),
+      said(bookUnreachable));
+    net.fail = false;
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    release(at, 200, { rental_items: ITEMS_TWO() });
+    await page.settle();
+    net.hold = false;
+    check('  Book a rental: and Try again recovers once the server answers', bookForm(bookView(page)), said(bookView(page)));
+    await finish(page);
+
+    // o. An error answer with no message in it.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookBare = bookView(page);
+    check('  Book a rental: so does an error answer with no message in it, never "Request failed (502)"',
+      bookBare.error === 'Could not load the rental items: the server did not respond' && bookErrorOnly(bookBare)
+        && !/Request failed/.test(root().textContent), said(bookBare));
+    await finish(page);
+
+    // p. No items, loaded successfully, is a real empty state.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith([], []));
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookNone = bookView(page);
+    check('Book a rental: a successful load of no items says "Nothing is currently available for rental.", with no form and '
+        + 'no error',
+      bookNone.empty && bookNone.fields === 0 && !bookNone.bookNow && !bookNone.error && bookNone.alerts.length === 0
+        && !bookNone.tryAgain && !bookNone.loading,
+      said(bookNone));
+    await finish(page);
+
+    // q. A 401.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(401);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookEnded = bookView(page);
+    check('Book a rental: a 401 ends the session once and shows the login screen, with no "Nothing is currently available '
+        + 'for rental." and no list error',
+      store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+        && !bookEnded.empty && !bookEnded.error && !bookEnded.bookNow && isItems(net.calls[0]),
+      `${store.removes} teardown(s) ${said(bookEnded)}`);
+    await finish(page);
+
+    // r. Neither page stores an empty list for one it could not load: the
+    // failed load keeps null (CLAUDE.md: a list that failed to load). Read
+    // from the source, comments stripped, as section AC reads the table's
+    // class; on Book a rental the error-first render already keeps the empty
+    // text away, so this is where a stored [] shows.
+    const codeOf = (file) => fs.readFileSync(path.join(HERE, '..', 'src', 'pages', file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const storesEmpty = ['MyRentalsPage.jsx', 'BookRentalPage.jsx']
+      .map((f) => ({ f, hits: codeOf(f).match(/\bset(Requests|Items)\(\s*\[\s*\]\s*\)/g) || [] }));
+    check('neither page ever stores an empty list in place of one it could not load (no setRequests([]) in '
+        + 'MyRentalsPage.jsx, no setItems([]) in BookRentalPage.jsx)',
+      storesEmpty.every((s) => s.hits.length === 0), said(storesEmpty));
+
+    check('section AI kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom,
+      said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AI\'s loads sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
   }
 
   console.error = origError;

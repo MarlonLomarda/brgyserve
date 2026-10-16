@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -16,23 +16,45 @@ const EMPTY_FORM = {
   purpose: "",
 };
 
+// Why a load failed, for "Could not load the rental items: …". The server's
+// own message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// A copy of the Rental bookings page's function, which the Document requests
+// and Payments pages and My rentals each copy too.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function BookRentalPage() {
   const { authFetch } = useAuth();
-  const [items, setItems] = useState(null); // null = loading
-  const [loadError, setLoadError] = useState("");
+  const [items, setItems] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [booked, setBooked] = useState(null); // confirmed booking
+  // Numbers each load, so only the newest one may change the items.
+  const loadSeq = useRef(0);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the server's bare message sat over "Nothing is currently
+  // available for rental." while the page knew nothing. items now stays null
+  // and the error, with Try again, takes the place of the form (CLAUDE.md: a
+  // list that failed to load), as on Rental bookings. Every load starts from
+  // the loading state, and an older answer that arrives late is dropped.
   const loadItems = useCallback(async () => {
-    setLoadError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setItems(null);
     try {
       const data = await authFetch("/rental-items");
-      setItems(data.rental_items);
+      if (seq === loadSeq.current) setItems(data.rental_items);
     } catch (err) {
-      setLoadError(err.message);
-      setItems([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
   }, [authFetch]);
 
@@ -141,10 +163,29 @@ export default function BookRentalPage() {
       ) : (
         <form className="pending-card section-card" onSubmit={handleSubmit}>
           <h3>Book a facility or item</h3>
-          {loadError && <div className="alert error">{loadError}</div>}
           {error && <div className="alert error">{error}</div>}
 
-          {items === null ? (
+          {/* The error first, then loading, then empty, then the form's
+              fields: a load that failed shows neither the empty text nor the
+              form. Try again is a plain button, so pressing it inside this
+              form loads the items again and submits nothing; it sits in the
+              card's actions row, as Book now does. */}
+          {loadError ? (
+            <>
+              <div className="alert error" role="alert">
+                Could not load the rental items: {loadError}
+              </div>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={loadItems}
+                >
+                  Try again
+                </button>
+              </div>
+            </>
+          ) : items === null ? (
             <p className="muted">Loading rental items…</p>
           ) : items.length === 0 ? (
             <p className="muted">Nothing is currently available for rental.</p>
