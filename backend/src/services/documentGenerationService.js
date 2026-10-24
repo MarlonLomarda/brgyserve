@@ -3,7 +3,7 @@ const Docxtemplater = require("docxtemplater");
 
 const { getDocumentTemplate } = require("./documentTemplateService.js");
 
-const generateDocument = async (templatePath, data) => {
+const generateDocx = async (templatePath, data) => {
   // get the template file from supabase storage and return as node.js buffer
   const templateBuffer = await getDocumentTemplate(templatePath);
 
@@ -25,4 +25,4 @@ const generateDocument = async (templatePath, data) => {
   return outputBuffer;
 };
 
-module.exports = { generateDocument };
+module.exports = { generateDocx };
