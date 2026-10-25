@@ -10,7 +10,7 @@ export default function TermsOfUse() {
   return (
     <>
       <h2 id="legal-modal-title">Terms of Use</h2>
-      <p className="legal-effective">Effective: 3 October 2026</p>
+      <p className="legal-effective">Effective: 25 October 2026</p>
 
       <h3>1. What BrgyServe is</h3>
       <p>
@@ -151,15 +151,16 @@ export default function TermsOfUse() {
 
       <h3>10. Notifications</h3>
       <p>
-        Notices about your requests, bookings, and payments appear{' '}
-        <strong>inside the portal</strong> when you sign in. Email is used only
-        to send password reset links, and the set-password links Barangay
-        officials receive to set up their accounts. SMS notification is not
-        currently active — messages are recorded against your record but are
-        not delivered to your phone.
+        Updates about your requests and bookings, including whether a fee has
+        been paid, are shown under <strong>My requests and My rentals</strong>{' '}
+        when you sign in. Email is used only to send password reset links, and
+        the set-password links Barangay officials receive to set up their
+        accounts. SMS notification is not currently active — messages are
+        recorded against your record but are not delivered to your phone.
       </p>
       <p>
-        Check the portal for the current status of anything you have submitted.
+        Check My requests and My rentals for the current status of anything you
+        have submitted.
       </p>
 
       <h3>11. Availability</h3>

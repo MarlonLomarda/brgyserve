@@ -200,8 +200,8 @@ export default function HelpCenter() {
 
       <h4>Where do I see updates about my request?</h4>
       <p>
-        Inside the portal, under notifications, when you are signed in. That is
-        the authoritative place.
+        Under My requests for a document request, or under My rentals for a
+        booking, when you are signed in. That is the authoritative place.
       </p>
 
       <h4>Will I get a text message?</h4>

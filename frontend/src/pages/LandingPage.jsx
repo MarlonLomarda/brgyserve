@@ -100,7 +100,7 @@ const FAQS = [
   },
   {
     q: "How do I pay the fee?",
-    a: "You can pay in cash at the Barangay Office, or online by GCash. Once your request is approved, tap Pay beside it in My requests or My rentals and choose Pay online via GCash.",
+    a: "You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it is confirmed. Then choose Pay online via GCash.",
   },
   {
     q: "How do I know when my document is ready?",

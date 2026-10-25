@@ -217,6 +217,14 @@
 // shown. utils/bookingTimes.js is checked case by case first, at fixed
 // moments, and everything runs on a UTC clock and a Los Angeles one.
 //
+// Section AK is where the Terms of Use, the Help Center and the landing
+// page's FAQ tell a resident to look: under My requests and My rentals,
+// never "inside the portal" or "under notifications", since a resident has
+// no notifications page; and the FAQ's "How do I pay the fee?" tells a
+// document request (Pay once it is approved) apart from a rental (Pay as soon
+// as it is confirmed). docs/legal-copy.md says the same words; the Terms are
+// dated 25 October 2026 and the Privacy Policy keeps 3 October 2026.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -13807,6 +13815,196 @@ const root = () => dom.window.document.getElementById('root');
       kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
     if (previousTZAJ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAJ;
+  }
+
+  // =========================================================================
+  // AK. Terms, Help Center and landing FAQ: where residents see updates
+  // =========================================================================
+  // A resident has no notifications page: the only one is the Secretary's
+  // (/secretary/notifications, routes/notifications.js behind
+  // requireRole('secretary')). The Terms of Use said, in section 10, "Notices
+  // about your requests, bookings, and payments appear inside the portal when
+  // you sign in." and "Check the portal for the current status of anything
+  // you have submitted.", and the Help Center answered "Where do I see updates
+  // about my request?" with "Inside the portal, under notifications, …". A
+  // resident follows a request on My requests and a booking on My rentals,
+  // each row with its status badge and its fee's state. The landing page's
+  // "How do I pay the fee?" said "Once your request is approved, tap Pay
+  // beside it in My requests or My rentals": true of a document request, but
+  // nobody approves a booking, whose Pay is on My rentals from the moment it
+  // is confirmed while its charge is unpaid. The Terms changed, so their date
+  // moves (section 14 promises it); the Privacy Policy did not, so its date
+  // stays. Read as a person reads them, and against docs/legal-copy.md.
+  console.log('\n--- Terms, Help Center and landing FAQ: where residents see updates, and when a rental is paid ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const words = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const copy = el.cloneNode(true);
+      for (const br of copy.querySelectorAll('br')) br.replaceWith(' ');
+      return words(copy.textContent);
+    };
+    const T10_FIRST = 'Updates about your requests and bookings, including whether a fee has been paid, are shown under My '
+      + 'requests and My rentals when you sign in.';
+    const T10_KEPT = 'Email is used only to send password reset links, and the set-password links Barangay officials receive '
+      + 'to set up their accounts. SMS notification is not currently active — messages are recorded against your record '
+      + 'but are not delivered to your phone.';
+    const T10_SECOND = 'Check My requests and My rentals for the current status of anything you have submitted.';
+    const H_WHERE_Q = 'Where do I see updates about my request?';
+    const H_WHERE = 'Under My requests for a document request, or under My rentals for a booking, when you are signed in. '
+      + 'That is the authoritative place.';
+    const H_TEXT_Q = 'Will I get a text message?';
+    const H_TEXT = 'Not at present. SMS notification is not active. Messages are composed and recorded against your record, '
+      + 'but they are not delivered to your phone. Email is used only for password reset links, and for the set-password '
+      + 'links Barangay officials receive to set up their accounts.';
+    const FAQ_PAY_Q = 'How do I pay the fee?';
+    const FAQ_PAY = 'You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is '
+      + 'approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it '
+      + 'is confirmed. Then choose Pay online via GCash.';
+    // What they said before, word for word.
+    const OLD_T = ['Notices about your requests, bookings, and payments appear', 'Check the portal for the current status'];
+    const OLD_H = ['under notifications'];
+    const OLD_FAQ = 'Once your request is approved, tap Pay beside it in My requests or My rentals';
+    const TERMS_DATE = 'Effective: 25 October 2026';
+    const PRIVACY_DATE = 'Effective: 3 October 2026';
+    const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
+    const has = (blocks, o) => blocks.some((b) => b.text.includes(o));
+
+    // A /login modal as the page shows it: its blocks, its date line, and the
+    // bold words of section 10's first paragraph.
+    const openLegal = async (link) => {
+      seedSession(null);
+      resetNet(200);
+      const page = await globalThis.mountInteractive(root(), '/login');
+      await page.settle();
+      const opener = page.queryAll('.legal-links a').find((a) => a.textContent.trim() === link);
+      if (opener) await page.click(opener);
+      const body = page.query('.legal-modal-body');
+      const blocks = body ? [...body.querySelectorAll('h2, h3, h4, p, li')]
+        .map((el) => ({ tag: el.tagName.toLowerCase(), text: shown(el) })) : [];
+      const effective = body ? words(body.querySelector('.legal-effective')?.textContent) || null : null;
+      const h10 = body ? [...body.querySelectorAll('h3')].find((h) => words(h.textContent) === '10. Notifications') : null;
+      const p10 = h10?.nextElementSibling?.tagName === 'P' ? h10.nextElementSibling : null;
+      const bold10 = p10 ? [...p10.querySelectorAll('strong')].map((s) => words(s.textContent)) : null;
+      const sent = net.calls.length;
+      await page.unmount();
+      return { blocks, effective, bold10, sent };
+    };
+    // One part of docs/legal-copy.md, its raw lines and its blocks, read as
+    // section AH reads it.
+    const legalMd = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+    const mdPart = (part) => {
+      const all = legalMd.split('\n');
+      const start = all.indexOf(`## ${part}`);
+      const raw = [];
+      for (let i = start + 1; start >= 0 && i < all.length && !/^## /.test(all[i]); i += 1) raw.push(all[i]);
+      const blocks = [];
+      let para = null;
+      const plain = (s) => words(s.replace(/\*\*?/g, ''));
+      const flush = () => {
+        if (para) blocks.push({ tag: para.tag, text: plain(para.lines.join(' ')) });
+        para = null;
+      };
+      for (const line of raw) {
+        const heading = line.match(/^(#{3,4}) (.*)$/);
+        if (heading) {
+          flush();
+          blocks.push({ tag: `h${heading[1].length}`, text: plain(heading[2]) });
+        } else if (!line.trim() || /^-{3,}$/.test(line.trim())) {
+          flush();
+        } else if (/^- /.test(line)) {
+          flush();
+          para = { tag: 'li', lines: [line.slice(2)] };
+        } else {
+          if (!para) para = { tag: 'p', lines: [] };
+          para.lines.push(line.trim());
+        }
+      }
+      flush();
+      return { raw, blocks };
+    };
+    const under = (blocks, tag, title, stop) => {
+      const i = blocks.findIndex((b) => b.tag === tag && b.text === title);
+      if (i < 0) return [];
+      const out = [];
+      for (let j = i + 1; j < blocks.length && !stop.includes(blocks[j].tag); j += 1) out.push(blocks[j]);
+      return out;
+    };
+    // The raw markdown lines of one "### " section of a part.
+    const mdSection = (raw, title) => {
+      const i = raw.indexOf(`### ${title}`);
+      if (i < 0) return '';
+      const out = [];
+      for (let j = i + 1; j < raw.length && !/^#{2,3} /.test(raw[j]); j += 1) out.push(raw[j]);
+      return out.join('\n');
+    };
+
+    const terms = await openLegal('Terms of Use');
+    const help = await openLegal('Help Center');
+    const privacy = await openLegal('Privacy Policy');
+    const termsMd = mdPart('TERMS OF USE');
+    const helpMd = mdPart('HELP CENTER');
+    const privacyMd = mdPart('PRIVACY POLICY');
+    const wantT10 = [`p: ${T10_FIRST} ${T10_KEPT}`, `p: ${T10_SECOND}`];
+    const wantHelp = [`h4: ${H_WHERE_Q}`, `p: ${H_WHERE}`, `h4: ${H_TEXT_Q}`, `p: ${H_TEXT}`];
+    const t10 = under(terms.blocks, 'h3', '10. Notifications', ['h2', 'h3']);
+    const t10Md = under(termsMd.blocks, 'h3', '10. Notifications', ['h2', 'h3']);
+    const hNote = under(help.blocks, 'h3', 'Notifications and messages', ['h2', 'h3']);
+    const hNoteMd = under(helpMd.blocks, 'h3', 'Notifications and messages', ['h2', 'h3']);
+
+    check('Terms of Use, section 10, as /login\'s modal shows it (TermsOfUse.jsx): "Updates about your requests and bookings, '
+        + 'including whether a fee has been paid, are shown under My requests and My rentals when you sign in." then the '
+        + 'email and SMS sentences as they were, and "Check My requests and My rentals for the current status …"',
+      said(lines(t10)) === said(wantT10), said(lines(t10)));
+    check('  and section 10\'s first paragraph bolds "My requests and My rentals", where it bolded "inside the portal"',
+      said(terms.bold10) === said(['My requests and My rentals']), said(terms.bold10));
+    check('  and the Terms modal, read whole, has none of the old words ("Notices about your requests, bookings, and payments '
+        + 'appear", "Check the portal for the current status")',
+      terms.blocks.length > 20 && OLD_T.every((o) => !has(terms.blocks, o)), said(OLD_T.filter((o) => has(terms.blocks, o))));
+    check('Help Center, "Notifications and messages", as the modal shows it (HelpCenter.jsx): "Where do I see updates about my '
+        + 'request?" answered "Under My requests for a document request, or under My rentals for a booking, …"; "Will I '
+        + 'get a text message?" and its answer as they were',
+      said(lines(hNote)) === said(wantHelp), said(lines(hNote)));
+    check('  and the Help Center, read whole, never says "under notifications"',
+      help.blocks.length > 20 && OLD_H.every((o) => !has(help.blocks, o)), said(OLD_H.filter((o) => has(help.blocks, o))));
+    check('docs/legal-copy.md says the same words as the two modals: Terms section 10 (with **My requests and My rentals**) '
+        + 'and the Help Center\'s "Notifications and messages", and neither part keeps any of the old words',
+      said(lines(t10Md)) === said(wantT10) && said(lines(hNoteMd)) === said(wantHelp)
+        && mdSection(termsMd.raw, '10. Notifications').includes('**My requests and My rentals**')
+        && [...OLD_T, ...OLD_H].every((o) => !has(termsMd.blocks, o) && !has(helpMd.blocks, o)),
+      said({ t10Md: lines(t10Md), hNoteMd: lines(hNoteMd) }));
+    check(`the Terms of Use are dated "${TERMS_DATE}", in the modal and in docs/legal-copy.md, since they changed`,
+      terms.effective === TERMS_DATE && termsMd.raw.includes(`*${TERMS_DATE}*`),
+      said({ modal: terms.effective, md: termsMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
+    check(`the Privacy Policy keeps "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since it did not change`,
+      privacy.effective === PRIVACY_DATE && privacyMd.raw.includes(`*${PRIVACY_DATE}*`),
+      said({ modal: privacy.effective, md: privacyMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
+    check('opening the three modals sent no request', terms.sent + help.sent + privacy.sent === 0,
+      said({ terms: terms.sent, help: help.sent, privacy: privacy.sent }));
+
+    // The landing page's FAQ, signed out, as its <details> show it.
+    seedSession(null);
+    resetNet(200);
+    const landing = await globalThis.mountInteractive(root(), '/');
+    await landing.settle();
+    const faqs = landing.queryAll('.landing-faq-item').map((d) => ({
+      q: words(d.querySelector('summary')?.textContent), a: words(d.querySelector('p')?.textContent),
+    }));
+    const landingSent = net.calls.length;
+    const kept = store.sets;
+    await landing.unmount();
+    const pay = faqs.find((f) => f.q === FAQ_PAY_Q);
+    check('the landing page\'s FAQ answers "How do I pay the fee?" with "… For a document request, once it is approved, tap '
+        + 'Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it is '
+        + 'confirmed. Then choose Pay online via GCash."',
+      pay?.a === FAQ_PAY, said(pay ?? faqs.map((f) => f.q)));
+    check('  and no FAQ answer says "Once your request is approved, tap Pay beside it in My requests or My rentals", or '
+        + 'promises a notification',
+      faqs.length > 5 && faqs.every((f) => !f.a.includes(OLD_FAQ) && !/notif/i.test(f.a)),
+      said(faqs.filter((f) => f.a.includes(OLD_FAQ) || /notif/i.test(f.a))));
+    check('  and the landing page sent no request and kept nothing in the browser', landingSent === 0 && kept === 0,
+      said({ landingSent, kept }));
   }
 
   console.error = origError;

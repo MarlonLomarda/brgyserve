@@ -7,8 +7,11 @@ against the logging code and its tests (`activity:test`) on 1 October 2026. The
 lines about set-password links and officials' accounts, in §1, §3, §4 and §5 of
 the Privacy Policy, Terms of Use §10, and the Help Center's answer about text
 messages, were checked against the set-password code and its tests
-(`reset:test`) on 3 October 2026. The "No uploaded files" point was corrected on
-24 September 2026 (`3e372e6`). Every other factual claim below was checked
+(`reset:test`) on 3 October 2026. Terms of Use §10 and the Help Center's answer
+about where to see updates were checked on 25 October 2026 against the
+resident's pages and the notifications route, which is the Secretary's alone:
+a resident follows a request on My requests and a booking on My rentals. The
+"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Every other factual claim below was checked
 against the codebase on 10 September 2026. If the system changes, change this
 file and re-render the modals from it — do not edit the JSX copy directly.
 
@@ -236,7 +239,7 @@ received in person at the Barangay Office.
 
 ## TERMS OF USE
 
-*Effective: 3 October 2026*
+*Effective: 25 October 2026*
 
 ### 1. What BrgyServe is
 
@@ -344,13 +347,15 @@ the Barangay Office, not through the portal.
 
 ### 10. Notifications
 
-Notices about your requests, bookings, and payments appear **inside the portal**
-when you sign in. Email is used only to send password reset links, and the
-set-password links Barangay officials receive to set up their accounts. SMS
-notification is not currently active — messages are recorded against your
-record but are not delivered to your phone.
+Updates about your requests and bookings, including whether a fee has been
+paid, are shown under **My requests and My rentals** when you sign in. Email is
+used only to send password reset links, and the set-password links Barangay
+officials receive to set up their accounts. SMS notification is not currently
+active — messages are recorded against your record but are not delivered to
+your phone.
 
-Check the portal for the current status of anything you have submitted.
+Check My requests and My rentals for the current status of anything you have
+submitted.
 
 ### 11. Availability
 
@@ -536,8 +541,8 @@ your charges.
 
 #### Where do I see updates about my request?
 
-Inside the portal, under notifications, when you are signed in. That is the
-authoritative place.
+Under My requests for a document request, or under My rentals for a booking,
+when you are signed in. That is the authoritative place.
 
 #### Will I get a text message?
 
