@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import CancelBookingPanel from "../components/CancelBookingPanel";
 import PayMenu from "../components/PayMenu";
 import { chargeMeta, chargeOf } from "../constants/requestStatus";
 import {
@@ -29,6 +30,10 @@ export default function MyRentalsPage() {
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [cancelling, setCancelling] = useState(null); // booking being cancelled
+  const refocusId = useRef(null); // whose Cancel booking button gets the focus back
+  const flashRef = useRef(null);
+  const focusFlash = useRef(false); // a cancel went through: focus its message
   // Numbers each load, so only the newest one may change the list.
   const loadSeq = useRef(0);
 
@@ -160,6 +165,45 @@ export default function MyRentalsPage() {
     handleDeclare(r, "onsite");
   }
 
+  // CANCEL BOOKING (step B2). Drawn only where the server says the booking
+  // can be cancelled online (can_cancel_online, from the same check the
+  // cancel route makes: their own online booking, 24 hours or more ahead,
+  // unpaid); where it says no, its cancel_online_note is shown instead. The
+  // panel takes the list's place with an optional reason; a refusal shows in
+  // it, and closing after one loads the list again. Keep booking and Escape
+  // put the focus back on the button; a cancel that went through moves it to
+  // the success message.
+  async function sendCancel(r, reason) {
+    const data = await authFetch(`/rental-requests/mine/${r.request_id}/cancel`, {
+      method: "POST",
+      body: reason ? { reason } : {},
+    });
+    setCancelling(null);
+    focusFlash.current = true;
+    setFlash({ type: "success", text: data.message });
+    load();
+  }
+
+  function closeCancel(refused) {
+    refocusId.current = cancelling?.request_id ?? null;
+    setCancelling(null);
+    if (refused) load();
+  }
+
+  useEffect(() => {
+    if (cancelling) return;
+    if (refocusId.current !== null) {
+      const button = document.querySelector(`[data-cancel-for="${refocusId.current}"]`);
+      if (button) {
+        button.focus();
+        refocusId.current = null;
+      }
+    } else if (focusFlash.current && flashRef.current) {
+      flashRef.current.focus();
+      focusFlash.current = false;
+    }
+  }, [cancelling, requests, flash]);
+
   function payOnline(r, charge) {
     if (
       charge.declared_method === "gcash" &&
@@ -172,9 +216,29 @@ export default function MyRentalsPage() {
     handlePayOnline(r, charge);
   }
 
+  if (cancelling) {
+    return (
+      <CancelBookingPanel
+        title="Cancel booking"
+        lines={[
+          cancelling.rental_items?.name || "—",
+          formatSchedule(cancelling.start_datetime, cancelling.end_datetime),
+        ]}
+        note="This cannot be undone. You will need to book again."
+        reasonLabel="Reason (optional)"
+        onSubmit={(reason) => sendCancel(cancelling, reason)}
+        onClose={closeCancel}
+      />
+    );
+  }
+
   return (
     <>
-      {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+      {flash && (
+        <div className={`alert ${flash.type}`} ref={flashRef} tabIndex={-1}>
+          {flash.text}
+        </div>
+      )}
 
       {/* The heading row is drawn whatever the list's state, so Refresh is
           there while it loads, after it failed and over an empty list, as on
@@ -284,6 +348,17 @@ export default function MyRentalsPage() {
                               )}
                           </div>
                         )}
+                        {r.status === "cancelled" && r.cancellation_reason && (
+                          <div className="muted reason-note">
+                            Reason: {r.cancellation_reason}
+                          </div>
+                        )}
+                        {r.can_cancel_online === false &&
+                          r.cancel_online_note && (
+                            <div className="muted small-note cancel-online-note">
+                              {r.cancel_online_note}
+                            </div>
+                          )}
                       </td>
                       <td className="row-actions">
                         {charge?.status === "UNPAID" && (
@@ -292,6 +367,20 @@ export default function MyRentalsPage() {
                             onPayOnline={() => payOnline(r, charge)}
                             onPayOnsite={() => payOnsite(r, charge)}
                           />
+                        )}
+                        {r.can_cancel_online === true && (
+                          <button
+                            type="button"
+                            className="btn secondary danger"
+                            data-cancel-for={r.request_id}
+                            disabled={busyId === r.request_id}
+                            onClick={() => {
+                              setFlash(null);
+                              setCancelling(r);
+                            }}
+                          >
+                            Cancel booking
+                          </button>
                         )}
                       </td>
                     </tr>
