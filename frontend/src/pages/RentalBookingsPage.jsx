@@ -132,7 +132,11 @@ import {
 // (ReturnedBy, below), where it read "by @staff1 on …", as if staff1 had
 // marked the booking unpaid; a return note follows it.
 //
-// CANCEL ASKS FOR A REASON (25 Oct 2026, step B2). Cancel opens
+// EDIT AND CANCEL (25 Oct 2026, step B2). The Secretary's Edit and Cancel are
+// drawn only where the server's not_started says the booking has not started
+// (routes/rentalRequests.js, hasNotStarted()), so never on one that is under
+// way, Overdue, Completed, cancelled or returned. Edit shows the date, the
+// times and the purpose, and the quantity as text only. Cancel opens
 // CancelBookingPanel with a required reason, and for a paid booking says the
 // payment stays recorded and a refund is due. A cancelled booking shows its
 // reason under its status, as text.
@@ -228,15 +232,17 @@ const toTimeInput = (iso) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// Edit changes the date, the times and the purpose, and nothing else (step
+// B2): the server refuses a different quantity, and the item and borrower
+// were never editable. So the quantity is shown, not offered, and the PUT
+// carries no quantity_requested; to change either, cancel and book again.
 function EditPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const isCountable = item?.quantity_total > 1;
   const [form, setForm] = useState({
     date: toDateInput(booking.start_datetime),
     start_time: toTimeInput(booking.start_datetime),
     end_time: toTimeInput(booking.end_datetime),
-    quantity: String(booking.quantity_requested),
     purpose: booking.purpose,
   });
   const [error, setError] = useState("");
@@ -258,7 +264,6 @@ function EditPanel({ booking, onDone }) {
           date: form.date,
           start_time: form.start_time,
           end_time: form.end_time,
-          quantity_requested: isCountable ? Number(form.quantity) : 1,
           purpose: form.purpose,
         },
       });
@@ -280,13 +285,23 @@ function EditPanel({ booking, onDone }) {
             {residentName(booking)} · {item?.name} (
             {ITEM_TYPE_LABELS[item?.type] || item?.type})
           </p>
+          <p className="muted">
+            Quantity: {booking.quantity_requested}
+          </p>
+          <p className="muted small-note">
+            To change the item or quantity, cancel this booking and book again.
+          </p>
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
           ← Back to list
         </button>
       </div>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="grid-2">
@@ -301,22 +316,6 @@ function EditPanel({ booking, onDone }) {
               required
             />
           </label>
-          {isCountable && (
-            <label>
-              Quantity{" "}
-              <span className="hint">(up to {item.quantity_total})</span>
-              <input
-                name="quantity"
-                type="number"
-                min="1"
-                max={item.quantity_total}
-                step="1"
-                value={form.quantity}
-                onChange={handleChange}
-                required
-              />
-            </label>
-          )}
           <label>
             Start time
             <input
@@ -1294,7 +1293,11 @@ export default function RentalBookingsPage({
                         </td>
                         {(canManage || canReturn) && (
                           <td className="row-actions">
-                            {canManage && r.status === "confirmed" && (
+                            {/* Edit and Cancel only where the server says the
+                                booking has not started (not_started: stored
+                                confirmed and its start ahead, the rule both
+                                routes apply), online or walk-in. */}
+                            {canManage && r.not_started === true && (
                               <>
                                 <button
                                   className="btn secondary"
