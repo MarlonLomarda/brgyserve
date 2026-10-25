@@ -1,6 +1,6 @@
 // ===========================================================================
 // ROUTE ROLE GUARDS — resident records + document requests + disputes +
-// the activity log + payments.
+// the activity log + payments + rental bookings.
 //
 //   cd backend && npm run roles:test
 //
@@ -23,6 +23,13 @@
 // 'secretary')), so it still fails closed; the probe now runs router.use
 // layers as well as each route's own guards. Before that it read the file as
 // open to all five roles.
+//
+// rentalRequests.js joined with rental Edit and Cancel (25 Oct 2026), when
+// residents gained POST /mine/:id/cancel. Like documentRequests.js it guards
+// per route under a router-level authenticate, so every one of its nine
+// routes is declared below. Who may cancel WHICH booking — their own online
+// booking, 24 hours ahead, unpaid — is rentals:test's job; this file checks
+// who reaches each route at all.
 //
 // WHY THIS EXISTS. Both files used to be Secretary-only: residentRecords.js
 // opened with `router.use(authenticate, requireRole('secretary'))`, so every
@@ -54,6 +61,7 @@ const documentRequests = require(path.join(__dirname, '..', 'src', 'routes', 'do
 const disputes = require(path.join(__dirname, '..', 'src', 'routes', 'disputes.js'));
 const activityLogs = require(path.join(__dirname, '..', 'src', 'routes', 'activityLogs.js'));
 const charges = require(path.join(__dirname, '..', 'src', 'routes', 'charges.js'));
+const rentalRequests = require(path.join(__dirname, '..', 'src', 'routes', 'rentalRequests.js'));
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { withholdPersonal } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
 const { isSensitiveKey, isPersonalKey, PERSONAL_FIELDS } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
@@ -79,6 +87,10 @@ const LOG_VIEWERS = ['secretary', 'punong_barangay'];
 // list carries every resident's charges, so everyone else is refused,
 // residents included.
 const PAYMENT_ROLES = ['secretary', 'treasurer'];
+// Rental bookings: a resident books for themselves and the Secretary encodes
+// walk-ins; Staff record returns and nothing else.
+const BOOKERS = ['resident', 'secretary'];
+const STAFF_ONLY = ['staff'];
 
 // Routes whose access is scoped by OWNERSHIP — the caller's profiles.resident_id
 // matched against the row's resident_id — rather than by role. (They matched
@@ -129,6 +141,17 @@ const EXPECTED = {
   'charges.js': {
     'GET /': PAYMENT_ROLES,                  // the Payments queue, every resident's charges
     'POST /:id/verify': PAYMENT_ROLES,       // records a payment and marks the charge PAID
+  },
+  'rentalRequests.js': {
+    'POST /': BOOKERS,                       // a resident's own booking, or the Secretary's walk-in
+    'POST /mine/:id/pay': OWNERSHIP_SCOPED,  // scoped by resident_id, like the document routes
+    'POST /mine/:id/cancel': OWNERSHIP_SCOPED, // own ONLINE booking only: resident_id AND requested_by_user_id
+    'GET /mine': OWNERSHIP_SCOPED,
+    'GET /': VIEWERS,
+    'GET /:id': VIEWERS,
+    'PUT /:id': SECRETARY_ONLY,              // date, times and purpose of a booking that has not started
+    'POST /:id/cancel': SECRETARY_ONLY,      // a booking that has not started, with a reason
+    'POST /:id/return': STAFF_ONLY,          // Staff's one write action
   },
 };
 
@@ -254,7 +277,7 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
 const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
 
 (async () => {
-  console.log('Route role guards — resident records + document requests + disputes + activity log + payments');
+  console.log('Route role guards — resident records + document requests + disputes + activity log + payments + rental bookings');
   console.log('No server started. No writes.');
 
   auditRouter('residentRecords.js', residentRecords);
@@ -262,10 +285,11 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   auditRouter('disputes.js', disputes);
   auditRouter('activityLogs.js', activityLogs);
   auditRouter('charges.js', charges);
+  auditRouter('rentalRequests.js', rentalRequests);
 
   // -- every route carries authenticate at the router level -----------------
   section('router-level authenticate');
-  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges]]) {
+  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges], ['rentalRequests.js', rentalRequests]]) {
     const hasAuth = router.stack.some((l) => !l.route && l.handle?.name === 'authenticate');
     check(`${label} mounts authenticate at the router level`, hasAuth);
   }
@@ -283,6 +307,27 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   const byIdAt = indexOf(disputes, 'get', '/:id');
   check('disputes.js registers GET /mine before GET /:id', mineAt !== -1 && byIdAt !== -1 && mineAt < byIdAt,
     `GET /mine at stack index ${mineAt}, GET /:id at ${byIdAt}`);
+  const rentalMineAt = indexOf(rentalRequests, 'get', '/mine');
+  const rentalByIdAt = indexOf(rentalRequests, 'get', '/:id');
+  check('rentalRequests.js registers GET /mine before GET /:id', rentalMineAt !== -1 && rentalByIdAt !== -1 && rentalMineAt < rentalByIdAt,
+    `GET /mine at stack index ${rentalMineAt}, GET /:id at ${rentalByIdAt}`);
+
+  // -- the 401: no token never reaches a rental route --------------------------
+  // The probe above skips authenticate (it reads the database); with NO token
+  // it answers before any query, so it can be run for real here. Every rental
+  // route sits below this one layer.
+  section('rentalRequests.js — no token is a 401');
+  const rentalAuth = rentalRequests.stack.find((l) => !l.route && l.handle?.name === 'authenticate');
+  const firstRouteAt = rentalRequests.stack.findIndex((l) => l.route);
+  const authAt = rentalRequests.stack.indexOf(rentalAuth);
+  check('authenticate is mounted above every rental route', authAt !== -1 && authAt < firstRouteAt,
+    `authenticate at ${authAt}, first route at ${firstRouteAt}`);
+  if (rentalAuth) {
+    let status = null;
+    let reachedNext = false;
+    await rentalAuth.handle({ headers: {} }, { status(c) { status = c; return this; }, json() { return this; } }, () => { reachedNext = true; });
+    check('a request with no token gets 401 and goes no further', status === 401 && !reachedNext, `status ${status}`);
+  }
 
   // -- data minimization, against the real handlers --------------------------
   section('GET /resident-records — staff projection');

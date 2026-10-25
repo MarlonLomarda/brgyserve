@@ -314,15 +314,28 @@ const fakeFrom = (table) => {
   // Keys a route invents for the log rather than copying from a column. The
   // frontend would fall back to "Parties renamed 0 to 1" without its own
   // wording, so each must be named there.
-  const LOG_MARKERS = ['parties_renamed'];
+  // The rental cancel's facts (25 Oct 2026) and the webhook's late-payment
+  // row are markers too: none is a column the page already knows.
+  const LOG_MARKERS = ['parties_renamed', 'charge_outcome', 'refund_due', 'session_expired',
+    'session_expire_failure', 'reason_given', 'gateway_payment_id'];
   const markersMissing = LOG_MARKERS.filter((m) => !new RegExp(`^\\s*${m}:\\s*'`, 'm').test(frontendVocab)
     || !fs.readdirSync(ROUTES).some((f) => fs.readFileSync(path.join(ROUTES, f), 'utf8').includes(m)));
   check('every log marker a route writes is labelled in the frontend', markersMissing.length === 0,
     markersMissing.join(', ') || LOG_MARKERS.join(', '));
 
-  const badUser = calls.filter((c) => !/userId:\s*(req\.user\.user_id|user\.user_id)\b/.test(c.body));
+  // One call site has no session at all: the PayMongo webhook's row for a
+  // payment that arrived on a VOID charge, logged against the charge's own
+  // account (the resident who paid). It is named here, with its action, so a
+  // second session-less call site still fails.
+  const SESSIONLESS = [{ file: 'payments.js', userId: 'charge.user_id', action: 'ACTIONS.PAYMENT_ON_VOID_CHARGE' }];
+  const isSessionless = (c) => SESSIONLESS.some((x) => c.file === x.file
+    && new RegExp(`userId:\\s*${x.userId.replace('.', '\\.')}\\b`).test(c.body)
+    && new RegExp(`action:\\s*${x.action.replace('.', '\\.')}\\b`).test(c.body));
+  const badUser = calls.filter((c) => !/userId:\s*(req\.user\.user_id|user\.user_id)\b/.test(c.body) && !isSessionless(c));
   check('every userId is the session user, or the account the route just resolved (register, reset)',
     badUser.length === 0, badUser.map((c) => `${c.file}:${c.line}`).join(', ') || 'all');
+  check('  the one session-less call site is the webhook\'s late-payment row, and only that',
+    calls.filter(isSessionless).length === 1, `${calls.filter(isSessionless).length} found`);
 
   const personal = calls.filter((c) => FORBIDDEN_LITERAL_KEYS.test(c.body));
   check('no call site writes a personal, free-text, credential or reference key by name', personal.length === 0,
@@ -341,7 +354,6 @@ const fakeFrom = (table) => {
     ['auth.js', "router.post('/forgot-password'"],
     ['auth.js', "router.post('/set-password/check'"],
     ['payments.js', "router.post('/gcash/checkout'"],
-    ['payments.js', 'async function webhookHandler'],
     ['payments.js', 'async function settlePaidCharge'],
     ['residentRecords.js', "router.post('/import/preview'"],
     ['residentRecords.js', "router.post('/check-duplicates'"],
@@ -350,6 +362,19 @@ const fakeFrom = (table) => {
     const seg = segment(fs.readFileSync(path.join(ROUTES, file), 'utf8').replace(/\r/g, ''), marker);
     check(`${file} ${marker.replace(/^router\.post\(|^async function /, '')} does not log`, seg !== null && !seg.includes('logActivity'),
       seg === null ? 'marker not found' : '');
+  }
+  // The webhook logs ONE thing, since 25 Oct 2026: a payment for a VOID
+  // charge, inside that branch only. Settling a charge is still not logged
+  // there — the payments row marks it.
+  {
+    const seg = segment(fs.readFileSync(path.join(ROUTES, 'payments.js'), 'utf8').replace(/\r/g, ''), 'async function webhookHandler');
+    const logs = seg ? [...seg.matchAll(/logActivity(Many)?\(/g)].length : -1;
+    const branch = seg ? seg.slice(seg.indexOf('if (result.outcome === SETTLE_OUTCOME.VOID)')) : '';
+    check('payments.js webhookHandler logs only PAYMENT_ON_VOID_CHARGE, inside the VOID branch',
+      logs === 1 && seg.indexOf('if (result.outcome === SETTLE_OUTCOME.VOID)') !== -1
+        && /logActivity\(\{[^}]*action:\s*ACTIONS\.PAYMENT_ON_VOID_CHARGE/.test(branch)
+        && !/SETTLE_PAYMENT|VERIFY_PAYMENT/.test(seg),
+      seg === null ? 'marker not found' : `${logs} logActivity call(s)`);
   }
   let getsWithLog = 0;
   for (const f of fs.readdirSync(ROUTES)) {
