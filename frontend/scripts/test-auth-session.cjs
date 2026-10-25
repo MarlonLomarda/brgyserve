@@ -223,7 +223,7 @@
 // no notifications page; and the FAQ's "How do I pay the fee?" tells a
 // document request (Pay once it is approved) apart from a rental (Pay as soon
 // as it is confirmed). docs/legal-copy.md says the same words; the Terms are
-// dated 25 October 2026 and the Privacy Policy keeps 3 October 2026.
+// dated 25 October 2026, and since step B2 the Privacy Policy is too.
 //
 // Section AL is Book a rental's two messages and its Try again: the server's
 // refusal of a booking is read out (role="alert"), as the time message and
@@ -232,6 +232,18 @@
 // in index.css), read as a browser of 390, 768 and 1280px applies it, while
 // every other .actions row and the shared .alert, .actions and .pending-card
 // .alert rules keep their spacing.
+//
+// Section AM is rental Edit and Cancel on the screens (step B2): the
+// Secretary's Cancel opens a panel with a required reason (3 to 300
+// characters, its submit disabled below 3, the focus in the box, Escape and
+// Keep booking closing it with the focus back on Cancel), warns on a paid
+// booking, shows the server's refusal with role="alert", and asks no
+// window.confirm; Edit shows only the date, the times and the purpose and
+// sends no quantity; Edit and Cancel are drawn only where the server's
+// not_started says so; a cancelled booking shows its reason as text; My
+// rentals draws Cancel booking only on can_cancel_online and shows
+// cancel_online_note otherwise; the Activity Log page words the cancel's
+// facts and the late-payment row; and the Privacy Policy names both.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -1099,6 +1111,16 @@ const root = () => dom.window.document.getElementById('root');
   const typeSearch = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
   const yetShown = (page) => page.queryAll('.staff-accounts p').some((p) => p.textContent === 'No staff accounts yet.');
   const clickIf = async (page, el) => { if (el) await page.click(el); };
+  // Since step B2 a rental booking's Cancel opens a panel that asks for a
+  // reason (section AM) where window.confirm used to ask: type one and send.
+  const cancelWithReason = async (page, reason = 'Needed for an official event') => {
+    const box = page.query('.cancel-booking-panel textarea');
+    if (!box) return;
+    Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(box, reason);
+    box.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await page.settle();
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+  };
 
   seedSession(VALID);
   resetNet(200, staffAnswer(STAFF_LIST));
@@ -8754,6 +8776,9 @@ const root = () => dom.window.document.getElementById('root');
         charges: r.noCharge ? null : { charge_id: 950 + r.id, amount: '25.00', status: r.status === 'cancelled' ? 'VOID' : 'UNPAID',
           declared_method: null, declared_reference: null, declared_at: null },
         derived_status: r.derived,
+        // Since step B2 the route says whether the booking has not started
+        // (stored confirmed, start ahead): here, the upcoming ones.
+        not_started: r.status === 'confirmed' && r.derived === 'confirmed',
       };
     };
     const nameOf = (r) => (r.guest ? r.guest[0] : `${r.who[0]} ${r.who[1]}`);
@@ -8792,8 +8817,10 @@ const root = () => dom.window.document.getElementById('root');
       510: `Returned with issue ${BY} Note: One pole bent`, 511: 'Cancelled',
     };
     const NOTE = (r) => (r.guest ? `Guest · ${r.guest[1]}` : r.noAccount ? 'No online account' : `@res_${r.id}`);
+    // Since step B2 the Secretary's Edit and Cancel are on bookings that have
+    // not started only, never an Overdue or Completed one (section AM).
     const ACTIONS = {
-      Secretary: (r) => (r.status === 'confirmed' ? 'Edit + Cancel' : '(none)'),
+      Secretary: (r) => (r.status === 'confirmed' && r.derived === 'confirmed' ? 'Edit + Cancel' : '(none)'),
       Staff: (r) => (r.status === 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1]) ? 'Mark returned' : '(none)'),
       'Punong Barangay': null,
     };
@@ -8953,7 +8980,7 @@ const root = () => dom.window.document.getElementById('root');
       check(`${name}: the counts are the whole list's, and read the same on every tab`, said(strips) === said([STRIP]), said(strips));
       const wantHeaders = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(ACTIONS[name] ? [''] : [])];
       check(`${name}: every row keeps its columns, badges, notes and actions (${ACTIONS[name] ? 'Edit and Cancel on the Secretary\'s '
-          + 'confirmed bookings, Mark returned on Staff\'s confirmed equipment and furniture' : 'none for the Punong Barangay, and '
+          + 'upcoming bookings, Mark returned on Staff\'s confirmed equipment and furniture' : 'none for the Punong Barangay, and '
           + 'no actions column'}): the ${wantHeaders.length} headers and all eleven rows on All`,
         said(headersRead(page)) === said(wantHeaders) && said(rowsRead(page)) === said(wantRows(name)),
         said({ headers: headersRead(page), rows: rowsRead(page) }));
@@ -9010,13 +9037,16 @@ const root = () => dom.window.document.getElementById('root');
         // Cancelled.
         await clickIf(page, tabNamed(page, 'Upcoming'));
         sent = net.calls.length;
+        // Since step B2 the cancel goes through the reason panel, not
+        // window.confirm (section AM).
         await clickIf(page, rowButton(page, 'Ana Cruz', 'Cancel'));
+        await cancelWithReason(page);
         await page.settle();
         v = look(page);
         const flash = text(page.query('.alert.success'));
-        check('Secretary: Cancel on an upcoming booking posts the cancel, loads the list again, once, keeps Upcoming, and the '
-            + 'booking leaves it: "1 upcoming booking", Cancelled 2',
-          asked.length === 1 && flash === 'Booking #501 cancelled.'
+        check('Secretary: Cancel on an upcoming booking, with a reason, posts the cancel, loads the list again, once, keeps '
+            + 'Upcoming, and the booking leaves it: "1 upcoming booking", Cancelled 2',
+          asked.length === 0 && flash === 'Booking #501 cancelled.'
             && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/501/cancel', 'GET /rental-requests?status=all'])
             && said(v.pressed) === said(['Upcoming 1']) && v.heading === '1 upcoming booking' && said(v.rows) === said(['Ben Reyes'])
             && v.strip === 'Upcoming 1 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 2 · All 12',
@@ -9030,25 +9060,27 @@ const root = () => dom.window.document.getElementById('root');
           said({ v, row: rowsRead(page)[0] }));
 
         // Edit: Back without saving loads nothing; saving loads the list
-        // again, once, and keeps the tab.
-        await clickIf(page, tabNamed(page, 'Overdue'));
+        // again, once, and keeps the tab. On an upcoming booking: since step
+        // B2 an Overdue one has no Edit.
+        await clickIf(page, tabNamed(page, 'Upcoming'));
         sent = net.calls.length;
-        await clickIf(page, rowButton(page, 'Carla Santos', 'Edit'));
+        await clickIf(page, rowButton(page, 'Ben Reyes', 'Edit'));
         const panel = text(page.query('.pending-card h3'));
         await clickIf(page, buttonNamed(root(), '← Back to list'));
         const backCalls = listCalls(net.calls.slice(sent));
-        await clickIf(page, rowButton(page, 'Carla Santos', 'Edit'));
+        await clickIf(page, rowButton(page, 'Ben Reyes', 'Edit'));
         if (page.query('.pending-card form')) await page.submit();
         await page.settle();
         v = look(page);
         check('Secretary: Edit, then Back to list, loads nothing; Edit and Save changes sends the PUT and loads the list again, '
-            + 'once, and keeps Overdue',
-          panel === 'Edit booking #503' && backCalls.length === 0
-            && said(listCalls(net.calls.slice(sent))) === said(['PUT /rental-requests/503', 'GET /rental-requests?status=all'])
-            && said(v.pressed) === said(['Overdue 3']) && text(page.query('.alert.success')) === 'Booking updated.',
+            + 'once, and keeps Upcoming',
+          panel === 'Edit booking #502' && backCalls.length === 0
+            && said(listCalls(net.calls.slice(sent))) === said(['PUT /rental-requests/502', 'GET /rental-requests?status=all'])
+            && said(v.pressed) === said(['Upcoming 1']) && text(page.query('.alert.success')) === 'Booking updated.',
           said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), v }));
 
         // Encode walk-in, left without filing: the list is not loaded again.
+        await clickIf(page, tabNamed(page, 'Overdue'));
         sent = net.calls.length;
         await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
         const walkIn = text(page.query('.pending-card h3'));
@@ -9350,6 +9382,14 @@ const root = () => dom.window.document.getElementById('root');
         charges: { charge_id: 900 + id, amount: '25.00', status: status === 'cancelled' ? 'VOID' : 'PAID',
           declared_method: null, declared_reference: null, declared_at: null },
         derived_status: derived,
+        // A STAND-IN, not the rule. Since step B2 the Secretary's Edit and
+        // Cancel follow the route's not_started, which is false on every
+        // booking here (none is upcoming); these checks are about the search,
+        // the tabs, the pager and the filters living through an action, so
+        // every stored-confirmed booking is marked not started, as the buttons
+        // followed the stored status when they were written. Which bookings
+        // really get the buttons is sections AD's and AM's.
+        not_started: status === 'confirmed',
       };
     };
     const LIST_AE = ROWS_AE.map(asBooking);
@@ -9825,6 +9865,7 @@ const root = () => dom.window.document.getElementById('root');
       if (name === 'Secretary') {
         sent = net.calls.length;
         await clickIf(page, rowButton(page, rowKey(2), 'Cancel'));
+        await cancelWithReason(page);
         await page.settle();
         v = look(page);
         check('Secretary: Cancel posts the cancel, loads the list again, once, and keeps the search and the tab: "santos" on '
@@ -9974,6 +10015,7 @@ const root = () => dom.window.document.getElementById('root');
           if (!b) return undefined;
           b.status = act[2] === 'cancel' ? 'cancelled' : 'returned';
           b.derived_status = b.status;
+          b.not_started = false;
           return { message: act[2] === 'cancel' ? `Booking #${b.request_id} cancelled.`
             : `Return recorded for booking #${b.request_id}.` };
         }
@@ -10005,6 +10047,8 @@ const root = () => dom.window.document.getElementById('root');
           charges: { charge_id: 5000 + n, amount: '5.00', status: 'UNPAID', declared_method: null, declared_reference: null,
             declared_at: null },
           derived_status: chairs ? 'overdue' : 'completed',
+          // The same stand-in as asBooking's: buttons for the pager's checks.
+          not_started: true,
         };
       };
       const MANY = Array.from({ length: 30 }, (_, i) => manyBooking(i + 1));
@@ -10300,6 +10344,7 @@ const root = () => dom.window.document.getElementById('root');
           // The reload after an action keeps the page where it still exists.
           sent = net.calls.length;
           await clickIf(page, rowButton(page, rowKey(27), 'Cancel'));
+          await cancelWithReason(page);
           await page.settle();
           v = lookP(page);
           check('Secretary: Cancel on page 2 posts the cancel, loads the list again, once, and keeps the page, which still '
@@ -10388,6 +10433,7 @@ const root = () => dom.window.document.getElementById('root');
           const label = name === 'Secretary' ? 'Cancel' : 'Mark returned';
           await clickIf(page, rowButton(page, manyKeys(26, 26)[0], label));
           if (name === 'Staff' && page.query('.pending-card form')) await page.submit();
+          if (name === 'Secretary') await cancelWithReason(page);
           await page.settle();
           v = lookP(page);
           const action = name === 'Secretary' ? 'cancel' : 'return';
@@ -10812,7 +10858,8 @@ const root = () => dom.window.document.getElementById('root');
       const TONES = { Paid: 'charge-word status-claimed', Unpaid: 'charge-word status-pending', Void: 'charge-word status-cancelled',
         'No fee': 'charge-word gray', 'Not billed': 'charge-word gray' };
       // The actions each role's rows had before the marker: the Secretary's
-      // Edit and Cancel on every booking stored as confirmed, Staff's Mark
+      // Edit and Cancel on every booking stored as confirmed (since step B2,
+      // where not_started says so: asBooking's stand-in), Staff's Mark
       // returned on stored-confirmed equipment and furniture, and none, with
       // no actions column, for the Punong Barangay.
       const CONFIRMED_AF = [112, 61, 21, 19, 12, 11, 10];
@@ -11938,6 +11985,7 @@ const root = () => dom.window.document.getElementById('root');
           if (name === 'Secretary') {
             sent = net.calls.length;
             await clickIf(page, rowButtonF(page, 147, 'Cancel'));
+            await cancelWithReason(page);
             await page.settle();
             v = lookF(page);
             check('Secretary: Cancel with Unpaid on posts the cancel, loads the list again, once, and keeps the filter and the tab: '
@@ -13875,7 +13923,10 @@ const root = () => dom.window.document.getElementById('root');
     const OLD_H = ['under notifications'];
     const OLD_FAQ = 'Once your request is approved, tap Pay beside it in My requests or My rentals';
     const TERMS_DATE = 'Effective: 25 October 2026';
-    const PRIVACY_DATE = 'Effective: 3 October 2026';
+    // Step B2 changed the Privacy Policy's log paragraph (a cancelled rental
+    // booking, and a GCash payment received after one), so its date moved
+    // too; section AM reads the paragraph.
+    const PRIVACY_DATE = 'Effective: 25 October 2026';
     const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
     const has = (blocks, o) => blocks.some((b) => b.text.includes(o));
 
@@ -13985,7 +14036,7 @@ const root = () => dom.window.document.getElementById('root');
     check(`the Terms of Use are dated "${TERMS_DATE}", in the modal and in docs/legal-copy.md, since they changed`,
       terms.effective === TERMS_DATE && termsMd.raw.includes(`*${TERMS_DATE}*`),
       said({ modal: terms.effective, md: termsMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
-    check(`the Privacy Policy keeps "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since it did not change`,
+    check(`the Privacy Policy is dated "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since step B2 changed it`,
       privacy.effective === PRIVACY_DATE && privacyMd.raw.includes(`*${PRIVACY_DATE}*`),
       said({ modal: privacy.effective, md: privacyMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
     check('opening the three modals sent no request', terms.sent + help.sent + privacy.sent === 0,
@@ -14346,6 +14397,431 @@ const root = () => dom.window.document.getElementById('root');
       kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
     check('section AL sent only GETs and its booking POSTs, every one answered by the fetch stub',
       methods.length > 0 && methods.every((m) => /^GET /.test(m) || m === 'POST /rental-requests'),
+      said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AM. Rental Edit and Cancel on the screens (step B2)
+  // =========================================================================
+  // Step B1 moved the rules to the server: Edit changes only the date, the
+  // times and the purpose of a booking that has not started; Cancel needs a
+  // reason of 3 to 300 characters; a resident cancels their own unpaid online
+  // booking up to 24 hours ahead (docs/modules/rental-bookings.md, "Edit and
+  // Cancel"). The screens still asked window.confirm and sent no reason, sent
+  // the quantity on every edit, offered Edit and Cancel on Overdue and
+  // Completed bookings, and gave the resident no way to cancel. Here: the
+  // Secretary's Cancel opens a panel with a required reason and, for a paid
+  // booking, the refund warning; Edit shows only date, times and purpose and
+  // sends no quantity; both are drawn only where the server says the booking
+  // has not started (not_started); a cancelled booking shows its reason, as
+  // text; My rentals draws Cancel booking only where the server says
+  // can_cancel_online, and its note where it does not; and the Activity Log
+  // page words the cancel's facts and the late-payment row.
+  console.log('\n--- Rental Edit and Cancel: the reason panel, the hidden buttons, and the resident\'s own cancel ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const codeOf = (f) => fs.readFileSync(path.join(HERE, '..', 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const bodyOf = (call) => { try { return JSON.parse(call?.body ?? 'null'); } catch { return call?.body ?? null; } };
+    const typeInto = async (pg, el, value) => {
+      if (!el) return;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(el, value);
+      el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await pg.settle();
+    };
+    const previousConfirm = dom.window.confirm;
+    const asked = [];
+    dom.window.confirm = (message) => { asked.push(message); return true; };
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '').replace(/\d+/g, ':id')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+    const PESO = (n) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(n);
+    const CHARGE_CHANGED = "This booking's charge just changed (it may have been paid). Refresh and try again; nothing was changed.";
+    const QUANTITY_FIXED = 'The quantity cannot be changed. Cancel this booking and book again.';
+    const TOO_LATE = 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.';
+    const PAID_HALL = 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.';
+    const HELPER = 'The resident receives this reason by text message. Keep it short and use plain letters.';
+    const WARN_902 = `This booking was paid (PHP 150.00). The payment stays recorded. The resident is told to contact the barangay about the refund.`;
+    const UNDO = 'This cannot be undone. You will need to book again.';
+    const SAFE_TEXT = '<b>Typhoon</b> signal no. 2';
+
+    // --- the Secretary's list, in MANAGE_FIELDS' shape with derived_status
+    // and not_started, as GET /rental-requests sends it since step B2 ---
+    const secBooking = (id, who, item, type, extra = {}) => ({
+      request_id: id, quantity_requested: 2,
+      start_datetime: `2026-11-${10 + (id % 10)}T01:00:00+00:00`, end_datetime: `2026-11-${10 + (id % 10)}T05:00:00+00:00`,
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null,
+      resident_id: 800 + id, outside_borrower_name: null, outside_borrower_contact: null,
+      rental_items: { item_id: 600 + id, name: item, type, fee: '75.00', quantity_total: 10, quantity_available: 10 },
+      resident_records: { resident_id: 800 + id, first_name: who[0], middle_name: null, last_name: who[1], suffix: null,
+        account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: null, profiles: null },
+      returned_by: null,
+      charges: { charge_id: 950 + id, amount: '150.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+      derived_status: 'confirmed', not_started: true, ...extra,
+    });
+    const SEC_LIST = () => [
+      secBooking(901, ['Ana', 'Cruz'], 'Sound System', 'equipment'),
+      secBooking(902, ['Ben', 'Reyes'], 'Covered Court', 'facility', { quantity_requested: 1,
+        charges: { charge_id: 1852, amount: '150.00', status: 'PAID', declared_method: null, declared_reference: null, declared_at: null } }),
+      // Started an hour ago, still running: stored confirmed, derived confirmed.
+      secBooking(903, ['Carla', 'Santos'], 'Plastic Chairs', 'furniture', { not_started: false }),
+      secBooking(904, ['Dino', 'Tan'], 'Tent (10x10)', 'equipment', { start_datetime: '2026-10-01T01:00:00+00:00',
+        end_datetime: '2026-10-01T05:00:00+00:00', derived_status: 'overdue', not_started: false }),
+      secBooking(905, ['Elsa', 'Uy'], 'Barangay Hall', 'facility', { status: 'cancelled', derived_status: 'cancelled',
+        not_started: false, cancellation_reason: SAFE_TEXT,
+        charges: { charge_id: 1855, amount: '150.00', status: 'VOID', declared_method: null, declared_reference: null, declared_at: null } }),
+      secBooking(906, ['Fe', 'Villa'], 'Covered Court', 'facility', { status: 'cancelled', derived_status: 'cancelled',
+        not_started: false }),
+      secBooking(907, ['x', 'x'], 'Folding Tables', 'furniture', { resident_id: null, resident_records: null,
+        outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000',
+        requester: { user_id: 1, username: 'secretary1', email: null, profiles: null } }),
+    ];
+    const secState = { list: SEC_LIST() };
+    const secAnswer = (st) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: st.list };
+      const cancelAt = url.match(/\/rental-requests\/(\d+)\/cancel$/);
+      if (method === 'POST' && cancelAt) {
+        if (net.status !== 200) return { error: st.refusal };
+        const row = st.list.find((b) => b.request_id === Number(cancelAt[1]));
+        const sent = bodyOf(net.calls.at(-1));
+        Object.assign(row, { status: 'cancelled', derived_status: 'cancelled', not_started: false,
+          cancellation_reason: sent?.reason ?? null });
+        return { message: 'Booking cancelled — the slot has been freed' };
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) {
+        return net.status !== 200 ? { error: st.refusal } : { message: 'Booking updated' };
+      }
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const rowOf = (pg, id) => pg.queryAll('table.data-table tbody tr')
+      .find((tr) => text(tr.querySelector('.doc-requests-number')) === `#${id}`) ?? null;
+    const buttonsOf = (pg, id) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
+    const rowButton = (pg, id, label) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])]
+      .find((b) => b.textContent === label) ?? null;
+    const tabNamed = (pg, label) => pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const panelView = (pg) => {
+      const panel = pg.query('.cancel-booking-panel');
+      const box = panel?.querySelector('textarea') ?? null;
+      const submit = panel ? [...panel.querySelectorAll('button')].find((b) => b.textContent === 'Cancel this booking') : null;
+      return {
+        open: !!panel,
+        title: text(panel?.querySelector('h3')),
+        lines: panel ? [...panel.querySelectorAll('.pending-head p')].map(text) : [],
+        label: text(box?.closest('label')) ?? null,
+        maxLength: box?.maxLength ?? null,
+        required: box?.required ?? null,
+        focused: !!box && pg.active() === box,
+        counter: text(panel?.querySelector('.char-counter')),
+        texts: panel ? [...panel.querySelectorAll('p, .alert')].map(text) : [],
+        alerts: panel ? [...panel.querySelectorAll('[role="alert"]')].map(text) : [],
+        submitDisabled: submit ? submit.disabled : null,
+        keep: !!panel && [...panel.querySelectorAll('button')].some((b) => b.textContent === 'Keep booking'),
+        box,
+        submit,
+      };
+    };
+    const secOpen = async () => {
+      seedSession(VALID);
+      resetNet(200, secAnswer(secState));
+      const pg = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await pg.settle();
+      await clickIf(pg, tabNamed(pg, 'All'));
+      return pg;
+    };
+
+    check('RentalBookingsPage.jsx no longer calls window.confirm (comments stripped)',
+      !/window\.confirm/.test(codeOf('pages/RentalBookingsPage.jsx')),
+      String((codeOf('pages/RentalBookingsPage.jsx').match(/window\.confirm/g) || []).length));
+
+    let page = await secOpen();
+    const ACTIONS_WANT = { 901: 'Edit + Cancel', 902: 'Edit + Cancel', 903: '(none)', 904: '(none)', 905: '(none)', 906: '(none)',
+      907: 'Edit + Cancel' };
+    const actionsNow = Object.fromEntries(Object.keys(ACTIONS_WANT).map((id) => [id, buttonsOf(page, Number(id)).join(' + ') || '(none)']));
+    check('Secretary: Edit and Cancel are drawn only on the bookings the server says have not started (not_started): the '
+        + 'upcoming online ones and the walk-in; none on a booking that has started, an Overdue one or a cancelled one',
+      said(actionsNow) === said(ACTIONS_WANT), said(actionsNow));
+    const reasonLines = (id) => [...(rowOf(page, id)?.querySelectorAll('.reason-note') ?? [])].map(text)
+      .filter((t) => t.startsWith('Reason:'));
+    check('  a cancelled booking shows "Reason: …" from cancellation_reason, as text (its "<b>" shown, never made bold)',
+      said(reasonLines(905)) === said([`Reason: ${SAFE_TEXT}`]) && !rowOf(page, 905)?.querySelector('.reason-note b'),
+      said(reasonLines(905)));
+    check('  and a cancelled booking with no reason shows no "Reason:" line and no placeholder',
+      reasonLines(906).length === 0 && !/Reason:/.test(text(rowOf(page, 906)) ?? ''), text(rowOf(page, 906)));
+
+    // a. Cancel on an upcoming unpaid booking.
+    asked.length = 0;
+    const cancelButton901 = rowButton(page, 901, 'Cancel');
+    await clickIf(page, cancelButton901);
+    let p = panelView(page);
+    check('Secretary: Cancel opens the in-page panel, asks no window.confirm: "Cancel booking #901", the borrower, the item '
+        + 'and the date and time',
+      p.open && asked.length === 0 && p.title === 'Cancel booking #901'
+        && p.lines.some((l) => l.includes('Ana Cruz') && l.includes('Sound System'))
+        && p.lines.some((l) => /Nov 1\d, 2026/.test(l)),
+      said({ asked: asked.length, title: p.title, lines: p.lines }));
+    check('  a required "Reason for cancelling" box, maxLength 300, with the focus in it, a live count and the helper text',
+      p.label?.startsWith('Reason for cancelling') && p.maxLength === 300 && p.required === true && p.focused
+        && p.counter === '0/300' && p.texts.includes(HELPER),
+      said({ label: p.label, maxLength: p.maxLength, required: p.required, focused: p.focused, counter: p.counter, texts: p.texts }));
+    check('  "Cancel this booking" and "Keep booking"; no paid warning on an unpaid booking',
+      !!p.submit && p.keep && !p.texts.some((t) => /was paid/.test(t)), said(p.texts));
+    const disabledAt = {};
+    for (const v of ['', 'ab', '   ab   ', 'abc']) {
+      await typeInto(page, panelView(page).box, v);
+      disabledAt[JSON.stringify(v)] = panelView(page).submitDisabled;
+    }
+    check('  the submit stays disabled until the reason has 3 characters after trimming ("", "ab", "   ab   " disabled; "abc" not)',
+      said(disabledAt) === said({ '""': true, '"ab"': true, '"   ab   "': true, '"abc"': false }), said(disabledAt));
+    check('  and the count follows the box: "3/300"', panelView(page).counter === '3/300', panelView(page).counter);
+    await typeInto(page, panelView(page).box, 'ab');
+    let sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    check('  submitting a 2-character reason anyway sends nothing',
+      net.calls.slice(sent).filter((c) => c.method === 'POST').length === 0, said(net.calls.slice(sent).map((c) => c.method)));
+    await typeInto(page, panelView(page).box, '  Hall needed for a meeting  ');
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const post901 = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  a valid reason posts { reason } trimmed to /rental-requests/901/cancel, then loads the list again',
+      /\/rental-requests\/901\/cancel$/.test(post901?.url ?? '') && said(bodyOf(post901)) === said({ reason: 'Hall needed for a meeting' })
+        && net.calls.slice(sent).some((c) => c.method === 'GET' && /status=all$/.test(c.url)),
+      said(net.calls.slice(sent).map((c) => `${c.method} ${c.url} ${c.body ?? ''}`)));
+    check('  the panel closes, the server\'s message shows, and the booking reads Cancelled with its reason',
+      !panelView(page).open && text(page.query('.alert.success')) === 'Booking cancelled — the slot has been freed',
+      said({ open: panelView(page).open, flash: text(page.query('.alert.success')) }));
+    await clickIf(page, tabNamed(page, 'All'));
+    check('  (on All: #901 Cancelled, "Reason: Hall needed for a meeting", no buttons)',
+      /Cancelled/.test(text(rowOf(page, 901)) ?? '') && said(reasonLines(901)) === said(['Reason: Hall needed for a meeting'])
+        && buttonsOf(page, 901).length === 0, text(rowOf(page, 901)));
+
+    // b. A paid booking: the warning; then the server refuses (the charge
+    // just changed) and the panel says so, in the server's words.
+    await clickIf(page, rowButton(page, 902, 'Cancel'));
+    p = panelView(page);
+    check('Secretary: Cancel on a booking with a PAID charge above PHP 0 warns, in these words: "' + WARN_902 + '"',
+      p.open && p.texts.includes(WARN_902), said(p.texts));
+    await typeInto(page, p.box, 'Court needed for an emergency');
+    secState.refusal = CHARGE_CHANGED;
+    net.status = 409;
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    net.status = 200;
+    p = panelView(page);
+    check('  the server\'s refusal shows inside the panel with role="alert", telling the Secretary to refresh, and the panel stays',
+      p.open && said(p.alerts) === said([CHARGE_CHANGED]) && /Refresh/.test(p.alerts[0] ?? ''), said({ open: p.open, alerts: p.alerts }));
+    sent = net.calls.length;
+    await clickIf(page, [...(page.query('.cancel-booking-panel')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Keep booking'));
+    await page.settle();
+    check('  Keep booking closes it, loads the list again after the refusal, and puts the focus back on #902\'s Cancel',
+      !panelView(page).open && net.calls.slice(sent).some((c) => c.method === 'GET' && /status=all$/.test(c.url))
+        && page.active() === rowButton(page, 902, 'Cancel'),
+      said({ open: panelView(page).open, calls: net.calls.slice(sent).map((c) => c.method), active: page.active()?.textContent }));
+
+    // c. Escape on the walk-in's panel: closed, nothing sent, focus back.
+    await clickIf(page, rowButton(page, 907, 'Cancel'));
+    const opened907 = panelView(page).open;
+    sent = net.calls.length;
+    await page.key('Escape');
+    await page.settle();
+    check('Secretary: Escape closes the panel, sends nothing, and puts the focus back on the walk-in\'s Cancel',
+      opened907 && !panelView(page).open && net.calls.length === sent && page.active() === rowButton(page, 907, 'Cancel'),
+      said({ opened907, open: panelView(page).open, sent: net.calls.length - sent, active: page.active()?.textContent }));
+
+    // d. Edit: date, times and purpose only; no quantity sent.
+    await clickIf(page, rowButton(page, 907, 'Edit'));
+    const edit = page.query('.pending-card');
+    const fields = edit ? [...edit.querySelectorAll('input, select, textarea')].map((el) => el.name) : [];
+    check('Secretary: Edit shows only date, start time, end time and purpose: no quantity or item control',
+      said(fields) === said(['date', 'start_time', 'end_time', 'purpose']), said(fields));
+    const editLines = edit ? [...edit.querySelectorAll('p')].map(text) : [];
+    check('  the quantity as read-only text, with "To change the item or quantity, cancel this booking and book again."',
+      editLines.includes('Quantity: 2') && editLines.includes('To change the item or quantity, cancel this booking and book again.'),
+      said(editLines));
+    sent = net.calls.length;
+    if (page.query('.pending-card form')) await page.submit();
+    const put = net.calls.slice(sent).find((c) => c.method === 'PUT');
+    check('  Save changes sends the PUT with date, start_time, end_time and purpose, and no quantity_requested',
+      /\/rental-requests\/907$/.test(put?.url ?? '') && said(Object.keys(bodyOf(put) ?? {}).sort())
+        === said(['date', 'end_time', 'purpose', 'start_time']),
+      said(bodyOf(put)));
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 907, 'Edit'));
+    secState.refusal = QUANTITY_FIXED;
+    net.status = 400;
+    if (page.query('.pending-card form')) await page.submit();
+    net.status = 200;
+    const editAlerts = page.queryAll('.pending-card [role="alert"]').map(text);
+    check('  a refusal shows in the Edit panel with role="alert"', said(editAlerts) === said([QUANTITY_FIXED]), said(editAlerts));
+    await finish(page);
+
+    // --- My rentals: RENTAL_FIELDS' shape plus can_cancel_online and
+    // cancel_online_note, as GET /rental-requests/mine sends them since B2 ---
+    const mineBooking = (id, item, extra = {}) => ({
+      request_id: id, quantity_requested: 1, start_datetime: `2026-11-2${id % 10}T01:00:00+00:00`,
+      end_datetime: `2026-11-2${id % 10}T05:00:00+00:00`, purpose: `Purpose ${id}`, status: 'confirmed', return_note: null,
+      returned_at: null, cancellation_reason: null,
+      rental_items: { item_id: 600 + id, name: item, type: 'equipment', fee: '50.00' },
+      charges: { charge_id: 950 + id, amount: '50.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', can_cancel_online: false, cancel_online_note: null, ...extra,
+    });
+    const MINE = () => [
+      mineBooking(801, 'Sound System', { can_cancel_online: true }),
+      mineBooking(802, 'Tent (10x10)', { cancel_online_note: TOO_LATE }),
+      mineBooking(803, 'Covered Court', { cancel_online_note: PAID_HALL,
+        charges: { charge_id: 1803, amount: '300.00', status: 'PAID', declared_method: null, declared_reference: null, declared_at: null } }),
+      mineBooking(804, 'Plastic Chairs', { status: 'cancelled', derived_status: 'cancelled', cancellation_reason: 'Change of plans',
+        charges: { charge_id: 1804, amount: '50.00', status: 'VOID', declared_method: null, declared_reference: null, declared_at: null } }),
+    ];
+    // An answer from before step B2, with neither key: no button, no note.
+    const OLD_SHAPE = () => { const b = mineBooking(805, 'Folding Tables'); delete b.can_cancel_online; delete b.cancel_online_note; return b; };
+    const mineState = { list: [...MINE(), OLD_SHAPE()] };
+    const mineAnswer = (st) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests\/mine$/.test(url)) return { requests: st.list };
+      const at = url.match(/\/rental-requests\/mine\/(\d+)\/cancel$/);
+      if (method === 'POST' && at) {
+        if (net.status !== 200) return { error: st.refusal };
+        const row = st.list.find((b) => b.request_id === Number(at[1]));
+        Object.assign(row, { status: 'cancelled', derived_status: 'cancelled', can_cancel_online: false, cancel_online_note: null,
+          cancellation_reason: bodyOf(net.calls.at(-1))?.reason ?? null,
+          charges: { ...row.charges, status: 'VOID' } });
+        return { message: 'Your booking has been cancelled.' };
+      }
+      return undefined;
+    };
+    const mineRow = (pg, item) => pg.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === item) ?? null;
+    const mineButtons = (pg, item) => [...(mineRow(pg, item)?.querySelectorAll('button') ?? [])].map((b) => b.textContent)
+      .filter((t) => t === 'Cancel booking');
+    const mineNotes = (pg, item) => [...(mineRow(pg, item)?.querySelectorAll('.cancel-online-note') ?? [])].map(text);
+    const mineOpen = async () => {
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(200, mineAnswer(mineState));
+      const pg = await globalThis.mountInteractive(root(), '/resident/rentals');
+      await pg.settle();
+      return pg;
+    };
+    page = await mineOpen();
+    const ITEMS_MINE = ['Sound System', 'Tent (10x10)', 'Covered Court', 'Plastic Chairs', 'Folding Tables'];
+    const buttonsMine = Object.fromEntries(ITEMS_MINE.map((i) => [i, mineButtons(page, i).length]));
+    check('My rentals: "Cancel booking" only where can_cancel_online is true (Sound System); none where it is false or absent',
+      said(buttonsMine) === said({ 'Sound System': 1, 'Tent (10x10)': 0, 'Covered Court': 0, 'Plastic Chairs': 0, 'Folding Tables': 0 }),
+      said(buttonsMine));
+    const notesMine = Object.fromEntries(ITEMS_MINE.map((i) => [i, mineNotes(page, i)]));
+    check('  where it is false, cancel_online_note shown as small text instead (the 24-hour and the paid sentences); no note '
+        + 'where there is none',
+      said(notesMine) === said({ 'Sound System': [], 'Tent (10x10)': [TOO_LATE], 'Covered Court': [PAID_HALL], 'Plastic Chairs': [],
+        'Folding Tables': [] }), said(notesMine));
+    check('  a cancelled booking shows "Reason: Change of plans", as text',
+      [...(mineRow(page, 'Plastic Chairs')?.querySelectorAll('.reason-note') ?? [])].map(text).includes('Reason: Change of plans'),
+      text(mineRow(page, 'Plastic Chairs')));
+    asked.length = 0;
+    await clickIf(page, [...(mineRow(page, 'Sound System')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel booking'));
+    p = panelView(page);
+    check('My rentals: Cancel booking opens the panel, asks no window.confirm: an OPTIONAL "Reason (optional)" box, maxLength '
+        + '300, the focus in it, "' + UNDO + '"',
+      p.open && asked.length === 0 && p.label?.startsWith('Reason (optional)') && p.maxLength === 300 && p.required === false
+        && p.focused && p.texts.includes(UNDO),
+      said({ asked: asked.length, label: p.label, maxLength: p.maxLength, required: p.required, focused: p.focused, texts: p.texts }));
+    check('  the submit is enabled with no reason, and the panel says nothing about payment',
+      p.submitDisabled === false && !p.texts.some((t) => /PHP|₱|paid|refund/i.test(t)), said(p.texts));
+    secState.refusal = null;
+    mineState.refusal = TOO_LATE;
+    net.status = 409;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    net.status = 200;
+    check('  a refusal shows inside the panel with role="alert"', said(panelView(page).alerts) === said([TOO_LATE]),
+      said(panelView(page).alerts));
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const postMine = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  with no reason it posts {} to /rental-requests/mine/801/cancel and loads the list again',
+      /\/rental-requests\/mine\/801\/cancel$/.test(postMine?.url ?? '') && said(bodyOf(postMine)) === said({})
+        && net.calls.slice(sent).some((c) => c.method === 'GET' && /\/mine$/.test(c.url)),
+      said(net.calls.slice(sent).map((c) => `${c.method} ${c.url} ${c.body ?? ''}`)));
+    check('  the panel closes, the server\'s message shows, and the booking reads Cancelled with no button',
+      !panelView(page).open && text(page.query('.alert.success')) === 'Your booking has been cancelled.'
+        && /Cancelled/.test(text(mineRow(page, 'Sound System')) ?? '') && mineButtons(page, 'Sound System').length === 0,
+      said({ open: panelView(page).open, flash: text(page.query('.alert.success')), row: text(mineRow(page, 'Sound System')) }));
+    await finish(page);
+    mineState.list = [...MINE(), OLD_SHAPE()];
+    page = await mineOpen();
+    await clickIf(page, [...(mineRow(page, 'Sound System')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel booking'));
+    await typeInto(page, panelView(page).box, '  Change of plans  ');
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const postReason = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  with a reason it posts { reason } trimmed', said(bodyOf(postReason)) === said({ reason: 'Change of plans' }), said(bodyOf(postReason)));
+    await finish(page);
+
+    // --- the Activity Log page's words (constants/activityLog.js) ---
+    const L = globalThis.activityLog || {};
+    const sum = (action, table, before, after) => (typeof L.summarize === 'function'
+      ? L.summarize({ action, table_name: table, record_id: 7, old_value: before, new_value: after }) : null);
+    const C = { status: 'confirmed' };
+    const cancelled = (extra) => ({ status: 'cancelled', ...extra });
+    const SUMS = [
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'VOID', session_expired: true, reason_given: true })),
+        'Cancelled. Charge: voided. GCash checkout: closed. Reason given.'],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'PAID_REFUND_DUE', refund_due: 50, session_expired: 'not_needed',
+        reason_given: true })), `Cancelled. Charge: paid, refund due ${PESO(50)}. GCash checkout: not needed. Reason given.`],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'VOID', session_expired: false,
+        session_expire_failure: 'HTTP 400: Checkout session is already paid', reason_given: false })),
+      'Cancelled. Charge: voided. GCash checkout: could not be closed (HTTP 400: Checkout session is already paid). No reason given.'],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'NONE', session_expired: 'not_needed', reason_given: false })),
+        'Cancelled. Charge: none. GCash checkout: not needed. No reason given.'],
+      // A cancel logged before step B1 reads as it did.
+      [sum('CANCEL', 'rental_requests', C, { status: 'cancelled' }), 'Confirmed to Cancelled'],
+      [sum('PAYMENT_ON_VOID_CHARGE', 'charges', null, { charge_id: 1610, gateway_payment_id: 'pay_test_late_610', amount: 50 }),
+        `GCash payment of ${PESO(50)} received after the booking was cancelled. Not applied; a refund is due. PayMongo payment pay_test_late_610.`],
+    ];
+    check('Activity log: a rental CANCEL row reads as a sentence (charge voided / paid with the refund due / none; the GCash '
+        + 'checkout closed / not needed / could not be closed; whether a reason was given), and an older one as before',
+      SUMS.slice(0, 5).every(([got, want]) => got === want), said(SUMS.slice(0, 5).map(([got]) => got)));
+    check('  the late-payment row reads "GCash payment of ₱50.00 received after the booking was cancelled. Not applied; a refund '
+        + 'is due. PayMongo payment …"', SUMS[5][0] === SUMS[5][1], said(SUMS[5][0]));
+    const meta = typeof L.actionMeta === 'function' ? L.actionMeta('PAYMENT_ON_VOID_CHARGE') : null;
+    check('  PAYMENT_ON_VOID_CHARGE is labelled "Payment after cancellation" and is in the action filter',
+      L.ACTION_META?.PAYMENT_ON_VOID_CHARGE?.label === 'Payment after cancellation' && meta?.label === 'Payment after cancellation'
+        && (L.ACTION_FILTERS || []).some((o) => o.value === 'PAYMENT_ON_VOID_CHARGE' && o.label === 'Payment after cancellation'),
+      said({ meta, inFilter: (L.ACTION_FILTERS || []).find((o) => o.value === 'PAYMENT_ON_VOID_CHARGE') ?? null }));
+
+    // --- the Privacy Policy names both, in the modal and in its source ---
+    const LOG_PARA = 'BrgyServe keeps a log of the actions Barangay officials and staff take on records: adding, editing, '
+      + 'archiving and approving them, recording payments, recording event attendance, recording blotter cases, and sending '
+      + 'an official a set-password link. Actions of yours that change a record are logged too: registering, submitting or '
+      + 'cancelling a request, booking a facility, cancelling a rental booking, declaring a payment, having a GCash payment '
+      + 'confirmed, changing or resetting your password, and setting your password from an emailed set-password link. A '
+      + 'GCash payment received after its booking was cancelled is also recorded in this log.';
+    const flat = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    seedSession(null);
+    resetNet(200);
+    page = await globalThis.mountInteractive(root(), '/login');
+    await page.settle();
+    await clickIf(page, page.queryAll('.legal-links a').find((a) => a.textContent.trim() === 'Privacy Policy'));
+    const logHeading = page.queryAll('.legal-modal-body h4').find((h) => flat(h.textContent) === 'A log of changes to records');
+    const modalPara = flat(logHeading?.nextElementSibling?.textContent);
+    await finish(page);
+    const md = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+    const mdAt = md.indexOf('#### A log of changes to records');
+    const mdPara = mdAt < 0 ? null : flat(md.slice(mdAt).split('\n\n')[1]);
+    check('the Privacy Policy\'s log paragraph names "cancelling a rental booking" and "A GCash payment received after its '
+        + 'booking was cancelled is also recorded in this log.", in the modal (LegalPrivacy.jsx) and in docs/legal-copy.md alike',
+      modalPara === LOG_PARA && mdPara === LOG_PARA, said({ modalPara, mdPara }));
+
+    dom.window.confirm = previousConfirm;
+    check('section AM asked no window.confirm, and kept nothing in the browser', asked.length === 0 && kept.sets === 0
+      && domStorage.writes === kept.dom, said({ asked: asked.length, stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AM sent only GETs, the cancels and the edit, every one answered by the fetch stub',
+      methods.length > 0 && methods.every((m) => /^GET /.test(m) || /^POST \/rental-requests(\/mine)?\/:id\/cancel$/.test(m)
+        || m === 'PUT /rental-requests/:id'),
       said([...new Set(methods)]));
   }
 

@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
+import * as activityLog from '../src/constants/activityLog.js';
 import * as bookingTimes from '../src/utils/bookingTimes.js';
 import * as chargeMethod from '../src/utils/chargeMethod.js';
 import * as chargeFilters from '../src/utils/chargeFilters.js';
@@ -42,6 +43,9 @@ globalThis.rentalList = rentalList;
 // The booking form's earliest date and time checks, checked on their own in
 // section AJ.
 globalThis.bookingTimes = bookingTimes;
+// The Activity Log page's labels and one-line summaries, checked on their own
+// in section AM.
+globalThis.activityLog = activityLog;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.
