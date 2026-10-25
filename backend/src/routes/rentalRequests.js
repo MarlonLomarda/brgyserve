@@ -629,6 +629,68 @@ router.post('/mine/:id/pay', async (req, res) => {
   });
 });
 
+// POST /api/rental-requests/mine/:id/cancel — a resident cancels their OWN
+// online booking, at least 24 hours before it starts, while nothing has been
+// paid for it (a PHP 0 booking, or one with no charge, counts as unpaid).
+// "Their own online booking" is both columns: resident_id is their linked
+// record (the /mine scoping — anyone else's booking is a 404, never a hint
+// that it exists) AND requested_by_user_id is their own account. A walk-in
+// the Secretary filed for them, or a booking with money paid, is refused and
+// sent to the barangay hall: a paid booking needs a person to arrange the
+// refund. A reason is optional. No notification: they have just done it.
+const RESIDENT_CANCEL_HOURS = 24;
+
+router.post('/mine/:id/cancel', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+  const parsed = parseReason(req.body?.reason, { required: false });
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const residentId = await ownResidentId(req.user.user_id);
+  if (!residentId) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select(CANCEL_FIELDS)
+    .eq('request_id', id)
+    .eq('resident_id', residentId) // own bookings only
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  if (booking.requested_by_user_id !== req.user.user_id) {
+    return res.status(409).json({ error: 'This booking was made at the barangay hall, so it can only be changed there.' });
+  }
+  if (new Date(booking.start_datetime) - Date.now() < RESIDENT_CANCEL_HOURS * 3600 * 1000) {
+    return res.status(409).json({
+      error: 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.',
+    });
+  }
+  const charge = chargeOf(booking);
+  if (charge?.status === CHARGE_STATUS.PAID && Number(charge.amount) > 0) {
+    return res.status(409).json({ error: 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.' });
+  }
+
+  const result = await cancelBooking(booking, {
+    user: req.user,
+    processedBy: null, // nobody at the barangay processed it
+    reason: parsed.reason,
+    notifyBorrower: false,
+    responseFields: RENTAL_FIELDS,
+    message: 'Your booking has been cancelled.',
+  });
+  res.status(result.status).json(result.body);
+});
+
 // GET /api/rental-requests/mine — the bookings FOR the logged-in resident,
 // newest first. Filtered by resident_id, not requested_by_user_id, so a
 // walk-in the Secretary encoded for this resident shows up in their own list;
