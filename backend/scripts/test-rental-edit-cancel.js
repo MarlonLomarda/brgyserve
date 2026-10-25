@@ -607,6 +607,83 @@ const REASON = 'Hall needed for an emergency meeting';
   check('The resident route uses the same revert on a failed void', r.status === 500 && r.body?.error === VOID_FAILED
     && r.booking(601).status === 'confirmed', said(r));
 
+  // ================================================================ the reads
+  // What the pages are told, so neither guesses (step B2). My rentals shows its
+  // Cancel booking button from can_cancel_online and its note from
+  // cancel_online_note; Rental bookings shows Edit and Cancel from
+  // not_started. Each flag is checked against the route it stands for, booking
+  // by booking, so the list and the route cannot disagree.
+  section('GET /mine and the Secretary\'s reads — what the pages are told');
+  const read = (path, user, id, setup) => call({ method: 'get', path, user, id, setup });
+  const withReason = (db) => { db.rental_requests.find((b) => b.request_id === 610).cancellation_reason = 'Typhoon signal no. 2'; };
+  r = await read('/mine', RES_A, '', withReason);
+  const mineRows = r.body?.requests || [];
+  const mineById = Object.fromEntries(mineRows.map((b) => [b.request_id, b]));
+  check('GET /mine answers 200 with resident A\'s bookings', r.status === 200 && mineRows.length > 0, `${said(r)}; ${mineRows.length} row(s)`);
+  const WANT_MINE = {
+    601: [true, null], 602: [false, TOO_LATE], 603: [false, PAID_HALL], 604: [true, null], 606: [false, WALK_IN_HALL],
+    607: [false, null], 608: [false, null], 609: [false, null], 610: [false, null], 612: [true, null],
+  };
+  for (const [id, [can, note]] of Object.entries(WANT_MINE)) {
+    const b = mineById[id];
+    check(`  #${id}: can_cancel_online ${can}, cancel_online_note ${note ? JSON.stringify(note.slice(0, 32) + '…') : 'null'}`,
+      b?.can_cancel_online === can && b?.cancel_online_note === note,
+      JSON.stringify(b ? { can: b.can_cancel_online, note: b.cancel_online_note } : 'missing'));
+  }
+  check('  every row carries both keys, and cancellation_reason', mineRows.every((b) => 'can_cancel_online' in b
+    && 'cancel_online_note' in b && 'cancellation_reason' in b));
+  check('  the cancelled booking\'s reason is there as text', mineById[610]?.cancellation_reason === 'Typhoon signal no. 2',
+    JSON.stringify(mineById[610]?.cancellation_reason));
+  check('  requested_by_user_id is ABSENT from every row (read to decide, never sent)',
+    mineRows.every((b) => !('requested_by_user_id' in b)), JSON.stringify(mineRows.filter((b) => 'requested_by_user_id' in b).map((b) => b.request_id)));
+  check('  no PayMongo field and no other resident\'s booking', !JSON.stringify(mineRows).includes('paymongo')
+    && mineRows.every((b) => b.request_id !== 605 && b.request_id !== 611));
+  // The flag against the route, for every one of A's bookings: true exactly
+  // when POST /mine/:id/cancel succeeds, and a note exactly the route's 409.
+  const drift = [];
+  for (const b of mineRows) {
+    const tried = await mine(b.request_id);
+    const routeSays = tried.status === 200 ? null : tried.body?.error;
+    const listSays = b.can_cancel_online ? null : (b.cancel_online_note ?? 'NO_NOTE');
+    const agrees = b.can_cancel_online ? tried.status === 200
+      : tried.status !== 200 && (b.cancel_online_note === null || b.cancel_online_note === routeSays);
+    if (!agrees) drift.push({ id: b.request_id, list: listSays, route: `${tried.status} ${routeSays}` });
+  }
+  check('  can_cancel_online and cancel_online_note agree with POST /mine/:id/cancel on every booking', drift.length === 0,
+    JSON.stringify(drift) || `${mineRows.length} compared`);
+
+  r = await read('/mine', RES_UNLINKED, '');
+  check('GET /mine for an account with no record is still an empty list', r.status === 200 && JSON.stringify(r.body) === '{"requests":[]}', said(r));
+
+  r = await read('/', SEC, '', withReason);
+  const secRows = r.body?.requests || [];
+  const secById = Object.fromEntries(secRows.map((b) => [b.request_id, b]));
+  check('GET / (the Secretary\'s list) answers 200 with every booking', r.status === 200 && secRows.length === freshDb().rental_requests.length,
+    `${said(r)}; ${secRows.length} row(s)`);
+  const STARTED = [607, 608, 609, 610];
+  check('  not_started is true for a booking that has not started and false for started, Overdue, Completed and cancelled',
+    secRows.every((b) => b.not_started === !STARTED.includes(b.request_id)),
+    JSON.stringify(secRows.map((b) => [b.request_id, b.not_started])));
+  check('  every row carries cancellation_reason; #610\'s is its text', secRows.every((b) => 'cancellation_reason' in b)
+    && secById[610]?.cancellation_reason === 'Typhoon signal no. 2', JSON.stringify(secById[610]?.cancellation_reason));
+  const secDrift = [];
+  for (const b of secRows) {
+    const tried = await cancel(b.request_id, { reason: REASON });
+    const refusedAsStarted = tried.status === 409 && tried.body?.error === NOT_STARTED_CANCEL;
+    if (b.not_started === refusedAsStarted) secDrift.push({ id: b.request_id, not_started: b.not_started, route: said(tried) });
+  }
+  check('  not_started agrees with POST /:id/cancel\'s not-started refusal on every booking', secDrift.length === 0,
+    JSON.stringify(secDrift) || `${secRows.length} compared`);
+  check('  the list sends no PayMongo field', !JSON.stringify(secRows).includes('paymongo'));
+
+  r = await read('/:id', SEC, 610, withReason);
+  check('GET /:id carries cancellation_reason and not_started', r.status === 200
+    && r.body?.request?.cancellation_reason === 'Typhoon signal no. 2' && r.body?.request?.not_started === false, said(r));
+  r = await read('/:id', SEC, 601);
+  check('  and an upcoming booking reads not_started true, cancellation_reason null', r.body?.request?.not_started === true
+    && r.body?.request?.cancellation_reason === null, JSON.stringify(r.body?.request && {
+    not_started: r.body.request.not_started, reason: r.body.request.cancellation_reason }));
+
   // ======================================================================= webhook
   section('the PayMongo webhook — a payment for a cancelled booking');
   const signed = (event) => {

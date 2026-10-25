@@ -21,7 +21,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const RENTAL_FIELDS =
-  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
+  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, cancellation_reason, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
 // Management/staff views: adds the requester (with their profile name), the
 // item's capacity numbers (the edit form needs them), and the return record.
@@ -48,7 +48,7 @@ const RENTAL_FIELDS =
 // email and profile name from this same constant.
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
-  return_note, returned_at,
+  return_note, returned_at, cancellation_reason,
   resident_id, outside_borrower_name, outside_borrower_contact,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
   resident_records ( resident_id, first_name, middle_name, last_name, suffix,
@@ -640,6 +640,38 @@ router.post('/mine/:id/pay', async (req, res) => {
 // refund. A reason is optional. No notification: they have just done it.
 const RESIDENT_CANCEL_HOURS = 24;
 
+// Why the resident may NOT cancel this booking online, as the sentence the
+// route answers with, or null when they may. ONE function behind the route
+// and behind the can_cancel_online / cancel_online_note GET /mine sends, so
+// the button My rentals draws and the answer it gets cannot disagree. Checked
+// in this order: made at the hall, under 24 hours, paid. Whether the booking
+// has started at all is cancelBooking()'s hasNotStarted(), which the route
+// reaches next and the list reads first. The booking needs
+// requested_by_user_id, start_datetime and its charge.
+function onlineCancelRefusal(booking, userId) {
+  if (booking.requested_by_user_id !== userId) {
+    return 'This booking was made at the barangay hall, so it can only be changed there.';
+  }
+  if (new Date(booking.start_datetime) - Date.now() < RESIDENT_CANCEL_HOURS * 3600 * 1000) {
+    return 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.';
+  }
+  const charge = chargeOf(booking);
+  if (charge?.status === CHARGE_STATUS.PAID && Number(charge.amount) > 0) {
+    return 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.';
+  }
+  return null;
+}
+
+// What My rentals is told about cancelling a booking online. A booking that
+// has started, or is no longer confirmed (cancelled, returned), needs no
+// button and no note: both are false and null. Otherwise the button shows
+// exactly when the route would accept, and the note is the route's sentence.
+function onlineCancelView(booking, userId) {
+  if (!hasNotStarted(booking)) return { can_cancel_online: false, cancel_online_note: null };
+  const refusal = onlineCancelRefusal(booking, userId);
+  return { can_cancel_online: refusal === null, cancel_online_note: refusal };
+}
+
 router.post('/mine/:id/cancel', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -667,17 +699,9 @@ router.post('/mine/:id/cancel', async (req, res) => {
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  if (booking.requested_by_user_id !== req.user.user_id) {
-    return res.status(409).json({ error: 'This booking was made at the barangay hall, so it can only be changed there.' });
-  }
-  if (new Date(booking.start_datetime) - Date.now() < RESIDENT_CANCEL_HOURS * 3600 * 1000) {
-    return res.status(409).json({
-      error: 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.',
-    });
-  }
-  const charge = chargeOf(booking);
-  if (charge?.status === CHARGE_STATUS.PAID && Number(charge.amount) > 0) {
-    return res.status(409).json({ error: 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.' });
+  const refusal = onlineCancelRefusal(booking, req.user.user_id);
+  if (refusal) {
+    return res.status(409).json({ error: refusal });
   }
 
   const result = await cancelBooking(booking, {
@@ -702,6 +726,11 @@ router.post('/mine/:id/cancel', async (req, res) => {
 //
 // A caller with no linked record gets an empty list, not an error — "you have
 // no bookings" is true of an account with no resident behind it.
+//
+// Each booking also says whether the resident may cancel it online
+// (can_cancel_online) and, where not, why (cancel_online_note), from
+// onlineCancelView(), so My rentals never guesses. requested_by_user_id is
+// read for that and NOT sent: on a walk-in it is the Secretary's account.
 router.get('/mine', async (req, res) => {
   const residentId = await ownResidentId(req.user.user_id);
   if (!residentId) {
@@ -710,13 +739,18 @@ router.get('/mine', async (req, res) => {
 
   const { data, error } = await supabase
     .from('rental_requests')
-    .select(RENTAL_FIELDS)
+    .select(`${RENTAL_FIELDS}, requested_by_user_id`)
     .eq('resident_id', residentId)
     .order('request_id', { ascending: false });
   if (error) {
     throw new Error(`Failed to load bookings: ${error.message}`);
   }
-  res.json({ requests: data.map(withDerived) });
+  res.json({
+    requests: data.map(({ requested_by_user_id: filedBy, ...row }) => ({
+      ...withDerived(row),
+      ...onlineCancelView({ ...row, requested_by_user_id: filedBy }, req.user.user_id),
+    })),
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -762,7 +796,7 @@ router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
     throw new Error(`Failed to load bookings: ${error.message}`);
   }
 
-  let rows = data.map(withDerived);
+  let rows = data.map(withManaged);
   if (isVirtual) {
     rows = rows.filter((r) => r.derived_status === status);
   }
@@ -787,7 +821,7 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   if (!data) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  res.json({ request: withDerived(data) });
+  res.json({ request: withManaged(data) });
 });
 
 // A booking that has NOT STARTED: stored as confirmed and its start still
@@ -796,6 +830,12 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
 // the STORED start, never from the new values an edit asks for.
 const hasNotStarted = (booking) =>
   booking.status === RENTAL_STATUS.CONFIRMED && new Date(booking.start_datetime) > new Date();
+
+// The Secretary's reads (GET / and GET /:id) carry not_started, the same
+// hasNotStarted() Edit and Cancel apply, so Rental bookings draws those two
+// buttons from the server's answer rather than from the PC's clock. The
+// server still decides again on every Edit and Cancel.
+const withManaged = (row) => (row ? { ...withDerived(row), not_started: hasNotStarted(row) } : row);
 
 // "Oct 30, 2026, 8:00 AM to 10:00 AM" — a booking's slot in a notification,
 // the same words the CONFIRMED message uses.
