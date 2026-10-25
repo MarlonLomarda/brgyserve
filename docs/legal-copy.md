@@ -22,7 +22,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 3 October 2026*
+*Effective: 25 October 2026*
 
 ### Who we are, and what this system is
 
@@ -93,9 +93,11 @@ BrgyServe keeps a log of the actions Barangay officials and staff take on
 records: adding, editing, archiving and approving them, recording payments,
 recording event attendance, recording blotter cases, and sending an official a
 set-password link. Actions of yours that change a record are logged too:
-registering, submitting or cancelling a request, booking a facility, declaring
-a payment, having a GCash payment confirmed, changing or resetting your
-password, and setting your password from an emailed set-password link.
+registering, submitting or cancelling a request, booking a facility,
+cancelling a rental booking, declaring a payment, having a GCash payment
+confirmed, changing or resetting your password, and setting your password from
+an emailed set-password link. A GCash payment received after its booking was
+cancelled is also recorded in this log.
 
 Each entry holds who took the action, what the action was, which record it was
 taken on, the time, and the values of the changed fields before and after the
