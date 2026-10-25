@@ -13,7 +13,9 @@ const { ACTIONS, isSensitiveKey, isPersonalKey } = require('../constants/activit
 // user_id is NOT NULL and references users, so only actions with a person
 // behind them are logged. System actions — the PayMongo webhook settling a
 // charge — are not: the payment row already marks them, with
-// received_by_user_id left NULL.
+// received_by_user_id left NULL. The one exception is a payment that arrives
+// for a VOID charge, which leaves no payment row to mark it: the webhook logs
+// PAYMENT_ON_VOID_CHARGE against the account that owns the charge.
 //
 // timestamp has NO default in the schema, so it is set here.
 // ===========================================================================

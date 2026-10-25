@@ -37,6 +37,12 @@ const ACTIONS = {
   SEND_SET_PASSWORD_LINK: 'SEND_SET_PASSWORD_LINK',
   PASSWORD_SET: 'PASSWORD_SET',
   IMPORT: 'IMPORT',
+  // A GCash payment the webhook received for a VOID charge — a booking
+  // cancelled while its checkout page was still open. Nothing is applied and
+  // nobody is notified; this row is how the barangay learns that money it
+  // must refund has arrived. The only action logged with no session: the
+  // actor is the account that owns the charge, the resident who paid.
+  PAYMENT_ON_VOID_CHARGE: 'PAYMENT_ON_VOID_CHARGE',
 };
 
 // Keys REMOVED from old_value and new_value before a row is written — removed
