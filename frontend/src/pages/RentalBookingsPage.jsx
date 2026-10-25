@@ -4,8 +4,9 @@ import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
+import CancelBookingPanel from "../components/CancelBookingPanel";
 import ResidentPicker from "../components/ResidentPicker";
-import { formatDate } from "../constants/requestStatus";
+import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
   RETURN_OUTCOMES,
@@ -130,6 +131,11 @@ import {
 // marker names the return, "Returned by @staff1 on Oct 8, 2026, 1:20 PM"
 // (ReturnedBy, below), where it read "by @staff1 on …", as if staff1 had
 // marked the booking unpaid; a return note follows it.
+//
+// CANCEL ASKS FOR A REASON (25 Oct 2026, step B2). Cancel opens
+// CancelBookingPanel with a required reason, and for a paid booking says the
+// payment stays recorded and a refund is due. A cancelled booking shows its
+// reason under its status, as text.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -175,6 +181,16 @@ function PaymentMarker({ booking }) {
       {marker.label}
     </div>
   );
+}
+
+// The Cancel panel's warning for a booking with a PAID charge above PHP 0:
+// the charge stays PAID (the server never rewrites money) and the borrower's
+// notice says a refund is due. Null otherwise, an open GCash checkout
+// included: the server expires that one itself.
+function paidWarning(booking) {
+  const charge = chargeOf(booking);
+  if (charge?.status !== "PAID" || !(Number(charge.amount) > 0)) return null;
+  return `This booking was paid (PHP ${Number(charge.amount).toFixed(2)}). The payment stays recorded. The resident is told to contact the barangay about the refund.`;
 }
 
 // Who took a returned booking back, and when, the line after its payment
@@ -772,9 +788,12 @@ export default function RentalBookingsPage({
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
-  const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
+  const [cancelling, setCancelling] = useState(null); // booking being cancelled
+  const refocusId = useRef(null); // whose Cancel button gets the focus back
+  const flashRef = useRef(null);
+  const focusFlash = useRef(false); // a cancel went through: focus its message
   const [encoding, setEncoding] = useState(false); // walk-in panel open
   // The search, as typed. Here rather than in the box, so it outlives the list
   // while the Edit, Mark returned or walk-in panel takes its place.
@@ -834,29 +853,47 @@ export default function RentalBookingsPage({
     load();
   }, [load]);
 
-  async function handleCancel(r) {
-    const when = formatSchedule(r.start_datetime, r.end_datetime);
-    if (
-      !window.confirm(
-        `Cancel ${residentName(r)}'s booking of ${r.rental_items?.name} (${when})? The slot will be freed for others.`,
-      )
-    ) {
-      return;
-    }
-    setFlash(null);
-    setBusyId(r.request_id);
-    try {
-      const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, {
-        method: "POST",
-      });
-      setFlash({ type: "success", text: data.message });
-      await load();
-    } catch (err) {
-      setFlash({ type: "error", text: err.message });
-    } finally {
-      setBusyId(null);
-    }
+  // CANCEL ASKS FOR A REASON (step B2). Cancel opens CancelBookingPanel in the
+  // list's place, where window.confirm used to ask and the cancel went out
+  // with no body; the server now refuses a Secretary cancel without a reason
+  // of 3 to 300 characters, and sends it to the borrower. A refusal shows in
+  // the panel; closing after one loads the list again, since the booking
+  // usually changed underneath. Keep booking and Escape put the focus back on
+  // the row's Cancel button; a cancel that went through moves it to the
+  // success message, since that row's buttons are gone.
+  async function sendCancel(r, reason) {
+    const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, {
+      method: "POST",
+      body: { reason },
+    });
+    setCancelling(null);
+    focusFlash.current = true;
+    setFlash({ type: "success", text: data.message });
+    load();
   }
+
+  function closeCancel(refused) {
+    refocusId.current = cancelling?.request_id ?? null;
+    setCancelling(null);
+    if (refused) load();
+  }
+
+  // After the panel closes, back to the row's Cancel button once it is drawn
+  // again (after the reload, when there was one); after a cancel, to the
+  // success message.
+  useEffect(() => {
+    if (cancelling) return;
+    if (refocusId.current !== null) {
+      const button = document.querySelector(`[data-cancel-for="${refocusId.current}"]`);
+      if (button) {
+        button.focus();
+        refocusId.current = null;
+      }
+    } else if (focusFlash.current && flashRef.current) {
+      flashRef.current.focus();
+      focusFlash.current = false;
+    }
+  }, [cancelling, requests, flash]);
 
   // The search runs over the whole list, then the filters over what it
   // leaves, then the tabs split what matches. The tab counts come from every
@@ -1005,6 +1042,20 @@ export default function RentalBookingsPage({
             }
           }}
         />
+      ) : cancelling ? (
+        <CancelBookingPanel
+          title={`Cancel booking ${bookingNumber(cancelling)}`}
+          lines={[
+            `${residentName(cancelling)} · ${cancelling.rental_items?.name || "—"}`,
+            formatSchedule(cancelling.start_datetime, cancelling.end_datetime),
+          ]}
+          warning={paidWarning(cancelling)}
+          reasonLabel="Reason for cancelling"
+          required
+          helper="The resident receives this reason by text message. Keep it short and use plain letters."
+          onSubmit={(reason) => sendCancel(cancelling, reason)}
+          onClose={closeCancel}
+        />
       ) : returning ? (
         <ReturnPanel
           booking={returning}
@@ -1018,7 +1069,11 @@ export default function RentalBookingsPage({
         />
       ) : (
         <>
-          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
+          {flash && (
+            <div className={`alert ${flash.type}`} ref={flashRef} tabIndex={-1}>
+              {flash.text}
+            </div>
+          )}
 
           {/* The heading is a polite live region, as on Document requests, so
               a screen reader hears "4 of 7 overdue bookings match" as the
@@ -1230,6 +1285,12 @@ export default function RentalBookingsPage({
                               Note: {r.return_note}
                             </div>
                           )}
+                          {r.status === "cancelled" &&
+                            r.cancellation_reason && (
+                              <div className="muted reason-note">
+                                Reason: {r.cancellation_reason}
+                              </div>
+                            )}
                         </td>
                         {(canManage || canReturn) && (
                           <td className="row-actions">
@@ -1237,19 +1298,19 @@ export default function RentalBookingsPage({
                               <>
                                 <button
                                   className="btn secondary"
-                                  disabled={busyId === r.request_id}
                                   onClick={() => setEditing(r)}
                                 >
                                   Edit
                                 </button>
                                 <button
                                   className="btn secondary danger"
-                                  disabled={busyId === r.request_id}
-                                  onClick={() => handleCancel(r)}
+                                  data-cancel-for={r.request_id}
+                                  onClick={() => {
+                                    setFlash(null);
+                                    setCancelling(r);
+                                  }}
                                 >
-                                  {busyId === r.request_id
-                                    ? "Cancelling…"
-                                    : "Cancel"}
+                                  Cancel
                                 </button>
                               </>
                             )}
@@ -1258,7 +1319,6 @@ export default function RentalBookingsPage({
                               returnable && (
                                 <button
                                   className="btn secondary"
-                                  disabled={busyId === r.request_id}
                                   onClick={() => setReturning(r)}
                                 >
                                   Mark returned
