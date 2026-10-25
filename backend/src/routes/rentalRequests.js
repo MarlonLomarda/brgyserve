@@ -12,7 +12,7 @@ const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/cha
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
-const { logActivity, diffFields } = require('../services/activityLog');
+const { logActivity, diffFields, pick } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
 
 const router = express.Router();
@@ -727,10 +727,30 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
   res.json({ request: withDerived(data) });
 });
 
-// PUT /api/rental-requests/:id — Secretary reschedules a booking (date,
-// times, quantity, purpose; the item itself is fixed). The stage 2 conflict
-// check re-runs on the new values with THIS booking excluded from the
-// comparison — otherwise every edit would collide with its own current slot.
+// A booking that has NOT STARTED: stored as confirmed and its start still
+// ahead. The one rule behind both Secretary actions, Edit and Cancel — an
+// Overdue or Completed booking was used, so neither applies to it. Read from
+// the STORED start, never from the new values an edit asks for.
+const hasNotStarted = (booking) =>
+  booking.status === RENTAL_STATUS.CONFIRMED && new Date(booking.start_datetime) > new Date();
+
+// "Oct 30, 2026, 8:00 AM to 10:00 AM" — a booking's slot in a notification,
+// the same words the CONFIRMED message uses.
+const scheduleText = (start, end) =>
+  `${dateFmt.format(new Date(start))}, ${timeFmt.format(new Date(start))} to ${timeFmt.format(new Date(end))}`;
+
+// The columns an edit may change. The diff is taken on these only, so a
+// guest's name and contact can never appear in it.
+const EDITABLE_COLUMNS = ['start_datetime', 'end_datetime', 'purpose'];
+
+// PUT /api/rental-requests/:id — Secretary changes the date, times or purpose
+// of a booking that has not started, online or walk-in (a resident may ask at
+// the hall to move it). The item, the quantity, the borrower and the status
+// are fixed: to change the quantity or the item, cancel and book again. The
+// fee is item fee x quantity once per booking, so a new date or time never
+// changes what is owed, and the charge is never touched here. The conflict
+// check re-runs on the new slot with THIS booking excluded — otherwise every
+// edit would collide with its own current slot.
 router.put('/:id', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -741,11 +761,13 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   if (parsed.error) {
     return res.status(400).json({ error: parsed.error });
   }
-  const { startIso, endIso, purpose, quantity } = parsed;
+  const { start, end, startIso, endIso, purpose } = parsed;
 
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
-    .select('request_id, item_id, status, quantity_requested, start_datetime, end_datetime, purpose')
+    .select(
+      'request_id, item_id, status, quantity_requested, start_datetime, end_datetime, purpose, resident_id, outside_borrower_name, outside_borrower_contact, resident_records ( contact_number )'
+    )
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -754,11 +776,15 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  if (booking.status !== RENTAL_STATUS.CONFIRMED) {
-    return res.status(409).json({
-      error: `Only confirmed bookings can be edited — this booking is '${booking.status}'`,
-    });
+  if (!hasNotStarted(booking)) {
+    return res.status(409).json({ error: 'Only a booking that has not started can be changed.' });
   }
+  // The Edit panel still sends the quantity it shows; the same number is
+  // accepted, any other is refused rather than silently ignored.
+  if (req.body?.quantity_requested !== undefined && parsed.quantity !== booking.quantity_requested) {
+    return res.status(400).json({ error: 'The quantity cannot be changed. Cancel this booking and book again.' });
+  }
+  const quantity = booking.quantity_requested;
 
   // The item is loaded even if since deactivated: deactivation only blocks
   // NEW bookings, not managing existing ones.
@@ -783,7 +809,7 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
 
   const { data: updated, error } = await supabase
     .from('rental_requests')
-    .update({ start_datetime: startIso, end_datetime: endIso, quantity_requested: quantity, purpose })
+    .update({ start_datetime: startIso, end_datetime: endIso, purpose })
     .eq('request_id', id)
     .eq('status', RENTAL_STATUS.CONFIRMED) // guard: not if just cancelled
     .select(MANAGE_FIELDS)
@@ -806,38 +832,28 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
       .update({
         start_datetime: booking.start_datetime,
         end_datetime: booking.end_datetime,
-        quantity_requested: booking.quantity_requested,
         purpose: booking.purpose,
       })
       .eq('request_id', id);
     return res.status(409).json({ error: lateConflict });
   }
 
-  // Stage 4: a quantity change changes what is owed (fee × quantity), so an
-  // UNPAID charge is recomputed to match. A PAID charge is left alone — it
-  // records money actually received; any difference after a paid booking is
-  // edited is settled offline by the Treasurer.
-  let response = updated;
-  if (quantity !== booking.quantity_requested) {
-    const { error: chargeError } = await supabase
-      .from('charges')
-      .update({ amount: rentalAmount(item, quantity) })
-      .eq('rental_request_id', id)
-      .eq('status', CHARGE_STATUS.UNPAID);
-    if (chargeError) {
-      throw new Error(`Booking updated but failed to update its charge: ${chargeError.message}`);
-    }
-    const { data: fresh } = await supabase
-      .from('rental_requests')
-      .select(MANAGE_FIELDS)
-      .eq('request_id', id)
-      .maybeSingle();
-    if (fresh) response = fresh;
+  const diff = diffFields(pick(booking, EDITABLE_COLUMNS), pick(updated, EDITABLE_COLUMNS));
+  const changed = Object.keys(diff.after).length > 0;
+
+  // The borrower hears of every change the barangay makes to their booking —
+  // a Save that changed nothing is not one. To the borrower, as on cancel.
+  if (changed) {
+    const target = await borrowerNotifyTarget(booking);
+    await notify({
+      userId: target.userId,
+      destination: target.destination,
+      relatedType: RELATED_TYPE.RENTAL_REQUEST,
+      relatedTo: id,
+      message: `BrgyServe: your booking of ${item.name} was changed by the barangay. It is now ${scheduleText(start, end)}.`,
+    });
   }
 
-  // Compared on the columns the edit can touch (the pre-read selects only
-  // those), so a guest's name and contact can never appear in this diff.
-  const diff = diffFields(booking, updated);
   await logActivity({
     userId: req.user.user_id,
     action: ACTIONS.UPDATE,
@@ -847,7 +863,7 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     after: diff.after,
   });
 
-  res.json({ message: 'Booking updated', request: withDerived(response) });
+  res.json({ message: 'Booking updated', request: withDerived(updated) });
 });
 
 // POST /api/rental-requests/:id/cancel — Secretary cancels a booking. The
