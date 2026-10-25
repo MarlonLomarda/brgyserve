@@ -225,6 +225,14 @@
 // as it is confirmed). docs/legal-copy.md says the same words; the Terms are
 // dated 25 October 2026 and the Privacy Policy keeps 3 October 2026.
 //
+// Section AL is Book a rental's two messages and its Try again: the server's
+// refusal of a booking is read out (role="alert"), as the time message and
+// the load error are; and the Try again row under the load error sits 16px
+// below the error, by one rule of the page's own (.actions.book-rental-retry
+// in index.css), read as a browser of 390, 768 and 1280px applies it, while
+// every other .actions row and the shared .alert, .actions and .pending-card
+// .alert rules keep their spacing.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -14005,6 +14013,340 @@ const root = () => dom.window.document.getElementById('root');
       said(faqs.filter((f) => f.a.includes(OLD_FAQ) || /notif/i.test(f.a))));
     check('  and the landing page sent no request and kept nothing in the browser', landingSent === 0 && kept === 0,
       said({ landingSent, kept }));
+  }
+
+  // =========================================================================
+  // AL. Book a rental: the server refusal read out, Try again spaced
+  // =========================================================================
+  // Book a rental showed the server's refusal of a booking (a slot already
+  // taken) as a plain <div className="alert error">, which a screen reader
+  // does not announce, while the load error and the time message beside it
+  // carry role="alert". And under the load error, the Try again row sat 4px
+  // below the error: the card's .pending-card .alert (4px under) and
+  // .actions (4px over) collapse to 4px, which reads as one block. The row
+  // now carries a class of its own, .book-rental-retry, which one rule in
+  // index.css gives margin-top 16px; the shared .alert, .actions and
+  // .pending-card .alert rules are as they were, and every other .actions
+  // row keeps its 4px. jsdom applies no CSS, so index.css is read as a
+  // browser of a given width applies it, the cascade settled (section AA's
+  // reading), with margin and its longhands competing for each side.
+  console.log('\n--- Book a rental: the server refusal read out, and Try again spaced from the error ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    // 25 Oct 2026, 10:00 in Manila: 26 Oct is ahead, 25 Oct at 09:00 has passed.
+    if (F.clock) F.clock.now = () => new Date('2026-10-25T02:00:00Z');
+    const ITEMS = [
+      { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
+    ];
+    const CONFLICT = 'The Covered Court is already booked from 9:00 AM to 11:00 AM on Oct 26, 2026';
+    const PAST = 'The booking must start in the future';
+    const LOAD_ERROR = 'Could not load the rental items: Network down';
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+    const bookPage = async (answer, status = 200) => {
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(status, answer);
+      const pg = await globalThis.mountInteractive(root(), '/resident/book-rental');
+      await pg.settle();
+      return pg;
+    };
+    const itemsOr = (post) => (url, method) => {
+      if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+      if (method === 'POST' && /\/rental-requests$/.test(url)) return post;
+      return undefined;
+    };
+    const fillIn = async (pg, date, start, end) => {
+      const select = pg.query('select[name="item_id"]');
+      if (select && select.value !== '21') {
+        select.value = '21';
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        await pg.settle();
+      }
+      for (const [name, value] of [['date', date], ['start_time', start], ['end_time', end]]) {
+        if (pg.query(`input[name="${name}"]`)) await pg.fill(`input[name="${name}"]`, value);
+      }
+      const purpose = pg.query('textarea[name="purpose"]');
+      if (purpose && !purpose.value) {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Basketball practice');
+        purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      }
+      await pg.settle();
+    };
+    const press = async (pg) => { if (pg.query('form')) await pg.submit(); };
+    const posts = () => net.calls.filter((c) => c.method === 'POST').length;
+    const retryRows = (pg) => pg.queryAll('.book-rental-retry');
+
+    // --- index.css, read as a browser of a given width applies it ---
+    const splitList = (s) => {
+      const out = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim()).filter(Boolean);
+    };
+    const css = (() => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      const open = [];
+      let from = 0;
+      const own = (block, decl) => {
+        const k = decl.indexOf(':');
+        if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+      };
+      const media = () => open.filter((b) => b.at).map((b) => b.at);
+      const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+          const parent = inRule();
+          if (head.startsWith('@')) {
+            const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+            open.push(block);
+            if (parent) rules.push({ ...block, media: media() });
+          } else {
+            const mine = splitList(head);
+            const selectors = parent
+              ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+              : mine;
+            const block = { selectors, decls: {} };
+            open.push(block);
+            rules.push({ ...block, media: media() });
+          }
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          const rest = src.slice(from, i).trim();
+          if (block?.selectors && rest) own(block, rest);
+          from = i + 1;
+        } else if (ch === ';') {
+          const block = open.at(-1);
+          if (block?.selectors) own(block, src.slice(from, i).trim());
+          from = i + 1;
+        }
+      }
+      rules.forEach((r, i) => { r.order = i; });
+      return { rules, balanced: open.length === 0, src };
+    })();
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    const specificity = (selector) => {
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+      s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+        const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+        a += best[0];
+        b += best[1];
+        c += best[2];
+        return ' ';
+      });
+      s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+      s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+      a += (s.match(/#[\w-]+/g) || []).length;
+      b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+      c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+      return [a, b, c];
+    };
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // One side's margin ('top' or 'bottom'): `margin` and `margin-<side>`
+    // compete, the most specific winning, and of equals the later.
+    const sideOf = (value, side) => {
+      // One value, two (top and bottom alike) or three and four (the third
+      // is the bottom).
+      const [t, , b = t] = value.replace(/\s*!important$/, '').split(' ');
+      return side === 'top' ? t : b;
+    };
+    const marginAt = (width, el, side) => {
+      if (!el) return null;
+      let best = null;
+      for (const r of css.rules) {
+        const prop = `margin-${side}` in r.decls ? `margin-${side}` : 'margin' in r.decls ? 'margin' : null;
+        if (!prop || !appliesAt(r.media, width)) continue;
+        for (const sel of r.selectors) {
+          if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+          if (/::?(before|after|placeholder|first-line|first-letter)$/.test(sel) || !tryMatch(el, sel)) continue;
+          // A rule with both is read as written, its longhand after.
+          const value = prop === 'margin' ? sideOf(r.decls.margin, side) : r.decls[prop];
+          const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specificity(sel)];
+          const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+          if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+            best = { rank, order: r.order, selector: sel, value: value.replace(/\s*!important$/, '') };
+          }
+        }
+      }
+      return best;
+    };
+    const px = (m) => (m && /^-?\d+(\.\d+)?px$/.test(m.value) ? Number.parseFloat(m.value) : m && m.value === '0' ? 0 : null);
+    // The gap a browser leaves between two block siblings: their margins
+    // collapse to the larger (both are positive here).
+    const gapAt = (width, upper, lower) => {
+      const a = px(marginAt(width, upper, 'bottom'));
+      const b = px(marginAt(width, lower, 'top'));
+      return a === null || b === null ? null : Math.max(a, b);
+    };
+    const WIDTHS = [390, 768, 1280];
+
+    // a. The server refuses a valid booking (409, the slot is taken).
+    let page = await bookPage(itemsOr({ error: CONFLICT }));
+    await fillIn(page, '2026-10-26', '09:00', '11:00');
+    net.status = 409;
+    await press(page);
+    const refusal = page.queryAll('.section-card .alert.error').find((el) => text(el) === CONFLICT) ?? null;
+    check('Book a rental: the server\'s refusal of a booking (409, the slot is taken) is read out: its message, "' + CONFLICT
+        + '", carries role="alert"',
+      refusal?.getAttribute('role') === 'alert' && posts() === 1, said({ role: refusal?.getAttribute('role') ?? null,
+        found: !!refusal, posts: posts() }));
+    check('  and nothing else about it changed: "alert error" its only classes, straight under the card\'s heading, the only '
+        + 'message on the card, the form still there below it',
+      refusal?.className === 'alert error' && refusal?.previousElementSibling?.tagName === 'H3'
+        && page.queryAll('.section-card .alert').length === 1 && !!buttonNamed(root(), 'Book now')
+        && page.queryAll('.section-card select, .section-card input, .section-card textarea').length >= 5,
+      said({ className: refusal?.className ?? null, before: refusal?.previousElementSibling?.tagName ?? null,
+        alerts: page.queryAll('.section-card .alert').map(text) }));
+    // b. The time message, on the same page: still read out.
+    await fillIn(page, '2026-10-25', '09:00', '11:00');
+    await press(page);
+    const timeMessage = page.query('.section-card .grid-2 + [role="alert"]');
+    check('  the time message is still read out: "' + PAST + '" under the time fields, role="alert", no request sent',
+      text(timeMessage) === PAST && timeMessage?.className === 'alert error' && posts() === 1,
+      said({ message: text(timeMessage), posts: posts() }));
+    // The form's own .actions row, Book now's: the shared spacing.
+    const bookNowRow = buttonNamed(root(), 'Book now')?.closest('div') ?? null;
+    const bookNowClass = bookNowRow?.className ?? null;
+    const bookNowTop = WIDTHS.map((w) => marginAt(w, bookNowRow, 'top'));
+    await finish(page);
+
+    // c. The load error: still read out; its Try again row carries the
+    // page's class, and is the error's next sibling.
+    page = await bookPage({ error: 'Network down' }, 500);
+    const loadError = page.queryAll('[role="alert"]').find((el) => text(el) === LOAD_ERROR) ?? null;
+    const retryRow = tryAgainButton(page)?.parentElement ?? null;
+    check('Book a rental: the load error is still read out ("' + LOAD_ERROR + '", role="alert")',
+      !!loadError && loadError.className === 'alert error', said({ found: !!loadError, alerts: page.queryAll('.alert').map(text) }));
+    check('  and its Try again row is the error\'s next sibling, with the classes "actions book-rental-retry", the only '
+        + 'such row on the page',
+      !!retryRow && retryRow === loadError?.nextElementSibling && retryRow.className === 'actions book-rental-retry'
+        && retryRows(page).length === 1,
+      said({ className: retryRow?.className ?? null, sibling: retryRow === loadError?.nextElementSibling,
+        rows: retryRows(page).length }));
+    const retryGap = WIDTHS.map((w) => ({ w, alertBottom: marginAt(w, loadError, 'bottom'), rowTop: marginAt(w, retryRow, 'top'),
+      gap: gapAt(w, loadError, retryRow) }));
+    check('  and at 390, 768 and 1280px the Try again row sits 16px under the error: its margin-top 16px from '
+        + '".actions.book-rental-retry", the error\'s margin-bottom still 4px from ".pending-card .alert"',
+      retryGap.every((g) => g.gap === 16 && g.rowTop?.selector === '.actions.book-rental-retry' && g.rowTop?.value === '16px'
+        && g.alertBottom?.selector === '.pending-card .alert' && g.alertBottom?.value === '4px'),
+      said(retryGap.map((g) => ({ w: g.w, gap: g.gap, top: g.rowTop && `${g.rowTop.selector} ${g.rowTop.value}`,
+        bottom: g.alertBottom && `${g.alertBottom.selector} ${g.alertBottom.value}` }))));
+    await finish(page);
+
+    // d. A successful load of nothing is the real empty state it was.
+    page = await bookPage((url) => (/\/rental-items$/.test(url) ? { rental_items: [] } : undefined));
+    check('Book a rental: a successful load of no items still says "Nothing is currently available for rental.", with no '
+        + 'message, no Try again row and no form',
+      root().textContent.includes('Nothing is currently available for rental.') && page.queryAll('.alert').length === 0
+        && retryRows(page).length === 0 && !tryAgainButton(page) && !buttonNamed(root(), 'Book now'),
+      said({ alerts: page.queryAll('.alert').map(text), rows: retryRows(page).length }));
+    await finish(page);
+
+    // e. The form is as it was: its Book now row is a plain .actions row,
+    // with the shared 4px.
+    check('Book a rental: the form is as it was: Book now\'s row is "actions" alone, its margin-top 4px from the shared '
+        + '".actions" at 390, 768 and 1280px',
+      bookNowClass === 'actions' && bookNowTop.every((m) => m?.selector === '.actions' && m?.value === '4px'),
+      said({ bookNowClass, top: bookNowTop.map((m) => m && `${m.selector} ${m.value}`) }));
+
+    // f. Another page's alert and actions row: Staff accounts' create form,
+    // where the temporary-password note (.pending-card .alert) is followed by
+    // the Create account row. It keeps the shared 4px.
+    seedSession(VALID);
+    resetNet(200, (url) => (url.endsWith('/secretary/staff-accounts') ? { accounts: [] } : undefined));
+    page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'New staff account'));
+    const delivery = page.query('select[name="delivery"]');
+    if (delivery) {
+      delivery.value = 'temporary_password';
+      delivery.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await page.settle();
+    }
+    const staffRow = buttonNamed(root(), 'Create account')?.closest('.actions') ?? null;
+    const staffNote = staffRow?.previousElementSibling ?? null;
+    const staffGap = WIDTHS.map((w) => ({ w, gap: gapAt(w, staffNote, staffRow), top: marginAt(w, staffRow, 'top') }));
+    check('another page keeps its spacing: on Staff accounts the temporary-password note (.pending-card .alert) sits 4px over '
+        + 'the Create account row, whose margin-top is still the shared ".actions" 4px, at 390, 768 and 1280px',
+      !!staffNote?.classList.contains('alert') && !!staffNote.closest('.pending-card') && staffRow.className === 'actions'
+        && staffGap.every((g) => g.gap === 4 && g.top?.selector === '.actions'),
+      said({ note: staffNote?.className ?? null, row: staffRow?.className ?? null,
+        staffGap: staffGap.map((g) => ({ w: g.w, gap: g.gap, top: g.top && `${g.top.selector} ${g.top.value}` })) }));
+    methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`));
+    kept.sets += store.sets;
+    await page.unmount();
+
+    // g. The rule itself, and the shared rules as they were at c7d8843.
+    const mine = css.rules.filter((r) => r.selectors.some((s) => s.includes('book-rental-retry')));
+    const declsOf = (selector) => css.rules.filter((r) => r.media.length === 0 && r.selectors.length === 1
+      && r.selectors[0] === selector).map((r) => r.decls);
+    const SHARED = {
+      '.alert': { padding: '10px 12px', 'border-radius': '8px', 'margin-bottom': '16px', 'font-size': '0.9rem' },
+      '.actions': { display: 'flex', 'flex-wrap': 'wrap', gap: '10px', 'margin-top': '4px' },
+      '.pending-card .alert': { margin: '12px 0 4px' },
+    };
+    const sharedNow = Object.fromEntries(Object.keys(SHARED).map((s) => [s, declsOf(s)]));
+    check('index.css has one rule of the page\'s own, ".actions.book-rental-retry { margin-top: 16px }": top level, no @media, '
+        + 'no CSS variable, no z-index, nothing else in it',
+      css.balanced && mine.length === 1 && said(mine[0].selectors) === said(['.actions.book-rental-retry'])
+        && mine[0].media.length === 0 && said(mine[0].decls) === said({ 'margin-top': '16px' }),
+      said(mine.map((r) => ({ selectors: r.selectors, media: r.media, decls: r.decls }))));
+    check('  and the shared ".alert", ".actions" and ".pending-card .alert" rules are as they were (one top-level rule each, '
+        + 'the same declarations)',
+      Object.entries(SHARED).every(([s, want]) => sharedNow[s].length === 1 && said(sharedNow[s][0]) === said(want)),
+      said(sharedNow));
+    const srcFiles = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.jsx?$/.test(e.name)) srcFiles.push(p);
+      }
+    };
+    walk(path.join(HERE, '..', 'src'));
+    // Counted in the code, comments stripped, as section AI reads a page.
+    const codeOf = (f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const usedIn = srcFiles.map((f) => ({ f: path.relative(path.join(HERE, '..', 'src'), f).replace(/\\/g, '/'),
+      n: (codeOf(f).match(/book-rental-retry/g) || []).length })).filter((u) => u.n > 0);
+    check('  and the class is used once, on Book a rental\'s Try again row, and on no other page',
+      said(usedIn) === said([{ f: 'pages/BookRentalPage.jsx', n: 1 }]), said(usedIn));
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    check('section AL kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AL sent only GETs and its booking POSTs, every one answered by the fetch stub',
+      methods.length > 0 && methods.every((m) => /^GET /.test(m) || m === 'POST /rental-requests'),
+      said([...new Set(methods)]));
   }
 
   console.error = origError;

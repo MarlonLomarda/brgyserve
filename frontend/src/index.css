@@ -3260,6 +3260,17 @@ button.pay-tab:hover:not(:disabled) {
    button, the panel's margin, Clear filters' 44px and its hidden slot) style
    both lists: a change to them changes both. */
 
+/* Book a rental (pages/BookRentalPage.jsx, 25 Oct 2026): when the rental
+   items fail to load, the Try again row sits 16px under the error, the gap
+   the base .alert leaves under a message. In the card, .pending-card .alert
+   (4px under) and .actions (4px over) collapse to 4px, which read as one
+   block. Vertical margins collapse, so this 16px is the gap. (0,2,0) beats
+   .actions; the shared .alert, .actions and .pending-card .alert rules, and
+   every other .actions row, are unchanged. */
+.actions.book-rental-retry {
+  margin-top: 16px;
+}
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only

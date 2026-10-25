@@ -181,19 +181,26 @@ export default function BookRentalPage() {
       ) : (
         <form className="pending-card section-card" onSubmit={handleSubmit}>
           <h3>Book a facility or item</h3>
-          {error && <div className="alert error">{error}</div>}
+          {/* The server's refusal, read out as the load error and the time
+              message are (role="alert"). */}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
 
           {/* The error first, then loading, then empty, then the form's
               fields: a load that failed shows neither the empty text nor the
               form. Try again is a plain button, so pressing it inside this
               form loads the items again and submits nothing; it sits in the
-              card's actions row, as Book now does. */}
+              card's actions row, as Book now does, 16px under the error
+              (index.css; the card's shared margins leave 4px). */}
           {loadError ? (
             <>
               <div className="alert error" role="alert">
                 Could not load the rental items: {loadError}
               </div>
-              <div className="actions">
+              <div className="actions book-rental-retry">
                 <button
                   type="button"
                   className="btn secondary"
