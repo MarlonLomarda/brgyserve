@@ -257,13 +257,14 @@ Stores rental and booking requests for barangay items and facilities, including 
 | end_datetime | timestamptz | | No | End date and time of the rental period. |
 | purpose | text | | No | Intended use or reason for the rental request. |
 | status | varchar(50) | | No | Current status. Self-service, so no pending/approved: `confirmed`, `cancelled`, `returned`, `returned_late`, `returned_with_issue` (see `constants/rentals.js`). `completed` (facilities) and `overdue` (physical items) are derived at display, never stored. |
-| processed_by_user_id | bigint | FK → users | Yes | Secretary who edited/cancelled the booking; null otherwise. |
+| processed_by_user_id | bigint | FK → users | Yes | Secretary who cancelled the booking; null otherwise, including a booking the resident cancelled online themselves. An edit does not write it. |
 | return_note | text | | Yes | Optional note recorded with a return (e.g. damage). Added in migration 011. |
 | returned_at | timestamptz | | Yes | When Staff recorded the return; null until returned. Added in migration 011. |
 | returned_by_user_id | bigint | FK → users | Yes | Staff user who recorded the return; null until returned. Added in migration 011. |
 | resident_id | bigint | FK → resident_records | Yes | Resident the booking is for: the submitter's own linked record when they book for themselves, or the resident the Secretary chose for a walk-in. Null only on an outside borrower's booking. CHECK `rental_requests_resident_xor_outside_borrower`: either this is set and both `outside_borrower_*` columns are null, or this is null and both are set. Added in migration 022. |
 | outside_borrower_name | text | | Yes | Name of a borrower from another barangay, who has no resident record; set only when `resident_id` is null. The API limits it to 200 characters. Added in migration 022. |
 | outside_borrower_contact | text | | Yes | That borrower's contact number; set only when `resident_id` is null. The API requires a Philippine mobile number (`09XXXXXXXXX`, `639XXXXXXXXX` or `+639XXXXXXXXX`, at most 50 characters). Added in migration 022. |
+| cancellation_reason | text | | Yes | Why the booking was cancelled: required when the Secretary cancels, optional when a resident cancels their own booking, and sent to the borrower in the cancellation notice. Null when none was given, and on every booking cancelled before migration 023. CHECK `rental_requests_cancellation_reason_length`: null, or 3 to 300 characters after trimming. Added in migration 023. |
 
 ---
 
