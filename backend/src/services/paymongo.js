@@ -94,6 +94,15 @@ async function createCheckoutSession({ amount, description, lineItemName, refere
 
 const retrieveCheckoutSession = (id) => call(`/checkout_sessions/${id}`).then((b) => b.data);
 
+// Closes a checkout session so its hosted page can no longer be paid: POST
+// /v1/checkout_sessions/{id}/expire, secret-key basic auth, per PayMongo's API
+// reference ("Expire a Checkout Session"). A session never expires on its
+// own, so a cancelled booking's open page would stay payable without this.
+// Throws like every other call here; the caller decides that a failure does
+// not matter (see cancelBooking in routes/rentalRequests.js).
+const expireCheckoutSession = (id) =>
+  call(`/checkout_sessions/${encodeURIComponent(id)}/expire`, { method: 'POST' }).then((b) => b?.data ?? null);
+
 // Pulls the successful payment out of a checkout session resource, in the
 // shape both the webhook and the Treasurer's reconciliation action need.
 // Returns null when the session has not been paid.
@@ -157,6 +166,7 @@ function verifyWebhookSignature(rawBody, signatureHeader, secret, { toleranceSec
 module.exports = {
   createCheckoutSession,
   retrieveCheckoutSession,
+  expireCheckoutSession,
   paidPaymentOf,
   verifyWebhookSignature,
   toCentavos,

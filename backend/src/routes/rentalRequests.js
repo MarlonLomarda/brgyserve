@@ -14,6 +14,7 @@ const { RELATED_TYPE } = require('../constants/notifications');
 const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
 const { logActivity, diffFields, pick } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
+const paymongo = require('../services/paymongo');
 
 const router = express.Router();
 
@@ -739,6 +740,201 @@ const hasNotStarted = (booking) =>
 const scheduleText = (start, end) =>
   `${dateFmt.format(new Date(start))}, ${timeFmt.format(new Date(start))} to ${timeFmt.format(new Date(end))}`;
 
+// ---------------------------------------------------------------------------
+// Cancelling — ONE implementation behind both cancel routes, the Secretary's
+// and the resident's own, so the steps and their failure handling cannot
+// drift apart. Each route decides WHETHER its caller may cancel this booking;
+// cancelBooking() re-checks the rule they share and does the cancel.
+// ---------------------------------------------------------------------------
+
+const REASON_MIN = 3;
+const REASON_MAX = 300;
+
+// A cancellation reason: trimmed, and counted as Postgres counts characters
+// (code points, not UTF-16 units) so it can never fail the CHECK migration 023
+// put on rental_requests.cancellation_reason. Returns { reason } — null when
+// none was given and none is required — or { error }.
+function parseReason(raw, { required }) {
+  if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+    return { error: 'The reason must be text.' };
+  }
+  const reason = String(raw ?? '').trim();
+  if (!reason) {
+    return required ? { error: `A reason is required (${REASON_MIN} to ${REASON_MAX} characters).` } : { reason: null };
+  }
+  const length = [...reason].length;
+  if (length < REASON_MIN || length > REASON_MAX) {
+    return { error: `The reason must be ${REASON_MIN} to ${REASON_MAX} characters.` };
+  }
+  return { reason };
+}
+
+// What cancelBooking() needs to know about a booking. paymongo_session_id is
+// read to expire an open checkout and is never sent back to the caller: the
+// response is re-read with the route's own projection.
+const CANCEL_FIELDS =
+  'request_id, status, requested_by_user_id, processed_by_user_id, resident_id, outside_borrower_name, outside_borrower_contact, start_datetime, rental_items ( name ), resident_records ( contact_number ), charges ( charge_id, amount, status, paymongo_session_id )';
+
+// What became of the charge, for the activity log.
+const CHARGE_OUTCOME = {
+  VOID: 'VOID', // was UNPAID; nothing is owed any more
+  PAID_REFUND_DUE: 'PAID_REFUND_DUE', // stays PAID; the barangay refunds by hand
+  NONE: 'NONE', // no charge, a PHP 0 one, or one already void
+};
+
+const asSentence = (text) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+// "HTTP 400: Checkout session is already paid", short enough for a log row.
+const failureReason = (err) => `${err?.status ? `HTTP ${err.status}: ` : ''}${err?.message || 'unknown error'}`.slice(0, 120);
+
+// Puts a just-cancelled booking back to confirmed, for when its charge could
+// not be voided. Guarded on cancelled so it can only undo this cancel. True
+// when the booking is confirmed again.
+async function revertCancel(booking) {
+  try {
+    const { data, error } = await supabase
+      .from('rental_requests')
+      .update({
+        status: RENTAL_STATUS.CONFIRMED,
+        processed_by_user_id: booking.processed_by_user_id ?? null,
+        cancellation_reason: null,
+      })
+      .eq('request_id', booking.request_id)
+      .eq('status', RENTAL_STATUS.CANCELLED)
+      .select('request_id')
+      .maybeSingle();
+    return !error && !!data;
+  } catch {
+    return false;
+  }
+}
+
+// Cancels a booking loaded with CANCEL_FIELDS. Returns { status, body } for
+// the route to send. supabase-js has no transactions, so the steps run in an
+// order that can be undone:
+//   1. the booking -> cancelled, guarded on confirmed;
+//   2. an UNPAID charge -> VOID. A PAID charge above PHP 0 STAYS PAID — it
+//      records money actually received, and the system never rewrites money
+//      or refunds; the borrower is told a refund is due. No charge, or a PHP 0
+//      one: nothing;
+//   3. if 2 failed, the booking goes back to confirmed — and if THAT fails it
+//      is said loudly, never left silent;
+//   4. an open GCash checkout on the voided charge is expired, best effort:
+//      it never blocks or undoes the cancel, and its outcome is logged;
+//   5. the borrower is notified (the Secretary's cancel only — a resident who
+//      cancels their own booking has just done it);
+//   6. one CANCEL row in the activity log. The reason is free text, so the
+//      log says only whether one was given; the text stays on the booking and
+//      in the notification.
+async function cancelBooking(booking, { user, processedBy, reason, notifyBorrower, responseFields, message }) {
+  const id = booking.request_id;
+  if (!hasNotStarted(booking)) {
+    return { status: 409, body: { error: 'Only a booking that has not started can be cancelled.' } };
+  }
+  const charge = chargeOf(booking);
+
+  const { data: cancelled, error } = await supabase
+    .from('rental_requests')
+    .update({ status: RENTAL_STATUS.CANCELLED, processed_by_user_id: processedBy, cancellation_reason: reason })
+    .eq('request_id', id)
+    .eq('status', RENTAL_STATUS.CONFIRMED)
+    .select('request_id')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to cancel booking: ${error.message}`);
+  }
+  if (!cancelled) {
+    return { status: 409, body: { error: 'Booking status just changed — refresh and try again' } };
+  }
+
+  let chargeOutcome = CHARGE_OUTCOME.NONE;
+  let refundDue = null;
+  if (charge?.status === CHARGE_STATUS.UNPAID) {
+    const { data: voided, error: voidError } = await supabase
+      .from('charges')
+      .update({ status: CHARGE_STATUS.VOID })
+      .eq('charge_id', charge.charge_id)
+      .eq('status', CHARGE_STATUS.UNPAID) // guard: not if just paid
+      .select('charge_id')
+      .maybeSingle();
+    if (voidError || !voided) {
+      if (!(await revertCancel(booking))) {
+        console.error(
+          `[rentals] booking ${id} was cancelled but its charge ${charge.charge_id} was not voided, and putting the booking back to confirmed failed too — fix both by hand`
+        );
+        return { status: 500, body: { error: 'Cancel was interrupted; tell the developer.' } };
+      }
+      // No row changed: the charge left UNPAID between the read and the
+      // update — most likely just paid. Not a server fault.
+      if (!voidError) {
+        return {
+          status: 409,
+          body: { error: "This booking's charge just changed (it may have been paid). Refresh and try again; nothing was changed." },
+        };
+      }
+      return { status: 500, body: { error: 'Could not cancel this booking; nothing was changed.' } };
+    }
+    chargeOutcome = CHARGE_OUTCOME.VOID;
+  } else if (charge?.status === CHARGE_STATUS.PAID && Number(charge.amount) > 0) {
+    chargeOutcome = CHARGE_OUTCOME.PAID_REFUND_DUE;
+    refundDue = Number(charge.amount);
+  }
+
+  // A checkout page left open on a voided charge could still be paid. The
+  // webhook would then find the charge VOID and log the money for the
+  // Secretary instead of applying it, so this is a courtesy, not a guard.
+  let sessionExpired = 'not_needed';
+  let expireFailure = null;
+  if (chargeOutcome === CHARGE_OUTCOME.VOID && charge.paymongo_session_id) {
+    try {
+      await paymongo.expireCheckoutSession(charge.paymongo_session_id);
+      sessionExpired = true;
+    } catch (err) {
+      sessionExpired = false;
+      expireFailure = failureReason(err);
+      console.warn(`[rentals] booking ${id} cancelled, but its GCash checkout could not be expired: ${expireFailure}`);
+    }
+  }
+
+  const { data: fresh } = await supabase
+    .from('rental_requests')
+    .select(responseFields)
+    .eq('request_id', id)
+    .maybeSingle();
+
+  // To the BORROWER — not requested_by_user_id, which for a walk-in is the
+  // Secretary who filed it.
+  if (notifyBorrower) {
+    const target = await borrowerNotifyTarget(booking);
+    const refund = refundDue === null ? '' : ` You paid PHP ${refundDue.toFixed(2)}. Please contact the barangay about your refund.`;
+    await notify({
+      userId: target.userId,
+      destination: target.destination,
+      relatedType: RELATED_TYPE.RENTAL_REQUEST,
+      relatedTo: id,
+      message: `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} was cancelled by the barangay. Reason: ${asSentence(reason)}${refund}`,
+    });
+  }
+
+  await logActivity({
+    userId: user.user_id,
+    action: ACTIONS.CANCEL,
+    table: 'rental_requests',
+    recordId: id,
+    before: { status: RENTAL_STATUS.CONFIRMED },
+    after: {
+      status: RENTAL_STATUS.CANCELLED,
+      charge_outcome: chargeOutcome,
+      ...(refundDue === null ? {} : { refund_due: refundDue }),
+      session_expired: sessionExpired,
+      ...(expireFailure ? { session_expire_failure: expireFailure } : {}),
+      reason_given: reason !== null,
+    },
+  });
+
+  return { status: 200, body: { message, request: withDerived(fresh) } };
+}
+
 // The columns an edit may change. The diff is taken on these only, so a
 // guest's name and contact can never appear in it.
 const EDITABLE_COLUMNS = ['start_datetime', 'end_datetime', 'purpose'];
@@ -866,20 +1062,23 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   res.json({ message: 'Booking updated', request: withDerived(updated) });
 });
 
-// POST /api/rental-requests/:id/cancel — Secretary cancels a booking. The
-// conflict check ignores cancelled rows, so the slot/units free up
-// immediately. SMS stub tells the resident, since this is done TO them.
+// POST /api/rental-requests/:id/cancel — Secretary cancels a booking that has
+// not started, and says why: the reason is stored on the booking and sent to
+// the borrower, since this is done TO them. The work itself is
+// cancelBooking(), shared with the resident's own cancel.
 router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Invalid booking id' });
   }
+  const parsed = parseReason(req.body?.reason, { required: true });
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
 
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
-    .select(
-      'request_id, status, resident_id, outside_borrower_name, outside_borrower_contact, start_datetime, rental_items ( name ), resident_records ( contact_number )'
-    )
+    .select(CANCEL_FIELDS)
     .eq('request_id', id)
     .maybeSingle();
   if (loadError) {
@@ -888,67 +1087,16 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  if (booking.status !== RENTAL_STATUS.CONFIRMED) {
-    return res.status(409).json({
-      error: `Only confirmed bookings can be cancelled — this booking is '${booking.status}'`,
-    });
-  }
 
-  const { data: cancelled, error } = await supabase
-    .from('rental_requests')
-    .update({ status: RENTAL_STATUS.CANCELLED, processed_by_user_id: req.user.user_id })
-    .eq('request_id', id)
-    .eq('status', RENTAL_STATUS.CONFIRMED)
-    .select('request_id')
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to cancel booking: ${error.message}`);
-  }
-  if (!cancelled) {
-    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
-  }
-
-  // Stage 4: an UNPAID charge on a cancelled booking is VOIDed — nothing is
-  // owed anymore, and VOID (unlike deletion) keeps the billing record while
-  // dropping it off the verification queue. A PAID charge stays PAID: it
-  // records money actually received, and any refund is handled offline.
-  const { error: voidError } = await supabase
-    .from('charges')
-    .update({ status: CHARGE_STATUS.VOID })
-    .eq('rental_request_id', id)
-    .eq('status', CHARGE_STATUS.UNPAID);
-  if (voidError) {
-    throw new Error(`Booking cancelled but failed to void its charge: ${voidError.message}`);
-  }
-
-  const { data: fresh } = await supabase
-    .from('rental_requests')
-    .select(MANAGE_FIELDS)
-    .eq('request_id', id)
-    .maybeSingle();
-
-  // To the BORROWER — previously looked up through requested_by_user_id, which
-  // for a walk-in is the Secretary who filed it, not the person whose slot
-  // was just cancelled.
-  const target = await borrowerNotifyTarget(booking);
-  await notify({
-    userId: target.userId,
-    destination: target.destination,
-    relatedType: RELATED_TYPE.RENTAL_REQUEST,
-    relatedTo: id,
-    message: `BrgyServe: your booking of ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} has been CANCELLED by the barangay. Please contact the barangay hall for details.`,
+  const result = await cancelBooking(booking, {
+    user: req.user,
+    processedBy: req.user.user_id,
+    reason: parsed.reason,
+    notifyBorrower: true,
+    responseFields: MANAGE_FIELDS,
+    message: 'Booking cancelled — the slot has been freed',
   });
-
-  await logActivity({
-    userId: req.user.user_id,
-    action: ACTIONS.CANCEL,
-    table: 'rental_requests',
-    recordId: id,
-    before: { status: RENTAL_STATUS.CONFIRMED },
-    after: { status: RENTAL_STATUS.CANCELLED },
-  });
-
-  res.json({ message: 'Booking cancelled — the slot has been freed', request: withDerived(fresh) });
+  res.status(result.status).json(result.body);
 });
 
 // ---------------------------------------------------------------------------
