@@ -13,6 +13,9 @@
 export const CHECKING = "Checking availability…";
 export const AVAILABILITY_FAILED =
   "Couldn't check availability. You can still try to book; the barangay checks again when you do.";
+// The Edit panel's: the Secretary is the barangay, and saves rather than books.
+export const EDIT_AVAILABILITY_FAILED =
+  "Couldn't check availability. You can still save; the system checks again when you do.";
 export const FACILITY_NOT_FREE = "Not free. That time overlaps a booking.";
 export const FULLY_BOOKED = "Fully booked for that time.";
 export const NOTHING_TAKEN = "Nothing is taken that day.";
@@ -28,14 +31,17 @@ const manilaTime = (value) => timeFmt.format(new Date(value));
 const isOrAre = (n) => (n === 1 ? "is" : "are");
 
 // The question for GET /rental-requests/availability: the item and the form's
-// date and two times, as the booking itself would send them.
-export function availabilityPath(itemId, { date, start_time, end_time }) {
+// date and two times, as the booking itself would send them. The Edit panel
+// adds the booking being edited (`excludeId`), so it is not counted against
+// its own new time; the server takes that from the Secretary only.
+export function availabilityPath(itemId, { date, start_time, end_time }, excludeId) {
   const query = new URLSearchParams({
     item_id: String(itemId),
     date,
     start_time,
     end_time,
   });
+  if (excludeId) query.set("exclude_request_id", String(excludeId));
   return `/rental-requests/availability?${query}`;
 }
 
@@ -106,6 +112,23 @@ export function bookingBlock({ answer, quantity, countable }) {
   if (answer.left < 1) return FULLY_BOOKED;
   if (countable && quantity > answer.left) {
     return `Only ${answer.left} left. Lower the quantity to ${answer.left} or less.`;
+  }
+  return null;
+}
+
+// Why an edit may not be saved as it stands, or null: bookingBlock's rule for
+// the Edit panel, where the quantity is fixed (cancel and book again to
+// change it), so the way out is another time. `quantity` is the booking's
+// own; the answer leaves the booking out of the count. No answer blocks
+// nothing.
+export function editBlock({ answer, quantity }) {
+  if (!answer) return null;
+  if (answer.item_type === "facility") {
+    return answer.left > 0 ? null : FACILITY_NOT_FREE;
+  }
+  if (answer.left < 1) return FULLY_BOOKED;
+  if (quantity > answer.left) {
+    return `Only ${answer.left} left for that time; this booking needs ${quantity}. Choose another time.`;
   }
   return null;
 }

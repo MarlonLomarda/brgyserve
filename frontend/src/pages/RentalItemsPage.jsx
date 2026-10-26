@@ -1,8 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { ITEM_TYPE_LABELS as TYPE_LABELS } from "../constants/rentals";
 
 // Facilities are whole venues booked as one unit, so quantity locks to 1.
+
+// The lower-stock warning in words (step C3): the server's 409
+// STOCK_BELOW_BOOKED carries counts only (bookings, units, largest,
+// new_total), never who booked or why. `name` is the item's current name.
+function stockWarningText({ bookings, units, largest, new_total }, name) {
+  const one = bookings === 1;
+  return [
+    `${bookings} upcoming or overdue booking${one ? " holds" : "s hold"} ${units} unit${units === 1 ? "" : "s"} of ${name}.`,
+    one ? null : `The largest asks for ${largest}.`,
+    `If you lower the total to ${new_total}, ${one ? "that booking stays" : "those bookings stay"}, but new bookings will be refused until enough units are free.`,
+    "Lower it anyway?",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 const EMPTY_FORM = {
   item_id: null,
@@ -21,6 +36,9 @@ export default function RentalItemsPage() {
   const [form, setForm] = useState(null); // null = closed; object = create/edit form
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  // The server's STOCK_BELOW_BOOKED answer while its warning is shown.
+  const [stockWarning, setStockWarning] = useState(null);
+  const quantityRef = useRef(null);
 
   const load = useCallback(async () => {
     setListError("");
@@ -39,11 +57,13 @@ export default function RentalItemsPage() {
 
   function openCreate() {
     setFormError("");
+    setStockWarning(null);
     setForm({ ...EMPTY_FORM });
   }
 
   function openEdit(item) {
     setFormError("");
+    setStockWarning(null);
     setForm({
       item_id: item.item_id,
       name: item.name,
@@ -56,6 +76,8 @@ export default function RentalItemsPage() {
 
   function handleChange(e) {
     const { name, value } = e.target;
+    // A new number is a new question: the warning was about the old one.
+    if (name === "quantity_total" || name === "type") setStockWarning(null);
     setForm((f) => {
       const next = { ...f, [name]: value };
       // facilities are single-unit — lock the quantity
@@ -64,9 +86,17 @@ export default function RentalItemsPage() {
     });
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
+    save(false);
+  }
+
+  // Saves the form. `confirmLower` is "Lower anyway": the same request, with
+  // confirm_lower_stock, after the server warned that bookings hold more
+  // units than the new total. WARN, THEN ALLOW: those bookings stay.
+  async function save(confirmLower) {
     setFormError("");
+    setStockWarning(null);
     setBusy(true);
     try {
       const body = {
@@ -75,6 +105,7 @@ export default function RentalItemsPage() {
         description: form.description,
         quantity_total: Number(form.quantity_total),
         fee: form.fee,
+        ...(confirmLower ? { confirm_lower_stock: true } : {}),
       };
       const data = form.item_id
         ? await authFetch(`/rental-items/${form.item_id}`, {
@@ -86,10 +117,25 @@ export default function RentalItemsPage() {
       setForm(null);
       await load();
     } catch (err) {
-      setFormError(err.message);
+      if (err.status === 409 && err.data?.code === "STOCK_BELOW_BOOKED") {
+        setStockWarning(err.data);
+      } else {
+        setFormError(err.message);
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  // "Keep the current number": the total goes back to what is saved, and
+  // nothing is sent; any other change in the form is kept.
+  function keepNumber() {
+    const saved = items?.find((i) => i.item_id === form.item_id);
+    setStockWarning(null);
+    if (saved) {
+      setForm((f) => ({ ...f, quantity_total: String(saved.quantity_total) }));
+    }
+    quantityRef.current?.focus();
   }
 
   async function toggleActive(item) {
@@ -161,6 +207,7 @@ export default function RentalItemsPage() {
                 <span className="hint">(facilities are single-unit)</span>
               )}
               <input
+                ref={quantityRef}
                 name="quantity_total"
                 type="number"
                 min="1"
@@ -193,6 +240,35 @@ export default function RentalItemsPage() {
               rows={3}
             />
           </label>
+          {stockWarning && (
+            <div className="alert info stock-warning" role="alert">
+              <p>
+                {stockWarningText(
+                  stockWarning,
+                  items?.find((i) => i.item_id === form.item_id)?.name ||
+                    form.name,
+                )}
+              </p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn secondary danger"
+                  disabled={busy}
+                  onClick={() => save(true)}
+                >
+                  Lower anyway
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={busy}
+                  onClick={keepNumber}
+                >
+                  Keep the current number
+                </button>
+              </div>
+            </div>
+          )}
           <div className="actions">
             <button className="btn" type="submit" disabled={busy}>
               {busy ? "Saving…" : form.item_id ? "Save changes" : "Create"}

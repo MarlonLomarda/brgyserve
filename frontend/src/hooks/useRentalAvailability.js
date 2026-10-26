@@ -22,7 +22,10 @@ export const AVAILABILITY_DELAY_MS = 400;
 // reload }. data and slot are the last answer and its slot (kept while
 // "loading"); reload asks again for the same fields, after a booking the
 // server refused.
-export default function useRentalAvailability(itemId, date, startTime, endTime) {
+//
+// `excludeId`, optional, is the booking being edited (the Edit panel): it is
+// left out of the count, so the booking does not clash with its own time.
+export default function useRentalAvailability(itemId, date, startTime, endTime, excludeId) {
   const { authFetch } = useAuth();
   const [state, setState] = useState({ status: "idle", data: null, slot: null });
   const [asked, setAsked] = useState(0);
@@ -41,7 +44,7 @@ export default function useRentalAvailability(itemId, date, startTime, endTime) 
     const fields = { date, start_time: startTime, end_time: endTime };
     const timer = setTimeout(async () => {
       try {
-        const data = await authFetch(availabilityPath(itemId, fields));
+        const data = await authFetch(availabilityPath(itemId, fields, excludeId));
         if (mine !== seq.current) return;
         setState(
           isAnswer(data)
@@ -57,7 +60,7 @@ export default function useRentalAvailability(itemId, date, startTime, endTime) 
       // Unmounted or changed: whatever is out now answers nobody.
       if (seq.current === mine) seq.current += 1;
     };
-  }, [authFetch, ready, itemId, date, startTime, endTime, asked]);
+  }, [authFetch, ready, itemId, date, startTime, endTime, excludeId, asked]);
 
   const reload = useCallback(() => setAsked((n) => n + 1), []);
   return { ...state, reload };

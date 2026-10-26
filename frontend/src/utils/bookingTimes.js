@@ -26,6 +26,18 @@ export function earliestBookingDate(now) {
   return manilaDay(now);
 }
 
+// A stored booking time as the form's two fields, "YYYY-MM-DD" and "HH:MM",
+// in Manila whatever clock the computer keeps (the Edit panel's prefill).
+const MANILA_TIME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Manila",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+export function manilaInputs(value) {
+  return { date: manilaDay(value), time: MANILA_TIME.format(new Date(value)) };
+}
+
 // A date and a time from the form, as the moment the server will read them,
 // or null while either is missing or not yet whole.
 function manilaMoment(date, time) {

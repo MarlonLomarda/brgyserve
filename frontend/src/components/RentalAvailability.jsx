@@ -12,8 +12,9 @@ import {
 // The wrapper is always drawn, so the status region exists before its first
 // words (a live region that appears with its text is often not read out), and
 // so the time fields' own message, when there is one, stays the element right
-// after their grid.
-export default function RentalAvailability({ check }) {
+// after their grid. `failedText` replaces the failed check's words (the Edit
+// panel saves rather than books).
+export default function RentalAvailability({ check, failedText = AVAILABILITY_FAILED }) {
   const { status, data, slot } = check;
   const stale = status === "loading";
   const shown =
@@ -39,7 +40,7 @@ export default function RentalAvailability({ check }) {
       </div>
       {status === "error" && (
         <div className="alert info" role="alert">
-          {AVAILABILITY_FAILED}
+          {failedText}
         </div>
       )}
     </div>

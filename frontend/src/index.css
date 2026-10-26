@@ -3304,6 +3304,21 @@ button.pay-tab:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+/* Rental items' lower-stock warning (step C3): an .alert.info in the edit
+   form holding a sentence and two buttons. The paragraph's own margins made
+   the box taller above the sentence than below the buttons, and the box sat
+   4px over the Save row (.pending-card .alert's bottom margin); here it is
+   even, and 12px clear of Save. Scoped to the class: no shared .alert,
+   .actions or .pending-card rule changes. .alert.stock-warning is (0,2,0),
+   as .pending-card .alert is, and wins by coming later in the file. */
+.stock-warning p {
+  margin: 0 0 10px;
+}
+
+.alert.stock-warning {
+  margin-bottom: 12px;
+}
+
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
    count on the left; Rows per page, Previous, the page numbers and Next on
    the right. Where the column is too narrow for one line it wraps, and only

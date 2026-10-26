@@ -17,11 +17,20 @@ import {
   rentalMeta,
 } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
-import { bookingTimeError, earliestBookingDate } from "../utils/bookingTimes";
+import {
+  bookingTimeError,
+  earliestBookingDate,
+  manilaInputs,
+} from "../utils/bookingTimes";
 import { ANY, backwards, clock, manilaToday } from "../utils/chargeFilters";
 import { searchTerms } from "../utils/chargeSearch";
 import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
-import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
+import {
+  bookingBlock,
+  EDIT_AVAILABILITY_FAILED,
+  editBlock,
+  quantityCap,
+} from "../utils/rentalAvailability";
 import {
   accountHandle,
   ANY_ITEM,
@@ -226,31 +235,41 @@ function ReturnedBy({ booking }) {
   );
 }
 
-const pad = (n) => String(n).padStart(2, "0");
-const toDateInput = (iso) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-const toTimeInput = (iso) => {
-  const d = new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
 // Edit changes the date, the times and the purpose, and nothing else (step
 // B2): the server refuses a different quantity, and the item and borrower
 // were never editable. So the quantity is shown, not offered, and the PUT
 // carries no quantity_requested; to change either, cancel and book again.
+//
+// Since step C3 it shows what is free for the new time under the time
+// fields, as the booking forms do, with this booking left out of the count
+// (exclude_request_id), and the booking's own quantity decides whether Save
+// is blocked (editBlock). Advice only: the server checks again on Save. The
+// fields are filled, and the date's earliest day set, in Manila time.
 function EditPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const [form, setForm] = useState({
-    date: toDateInput(booking.start_datetime),
-    start_time: toTimeInput(booking.start_datetime),
-    end_time: toTimeInput(booking.end_datetime),
-    purpose: booking.purpose,
+  const [form, setForm] = useState(() => {
+    const start = manilaInputs(booking.start_datetime);
+    return {
+      date: start.date,
+      start_time: start.time,
+      end_time: manilaInputs(booking.end_datetime).time,
+      purpose: booking.purpose,
+    };
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const availability = useRentalAvailability(
+    item?.item_id,
+    form.date,
+    form.start_time,
+    form.end_time,
+    booking.request_id,
+  );
+  const answer = availability.status === "ready" ? availability.data : null;
+  const blocked = editBlock({ answer, quantity: booking.quantity_requested });
+  const blockedId = useId();
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -259,6 +278,8 @@ function EditPanel({ booking, onDone }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // Save is disabled then; this stops the Enter key too.
+    if (blocked) return;
     setError("");
     setBusy(true);
     try {
@@ -274,11 +295,15 @@ function EditPanel({ booking, onDone }) {
       onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message); // conflict messages land here
+      // The time was taken after the panel last asked: ask again.
+      if (err.status === 409) availability.reload();
       setBusy(false);
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in Manila, as on the booking forms: it was today in UTC, which
+  // until 8 AM in Manila is yesterday.
+  const today = earliestBookingDate(clock.now());
 
   return (
     <div className="pending-card">
@@ -341,6 +366,10 @@ function EditPanel({ booking, onDone }) {
             />
           </label>
         </div>
+        <RentalAvailability
+          check={availability}
+          failedText={EDIT_AVAILABILITY_FAILED}
+        />
         <label>
           Purpose
           <textarea
@@ -353,20 +382,34 @@ function EditPanel({ booking, onDone }) {
           />
         </label>
         <div className="actions">
-          <button className="btn" type="submit" disabled={busy}>
+          <button
+            className="btn"
+            type="submit"
+            disabled={busy || Boolean(blocked)}
+            aria-describedby={blocked ? blockedId : undefined}
+          >
             {busy ? "Checking availability…" : "Save changes"}
           </button>
+          {blocked && (
+            <span id={blockedId} className="rental-block-reason">
+              {blocked}
+            </span>
+          )}
         </div>
       </form>
     </div>
   );
 }
 
-// Staff record a physical item's return: an outcome + optional note.
+// Staff record a physical item's return: an outcome + optional note. An
+// overdue booking (the Overdue tab's own test, inTab) starts on "Returned
+// late", any other on time (step C3); Staff can change either.
 function ReturnPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const [outcome, setOutcome] = useState(RETURN_OUTCOMES[0].value);
+  const [outcome, setOutcome] = useState(() =>
+    inTab(booking, "overdue") ? "returned_late" : RETURN_OUTCOMES[0].value,
+  );
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -410,7 +453,11 @@ function ReturnPanel({ booking, onDone }) {
         </button>
       </div>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <label>
@@ -1399,9 +1446,12 @@ export default function RentalBookingsPage({
                                 </button>
                               </>
                             )}
+                            {/* Never before the booking starts (the
+                                server's not_started; it refuses too). */}
                             {canReturn &&
                               r.status === "confirmed" &&
-                              returnable && (
+                              returnable &&
+                              r.not_started !== true && (
                                 <button
                                   className="btn secondary"
                                   onClick={() => setReturning(r)}
