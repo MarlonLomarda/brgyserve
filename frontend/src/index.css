@@ -3356,6 +3356,34 @@ button.pay-tab:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+/* The four rental panels (step O1/O2): Encode walk-in, Edit and Mark
+   returned (RentalBookingsPage.jsx) and Cancel (CancelBookingPanel.jsx, which
+   My rentals opens too). .pending-head has no margin of its own, so the
+   tabs, the Date label or the first field touched the help text above (and,
+   at 640px and below, the Back button). It collapses with an .alert's 12px
+   to 16. The shared .pending-head, in 21 places, is unchanged. */
+.rental-form-panel .pending-head {
+  margin-bottom: 16px;
+}
+
+/* "← Back to list" keeps to one line beside the help text, which wraps
+   instead: on the walk-in it broke as "← Back to / list" at 768 and 1280.
+   At 640px and below the shared .pending-head wrap still gives it a line of
+   its own under the text, which is accepted. As .staff-accounts-page does
+   for "New staff account". Cancel has no Back button. */
+.rental-form-panel .pending-head > .btn {
+  white-space: nowrap;
+}
+
+/* A booking form with no Quantity box (an item with one unit on Book a
+   rental and the walk-in form; Edit always) left End time alone on a row.
+   The Date label then takes the whole row, and Start | End share the next;
+   the JSX decides when. 1 / -1, not .span-2: .span-2 is released at 560px
+   while .grid-2 collapses at 480, so 481 to 560 would break again. */
+.rental-date-full {
+  grid-column: 1 / -1;
+}
+
 /* Rental items' lower-stock warning (step C3): an .alert.info in the edit
    form holding a sentence and two buttons. The paragraph's own margins made
    the box taller above the sentence than below the buttons, and the box sat

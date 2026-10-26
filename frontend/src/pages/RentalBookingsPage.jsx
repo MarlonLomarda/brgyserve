@@ -306,7 +306,7 @@ function EditPanel({ booking, onDone }) {
   const today = earliestBookingDate(clock.now());
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Edit booking #{booking.request_id}</h3>
@@ -333,8 +333,10 @@ function EditPanel({ booking, onDone }) {
       )}
 
       <form onSubmit={handleSubmit}>
+        {/* No Quantity box here, ever: Date takes the whole row, so Start
+            and End time sit side by side under it. */}
         <div className="grid-2">
-          <label>
+          <label className="rental-date-full">
             Date
             <input
               name="date"
@@ -434,7 +436,7 @@ function ReturnPanel({ booking, onDone }) {
   }
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Mark returned — booking #{booking.request_id}</h3>
@@ -651,7 +653,7 @@ function WalkInBookingPanel({ onDone }) {
   const today = earliestBookingDate(clock.now());
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Encode walk-in booking</h3>
@@ -791,8 +793,10 @@ function WalkInBookingPanel({ onDone }) {
               </p>
             )}
 
+            {/* Without a Quantity box, Date takes the whole row so Start and
+                End time sit side by side; with one, Date | Quantity. */}
             <div className="grid-2">
-              <label>
+              <label className={isCountable ? undefined : "rental-date-full"}>
                 Date
                 <input
                   name="date"

@@ -268,8 +268,10 @@ export default function BookRentalPage() {
                 </p>
               )}
 
+              {/* Without a Quantity box, Date takes the whole row so Start
+                  and End time sit side by side; with one, Date | Quantity. */}
               <div className="grid-2">
-                <label>
+                <label className={isCountable ? undefined : "rental-date-full"}>
                   Date
                   <input
                     name="date"

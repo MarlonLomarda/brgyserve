@@ -64,7 +64,7 @@ export default function CancelBookingPanel({
   }
 
   return (
-    <div className="pending-card cancel-booking-panel">
+    <div className="pending-card cancel-booking-panel rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>{title}</h3>
