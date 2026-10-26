@@ -525,6 +525,7 @@ function WalkInBookingPanel({ onDone }) {
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [mode, setMode] = useState("resident"); // 'resident' | 'guest'
   const [resident, setResident] = useState(null);
+  const residentBoxId = useId(); // the "Resident" label's for=
   const [guest, setGuest] = useState({ name: "", contact: "" });
   const [form, setForm] = useState({ ...EMPTY_WALK_IN });
   const [error, setError] = useState("");
@@ -693,8 +694,11 @@ function WalkInBookingPanel({ onDone }) {
 
         {mode === "resident" ? (
           <>
-            <label>Resident</label>
+            <label htmlFor={residentBoxId} className="picker-label">
+              Resident
+            </label>
             <ResidentPicker
+              inputId={residentBoxId}
               value={resident}
               onPick={(r) => {
                 setResident(r);

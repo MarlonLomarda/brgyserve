@@ -2030,12 +2030,51 @@ button.link-button:hover:not(:disabled) {
   margin: 0;
 }
 
+/* The picker's root (components/ResidentPicker.jsx), in its search and its
+   picked state, on all five screens that use it: the rental and document
+   walk-in forms, New household, Add a member and the blotter's party rows.
+   It is the one field not wrapped in a <label>, so it carries a label's 14px
+   itself; before step O1/O2 the next label (or the results list) touched it.
+   In a party row it also evens the row's foot with the typed-name fields. */
+.resident-picker {
+  margin-bottom: 14px;
+}
+
+/* A label naming the picker (for= its box) sits 6px above the box, as a
+   wrapping label's text does: the box's own 6px margin-top collapses with
+   this. A bare label kept its 14px and stood apart from its box. */
+.picker-label {
+  margin-bottom: 6px;
+}
+
 .picker-selected {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* "Searching…" and "No matching residents.": always in the DOM (role
+   status), spaced only while it says something. */
+.picker-status:not(:empty) {
+  margin-top: 0.35rem;
+}
+
+/* A failed search: the reason (role alert) and Try again on one line where
+   they fit. #b91c1c on white is 6.47:1. */
+.picker-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 0.35rem;
+}
+
+.picker-error p {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
 }
 
 .picker-results {
@@ -2046,11 +2085,15 @@ button.link-button:hover:not(:disabled) {
   overflow-y: auto;
 }
 
+/* A result is a <button>, so without a colour of its own it took the global
+   button's #fff, white on the card's white (1.00:1). #1e293b, the body text,
+   is 14.63:1 on white. */
 .picker-option {
   display: block;
   width: 100%;
   text-align: left;
   padding: 0.5rem 0.65rem;
+  color: #1e293b;
   background: none;
   border: none;
   border-bottom: 1px solid #f1f5f9;
@@ -2062,8 +2105,17 @@ button.link-button:hover:not(:disabled) {
   border-bottom: none;
 }
 
-.picker-option:hover {
+/* (0,3,1), as button.tab's hover is: the global button:hover:not(:disabled)
+   is (0,2,1) and beat a plain .picker-option:hover (0,2,0), painting the row
+   #1d4ed8, where the grey details read 1.41:1. On #f8fafc the name is
+   13.98:1 and the details, darkened to #475569, 7.24:1 (#64748b would be
+   4.55). The global button and .muted rules are unchanged. */
+button.picker-option:hover:not(:disabled) {
   background: #f8fafc;
+}
+
+button.picker-option:hover .muted {
+  color: #475569;
 }
 
 @media (max-width: 560px) {

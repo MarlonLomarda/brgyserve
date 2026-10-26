@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ResidentPicker from "../components/ResidentPicker";
 import { ASSIGNABLE_ROLES, HOUSEHOLD_ROLE } from "../constants/households";
@@ -56,6 +56,7 @@ function emptyMessage(search, active, totalAll) {
 function CreateHouseholdModal({ onClose, onCreated }) {
   const { authFetch } = useAuth();
   const [head, setHead] = useState(null);
+  const headBoxId = useId(); // the "Household head" label's for=
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(null);
@@ -113,7 +114,7 @@ function CreateHouseholdModal({ onClose, onCreated }) {
         )}
 
         <form onSubmit={handleSubmit}>
-          <label>
+          <label htmlFor={headBoxId} className="picker-label">
             Household head
             <span className="hint">
               {" "}
@@ -121,6 +122,7 @@ function CreateHouseholdModal({ onClose, onCreated }) {
             </span>
           </label>
           <ResidentPicker
+            inputId={headBoxId}
             value={head}
             onPick={pickHead}
             onClear={() => setHead(null)}
@@ -161,6 +163,7 @@ function CreateHouseholdModal({ onClose, onCreated }) {
 function AddMemberPanel({ householdId, onDone, onCancel }) {
   const { authFetch } = useAuth();
   const [resident, setResident] = useState(null);
+  const residentBoxId = useId(); // the "Resident" label's for=
   const [role, setRole] = useState(ASSIGNABLE_ROLES[0]);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(null); // 409 -> offer the transfer
@@ -214,8 +217,11 @@ function AddMemberPanel({ householdId, onDone, onCancel }) {
         </div>
       )}
 
-      <label>Resident</label>
+      <label htmlFor={residentBoxId} className="picker-label">
+        Resident
+      </label>
       <ResidentPicker
+        inputId={residentBoxId}
         value={resident}
         onPick={(r) => {
           setResident(r);

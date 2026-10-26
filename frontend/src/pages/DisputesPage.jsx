@@ -72,6 +72,7 @@ function PartyRow({ party, onChange, onRemove, canRemove }) {
       </div>
       {party.mode === "resident" ? (
         <ResidentPicker
+          ariaLabel={`${party.role} resident`}
           value={party.resident}
           onPick={(resident) => set({ resident })}
           onClear={() => set({ resident: null })}
