@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import RentalAvailability from "../components/RentalAvailability";
 import {
   ITEM_TYPE_LABELS,
   formatSchedule,
   rentalMeta,
 } from "../constants/rentals";
+import useRentalAvailability from "../hooks/useRentalAvailability";
 import { bookingTimeError, earliestBookingDate } from "../utils/bookingTimes";
 import { clock } from "../utils/chargeFilters";
+import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
 
 const EMPTY_FORM = {
   item_id: "",
@@ -73,6 +76,22 @@ export default function BookRentalPage() {
   const quantity = isCountable ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
 
+  // What is free for the chosen time, asked of the server once the item, the
+  // date and both times are set. ADVICE ONLY: the server decides at Book now.
+  // An answer caps the quantity and can block Book now, with the reason
+  // beside it; no answer (none yet, one out, or a check that failed) leaves
+  // the form as it was.
+  const availability = useRentalAvailability(
+    selectedItem?.item_id,
+    form.date,
+    form.start_time,
+    form.end_time,
+  );
+  const answer = availability.status === "ready" ? availability.data : null;
+  const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
+  const blocked = bookingBlock({ answer, quantity, countable: isCountable });
+  const blockedId = useId();
+
   function handleChange(e) {
     const { name, value } = e.target;
     // A changed date or time may answer the check; it runs again on Book now.
@@ -88,6 +107,8 @@ export default function BookRentalPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // Book now is disabled then; this stops the Enter key too.
+    if (blocked) return;
     setError("");
     // CHECKED ON BOOK NOW, NOT AS YOU TYPE. A start already past, or an end
     // not after the start, is refused here in the server's words and nothing
@@ -114,6 +135,9 @@ export default function BookRentalPage() {
       setForm({ ...EMPTY_FORM });
     } catch (err) {
       setError(err.message); // conflict reasons surface here — pick another slot
+      // The slot was taken after the page last asked: ask again, so the
+      // display matches what the server just said.
+      if (err.status === 409) availability.reload();
     } finally {
       setBusy(false);
     }
@@ -260,13 +284,13 @@ export default function BookRentalPage() {
                   <label>
                     Quantity{" "}
                     <span className="hint">
-                      (up to {selectedItem.quantity_total})
+                      {cap > 0 ? `(up to ${cap})` : "(none left)"}
                     </span>
                     <input
                       name="quantity"
                       type="number"
                       min="1"
-                      max={selectedItem.quantity_total}
+                      max={Math.max(1, cap)}
                       step="1"
                       value={form.quantity}
                       onChange={handleChange}
@@ -302,6 +326,7 @@ export default function BookRentalPage() {
                   {timeError}
                 </div>
               )}
+              <RentalAvailability check={availability} />
 
               <label>
                 Purpose
@@ -329,9 +354,19 @@ export default function BookRentalPage() {
               )}
 
               <div className="actions">
-                <button className="btn" type="submit" disabled={busy}>
+                <button
+                  className="btn"
+                  type="submit"
+                  disabled={busy || Boolean(blocked)}
+                  aria-describedby={blocked ? blockedId : undefined}
+                >
                   {busy ? "Checking availability…" : "Book now"}
                 </button>
+                {blocked && (
+                  <span id={blockedId} className="rental-block-reason">
+                    {blocked}
+                  </span>
+                )}
               </div>
             </>
           )}

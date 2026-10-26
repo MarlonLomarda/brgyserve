@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
 import CancelBookingPanel from "../components/CancelBookingPanel";
+import RentalAvailability from "../components/RentalAvailability";
 import ResidentPicker from "../components/ResidentPicker";
 import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
@@ -15,9 +16,12 @@ import {
   isReturnable,
   rentalMeta,
 } from "../constants/rentals";
-import { ANY, backwards, manilaToday } from "../utils/chargeFilters";
+import useRentalAvailability from "../hooks/useRentalAvailability";
+import { bookingTimeError, earliestBookingDate } from "../utils/bookingTimes";
+import { ANY, backwards, clock, manilaToday } from "../utils/chargeFilters";
 import { searchTerms } from "../utils/chargeSearch";
 import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
+import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
 import {
   accountHandle,
   ANY_ITEM,
@@ -461,39 +465,47 @@ const EMPTY_WALK_IN = {
 // a resident-facing page this feature does not otherwise touch. The fields
 // are the same ones that form collects; only who-it-is-for is new.
 //
-// THE CONFLICT CHECK IS THE SERVER'S. This posts to the same
-// POST /rental-requests handler BookRentalPage does, and that handler runs
-// findConflict() before and after the insert for every caller — there is no
-// second code path a walk-in could take around it. Refusals surface here in
-// `error` exactly as they do on the resident form.
+// THE AVAILABILITY CHECK IS THE SERVER'S. This posts to the same
+// POST /rental-requests handler BookRentalPage does, and that handler books
+// through create_rental_booking (migration 024) for every caller — there is
+// no second code path a walk-in could take around it. Before the press the
+// form shows what is free, from the same rule (RentalAvailability, as on Book
+// a rental), and its own time check runs as Book a rental's does; refusals
+// surface here in `error` exactly as they do on the resident form.
 function WalkInBookingPanel({ onDone }) {
   const { authFetch } = useAuth();
-  const [items, setItems] = useState(null); // null = loading
-  const [loadError, setLoadError] = useState("");
+  const [items, setItems] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [mode, setMode] = useState("resident"); // 'resident' | 'guest'
   const [resident, setResident] = useState(null);
   const [guest, setGuest] = useState({ name: "", contact: "" });
   const [form, setForm] = useState({ ...EMPTY_WALK_IN });
   const [error, setError] = useState("");
+  // The form's own check of the times, shown under the time fields.
+  const [timeError, setTimeError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Numbers each load, so only the newest one may change the items.
+  const loadSeq = useRef(0);
+
+  // A FAILED LOAD IS NOT AN EMPTY LIST (CLAUDE.md: a list that failed to
+  // load). This used to store [] beside the error, which showed "Nothing is
+  // currently available for rental." under it. items now stays null and the
+  // error, with Try again, takes the place of the fields, as on Book a rental.
+  const loadItems = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setItems(null);
+    try {
+      const data = await authFetch("/rental-items");
+      if (seq === loadSeq.current) setItems(data.rental_items);
+    } catch (err) {
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
+    }
+  }, [authFetch]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await authFetch("/rental-items");
-        if (!cancelled) setItems(data.rental_items);
-      } catch (err) {
-        if (!cancelled) {
-          setLoadError(err.message);
-          setItems([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authFetch]);
+    loadItems();
+  }, [loadItems]);
 
   const selectedItem = items?.find(
     (i) => String(i.item_id) === String(form.item_id),
@@ -502,8 +514,24 @@ function WalkInBookingPanel({ onDone }) {
   const quantity = isCountable ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
 
+  // What is free for the chosen time: advice only, as on Book a rental.
+  const availability = useRentalAvailability(
+    selectedItem?.item_id,
+    form.date,
+    form.start_time,
+    form.end_time,
+  );
+  const answer = availability.status === "ready" ? availability.data : null;
+  const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
+  const blocked = bookingBlock({ answer, quantity, countable: isCountable });
+  const blockedId = useId();
+
   function handleChange(e) {
     const { name, value } = e.target;
+    // A changed date or time may answer the check; it runs again on Record.
+    if (name === "date" || name === "start_time" || name === "end_time") {
+      setTimeError("");
+    }
     setForm((f) => {
       const next = { ...f, [name]: value };
       if (name === "item_id") next.quantity = "1"; // reset when switching items
@@ -518,6 +546,8 @@ function WalkInBookingPanel({ onDone }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // Record booking is disabled then; this stops the Enter key too.
+    if (blocked) return;
     if (mode === "resident" && !resident) {
       setError("Pick the resident this booking is for.");
       return;
@@ -533,6 +563,12 @@ function WalkInBookingPanel({ onDone }) {
       return;
     }
     setError("");
+    // The times, checked as the server will and in its words, before anything
+    // is sent (utils/bookingTimes.js, as on Book a rental). The server checks
+    // again with its own clock.
+    const refused = bookingTimeError(form, clock.now());
+    setTimeError(refused || "");
+    if (refused) return;
     setBusy(true);
     try {
       const data = await authFetch("/rental-requests", {
@@ -555,11 +591,16 @@ function WalkInBookingPanel({ onDone }) {
       onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message); // conflict reasons surface here — pick another slot
+      // The slot was taken after the form last asked: ask again.
+      if (err.status === 409) availability.reload();
       setBusy(false);
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in Manila, whatever clock the hall's computer keeps: the date
+  // field's earliest day. It was today in UTC, which until 8 AM in Manila is
+  // yesterday.
+  const today = earliestBookingDate(clock.now());
 
   return (
     <div className="pending-card">
@@ -576,14 +617,19 @@ function WalkInBookingPanel({ onDone }) {
         </button>
       </div>
 
-      {loadError && <div className="alert error">{loadError}</div>}
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
+        {/* Two toggles, one pressed: which kind of borrower this is for. */}
         <div className="tab-container">
           <button
             type="button"
             className={`tab ${mode === "resident" ? "active-tab" : ""}`}
+            aria-pressed={mode === "resident"}
             onClick={() => switchMode("resident")}
           >
             Existing resident
@@ -591,6 +637,7 @@ function WalkInBookingPanel({ onDone }) {
           <button
             type="button"
             className={`tab ${mode === "guest" ? "active-tab" : ""}`}
+            aria-pressed={mode === "guest"}
             onClick={() => switchMode("guest")}
           >
             Guest from another barangay
@@ -641,7 +688,25 @@ function WalkInBookingPanel({ onDone }) {
           </div>
         )}
 
-        {items === null ? (
+        {/* The error first, then loading, then empty, then the fields. Try
+            again is a plain button, so pressing it inside this form loads the
+            items again and submits nothing. */}
+        {loadError ? (
+          <>
+            <div className="alert error" role="alert">
+              Could not load the rental items: {loadError}
+            </div>
+            <div className="actions book-rental-retry">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={loadItems}
+              >
+                Try again
+              </button>
+            </div>
+          </>
+        ) : items === null ? (
           <p className="muted">Loading rental items…</p>
         ) : items.length === 0 ? (
           <p className="muted">Nothing is currently available for rental.</p>
@@ -691,13 +756,13 @@ function WalkInBookingPanel({ onDone }) {
                 <label>
                   Quantity{" "}
                   <span className="hint">
-                    (up to {selectedItem.quantity_total})
+                    {cap > 0 ? `(up to ${cap})` : "(none left)"}
                   </span>
                   <input
                     name="quantity"
                     type="number"
                     min="1"
-                    max={selectedItem.quantity_total}
+                    max={Math.max(1, cap)}
                     step="1"
                     value={form.quantity}
                     onChange={handleChange}
@@ -726,6 +791,13 @@ function WalkInBookingPanel({ onDone }) {
                 />
               </label>
             </div>
+            {/* The times' own check, by the fields it is about. */}
+            {timeError && (
+              <div className="alert error" role="alert">
+                {timeError}
+              </div>
+            )}
+            <RentalAvailability check={availability} />
 
             <label>
               Purpose
@@ -753,9 +825,19 @@ function WalkInBookingPanel({ onDone }) {
             )}
 
             <div className="actions">
-              <button className="btn" type="submit" disabled={busy}>
+              <button
+                className="btn"
+                type="submit"
+                disabled={busy || Boolean(blocked)}
+                aria-describedby={blocked ? blockedId : undefined}
+              >
                 {busy ? "Checking availability…" : "Record booking"}
               </button>
+              {blocked && (
+                <span id={blockedId} className="rental-block-reason">
+                  {blocked}
+                </span>
+              )}
             </div>
           </>
         )}

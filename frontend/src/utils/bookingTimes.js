@@ -34,6 +34,18 @@ function manilaMoment(date, time) {
   return Number.isNaN(moment.getTime()) ? null : moment;
 }
 
+// The slot the form describes, as the two moments the server will read, or
+// null while the date or a time is missing or not yet whole, or the end is not
+// after the start. A start already past still gives a slot: the form may ask
+// what is taken then, and bookingTimeError refuses the booking itself. The
+// availability check (hooks/useRentalAvailability.js) asks only for a slot.
+export function bookingWindow({ date, start_time, end_time }) {
+  const start = manilaMoment(date, start_time);
+  const end = manilaMoment(date, end_time);
+  if (!start || !end || end.getTime() <= start.getTime()) return null;
+  return { start, end };
+}
+
 // Why the server would refuse the form's times, in its words, or null. The
 // server checks an end not after the start first, then a start not ahead of
 // `now`, so these do too. A date before today in Manila is refused even

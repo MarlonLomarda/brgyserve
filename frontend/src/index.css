@@ -3266,9 +3266,42 @@ button.pay-tab:hover:not(:disabled) {
    (4px under) and .actions (4px over) collapse to 4px, which read as one
    block. Vertical margins collapse, so this 16px is the gap. (0,2,0) beats
    .actions; the shared .alert, .actions and .pending-card .alert rules, and
-   every other .actions row, are unchanged. */
+   every other .actions row, are unchanged. Since step C1b (26 Oct 2026) the
+   Secretary's walk-in form (WalkInBookingPanel in RentalBookingsPage.jsx)
+   carries the class on its own Try again row: the same row, in a card. */
 .actions.book-rental-retry {
   margin-top: 16px;
+}
+
+/* What is free for the chosen time, under the time fields of Book a rental
+   and the walk-in form (components/RentalAvailability.jsx, step C1b). The
+   result is a shared .alert (success while the time can be booked, error when
+   it cannot) holding one line per sentence, the first a little heavier; the
+   last answer is dimmed while a new one is out. The reason a booking is
+   blocked sits beside its disabled button, in the .actions row, in the error
+   red of .alert.error. Page-scoped: no shared rule is changed. */
+.rental-availability-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rental-availability-line:first-child {
+  font-weight: 600;
+}
+
+.rental-availability-result.is-stale {
+  opacity: 0.55;
+}
+
+.rental-availability .muted {
+  margin-bottom: 16px;
+}
+
+.rental-block-reason {
+  align-self: center;
+  color: #b91c1c;
+  font-size: 0.85rem;
 }
 
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
