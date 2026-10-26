@@ -16,6 +16,7 @@ import * as chargeFilters from '../src/utils/chargeFilters.js';
 import * as chargeSearch from '../src/utils/chargeSearch.js';
 import * as chargeTotals from '../src/utils/chargeTotals.js';
 import * as paging from '../src/utils/paging.js';
+import * as rentalAvailability from '../src/utils/rentalAvailability.js';
 import * as rentalList from '../src/utils/rentalList.js';
 import * as requestList from '../src/utils/requestList.js';
 
@@ -43,6 +44,9 @@ globalThis.rentalList = rentalList;
 // The booking form's earliest date and time checks, checked on their own in
 // section AJ.
 globalThis.bookingTimes = bookingTimes;
+// The booking forms' availability words, cap and block, checked on their own
+// in section AN.
+globalThis.rentalAvailability = rentalAvailability;
 // The Activity Log page's labels and one-line summaries, checked on their own
 // in section AM.
 globalThis.activityLog = activityLog;

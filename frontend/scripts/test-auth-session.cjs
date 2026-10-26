@@ -245,6 +245,20 @@
 // cancel_online_note otherwise; the Activity Log page words the cancel's
 // facts and the late-payment row; and the Privacy Policy names both.
 //
+// Sections AN and AO are what is free before booking (step C1b), on Book a
+// rental (AN) and the Secretary's walk-in form (AO): utils/rentalAvailability.js
+// and bookingTimes.js's bookingWindow case by case, then each form against a
+// stubbed GET /rental-requests/availability: nothing asked until an item, a
+// date and two whole times are set; one request 400ms after the last change;
+// an older answer never replacing a newer one; a facility's free or taken
+// time and that day's taken times; an item's booked, overdue, resting and
+// left; the quantity capped and the submit blocked with its reason beside
+// it; a failed check blocking nothing; a 409 at submit read out and the check
+// asked again; no name or contact shown; nothing kept in the browser. AO adds
+// the walk-in form's four fixes (the time check, today in Manila as the
+// date's earliest day, a failed items load with Try again, its messages read
+// out) and aria-pressed on its two mode buttons.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -14389,8 +14403,10 @@ const root = () => dom.window.document.getElementById('root');
     const codeOf = (f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     const usedIn = srcFiles.map((f) => ({ f: path.relative(path.join(HERE, '..', 'src'), f).replace(/\\/g, '/'),
       n: (codeOf(f).match(/book-rental-retry/g) || []).length })).filter((u) => u.n > 0);
-    check('  and the class is used once, on Book a rental\'s Try again row, and on no other page',
-      said(usedIn) === said([{ f: 'pages/BookRentalPage.jsx', n: 1 }]), said(usedIn));
+    // Since step C1b the walk-in form's Try again row carries it too: the same
+    // row (a failed items load in a .pending-card), with the same 4px collapse.
+    check('  and the class is used once on Book a rental\'s Try again row and once on the walk-in form\'s, and on no other page',
+      said(usedIn) === said([{ f: 'pages/BookRentalPage.jsx', n: 1 }, { f: 'pages/RentalBookingsPage.jsx', n: 1 }]), said(usedIn));
 
     if (F.clock && realNow) F.clock.now = realNow;
     check('section AL kept nothing in the browser: no write to localStorage or sessionStorage',
@@ -14823,6 +14839,525 @@ const root = () => dom.window.document.getElementById('root');
       methods.length > 0 && methods.every((m) => /^GET /.test(m) || /^POST \/rental-requests(\/mine)?\/:id\/cancel$/.test(m)
         || m === 'PUT /rental-requests/:id'),
       said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AN and AO. What is free, before booking (step C1b)
+  // =========================================================================
+  // Migration 024 moved the availability rule into the database, and
+  // GET /rental-requests/availability asks it before a booking: for a
+  // facility, whether the time is free and that day's taken times; for an
+  // item, how many are booked, overdue, resting and left. The two booking
+  // forms, Book a rental (AN) and the Secretary's walk-in form (AO), now show
+  // that under the time fields (hooks/useRentalAvailability.js and
+  // components/RentalAvailability.jsx, worded by utils/rentalAvailability.js):
+  // asked only once an item, a date and two whole times are set, 400ms after
+  // the last change, the older of two answers dropped; the quantity box
+  // capped at what is left; Book now (Record booking) blocked, with the reason
+  // beside it, when nothing is left; a check that failed blocking nothing; a
+  // 409 at submit shown in the server's words and the check asked again. The
+  // page only advises: the server decides. AO also checks the walk-in form's
+  // four fixes: the time check, today in Manila as the date's earliest day, a
+  // failed items load shown with Try again (never an empty list), and its
+  // messages read out (role="alert"); and its two mode buttons' aria-pressed.
+  console.log('\n--- What is free, before booking: Book a rental and the walk-in form ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const A = globalThis.rentalAvailability || {};
+    const B = globalThis.bookingTimes || {};
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const fn = (obj, name, ...args) => {
+      try { return typeof obj[name] === 'function' ? obj[name](...args) : `${name} is not exported`; } catch (e) { return `threw: ${e.message}`; }
+    };
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const FAILED = "Couldn't check availability. You can still try to book; the barangay checks again when you do.";
+    const NOT_FREE = 'Not free. That time overlaps a booking.';
+    const FULL = 'Fully booked for that time.';
+    const NOTHING = 'Nothing is taken that day.';
+    const CHECKING = 'Checking availability…';
+    const PAST = 'The booking must start in the future';
+    const END = 'End time must be after the start time (bookings run within one day)';
+    const onlyLeft = (n) => `Only ${n} left. Lower the quantity to ${n} or less.`;
+    // A Manila time on a given day, as Postgres's timestamptz text (what the
+    // function's jsonb carries).
+    const pgAt = (day, hhmm) => new Date(`${day}T${hhmm}:00+08:00`).toISOString().replace(/\.000Z$/, '+00:00');
+    const facility = (left, taken) => ({ ok: true, item_type: 'facility', total: 1, used: 1 - left, booked: 1 - left,
+      stuck: 0, resting: 0, left, taken });
+    const items = (o = {}) => ({ ok: true, item_type: 'furniture', total: 10, used: 0, booked: 0, stuck: 0, resting: 0, left: 10, ...o });
+
+    // --- a. the pure helpers, case by case ---------------------------------
+    const D0 = '2026-11-02';
+    const win = (d, s, e) => {
+      const w = fn(B, 'bookingWindow', { date: d, start_time: s, end_time: e });
+      return w && typeof w === 'object' ? { start: w.start?.toISOString?.() ?? null, end: w.end?.toISOString?.() ?? null } : w;
+    };
+    const WINDOWS = [
+      ['a whole date and two times: the two Manila moments', [D0, '08:00', '10:00'],
+        { start: '2026-11-02T00:00:00.000Z', end: '2026-11-02T02:00:00.000Z' }],
+      ['no end time yet: none', [D0, '08:00', ''], null],
+      ['no date yet: none', ['', '08:00', '10:00'], null],
+      ['a half-typed time: none', [D0, '8:0', '10:00'], null],
+      ['the end equal to the start: none', [D0, '10:00', '10:00'], null],
+      ['the end before the start: none', [D0, '13:00', '09:00'], null],
+      ['a start already past still gives one (the form refuses the booking itself)', ['2026-10-01', '08:00', '10:00'],
+        { start: '2026-10-01T00:00:00.000Z', end: '2026-10-01T02:00:00.000Z' }],
+    ];
+    for (const [name, [d, s, e], want] of WINDOWS) {
+      check(`bookingWindow: ${name}`, said(win(d, s, e)) === said(want), said(win(d, s, e)));
+    }
+    const askPath = fn(A, 'availabilityPath', 21, { date: D0, start_time: '08:00', end_time: '10:00' });
+    const askUrl = typeof askPath === 'string' ? new URL(askPath, 'http://x') : null;
+    check('availabilityPath: /rental-requests/availability with item_id, date, start_time and end_time, and nothing else',
+      askUrl?.pathname === '/rental-requests/availability'
+        && said([...askUrl.searchParams.entries()]) === said([['item_id', '21'], ['date', D0], ['start_time', '08:00'], ['end_time', '10:00']]),
+      said(askPath));
+
+    const slot = { start: new Date(`${D0}T08:00:00+08:00`), end: new Date(`${D0}T10:00:00+08:00`) };
+    const TEXTS = [
+      ['a facility free, two other bookings that day', facility(1, [{ start: pgAt(D0, '13:00'), end: pgAt(D0, '15:00') },
+        { start: pgAt(D0, '16:00'), end: pgAt(D0, '17:30') }]), 'free',
+      ['Free for 8:00 AM to 10:00 AM.', 'Already taken that day: 1:00 PM to 3:00 PM, 4:00 PM to 5:30 PM.']],
+      ['a facility free, nothing else that day', facility(1, []), 'free', ['Free for 8:00 AM to 10:00 AM.', NOTHING]],
+      ['a facility taken', facility(0, [{ start: pgAt(D0, '07:00'), end: pgAt(D0, '09:00') }]), 'none',
+        [NOT_FREE, 'Already taken that day: 7:00 AM to 9:00 AM.']],
+      ['an item with some left', items({ used: 3, booked: 3, left: 7 }), 'free', ['For that time: 3 booked, 7 left of 10.']],
+      ['an item with 5 overdue and 1 resting', items({ used: 8, booked: 2, stuck: 5, resting: 1, left: 2 }), 'free',
+        ['For that time: 2 booked, 2 left of 10.', '5 are overdue and not yet returned.', '1 is resting for 24 hours after being returned.']],
+      ['an item with 1 overdue and 2 resting', items({ used: 3, booked: 0, stuck: 1, resting: 2, left: 7 }), 'free',
+        ['For that time: 0 booked, 7 left of 10.', '1 is overdue and not yet returned.', '2 are resting for 24 hours after being returned.']],
+      ['an item with none left', items({ used: 10, booked: 10, left: 0 }), 'none', [FULL]],
+      ['an item with none left, 4 of them overdue', items({ used: 10, booked: 6, stuck: 4, left: 0 }), 'none',
+        [FULL, '4 are overdue and not yet returned.']],
+    ];
+    for (const [name, answer, tone, lines] of TEXTS) {
+      const got = fn(A, 'availabilityText', answer, slot);
+      check(`availabilityText: ${name}: ${said(lines)}`, got?.tone === tone && said(got?.lines) === said(lines), said(got));
+    }
+    const homeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    process.env.TZ = 'America/Los_Angeles';
+    const laText = fn(A, 'availabilityText', TEXTS[0][1], slot);
+    process.env.TZ = homeZone;
+    check('  the times are Manila\'s on any computer clock (the same words on a Los Angeles clock)',
+      said(laText?.lines) === said(TEXTS[0][3]), said(laText));
+    // A formatter built when the bundle loads keeps that zone for the run (see
+    // BUNDLE_ZONE), so on a Manila machine the check above cannot see a
+    // formatter that names no zone. The source must name Manila's on every one.
+    const availabilitySource = require('fs').readFileSync(path.join(HERE, '..', 'src', 'utils', 'rentalAvailability.js'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const formatters = (availabilitySource.match(/Intl\.DateTimeFormat\(/g) || []).length;
+    const manilaZones = (availabilitySource.match(/timeZone:\s*["']Asia\/Manila["']/g) || []).length;
+    check('  and utils/rentalAvailability.js gives every time formatter timeZone "Asia/Manila" (comments stripped)',
+      formatters > 0 && manilaZones === formatters, said({ formatters, manilaZones, bundleZone: BUNDLE_ZONE }));
+    const nosy = fn(A, 'availabilityText', { ...facility(1, [{ start: pgAt(D0, '13:00'), end: pgAt(D0, '15:00'), name: 'Ana Cruz',
+      contact: '09170000001', purpose: 'Birthday', request_id: 77 }]), names: ['Ana Cruz'], contact: '09170000001' }, slot);
+    check('  nothing but times and numbers is ever worded: names, contacts, purposes and ids in an answer are not read',
+      Array.isArray(nosy?.lines) && nosy.lines[0] === 'Free for 8:00 AM to 10:00 AM.' && !/Ana|Cruz|0917|Birthday|77/.test(said(nosy?.lines)),
+      said(nosy));
+    check('isAnswer: a full answer is one; { ok: true } alone, a refusal and nothing are not',
+      fn(A, 'isAnswer', items()) === true && fn(A, 'isAnswer', { ok: true }) === false
+        && fn(A, 'isAnswer', { ok: false, code: 'TIME_INVALID' }) === false && fn(A, 'isAnswer', null) === false,
+      said([fn(A, 'isAnswer', items()), fn(A, 'isAnswer', { ok: true }), fn(A, 'isAnswer', null)]));
+    const chairs = { item_id: 22, quantity_total: 10, quantity_available: 10 };
+    const CAPS = [
+      ['7 left: 7', chairs, items({ left: 7 }), 7],
+      ['more left than exist (12 of an item with 10): 10', chairs, items({ left: 12, total: 12 }), 10],
+      ['none left: 0', chairs, items({ left: 0 }), 0],
+      ['no answer yet: what exists, 10', chairs, null, 10],
+      ['no answer, an item with fewer available than its total: 6', { ...chairs, quantity_available: 6 }, null, 6],
+    ];
+    for (const [name, item, answer, want] of CAPS) {
+      check(`quantityCap: ${name}`, fn(A, 'quantityCap', item, answer) === want, said(fn(A, 'quantityCap', item, answer)));
+    }
+    const BLOCKS = [
+      ['a facility taken', { answer: facility(0, []), quantity: 1, countable: false }, NOT_FREE],
+      ['a facility free', { answer: facility(1, []), quantity: 1, countable: false }, null],
+      ['an item with none left', { answer: items({ left: 0 }), quantity: 1, countable: true }, FULL],
+      ['9 asked, 7 left', { answer: items({ left: 7 }), quantity: 9, countable: true }, onlyLeft(7)],
+      ['7 asked, 7 left', { answer: items({ left: 7 }), quantity: 7, countable: true }, null],
+      ['no answer (idle, loading or failed): nothing blocks', { answer: null, quantity: 99, countable: true }, null],
+    ];
+    for (const [name, args, want] of BLOCKS) {
+      check(`bookingBlock: ${name}: ${want === null ? 'no block' : `"${want}"`}`, fn(A, 'bookingBlock', args) === want,
+        said(fn(A, 'bookingBlock', args)));
+    }
+
+    // --- the two forms, against a stubbed API ------------------------------
+    const ITEMS = [
+      { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
+      { item_id: 22, name: 'Folding Chairs', type: 'furniture', description: null, quantity_total: 10, quantity_available: 10, fee: '5.00' },
+    ];
+    // Availability answers by "item start end"; `default` for the rest.
+    const st = { answers: {}, post: null };
+    const isAsk = (url) => /\/rental-requests\/availability\?/.test(url);
+    const stub = (url, method) => {
+      if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: [] };
+      if (method === 'GET' && isAsk(url)) {
+        const p = Object.fromEntries(new URL(url).searchParams.entries());
+        return st.answers[`${p.item_id} ${p.start_time} ${p.end_time}`] ?? st.answers.default;
+      }
+      if (method === 'POST' && /\/rental-requests$/.test(url)) return st.post;
+      return undefined;
+    };
+    const asks = () => net.calls.filter((c) => isAsk(c.url));
+    const paramsOf = (c) => (c ? Object.fromEntries(new URL(c.url).searchParams.entries()) : null);
+    const posts = () => net.calls.filter((c) => c.method === 'POST');
+    // Real time: the check waits 400ms after the last change.
+    const wait = async (pg, ms = 450) => { await new Promise((r) => setTimeout(r, ms)); await pg.settle(); };
+    const choose = async (pg, id) => {
+      const s = pg.query('select[name="item_id"]');
+      if (s && s.value !== String(id)) {
+        s.value = String(id);
+        s.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        await pg.settle();
+      }
+    };
+    const put = async (pg, name, value) => { if (pg.query(`input[name="${name}"]`)) await pg.fill(`input[name="${name}"]`, value); };
+    const times = async (pg, date, start, end) => {
+      await put(pg, 'date', date);
+      await put(pg, 'start_time', start);
+      await put(pg, 'end_time', end);
+    };
+    const purposeIn = async (pg) => {
+      const p = pg.query('textarea[name="purpose"]');
+      if (p && !p.value) {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(p, 'Barangay assembly');
+        p.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        await pg.settle();
+      }
+    };
+    const press = async (pg) => { if (pg.query('form')) await pg.submit(); };
+    // What the form shows. `label` is the submit button's resting name.
+    const look = (pg, label) => {
+      const region = pg.query('.rental-availability [role="status"]');
+      const failed = pg.query('.rental-availability [role="alert"]');
+      const button = [...root().querySelectorAll('button[type="submit"]')].find((b) => [label, CHECKING].includes(b.textContent));
+      const reasonId = button?.getAttribute('aria-describedby') || null;
+      const reason = reasonId ? dom.window.document.getElementById(reasonId) : null;
+      const qty = pg.query('input[name="quantity"]');
+      return {
+        region: !!region && region.getAttribute('aria-live') === 'polite',
+        lines: region ? [...region.querySelectorAll('.rental-availability-line')].map(text) : [],
+        status: text(region),
+        stale: !!region?.querySelector('.is-stale'),
+        failed: text(failed),
+        enabled: button ? !button.disabled : null,
+        reason: text(reason),
+        reasonBeside: !!reason && reason.parentElement === button?.parentElement,
+        max: qty?.getAttribute('max') ?? null,
+        hint: text(qty?.closest('label')?.querySelector('.hint')),
+        whole: text(pg.query('.rental-availability')),
+      };
+    };
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '').replace(/\?.*$/, '')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+
+    // One run of the shared checks over a form that is on screen with its
+    // items loaded. `form` names it in the check labels; `label` is its
+    // submit button; `day` a date ahead of the section's clock.
+    const sharedChecks = async (pg, form, label, day) => {
+      st.answers = { default: facility(1, []) };
+      let v = look(pg, label);
+      check(`${form}: before an item, a date and both times are set nothing is asked; the status region (role="status", `
+          + 'aria-live="polite") is there and empty, and the submit button is pressable as before',
+        v.region && v.status === '' && v.enabled === true && v.reason === null && asks().length === 0, said(v));
+      await choose(pg, 21);
+      await put(pg, 'date', day);
+      await put(pg, 'start_time', '08:00');
+      await wait(pg);
+      check(`${form}: an item, a date and a start but no end time: still nothing asked, the status region still empty`,
+        asks().length === 0 && look(pg, label).region && look(pg, label).status === '', said(asks().map((c) => c.url)));
+      await put(pg, 'end_time', '10:00');
+      v = look(pg, label);
+      check(`${form}: the moment the fields are whole, "${CHECKING}" shows (nothing to dim yet), and nothing is sent before the `
+          + 'debounce', v.status === CHECKING && asks().length === 0, said({ v, asks: asks().length }));
+      await wait(pg);
+      check(`${form}: 400ms later, one GET /rental-requests/availability with item_id, date, start_time and end_time`,
+        asks().length === 1 && asks()[0].method === 'GET'
+          && said(paramsOf(asks()[0])) === said({ item_id: '21', date: day, start_time: '08:00', end_time: '10:00' }),
+        said(asks().map((c) => c.url)));
+      v = look(pg, label);
+      check(`${form}: a facility that is free reads "Free for 8:00 AM to 10:00 AM." and "${NOTHING}"; the button is pressable, no reason`,
+        said(v.lines) === said(['Free for 8:00 AM to 10:00 AM.', NOTHING]) && v.enabled === true && v.reason === null, said(v));
+
+      // Three quick changes, one request: the last.
+      let before = asks().length;
+      for (const end of ['10:30', '11:00', '11:30']) await put(pg, 'end_time', end);
+      await wait(pg);
+      check(`${form}: three quick changes of the end time send one request, for the last (11:30)`,
+        asks().length === before + 1 && paramsOf(asks().at(-1))?.end_time === '11:30', said(asks().slice(before).map(paramsOf)));
+
+      // A late answer never replaces a newer one.
+      net.hold = true;
+      net.held = [];
+      st.answers[`21 08:00 12:00`] = facility(0, [{ start: pgAt(day, '07:00'), end: pgAt(day, '09:00') }]);
+      st.answers[`21 08:00 12:30`] = facility(1, [{ start: pgAt(day, '13:00'), end: pgAt(day, '14:00') }]);
+      await put(pg, 'end_time', '12:00');
+      await wait(pg);
+      v = look(pg, label);
+      check(`${form}: while an answer is out, the previous one stays, dimmed (is-stale)`,
+        v.stale && said(v.lines) === said(['Free for 8:00 AM to 11:30 AM.', NOTHING]), said(v));
+      await put(pg, 'end_time', '12:30');
+      await wait(pg);
+      const heldNow = net.held.length;
+      const first = asks().at(-2);
+      const second = asks().at(-1);
+      net.held[1]?.(200, stub(second?.url ?? '', 'GET'));
+      await pg.settle();
+      net.held[0]?.(200, stub(first?.url ?? '', 'GET'));
+      await pg.settle();
+      net.hold = false;
+      net.held = [];
+      v = look(pg, label);
+      check(`${form}: two answers out; the newer (to 12:30) arrives first and the older (to 12:00, taken) after it: the newer stays`,
+        heldNow === 2 && said(v.lines) === said(['Free for 8:00 AM to 12:30 PM.', 'Already taken that day: 1:00 PM to 2:00 PM.'])
+          && !v.stale && v.enabled === true, said({ heldNow, v }));
+
+      // A facility taken: the taken list, and the button blocked with the reason beside it.
+      st.answers[`21 13:00 15:00`] = { ...facility(0, [{ start: pgAt(day, '08:00'), end: pgAt(day, '10:00') },
+        { start: pgAt(day, '13:30'), end: pgAt(day, '15:00') }]), names: ['Ana Cruz'], contact: '09170000001' };
+      await put(pg, 'start_time', '13:00');
+      await put(pg, 'end_time', '15:00');
+      await wait(pg);
+      v = look(pg, label);
+      check(`${form}: a facility taken reads "${NOT_FREE}" and "Already taken that day: 8:00 AM to 10:00 AM, 1:30 PM to 3:00 PM." `
+          + '(times only, in Manila time)',
+        said(v.lines) === said([NOT_FREE, 'Already taken that day: 8:00 AM to 10:00 AM, 1:30 PM to 3:00 PM.']), said(v));
+      check(`${form}:   the button is disabled, with "${NOT_FREE}" beside it as its description (aria-describedby)`,
+        v.enabled === false && v.reason === NOT_FREE && v.reasonBeside, said(v));
+      check(`${form}:   no name, contact or purpose anywhere in the display, though the answer carried them`,
+        v.lines.length === 2 && !/Ana|Cruz|0917/.test(v.whole ?? ''), v.whole);
+      await purposeIn(pg);
+      before = posts().length;
+      await press(pg);
+      check(`${form}:   submitting the form anyway sends nothing (the button still disabled after)`,
+        posts().length === before && look(pg, label).enabled === false, String(posts().length - before));
+
+      // An item: how many are left, the cap, and the block.
+      st.answers[`22 08:00 10:00`] = items({ used: 3, booked: 3, left: 7 });
+      st.answers[`22 13:00 15:00`] = items({ used: 8, booked: 2, stuck: 5, resting: 1, left: 2 });
+      st.answers[`22 16:00 18:00`] = items({ used: 10, booked: 6, stuck: 4, left: 0 });
+      await choose(pg, 22);
+      await put(pg, 'start_time', '08:00');
+      await put(pg, 'end_time', '10:00');
+      await wait(pg);
+      v = look(pg, label);
+      check(`${form}: an item reads "For that time: 3 booked, 7 left of 10."; the quantity box's max is 7, its hint "(up to 7)"`,
+        said(v.lines) === said(['For that time: 3 booked, 7 left of 10.']) && v.max === '7' && v.hint === '(up to 7)' && v.enabled === true,
+        said(v));
+      await put(pg, 'quantity', '9');
+      v = look(pg, label);
+      check(`${form}:   9 asked: "${onlyLeft(7)}" beside the disabled button, as its description`,
+        v.enabled === false && v.reason === onlyLeft(7) && v.reasonBeside, said(v));
+      before = posts().length;
+      await press(pg);
+      check(`${form}:   and submitting sends nothing (the button still disabled after)`,
+        posts().length === before && look(pg, label).enabled === false, String(posts().length - before));
+      await put(pg, 'quantity', '7');
+      v = look(pg, label);
+      check(`${form}:   7 asked: pressable again, no reason, the max still 7`, v.enabled === true && v.reason === null && v.max === '7',
+        said(v));
+      await put(pg, 'start_time', '13:00');
+      await put(pg, 'end_time', '15:00');
+      await wait(pg);
+      v = look(pg, label);
+      check(`${form}: 5 overdue and 1 resting read as two more lines; max 2`,
+        said(v.lines) === said(['For that time: 2 booked, 2 left of 10.', '5 are overdue and not yet returned.',
+          '1 is resting for 24 hours after being returned.']) && v.max === '2' && v.enabled === false && v.reason === onlyLeft(2), said(v));
+      await put(pg, 'quantity', '1');
+      await put(pg, 'start_time', '16:00');
+      await put(pg, 'end_time', '18:00');
+      await wait(pg);
+      v = look(pg, label);
+      check(`${form}: none left reads "${FULL}" and the overdue line; the button is disabled with "${FULL}" beside it; hint "(none left)"`,
+        said(v.lines) === said([FULL, '4 are overdue and not yet returned.']) && v.enabled === false && v.reason === FULL
+          && v.reasonBeside && v.hint === '(none left)', said(v));
+
+      // A check that fails blocks nothing.
+      await choose(pg, 21);
+      net.status = 500;
+      st.answers.default = { error: 'Something broke' };
+      await put(pg, 'start_time', '09:00');
+      await put(pg, 'end_time', '11:00');
+      await wait(pg);
+      net.status = 200;
+      v = look(pg, label);
+      check(`${form}: a failed check (a 500) says "${FAILED}" with role="alert", shows no result, and leaves the button pressable`,
+        v.failed === FAILED && v.lines.length === 0 && v.enabled === true && v.reason === null, said(v));
+      net.fail = true;
+      await put(pg, 'end_time', '11:30');
+      await wait(pg);
+      net.fail = false;
+      v = look(pg, label);
+      check(`${form}:   and so does a server that cannot be reached`, v.failed === FAILED && v.enabled === true, said(v));
+      st.answers.default = facility(1, []);
+      return v;
+    };
+
+    // ======================= AN. Book a rental ============================
+    setNow('2026-10-26T02:00:00Z'); // 26 Oct 2026, 10:00 in Manila
+    const DAY = '2026-11-02';
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, stub);
+    let page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const afterFailed = await sharedChecks(page, 'Book a rental', 'Book now', DAY);
+    // The failed check left the form valid (09:00 to 11:30): Book now sends.
+    st.post = { message: 'Booking confirmed', request: { request_id: 991, status: 'confirmed', start_datetime: `${DAY}T09:00:00+08:00`,
+      end_datetime: `${DAY}T11:30:00+08:00`, quantity_requested: 1, purpose: 'Barangay assembly',
+      rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } } };
+    let sent = posts().length;
+    await press(page);
+    check('Book a rental: after a failed check Book now still sends the booking (the server decides)',
+      afterFailed.failed === FAILED && posts().length === sent + 1 && text(page.query('.section-card h3')) === 'Booking confirmed',
+      String(posts().length - sent));
+    await clickIf(page, buttonNamed(root(), 'Book another'));
+    // A 409 at submit: the server's sentence, read out, and the check asked again.
+    const CONFLICT = 'The Covered Court is already booked from 8:00 AM to 10:00 AM on that date — please pick a different time.';
+    await choose(page, 21);
+    await times(page, DAY, '08:00', '10:00');
+    await purposeIn(page);
+    await wait(page);
+    let v = look(page, 'Book now');
+    const shownBefore = said(v.lines);
+    st.post = { error: CONFLICT };
+    st.answers[`21 08:00 10:00`] = facility(0, [{ start: pgAt(DAY, '08:00'), end: pgAt(DAY, '10:00') }]);
+    sent = asks().length;
+    net.status = 409;
+    await press(page);
+    net.status = 200;
+    const refusalShown = page.queryAll('.section-card [role="alert"]').map(text);
+    await wait(page);
+    v = look(page, 'Book now');
+    check('Book a rental: a 409 at Book now shows the server\'s own sentence with role="alert"',
+      shownBefore === said(['Free for 8:00 AM to 10:00 AM.', NOTHING]) && refusalShown.includes(CONFLICT), said({ shownBefore, refusalShown }));
+    check('  and asks the availability again (one more request, for the same time), which now reads taken and blocks Book now',
+      asks().length === sent + 1 && said(paramsOf(asks().at(-1))) === said({ item_id: '21', date: DAY, start_time: '08:00', end_time: '10:00' })
+        && v.lines[0] === NOT_FREE && v.enabled === false, said({ asks: asks().length - sent, v }));
+    await finish(page);
+
+    // ======================= AO. The walk-in form =========================
+    // 00:30 on 1 Jan 2027 in Manila: in UTC it is still 31 Dec.
+    setNow('2026-12-31T16:30:00Z');
+    const WDAY = '2027-01-04';
+    st.answers = { default: facility(1, []) };
+    st.post = null;
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    // (c) a failed items load: an error with Try again, never an empty list.
+    net.fail = true;
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    net.fail = false;
+    const panelText = text(page.query('.pending-card'));
+    const loadAlert = page.queryAll('.pending-card [role="alert"]').map(text);
+    const retry = buttonNamed(root(), 'Try again');
+    check('walk-in: a failed items load says "Could not load the rental items: the server did not respond" (role="alert") '
+        + 'with a Try again button (type="button"), and never "Nothing is currently available for rental." nor the item field',
+      loadAlert.includes('Could not load the rental items: the server did not respond') && retry?.type === 'button'
+        && !/Nothing is currently available/.test(panelText ?? '') && !page.query('select[name="item_id"]'),
+      said({ loadAlert, retry: retry?.type ?? null, panelText }));
+    sent = net.calls.length;
+    await clickIf(page, retry);
+    check('  Try again loads the items once more and the form comes back, the error gone',
+      net.calls.slice(sent).filter((c) => /\/rental-items$/.test(c.url)).length === 1 && !!page.query('select[name="item_id"]')
+        && !page.queryAll('.pending-card [role="alert"]').some((el) => /Could not load/.test(text(el))),
+      said(net.calls.slice(sent).map((c) => c.url)));
+    // The mode buttons are toggles.
+    const pressed = () => page.queryAll('.pending-card .tab-container button').map((b) => `${b.textContent}=${b.getAttribute('aria-pressed')}`);
+    const pressedResident = pressed();
+    // (d) a message of the form's own is read out: no resident picked.
+    await press(page);
+    const pickAlert = page.queryAll('.pending-card [role="alert"]').map(text);
+    check('walk-in: "Pick the resident this booking is for." is read out (role="alert")',
+      pickAlert.includes('Pick the resident this booking is for.'), said(pickAlert));
+    await clickIf(page, buttonNamed(root(), 'Guest from another barangay'));
+    check('walk-in: the two mode buttons carry aria-pressed, true on the chosen one',
+      said(pressedResident) === said(['Existing resident=true', 'Guest from another barangay=false'])
+        && said(pressed()) === said(['Existing resident=false', 'Guest from another barangay=true']),
+      said({ pressedResident, after: pressed() }));
+    await page.fill('input[placeholder="As given at the counter"]', 'Pedro Guest');
+    await page.fill('input[placeholder="09XXXXXXXXX"]', '09179990000');
+    // (b) the date's earliest day is today in Manila.
+    const wMin = page.query('input[name="date"]')?.getAttribute('min') ?? null;
+    check('walk-in: the date field\'s earliest day is 2027-01-01, today in Manila at 00:30, never 2026-12-31 (UTC\'s day)',
+      wMin === '2027-01-01', said(wMin));
+    // (a) the times checked before sending, in the server's words, under the time fields.
+    const timeMessage = () => {
+      const grid = page.query('input[name="start_time"]')?.closest('.grid-2');
+      const next = grid?.nextElementSibling;
+      return next?.getAttribute('role') === 'alert' ? text(next) : null;
+    };
+    await choose(page, 21);
+    await times(page, '2027-01-01', '00:15', '02:00');
+    await purposeIn(page);
+    sent = posts().length;
+    await press(page);
+    const pastSaid = timeMessage();
+    await times(page, '2027-01-02', '13:00', '09:00');
+    const changedAway = timeMessage();
+    await press(page);
+    const endSaid = timeMessage();
+    check(`walk-in: a start already past says "${PAST}" straight under the time fields (role="alert"); a change takes it away; `
+        + `an end before the start says "${END}"; and nothing is sent`,
+      pastSaid === PAST && changedAway === null && endSaid === END && posts().length === sent,
+      said({ pastSaid, changedAway, endSaid, posts: posts().length - sent }));
+    // Start the shared checks from a blank time.
+    await times(page, '', '', '');
+    await choose(page, 21);
+    const sel = page.query('select[name="item_id"]');
+    if (sel) {
+      sel.value = '';
+      sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await page.settle();
+    }
+    await wait(page);
+    net.calls = net.calls.filter((c) => !isAsk(c.url));
+    await sharedChecks(page, 'walk-in', 'Record booking', WDAY);
+    // A 409 at Record booking: the server's sentence, read out, and the check asked again.
+    const W_CONFLICT = 'Only 2 of 10 Folding Chairs are available for that time — you asked for 3.';
+    await choose(page, 22);
+    st.answers[`22 08:00 10:00`] = items({ used: 3, booked: 3, left: 7 });
+    await times(page, WDAY, '08:00', '10:00');
+    await put(page, 'quantity', '3');
+    await wait(page);
+    st.post = { error: W_CONFLICT };
+    st.answers[`22 08:00 10:00`] = items({ used: 8, booked: 8, left: 2 });
+    sent = asks().length;
+    net.status = 409;
+    await press(page);
+    net.status = 200;
+    const wRefusal = page.queryAll('.pending-card [role="alert"]').map(text);
+    await wait(page);
+    v = look(page, 'Record booking');
+    check('walk-in: a 409 at Record booking shows the server\'s sentence with role="alert", asks the availability again, '
+        + `and then blocks with "${onlyLeft(2)}"`,
+      wRefusal.includes(W_CONFLICT) && asks().length === sent + 1 && v.enabled === false && v.reason === onlyLeft(2),
+      said({ wRefusal, asks: asks().length - sent, v }));
+    // Lowered to 2, it records and the panel closes with the server's message.
+    await put(page, 'quantity', '2');
+    st.post = { message: 'Walk-in booking recorded for Pedro Guest: Folding Chairs on Jan 4, 2027, 8:00 AM–10:00 AM.' };
+    sent = posts().length;
+    await press(page);
+    check('walk-in: lowered to what is left, Record booking sends one POST and the panel closes with the server\'s message',
+      posts().length === sent + 1 && !page.query('input[name="start_time"]') && /Walk-in booking recorded/.test(text(page.query('.alert.success')) ?? ''),
+      said({ posts: posts().length - sent, flash: text(page.query('.alert.success')) }));
+    await finish(page);
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    check('sections AN and AO kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('sections AN and AO sent only GETs (the items, the list, the availability) and booking POSTs',
+      methods.length > 0 && methods.every((m) => /^GET \/(rental-items|rental-requests\/availability|rental-requests)$/.test(m)
+        || m === 'POST /rental-requests'), said([...new Set(methods)]));
   }
 
   console.error = origError;
