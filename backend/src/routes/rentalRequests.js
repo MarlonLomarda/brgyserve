@@ -589,10 +589,27 @@ const AVAILABILITY_KEYS = ['ok', 'item_type', 'total', 'used', 'booked', 'stuck'
 // page and the server cannot disagree; the page only advises, and POST
 // decides again. A start already past may be asked about. Declared before
 // GET /:id, which would otherwise catch "/availability" as an id.
+//
+// The Secretary's Edit panel adds exclude_request_id, the booking being
+// edited, so it is not counted against its own new time (as
+// update_rental_booking_time leaves it out). A resident sending it is refused
+// with a 400, never quietly ignored: leaving a booking out would show units
+// free that are not, so only the one role that edits bookings may ask it.
 router.get('/availability', requireRole(...CREATE_ROLES), async (req, res) => {
   const itemId = Number(req.query?.item_id);
   if (!Number.isInteger(itemId)) {
     return res.status(400).json({ error: 'An item_id is required' });
+  }
+  let excludeId = null;
+  if (req.query?.exclude_request_id !== undefined) {
+    if (req.user.role !== 'secretary') {
+      return res.status(400).json({ error: 'Only the Secretary can leave a booking out of the count.' });
+    }
+    const raw = String(req.query.exclude_request_id);
+    excludeId = /^[1-9]\d*$/.test(raw) ? Number(raw) : null;
+    if (!Number.isSafeInteger(excludeId)) {
+      return res.status(400).json({ error: 'exclude_request_id must be a whole number above 0' });
+    }
   }
   const date = String(req.query?.date ?? '').trim();
   const startTime = String(req.query?.start_time ?? '').trim();
@@ -608,7 +625,8 @@ router.get('/availability', requireRole(...CREATE_ROLES), async (req, res) => {
 
   // An unknown or inactive item is refused as POST refuses it, before the
   // function is asked: an inactive item cannot be booked, so there is
-  // nothing to show.
+  // nothing to show. Except for an edit (an exclude id): an existing booking
+  // of a since-deactivated item may still be moved, as PUT /:id allows.
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
     .select('item_id, is_active')
@@ -620,7 +638,7 @@ router.get('/availability', requireRole(...CREATE_ROLES), async (req, res) => {
   if (!item) {
     return res.status(404).json({ error: ITEM_NOT_FOUND });
   }
-  if (!item.is_active) {
+  if (!item.is_active && excludeId === null) {
     return res.status(400).json({ error: ITEM_INACTIVE });
   }
 
@@ -628,6 +646,7 @@ router.get('/availability', requireRole(...CREATE_ROLES), async (req, res) => {
     p_item_id: itemId,
     p_start: times.start.toISOString(),
     p_end: times.end.toISOString(),
+    ...(excludeId === null ? {} : { p_exclude_request_id: excludeId }),
   });
   if (!result?.ok) {
     if (result?.code === 'TIME_INVALID') {
@@ -1312,7 +1331,7 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
     .select(
-      'request_id, status, resident_id, outside_borrower_name, outside_borrower_contact, rental_items ( name, type ), resident_records ( contact_number )'
+      'request_id, status, start_datetime, resident_id, outside_borrower_name, outside_borrower_contact, rental_items ( name, type ), resident_records ( contact_number )'
     )
     .eq('request_id', id)
     .maybeSingle();
@@ -1332,6 +1351,11 @@ router.post('/:id/return', requireRole('staff'), async (req, res) => {
     return res.status(409).json({
       error: `Only confirmed bookings can be marked returned — this booking is '${booking.status}'`,
     });
+  }
+  // Nothing has been taken out yet, so nothing can come back (step C3): the
+  // same hasNotStarted() rule Edit and Cancel use, from the stored start.
+  if (hasNotStarted(booking)) {
+    return res.status(409).json({ error: 'This booking has not started yet.' });
   }
 
   const { data: updated, error } = await supabase

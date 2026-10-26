@@ -55,6 +55,7 @@ const crypto = require('crypto');
 const supabase = require('../src/config/supabase');
 const paymongo = require('../src/services/paymongo');
 const rentals = require('../src/routes/rentalRequests');
+const rentalItems = require('../src/routes/rentalItems');
 const { webhookHandler } = require('../src/routes/payments');
 
 let pass = 0;
@@ -238,6 +239,7 @@ function fakeFrom(db) {
       if (op === 'lt') return cmp(row[c], v) < 0;
       if (op === 'gt') return cmp(row[c], v) > 0;
       if (op === 'in') return v.includes(row[c]);
+      if (op === 'ilike') return String(row[c]).toLowerCase() === String(v).toLowerCase();
       throw new Error(`unmodelled filter ${op}`);
     });
     const run = () => {
@@ -274,6 +276,7 @@ function fakeFrom(db) {
       lt(c, v) { q.filters.push(['lt', c, v]); return b; },
       gt(c, v) { q.filters.push(['gt', c, v]); return b; },
       in(c, v) { q.filters.push(['in', c, v]); return b; },
+      ilike(c, v) { q.filters.push(['ilike', c, v]); return b; },
       order() { return b; },
       update(patch) { q.op = 'update'; q.patch = patch; return b; },
       insert(rows) { q.op = 'insert'; q.rows = rows; return b; },
@@ -367,7 +370,7 @@ const realExpire = paymongo.expireCheckoutSession;
 
 // Runs one request against fresh tables. `setup(db)` adjusts them first;
 // `expire` stands in for PayMongo's expire call ('real' leaves the client alone).
-async function call({ method, path, user, id, body = {}, query = {}, chain = false, setup, expire, req: extraReq }) {
+async function call({ method, path, user, id, body = {}, query = {}, chain = false, setup, expire, req: extraReq, router = rentals }) {
   const db = freshDb();
   if (setup) setup(db);
   supabase.from = fakeFrom(db);
@@ -392,7 +395,7 @@ async function call({ method, path, user, id, body = {}, query = {}, chain = fal
   const netBefore = netCalls.length;
   let res;
   try {
-    const handler = chain ? chainFor(rentals, method, path) : handlerFor(rentals, method, path);
+    const handler = chain ? chainFor(router, method, path) : handlerFor(router, method, path);
     res = await new Promise((resolve, reject) => {
       let done = false;
       const resObj = {
@@ -1016,9 +1019,35 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     JSON.stringify(r.rpcCalls()[0]?.args));
   check('  the route reads no booking itself (the function decides)', !r.db.calls.some((c) => c.table === 'rental_requests'),
     JSON.stringify(r.db.calls.map((c) => `${c.op} ${c.table}`)));
-  r = await ask(RES_A, avQuery({ exclude_request_id: '601' }));
-  check('  an exclude_request_id in the query is ignored (none is sent)', !('p_exclude_request_id' in (r.rpcCalls()[0]?.args ?? {}))
+  r = await ask(SEC, avQuery());
+  check('  the Secretary asking with no exclude_request_id sends none either', !('p_exclude_request_id' in (r.rpcCalls()[0]?.args ?? {}))
     && r.status === 200, JSON.stringify(r.rpcCalls()[0]?.args));
+
+  // The Edit panel's question (step C3): the same, with the booking being
+  // edited left out of the count. The Secretary's alone.
+  const EXCLUDE_RESIDENT = 'Only the Secretary can leave a booking out of the count.';
+  const EXCLUDE_BAD = 'exclude_request_id must be a whole number above 0';
+  r = await ask(SEC, avQuery({ exclude_request_id: '601' }));
+  check('The Secretary\'s exclude_request_id=601 is passed to rental_availability as p_exclude_request_id 601, with the item and times',
+    r.status === 200 && sortedJson(r.rpcCalls()[0]?.args) === sortedJson({ p_item_id: 801, p_start: manilaIso(AV_DAY, '08:00'),
+      p_end: manilaIso(AV_DAY, '10:00'), p_exclude_request_id: 601 }), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the answer carries the same keys as without it, nothing added',
+    JSON.stringify(Object.keys(r.body ?? {}).sort()) === JSON.stringify(['booked', 'item_type', 'left', 'ok', 'resting', 'stuck', 'total', 'used']),
+    JSON.stringify(r.body));
+  for (const user of [RES_A, RES_UNLINKED]) {
+    r = await ask(user, avQuery({ exclude_request_id: '601' }));
+    check(`A resident (${user.username}) sending exclude_request_id: 400 "${EXCLUDE_RESIDENT}", function not called`,
+      r.status === 400 && r.body?.error === EXCLUDE_RESIDENT && r.rpcCalls().length === 0, said(r));
+  }
+  for (const bad of ['abc', '0', '-3', '1.5', '', '601abc', ' ']) {
+    r = await ask(SEC, avQuery({ exclude_request_id: bad }));
+    check(`The Secretary's exclude_request_id ${JSON.stringify(bad)}: 400 "${EXCLUDE_BAD}", function not called`,
+      r.status === 400 && r.body?.error === EXCLUDE_BAD && r.rpcCalls().length === 0, said(r));
+  }
+  r = await ask(SEC, avQuery({ item_id: '802', exclude_request_id: '601' }),
+    { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('An inactive item with exclude_request_id (Edit of a booking of a since-deactivated item): asked, 200',
+    r.status === 200 && r.rpcCalls().length === 1 && r.rpcCalls()[0]?.args?.p_exclude_request_id === 601, said(r));
 
   const AV_BAD = [
     ['no item_id', { item_id: undefined }, 'An item_id is required'],
@@ -1073,6 +1102,107 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   r = await ask(RES_A, avQuery());
   check('Asking writes nothing', !r.db.calls.some((c) => c.op !== 'select') && r.db.notifications.length === 0
     && r.db.activity_logs.length === 0, JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+
+  // ================================================================ stock warning
+  // Rental items edit (step C3, O4): lowering an item's total below what its
+  // upcoming and overdue bookings hold is WARNED, then allowed. The route
+  // counts plain facts (no overlap rule): the item's confirmed bookings that
+  // are upcoming or overdue-unreturned, their units and the largest one.
+  section('PUT /api/rental-items/:id — the warning when stock is lowered below booked');
+  const STOCK_BELOW = 'STOCK_BELOW_BOOKED';
+  // Tent, equipment, 20 units. 701 +72h x5, 702 +96h x4, 703 overdue x3 (all
+  // counted: 3 bookings, 12 units, largest 5); 704 cancelled x8 and 705
+  // returned x9 are not. Bookings keep the borrower's name and purpose, which
+  // the answer must never carry.
+  const withTent = (db) => {
+    db.rental_items.push({ item_id: 803, name: 'Tent', type: 'equipment', description: 'Big tent', fee: 100,
+      quantity_total: 20, quantity_available: 20, is_active: true });
+    const tent = (id, extra) => ({ ...structuredClone(db.rental_requests[0]), request_id: id, item_id: 803, ...extra });
+    db.rental_requests.push(
+      tent(701, { quantity_requested: 5, start_datetime: at(72), end_datetime: at(75) }),
+      tent(702, { quantity_requested: 4, start_datetime: at(96), end_datetime: at(99) }),
+      tent(703, { quantity_requested: 3, start_datetime: at(-30), end_datetime: at(-26) }),
+      tent(704, { quantity_requested: 8, status: 'cancelled' }),
+      tent(705, { quantity_requested: 9, start_datetime: at(-50), end_datetime: at(-48), status: 'returned', returned_at: at(-47) }),
+    );
+  };
+  const itemBody = (qty, extra = {}) => ({ name: 'Tent', type: 'equipment', description: 'Big tent', quantity_total: qty, fee: 100, ...extra });
+  const editItem = (body, opts = {}) => call({ method: 'put', path: '/:id', user: SEC, id: 803, body, router: rentalItems,
+    setup: (db) => { withTent(db); opts.setup?.(db); } });
+  const tentOf = (res) => res.db.rental_items.find((i) => i.item_id === 803);
+  const tentBookings = (res) => JSON.stringify(res.db.rental_requests.filter((b) => b.item_id === 803));
+  const untouched = (() => { const db = freshDb(); withTent(db); return JSON.stringify(db.rental_requests.filter((b) => b.item_id === 803)); })();
+  const onlyTent = (...ids) => (db) => { db.rental_requests = db.rental_requests.filter((b) => b.item_id !== 803 || ids.includes(b.request_id)); };
+
+  r = await editItem(itemBody(25));
+  check('Raising the total (20 to 25): 200, saved, no warning', r.status === 200 && tentOf(r).quantity_total === 25
+    && r.body?.code === undefined, said(r));
+  check('  quantity_available follows it, as today (25)', tentOf(r).quantity_available === 25, String(tentOf(r).quantity_available));
+  r = await editItem(itemBody(20));
+  check('Keeping the total (20 to 20): 200, no warning', r.status === 200 && tentOf(r).quantity_total === 20 && r.body?.code === undefined, said(r));
+  r = await editItem(itemBody(12));
+  check('Lowering to exactly the booked units (20 to 12): 200, no warning', r.status === 200 && tentOf(r).quantity_total === 12, said(r));
+  r = await editItem(itemBody(11));
+  check(`Lowering below the booked units (20 to 11): 409 with code ${STOCK_BELOW}`, r.status === 409 && r.body?.code === STOCK_BELOW, said(r));
+  check('  carrying the numbers: 3 bookings, 12 units, the largest 5, the new total 11',
+    r.body?.bookings === 3 && r.body?.units === 12 && r.body?.largest === 5 && r.body?.new_total === 11, JSON.stringify(r.body));
+  check('  and nothing else: error, code, bookings, units, largest, new_total',
+    JSON.stringify(Object.keys(r.body ?? {}).sort()) === JSON.stringify(['bookings', 'code', 'error', 'largest', 'new_total', 'units']),
+    JSON.stringify(r.body));
+  check('  no name, account, contact, purpose or booking id in it',
+    !/Ana|Probe|0917|reunion|rentals_probe|70[1-5]|request_id/.test(JSON.stringify(r.body)), JSON.stringify(r.body));
+  check('  nothing saved: the total is still 20, quantity_available 20, no update sent, no log row',
+    tentOf(r).quantity_total === 20 && tentOf(r).quantity_available === 20
+      && !r.db.calls.some((c) => c.op === 'update') && r.db.activity_logs.length === 0, JSON.stringify(tentOf(r)));
+  r = await editItem(itemBody(4));
+  check('Lowering below the largest single booking (20 to 4): 409 with the same numbers and new_total 4',
+    r.status === 409 && r.body?.code === STOCK_BELOW && r.body?.largest === 5 && r.body?.new_total === 4, said(r));
+  r = await editItem(itemBody(4, { confirm_lower_stock: 'true' }));
+  check('confirm_lower_stock "true" (a string, not true) is not the flag: still 409', r.status === 409 && r.body?.code === STOCK_BELOW, said(r));
+  r = await editItem(itemBody(4, { confirm_lower_stock: true }));
+  check('With confirm_lower_stock: true it saves exactly as today: 200, total 4, quantity_available 4',
+    r.status === 200 && tentOf(r).quantity_total === 4 && tentOf(r).quantity_available === 4 && r.body?.rental_item?.quantity_total === 4, said(r));
+  check('  the bookings are untouched (all five, byte for byte)', tentBookings(r) === untouched);
+  const tentLog = r.db.activity_logs;
+  check('  logged as today: one UPDATE on rental_items #803 with the changed quantity only, no flag, no booking facts',
+    tentLog.length === 1 && tentLog[0].action === 'UPDATE' && tentLog[0].table_name === 'rental_items' && tentLog[0].record_id === 803
+      && sameJson(tentLog[0].old_value, { quantity_total: 20, quantity_available: 20 })
+      && sameJson(tentLog[0].new_value, { quantity_total: 4, quantity_available: 4 }),
+    JSON.stringify(tentLog.map((l) => [l.action, l.old_value, l.new_value])));
+  r = await editItem(itemBody(25, { confirm_lower_stock: true }));
+  check('The flag on a raise changes nothing: 200, total 25', r.status === 200 && tentOf(r).quantity_total === 25, said(r));
+  r = await editItem(itemBody(3), { setup: onlyTent(703) });
+  check('An overdue booking alone still counts (only 703, 3 units): lowering to 3 saves', r.status === 200, said(r));
+  r = await editItem(itemBody(2), { setup: onlyTent(703) });
+  check('  and lowering to 2 warns: 409, 1 booking, 3 units', r.status === 409 && r.body?.bookings === 1 && r.body?.units === 3, said(r));
+  r = await editItem(itemBody(2), { setup: onlyTent(704, 705) });
+  check('Only cancelled and returned bookings: lowering to 2 saves with no warning', r.status === 200 && tentOf(r).quantity_total === 2, said(r));
+  r = await editItem(itemBody(11), { setup: (db) => { db.failWhen = ({ table, op }) => (table === 'rental_requests' && op === 'select'
+    ? { message: 'bookings read failed' } : null); } });
+  check('A failed bookings read is a 500 and saves nothing (never a silent "no warning")',
+    r.status === 'threw' && tentOf(r).quantity_total === 20, said(r));
+
+  // ================================================================ return
+  // Mark returned (step C3, O7): never for a booking that has not started.
+  section('POST /:id/return — not before the booking starts');
+  const STAFF_RET = { user_id: 7201, username: 'rentals_probe_staff', role: 'staff' };
+  const NOT_STARTED_RETURN = 'This booking has not started yet.';
+  const markReturned = (id, outcome = 'returned') => call({ method: 'post', path: '/:id/return', user: STAFF_RET, id, body: { outcome } });
+  r = await markReturned(601);
+  check(`A booking that starts in 72 hours: 409 "${NOT_STARTED_RETURN}"`, r.status === 409 && r.body?.error === NOT_STARTED_RETURN, said(r));
+  check('  nothing changed: still confirmed, no returned_at, no notification, no log row',
+    r.booking(601).status === 'confirmed' && r.booking(601).returned_at === null && r.db.notifications.length === 0
+      && r.db.activity_logs.length === 0 && !r.db.calls.some((c) => c.op === 'update'), JSON.stringify(r.booking(601)));
+  r = await markReturned(607);
+  check('A booking that started an hour ago (not overdue): 200, returned, as today', r.status === 200 && r.booking(607).status === 'returned'
+    && r.db.notifications.length === 1 && r.db.activity_logs.length === 1, said(r));
+  r = await markReturned(608, 'returned_late');
+  check('An overdue booking: 200, returned late, as today', r.status === 200 && r.booking(608).status === 'returned_late'
+    && r.db.notifications.length === 1 && r.db.activity_logs.length === 1, said(r));
+  check('  no charge is touched by a return', sameJson(r.db.charges, freshDb().charges));
+  r = await markReturned(610);
+  check('A cancelled booking is still refused as before (409, "Only confirmed bookings…")', r.status === 409
+    && /Only confirmed bookings can be marked returned/.test(r.body?.error || ''), said(r));
 
   // ======================================================================= webhook
   section('the PayMongo webhook — a payment for a cancelled booking');

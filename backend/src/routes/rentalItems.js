@@ -1,7 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { ITEM_TYPE, ITEM_TYPES } = require('../constants/rentals');
+const { ITEM_TYPE, ITEM_TYPES, RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
 const { logActivity, diffFields } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
 
@@ -60,6 +60,33 @@ async function nameTaken(name, excludeId = null) {
   const { data, error } = await query;
   if (error) throw new Error(`Duplicate-name check failed: ${error.message}`);
   return data.length > 0;
+}
+
+// What an item's bookings hold, as plain counts for the lower-stock warning:
+// its confirmed bookings (not cancelled, not returned) that are upcoming, or
+// overdue and not yet returned (a facility's past booking is completed, an
+// item's is overdue: deriveStatus in rentalRequests.js). No overlap rule here:
+// that is the database's (migration 024). Warning when the new total is below
+// ALL their units together is never wrong in the "no warning" direction: no
+// moment, and no single booking, can hold more than all of them. It can warn
+// for bookings on different days that never meet; the Secretary may then
+// lower it anyway.
+async function heldUnits(itemId, type) {
+  const { data, error } = await supabase
+    .from('rental_requests')
+    .select('quantity_requested, end_datetime')
+    .eq('item_id', itemId)
+    .eq('status', RENTAL_STATUS.CONFIRMED);
+  if (error) throw new Error(`Failed to load the item's bookings: ${error.message}`);
+  const now = new Date();
+  const held = data
+    .filter((b) => RETURNABLE_TYPES.includes(type) || new Date(b.end_datetime) > now)
+    .map((b) => b.quantity_requested);
+  return {
+    bookings: held.length,
+    units: held.reduce((sum, n) => sum + n, 0),
+    largest: held.length ? Math.max(...held) : 0,
+  };
 }
 
 // GET /api/rental-items — ACTIVE items only; any authenticated user.
@@ -132,6 +159,24 @@ router.put('/:id', async (req, res) => {
     .maybeSingle();
   if (beforeError) throw new Error(`Failed to load rental item: ${beforeError.message}`);
   if (!before) return res.status(404).json({ error: 'Rental item not found' });
+
+  // Lowering the stock below what bookings already hold: WARN, THEN ALLOW
+  // (step C3). Existing bookings stay; new ones are refused by the database's
+  // own rule until enough units are free. Only `confirm_lower_stock: true`
+  // saves it.
+  if (value.quantity_total < before.quantity_total && req.body?.confirm_lower_stock !== true) {
+    const held = await heldUnits(id, before.type);
+    if (value.quantity_total < held.units) {
+      return res.status(409).json({
+        error: `Upcoming or overdue bookings hold ${held.units} units of this item, more than the new total of ${value.quantity_total}.`,
+        code: 'STOCK_BELOW_BOOKED',
+        bookings: held.bookings,
+        units: held.units,
+        largest: held.largest,
+        new_total: value.quantity_total,
+      });
+    }
+  }
 
   const { data, error } = await supabase
     .from('rental_items')
