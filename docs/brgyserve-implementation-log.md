@@ -957,6 +957,52 @@ Neither has been measured against the other screens it reaches.
   - **Browser:** headless Chrome over CDP on the real app (`file://`, the real `index.css`, a fetch stub, no server, no database), at 390 (`innerWidth` 390) and 1280: the Edit panel blocked and free, the warning panel, the Mark returned panel on an overdue booking. No sideways scroll and nothing past the panel in any view; the reason under Save at 390 and beside it at 1280, never over it. The first look showed "Lower anyway" as `btn danger` (red text on blue) and the warning's paragraph margins uneven, the box 4px over Save; it is `btn secondary danger` now, with `.stock-warning p` and `.alert.stock-warning` in `index.css` (the box 12px clear of Save). A first selector, `.pending-card .alert.stock-warning`, failed `test:auth`'s guard on the `.pending-card` rules and was changed. At 390 the two warning buttons stack; at 1280 they share a row.
 - **Found and not changed:** the Rental items table is not stacked on a phone and its Quantity column is cut at 390 (as before, by design: a small admin catalogue); the Edit panel's "Back to list" sits on a line of its own at 390 (as before); Mark returned is offered on a booking that is under way but has not ended, which the owner's rule allows.
 
+### Step O1/O2: the resident search readable, spaced and fixed, and the rental form layout, 26 Oct 2026
+
+- **Why:** Lon saw a resident search result's name in white on the walk-in form, invisible until hovered, and uneven spacing on the walk-in and Edit panels. A read-only diagnosis came first. The owner then decided: fix the Date row on all three booking forms, give all four rental panels the head gap, carry the picker's spacing to every screen that uses it, and fix three picker bugs now. Arrow keys, Escape and the combobox roles were left for later, and "Back to list" on its own line at 390 was accepted. The rules are in `docs/modules/rental-bookings.md`, "The resident search and the form layout".
+- **The causes, confirmed in the real app** (headless Chrome over CDP, the real app bundled for `file://` with the real `index.css`, a fetch stub that answers GETs and refuses every other method, no server, no database):
+  - The result button took the global `button`'s `#fff` (1.00:1 on the card's white).
+  - Its own hover rule (0,2,0) lost to `button:hover:not(:disabled)` (0,2,1), so the row went `#1d4ed8` and the details read 1.41:1.
+  - The picker, the one field without a `<label>`, had nothing under it: 0px to the next label on the rental and Document requests walk-ins. New household and Add a member were already 14, from an inline margin on the next label, and a blotter party row's foot was 13px against the typed-name fields' 27.
+  - The four rental panels' head touched what followed (0px), and the walk-in's Back wrapped to two lines at 768 and 1280.
+  - With no Quantity box, End time sat alone on its row. That held on Book a rental too, which the brief had taken for the good example (it is only right for a countable item).
+- **Decisions taken here (flagged in the report):**
+  - The blotter party rows are named "Complainant resident" / "Respondent resident" (no visible label there).
+  - The picked state carries the root class too, so the 14px holds after a pick.
+  - "Searching…" and "No matching residents." share one always-present `role="status"` paragraph, under the box rather than inside the results border.
+  - Try again puts the focus back in the box.
+  - The Cancel panel has no Back button, so `nowrap` reaches nothing there.
+  - `CancelBookingPanel` is also My rentals', so the gap is there too.
+- **Tested:**
+  - **Red first:** `test:auth` 1915 passed, 31 failed. Every failure was in the new section AS, for the missing fix; the 1910 older checks stayed green.
+  - **Green:** `test:auth` 1910 to 1946; `roles:test` 179 and `rentals:test` 273, unchanged (no backend change); lint 7 warnings, the same seven; the build is clean.
+  - **Older checks:** none needed a change. The Document requests walk-in check that clicks `.picker-option` and sections AN and AO stayed green.
+  - **Mutations, in memory, sha256 the same before and after:** a preloaded hook answers one source text, a `.jsx` through a rolldown load plugin and `index.css` through `fs.readFileSync`. Results, with the number of checks each turned red:
+    - Control: green, 1946.
+    - Delete the result's colour: 4 red.
+    - Hover selector back to `.picker-option:hover`: 2.
+    - Remove the picker's 14px: 2.
+    - Remove the head gap: 5.
+    - Drop the Date class: 2.
+    - Drop the Date rule: 1.
+    - Remove `nowrap`: 3.
+    - A failed search stored as an empty list again: 3.
+    - Remove the Enter handler: 1.
+    - Untie the "Resident" label: 2.
+    - Change the shared `.muted` font size: 1, the guard.
+  - **Real keystrokes** (CDP `Input.dispatchKeyEvent`), before and after:
+    - Enter in the walk-in's search box set off the form's validation before the fix (4 `invalid` events) and nothing after (0).
+    - Enter on a focused result picked the resident both times.
+  - **Pixels**, at 390 (`innerWidth` 390), 768 and 1280, before and after:
+    - The name went from `#fff` on `#fff` (1.00:1) to `#1e293b` (14.63:1) at rest; on hover the row went from `#1d4ed8` to `#f8fafc`, the name 13.98:1, the details 1.41 to 7.24:1, on all five screens.
+    - Results or box to the next label: 0 to 14 on both walk-ins, 14 to 14 on New household and Add a member. A party row's foot went from 13 to 27, as the typed-name mode.
+    - The "Resident" label went from 14px above its box to 6.
+    - The head gap went from 0 to 16 on the four panels (both walk-in tabs).
+    - The walk-in's Back went from 2 lines to 1 at 768 and 1280, and keeps its own line at 390.
+    - The Date row is full width with Start | End side by side at 768 and 1280 for an item with one unit on the walk-in and Book a rental, and always on Edit; a countable item is unchanged (Date | Quantity, Start | End). At 390 each field has its own row, as before.
+    - No sideways scroll anywhere.
+- **Found and not changed:** the Document requests walk-in panel and the blotter's case form have the same 0px head gap, and the Document requests walk-in's Back still wraps to two lines at 768 and 1280. Neither is a rental panel, so they were left for the owner to decide.
+
 ## Resident Records Management
 
 ### Planned design
