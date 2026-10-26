@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Git and operating system files
+.git/
+.DS_Store
+
+# Logs
+*.log
