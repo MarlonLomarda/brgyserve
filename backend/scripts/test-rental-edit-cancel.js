@@ -18,13 +18,24 @@
 //   - A payment the webhook receives for a VOID charge writes one activity log
 //     row, and nothing else.
 //
+// And since step C1b (26 Oct 2026), migration 024: the database decides
+// whether a slot is free. POST / books through create_rental_booking, PUT /:id
+// moves a booking through update_rental_booking_time, and GET /availability
+// reads rental_availability. The rule itself (the 24-hour rest, stuck items,
+// the row lock) is proven against Postgres by the SQL test; here supabase.rpc
+// is faked too, and the checks are about what each ROUTE does with each
+// answer: the arguments it sends, the status and words it gives each refusal,
+// the charge, notification and log around a booking, and what it never sends
+// back.
+//
 // Makes NO network calls and touches NO database: the Supabase URL and key are
 // dead values set before anything loads, fetch records its call and throws,
-// and supabase.from is replaced by in-memory tables built fresh for every
-// call. The real handlers run, taken from router.stack past the router-level
-// authenticate, with req.user supplied. PayMongo's expire call is replaced on
-// the module object, except in the one check that lets the real client reach
-// the dead fetch to prove which url and method it would use.
+// and supabase.from and supabase.rpc are replaced by in-memory tables built
+// fresh for every call. The real handlers run, taken from router.stack past
+// the router-level authenticate, with req.user supplied (GET /availability
+// runs its whole route chain, role guard included). PayMongo's expire call is
+// replaced on the module object, except in the one check that lets the real
+// client reach the dead fetch to prove which url and method it would use.
 // ===========================================================================
 process.env.SUPABASE_URL = 'http://127.0.0.1:9';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'rentals-test-no-network';
@@ -103,6 +114,9 @@ function freshDb() {
     calls: [],
     failWhen: null,
     afterUpdate: null,
+    rpcCalls: [],
+    rpcAnswer: {},
+    rpcError: null,
     users: [SEC, RES_A, RES_B, RES_UNLINKED].map((u) => ({ ...u, email: null })),
     profiles: [
       { user_id: SEC.user_id, resident_id: null },
@@ -238,6 +252,7 @@ function fakeFrom(db) {
         return { data: null, error: null };
       }
       const rows = db[table].filter(matches);
+      if (q.op === 'select') db.calls.push({ table, op: 'select', filters: q.filters });
       if (q.op === 'update') {
         db.calls.push({ table, op: 'update', patch: q.patch, filters: q.filters });
         for (const row of rows) Object.assign(row, q.patch);
@@ -271,21 +286,92 @@ function fakeFrom(db) {
   };
 }
 
+// --- migration 024's functions, faked ------------------------------------------
+// The real rule (the 24-hour rest, stuck items, the item row lock) is proven
+// against Postgres by the SQL test. These only answer, so the checks are about
+// what the ROUTE does with each answer. db.rpcAnswer[name] replaces a
+// function's answer: a value is sent as it is, a function is asked
+// (args, db). Unscripted, each does what the real one does when the slot is
+// free; db.rpcError makes the call itself fail.
+const RPC_DEFAULTS = {
+  create_rental_booking(a, db) {
+    const row = {
+      request_id: Math.max(...db.rental_requests.map((r) => r.request_id)) + 1,
+      item_id: a.p_item_id, requested_by_user_id: a.p_requested_by_user_id, resident_id: a.p_resident_id,
+      outside_borrower_name: a.p_outside_borrower_name, outside_borrower_contact: a.p_outside_borrower_contact,
+      quantity_requested: a.p_quantity, start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose,
+      status: 'confirmed', processed_by_user_id: null, cancellation_reason: null,
+      return_note: null, returned_at: null, returned_by_user_id: null,
+    };
+    db.rental_requests.push(row);
+    // The whole new row, as to_jsonb sends it: contact and purpose included.
+    return { ok: true, request: { ...row } };
+  },
+  update_rental_booking_time(a, db) {
+    const row = db.rental_requests.find((r) => r.request_id === a.p_request_id);
+    if (!row) return { ok: false, code: 'BOOKING_NOT_FOUND' };
+    if (row.status !== 'confirmed' || Date.parse(row.start_datetime) <= Date.now()) {
+      return { ok: false, code: 'BOOKING_STARTED', status: row.status };
+    }
+    const before = { start_datetime: row.start_datetime, end_datetime: row.end_datetime, purpose: row.purpose };
+    Object.assign(row, { start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose });
+    return { ok: true, before, request: { ...row } };
+  },
+  rental_availability() {
+    return { ok: true, item_type: 'furniture', total: 100, used: 0, booked: 0, stuck: 0, resting: 0, left: 100 };
+  },
+};
+
+function fakeRpc(db) {
+  return async (name, args) => {
+    db.rpcCalls.push({ name, args: structuredClone(args) });
+    if (db.rpcError) return { data: null, error: db.rpcError };
+    const scripted = db.rpcAnswer[name];
+    if (scripted !== undefined) {
+      return { data: typeof scripted === 'function' ? scripted(args, db) : structuredClone(scripted), error: null };
+    }
+    if (!RPC_DEFAULTS[name]) return { data: null, error: { message: `Could not find the function public.${name}` } };
+    return { data: RPC_DEFAULTS[name](args, db), error: null };
+  };
+}
+
 // --- calling the real handlers -------------------------------------------------
-const handlerFor = (router, method, routePath) => {
+const routeLayer = (router, method, routePath) => {
   const layer = router.stack.find((l) => l.route?.path === routePath && l.route.methods[method]);
   if (!layer) throw new Error(`no ${method.toUpperCase()} ${routePath} on the router`);
+  return layer;
+};
+const handlerFor = (router, method, routePath) => {
+  const layer = routeLayer(router, method, routePath);
   return layer.route.stack[layer.route.stack.length - 1].handle;
+};
+// The route's whole own chain, its role guard first, then the handler. A guard
+// calls next() without returning it, so every step's promise is kept and
+// awaited: otherwise the handler would still be running into the next call's
+// tables.
+const chainFor = (router, method, routePath) => {
+  const handles = routeLayer(router, method, routePath).route.stack.map((s) => s.handle);
+  return async (req, res) => {
+    const running = [];
+    let i = 0;
+    const next = () => {
+      const h = handles[i++];
+      if (h) running.push(h(req, res, next));
+    };
+    next();
+    for (let k = 0; k < running.length; k += 1) await running[k];
+  };
 };
 
 const realExpire = paymongo.expireCheckoutSession;
 
 // Runs one request against fresh tables. `setup(db)` adjusts them first;
 // `expire` stands in for PayMongo's expire call ('real' leaves the client alone).
-async function call({ method, path, user, id, body = {}, setup, expire, req: extraReq }) {
+async function call({ method, path, user, id, body = {}, query = {}, chain = false, setup, expire, req: extraReq }) {
   const db = freshDb();
   if (setup) setup(db);
   supabase.from = fakeFrom(db);
+  supabase.rpc = fakeRpc(db);
   const expireCalls = [];
   if (expire !== 'real') {
     paymongo.expireCheckoutSession = async (sessionId) => {
@@ -306,7 +392,7 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
   const netBefore = netCalls.length;
   let res;
   try {
-    const handler = handlerFor(rentals, method, path);
+    const handler = chain ? chainFor(rentals, method, path) : handlerFor(rentals, method, path);
     res = await new Promise((resolve, reject) => {
       let done = false;
       const resObj = {
@@ -314,7 +400,7 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
         status(c) { this.statusCode = c; return this; },
         json(b) { done = true; resolve({ status: this.statusCode, body: b }); return this; },
       };
-      const req = { user, params: { id: String(id) }, body, query: {}, headers: {}, ...extraReq };
+      const req = { user, params: { id: String(id) }, body, query, headers: {}, ...extraReq };
       Promise.resolve(handler(req, resObj)).then(() => { if (!done) resolve({ status: 'no response', body: null }); }, reject);
     });
   } catch (e) {
@@ -327,7 +413,8 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
   }
   const booking = (n) => db.rental_requests.find((r) => r.request_id === n);
   const chargeOfBooking = (n) => db.charges.find((c) => c.rental_request_id === n);
-  return { ...res, db, booking, chargeOfBooking, expireCalls, consoleSeen, net: netCalls.slice(netBefore) };
+  const rpcCalls = () => db.rpcCalls;
+  return { ...res, db, booking, chargeOfBooking, rpcCalls, expireCalls, consoleSeen, net: netCalls.slice(netBefore) };
 }
 
 const said = (r) => `${r.status} ${r.body?.error || r.body?.message || ''}`.trim();
@@ -346,8 +433,160 @@ const PAID_HALL = 'A paid booking can only be cancelled at the barangay hall, so
 const WALK_IN_HALL = 'This booking was made at the barangay hall, so it can only be changed there.';
 const REASON = 'Hall needed for an emergency meeting';
 
+// The route's words for each refusal (parseBookingBody's and the old JS
+// conflict check's sentences, kept since migration 024 took over the check).
+const END_NOT_AFTER = 'End time must be after the start time (bookings run within one day)';
+const PAST_START = 'The booking must start in the future';
+const BELOW_ONE = 'quantity_requested must be a whole number of at least 1';
+const ITEM_GONE = 'Rental item not found';
+const ITEM_OFF = 'That item is not currently available for rental';
+// Postgres's own timestamptz text, as the functions' jsonb carries it.
+const pgTime = (isoText) => isoText.replace(/\.\d{3}Z$/, '+00:00');
+const sortedJson = (o) => JSON.stringify(Object.keys(o ?? {}).sort().reduce((acc, k) => ({ ...acc, [k]: o[k] }), {}));
+// RENTAL_FIELDS' columns plus derived_status: what POST / answers with.
+const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_datetime', 'purpose', 'quantity_requested',
+  'rental_items', 'request_id', 'return_note', 'returned_at', 'start_datetime', 'status'];
+
 (async () => {
   console.log('Rental Edit and Cancel — real handlers, fake tables, no network');
+
+  // ==================================================================== Book
+  section('POST / — booking through create_rental_booking (migration 024)');
+  const BOOK_DAY = dayAhead(5);
+  const bookStart = manilaIso(BOOK_DAY, '08:00');
+  const bookEnd = manilaIso(BOOK_DAY, '10:00');
+  const bookBody = (extra = {}) => ({
+    item_id: 802, date: BOOK_DAY, start_time: '08:00', end_time: '10:00', purpose: 'Birthday party', quantity_requested: 3, ...extra,
+  });
+  const book = (user, body, opts = {}) => call({ method: 'post', path: '/', user, id: '', body, ...opts });
+  const NEW_ID = 622;
+  const nothingWritten = (res) => !res.db.calls.some((c) => c.op === 'insert' || c.op === 'update' || c.op === 'delete')
+    && res.db.notifications.length === 0 && res.db.activity_logs.length === 0
+    && res.db.rental_requests.length === freshDb().rental_requests.length;
+  const overlapQuery = (res) => res.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'select'
+    && c.filters.some(([op]) => op === 'lt' || op === 'gt'));
+
+  let r = await book(RES_A, bookBody());
+  check('A resident\'s booking calls create_rental_booking once, with their own record and account',
+    r.rpcCalls().length === 1 && r.rpcCalls()[0].name === 'create_rental_booking'
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({
+        p_item_id: 802, p_requested_by_user_id: RES_A.user_id, p_resident_id: 9101,
+        p_outside_borrower_name: null, p_outside_borrower_contact: null,
+        p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party',
+      }), JSON.stringify(r.rpcCalls()));
+  check('  answers 201 "Booking confirmed: …"', r.status === 201 && /^Booking confirmed: Monobloc Chair on /.test(r.body?.message || ''), said(r));
+  check('  the route inserts no booking itself and runs no overlap query of its own (the function does both)',
+    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'insert') && !overlapQuery(r),
+    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => c.op)));
+  check('  and deletes nothing afterwards (no post-insert race guard)', !r.db.calls.some((c) => c.op === 'delete')
+    && r.booking(NEW_ID)?.status === 'confirmed');
+  const newCharge = r.chargeOfBooking(NEW_ID);
+  check('  one RENTAL charge, UNPAID, fee x quantity (PHP 15), on the resident\'s account',
+    newCharge?.charge_type === 'RENTAL' && newCharge?.amount === 15 && newCharge?.status === 'UNPAID'
+      && newCharge?.user_id === RES_A.user_id, JSON.stringify(newCharge));
+  const bookNote = r.db.notifications;
+  check('  the borrower is notified once, in today\'s words, to their account and number',
+    bookNote.length === 1 && bookNote[0].user_id === RES_A.user_id && bookNote[0].destination === '09170000001'
+      && bookNote[0].message === `BrgyServe: your booking is CONFIRMED - 3x Monobloc Chair on ${dateFmt.format(new Date(bookStart))}, ${timeFmt.format(new Date(bookStart))} to ${timeFmt.format(new Date(bookEnd))}.`,
+    bookNote[0]?.message || '(none)');
+  check('  one CREATE row by the resident, with no purpose in it',
+    r.db.activity_logs.length === 1 && r.db.activity_logs[0].action === 'CREATE' && r.db.activity_logs[0].record_id === NEW_ID
+      && r.db.activity_logs[0].user_id === RES_A.user_id && sortedJson(r.db.activity_logs[0].new_value) === sortedJson({
+      item_id: 802, resident_id: 9101, guest: false, walk_in: false, quantity_requested: 3,
+      start_datetime: bookStart, end_datetime: bookEnd, status: 'confirmed' }), JSON.stringify(r.db.activity_logs[0]?.new_value));
+  check('  the answer is the booking re-read with RENTAL_FIELDS (and derived_status), never the function\'s row',
+    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS)
+      && r.body.request.request_id === NEW_ID && Array.isArray(r.body.request.charges) && r.body.request.charges.length === 1,
+    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()));
+
+  r = await book(SEC, bookBody({ outside_borrower_name: '  Pedro Guest ', outside_borrower_contact: '09179990000' }));
+  check('A guest walk-in calls the function with the guest\'s name and number, no resident, filed by the Secretary',
+    r.status === 201 && sortedJson(r.rpcCalls()[0]?.args) === sortedJson({
+      p_item_id: 802, p_requested_by_user_id: SEC.user_id, p_resident_id: null,
+      p_outside_borrower_name: 'Pedro Guest', p_outside_borrower_contact: '09179990000',
+      p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party',
+    }), `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the answer carries no contact number, no outside_borrower_* key and no requester column',
+    !JSON.stringify(r.body).includes('09179990000') && !/outside_borrower|requested_by_user_id|processed_by_user_id/.test(JSON.stringify(r.body)),
+    JSON.stringify(r.body));
+  check('  the charge has no account, and the guest\'s number gets the notice',
+    r.chargeOfBooking(NEW_ID)?.user_id === null && r.db.notifications[0]?.destination === '09179990000');
+
+  r = await book(SEC, bookBody({ resident_id: 9102 }));
+  check('A walk-in for a registered resident calls the function with that resident, filed by the Secretary',
+    r.status === 201 && r.rpcCalls()[0]?.args?.p_resident_id === 9102 && r.rpcCalls()[0]?.args?.p_requested_by_user_id === SEC.user_id
+      && r.rpcCalls()[0]?.args?.p_outside_borrower_name === null, `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the charge goes on resident B\'s account, never the Secretary\'s', r.chargeOfBooking(NEW_ID)?.user_id === RES_B.user_id,
+    JSON.stringify(r.chargeOfBooking(NEW_ID)));
+
+  r = await book(RES_A, bookBody({ quantity_requested: 0 }));
+  check('Body validation still runs first: quantity 0 is a 400 and the function is never called',
+    r.status === 400 && r.body?.error === BELOW_ONE && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_A, bookBody({ start_time: '10:00', end_time: '09:00' }));
+  check('  and so does an end before the start', r.status === 400 && r.body?.error === END_NOT_AFTER && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_UNLINKED, bookBody());
+  check('  and so does who the borrower is (an account with no record: 409, no call)', r.status === 409 && r.rpcCalls().length === 0, said(r));
+
+  const chargeFails = (db) => { db.failWhen = ({ table, op }) => (table === 'charges' && op === 'insert' ? { message: 'forced charge failure' } : null); };
+  r = await book(RES_A, bookBody(), { setup: chargeFails });
+  check('If the charge cannot be created, the booking the function made is deleted and the error is today\'s',
+    r.status === 'threw' && /^Booking reverted — failed to create its charge: forced charge failure/.test(r.body?.error || '')
+      && !r.booking(NEW_ID) && r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'delete'),
+    `${said(r)}; booking ${JSON.stringify(r.booking(NEW_ID) ?? null)}`);
+  check('  nobody is notified and nothing is logged', r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  r = await book(SEC, bookBody({ outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000' }), {
+    setup: (db) => { db.failWhen = ({ table, op }) => (table === 'rental_requests' && op === 'select' ? { message: 'forced read failure' } : null); },
+  });
+  check('If the re-read fails, the answer is still 201 and still carries only RENTAL_FIELDS\' columns, never the contact',
+    r.status === 201 && !JSON.stringify(r.body).includes('09179990000')
+      && JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS),
+    `${said(r)}; ${JSON.stringify(r.body?.request)}`);
+
+  // Each coded refusal: today's status and words, and nothing written.
+  const clashA = { start: pgTime(manilaIso(BOOK_DAY, '08:00')), end: pgTime(manilaIso(BOOK_DAY, '10:00')) };
+  const clashB = { start: pgTime(manilaIso(BOOK_DAY, '13:00')), end: pgTime(manilaIso(BOOK_DAY, '15:00')) };
+  const notEnough = (extra) => ({ ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 97, left: 3, requested: 10,
+    stuck: 0, resting: 0, ...extra });
+  const ONLY3 = 'Only 3 of 100 Monobloc Chair are available for that time — you asked for 10.';
+  const REFUSALS = [
+    ['TIME_INVALID, end not after start', 802, { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }, 400, END_NOT_AFTER],
+    ['TIME_INVALID, start not in the future', 802, { ok: false, code: 'TIME_INVALID', reason: 'START_NOT_IN_FUTURE' }, 400, PAST_START],
+    ['QUANTITY_INVALID BELOW_ONE', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'BELOW_ONE', requested: 0 }, 400, BELOW_ONE],
+    ['QUANTITY_INVALID FACILITY_WHOLE', 801, { ok: false, code: 'QUANTITY_INVALID', reason: 'FACILITY_WHOLE', requested: 2 }, 400,
+      'The Covered Court is booked as a whole — quantity must be 1'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 120,
+      quantity_available: 100 }, 400, 'Only 100 units of Monobloc Chair exist — you asked for 120'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST, one unit', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 2,
+      quantity_available: 1 }, 400, 'Only 1 unit of Monobloc Chair exists — you asked for 2'],
+    ['ITEM_NOT_FOUND', 999, { ok: false, code: 'ITEM_NOT_FOUND' }, 404, ITEM_GONE],
+    ['ITEM_INACTIVE', 802, { ok: false, code: 'ITEM_INACTIVE' }, 400, ITEM_OFF],
+    ['FACILITY_TAKEN (the first clash, in Manila time)', 801, { ok: false, code: 'FACILITY_TAKEN', clashes: [clashA, clashB] }, 409,
+      `The Covered Court is already booked from ${timeFmt.format(new Date(clashA.start))} to ${timeFmt.format(new Date(clashA.end))} on that date — please pick a different time.`],
+    ['NOT_ENOUGH_LEFT', 802, notEnough(), 409, ONLY3],
+    ['NOT_ENOUGH_LEFT, one left', 802, notEnough({ left: 1, used: 99 }), 409,
+      'Only 1 of 100 Monobloc Chair is available for that time — you asked for 10.'],
+    ['NOT_ENOUGH_LEFT with 5 stuck', 802, notEnough({ stuck: 5 }), 409, `${ONLY3} 5 are overdue and not yet returned.`],
+    ['NOT_ENOUGH_LEFT with 2 resting', 802, notEnough({ resting: 2 }), 409, `${ONLY3} 2 are resting for 24 hours after being returned.`],
+    ['NOT_ENOUGH_LEFT with 1 stuck and 1 resting', 802, notEnough({ stuck: 1, resting: 1 }), 409,
+      `${ONLY3} 1 is overdue and not yet returned. 1 is resting for 24 hours after being returned.`],
+  ];
+  for (const [what, itemId, answer, status, words] of REFUSALS) {
+    r = await book(RES_A, bookBody({ item_id: itemId, quantity_requested: itemId === 801 ? 1 : 3 }),
+      { setup: (db) => { db.rpcAnswer.create_rental_booking = answer; } });
+    check(`${what}: ${status} "${words.length > 70 ? `${words.slice(0, 70)}…` : words}"`, r.status === status && r.body?.error === words, said(r));
+    check('  no charge, no notification, no log, no booking', nothingWritten(r), JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+  }
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.create_rental_booking = notEnough({ stuck: 0, resting: 0 }); } });
+  check('No add-on when stuck and resting are 0', r.body?.error === ONLY3, said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.create_rental_booking = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('An unknown refusal code is a 500, never a made-up sentence, and nothing is written', r.status === 'threw'
+    && /SOMETHING_NEW/.test(r.body?.error || '') && nothingWritten(r), said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.create_rental_booking = { ok: false, code: 'TIME_INVALID', reason: 'NEW_REASON' }; } });
+  check('  and so is a TIME_INVALID with an unknown reason', r.status === 'threw' && nothingWritten(r), said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('A failed call to the function is a 500 and nothing is written', r.status === 'threw' && /function exploded/.test(r.body?.error || '')
+    && nothingWritten(r), said(r));
 
   // ======================================================================== Edit
   section('PUT /:id — Secretary Edit');
@@ -359,7 +598,7 @@ const REASON = 'Hall needed for an emergency meeting';
     check(`  ${what} is left as it was`, r.booking(id).start_datetime === freshDb().rental_requests.find((b) => b.request_id === id).start_datetime);
   }
 
-  let r = await edit(601, editBody({ quantity_requested: 12 }));
+  r = await edit(601, editBody({ quantity_requested: 12 }));
   check('Edit refuses a changed quantity with the cancel-and-book-again 400', r.status === 400 && r.body?.error === QUANTITY_FIXED, said(r));
   check('  the booking keeps its quantity and schedule', r.booking(601).quantity_requested === 10 && r.booking(601).start_datetime === at(72));
 
@@ -389,6 +628,37 @@ const REASON = 'Hall needed for an emergency meeting';
     sameJson(editLog[0]?.old_value, { start_datetime: at(72), end_datetime: at(75) })
       && sameJson(editLog[0]?.new_value, { start_datetime: newStart, end_datetime: newEnd }),
     JSON.stringify([editLog[0]?.old_value, editLog[0]?.new_value]));
+  check('  the move goes through update_rental_booking_time, once, with the booking, the new times and the purpose',
+    r.rpcCalls().length === 1 && r.rpcCalls()[0].name === 'update_rental_booking_time'
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({ p_request_id: 601, p_start: newStart, p_end: newEnd, p_purpose: 'Family reunion' }),
+    JSON.stringify(r.rpcCalls()));
+  check('  the route updates no booking row itself and runs no overlap query of its own',
+    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update') && !overlapQuery(r),
+    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => c.op)));
+  check('  the answer is the booking re-read with MANAGE_FIELDS (derived_status, its item), never the function\'s row',
+    r.body?.request?.request_id === 601 && r.body.request.derived_status === 'confirmed' && r.body.request.rental_items?.name === 'Monobloc Chair'
+      && !('requested_by_user_id' in r.body.request) && !('processed_by_user_id' in r.body.request),
+    JSON.stringify(Object.keys(r.body?.request ?? {})));
+
+  // The function's `before` is the row as it was under the lock, so the
+  // notification and the diff come from it, not from the route's earlier read.
+  const viaBefore = (before) => (db) => {
+    db.rpcAnswer.update_rental_booking_time = (a) => {
+      const row = db.rental_requests.find((b) => b.request_id === 601);
+      Object.assign(row, { start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose });
+      return { ok: true, before, request: { ...row } };
+    };
+  };
+  r = await edit(601, editBody(), { setup: viaBefore({ start_datetime: newStart, end_datetime: newEnd, purpose: 'Old purpose' }) });
+  check('Edit diffs against the function\'s before: only the purpose changed there, so only the purpose is logged',
+    r.status === 200 && r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { purpose: 'Old purpose' })
+      && sameJson(r.db.activity_logs[0].new_value, { purpose: 'Family reunion' }),
+    JSON.stringify(r.db.activity_logs.map((l) => [l.old_value, l.new_value])));
+  check('  and the borrower is told', r.db.notifications.length === 1, `${r.db.notifications.length}`);
+  r = await edit(601, editBody(), { setup: viaBefore({ start_datetime: newStart, end_datetime: newEnd, purpose: 'Family reunion' }) });
+  check('  when the function\'s before already equals the new values, nothing is notified or logged (the route\'s own read differs)',
+    r.status === 200 && r.db.notifications.length === 0 && r.db.activity_logs.length === 0,
+    `${r.db.notifications.length} notification(s), ${r.db.activity_logs.length} log row(s)`);
 
   r = await edit(601, editBody({ quantity_requested: undefined }));
   check('Edit with no quantity in the body keeps the stored quantity (not 1)', r.status === 200 && r.booking(601).quantity_requested === 10,
@@ -412,25 +682,62 @@ const REASON = 'Hall needed for an emergency meeting';
   check('Edit that changes nothing sends no notification and logs nothing', r.status === 200 && r.db.notifications.length === 0
     && r.db.activity_logs.length === 0, `${said(r)}; ${r.db.notifications.length} notification(s)`);
 
-  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '12:30', end_time: '13:30', quantity_requested: 1 }));
-  check('Edit still refuses a clash with another booking', r.status === 409 && /already booked/.test(r.body?.error || ''), said(r));
-  check('  the booking keeps its slot, nobody is notified', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
-    && r.db.notifications.length === 0);
-
-  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '15:00', end_time: '16:00', quantity_requested: 1, purpose: 'Basketball' }), {
-    setup: (db) => {
-      db.afterUpdate = ({ table, patch }) => {
-        if (table !== 'rental_requests' || patch.start_datetime !== manilaIso(CLASH_DAY, '15:00')) return;
-        db.afterUpdate = null;
-        db.rental_requests.push({ ...db.rental_requests.find((b) => b.request_id === 621), request_id: 699,
-          start_datetime: manilaIso(CLASH_DAY, '15:00'), end_datetime: manilaIso(CLASH_DAY, '17:00') });
-      };
-    },
+  // A clash with another booking: the function finds it (#621 on the court)
+  // and the route says so in today's words. Before migration 024 the route
+  // found it itself; the intent, a clash refused and nothing moved, is kept.
+  const clash621 = { start: pgTime(manilaIso(CLASH_DAY, '12:00')), end: pgTime(manilaIso(CLASH_DAY, '14:00')) };
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '12:30', end_time: '13:30', quantity_requested: 1 }), {
+    setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'FACILITY_TAKEN', clashes: [clash621] }; },
   });
-  check('Edit that loses a race after its update answers 409', r.status === 409, said(r));
-  check('  and puts the date, times and purpose back', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
-    && r.booking(620).end_datetime === manilaIso(CLASH_DAY, '10:00') && r.booking(620).purpose === 'Family reunion');
+  check('Edit still refuses a clash with another booking, in today\'s words',
+    r.status === 409 && r.body?.error === `The Covered Court is already booked from ${timeFmt.format(new Date(clash621.start))} to ${timeFmt.format(new Date(clash621.end))} on that date — please pick a different time.`,
+    said(r));
+  check('  the booking keeps its slot, nobody is notified, nothing is logged', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
+    && r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  // A race lost: before migration 024 the route updated, re-checked, and put
+  // the old values back on a clash. Now the check and the update are one
+  // locked call, so a refusal means nothing moved, and the route has nothing
+  // to put back: it writes no booking row at all.
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '15:00', end_time: '16:00', quantity_requested: 1, purpose: 'Basketball' }), {
+    setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'FACILITY_TAKEN', clashes: [clash621] }; },
+  });
+  check('Edit refused by the function writes no booking row itself (nothing to revert) and keeps date, times and purpose',
+    r.status === 409 && !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update')
+      && r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00') && r.booking(620).end_datetime === manilaIso(CLASH_DAY, '10:00')
+      && r.booking(620).purpose === 'Family reunion', said(r));
   check('  nobody is notified and nothing is logged', r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  // The function's own refusals, each in today's words; nothing is written.
+  const EDIT_REFUSALS = [
+    ['BOOKING_NOT_FOUND (gone under the lock)', { ok: false, code: 'BOOKING_NOT_FOUND' }, 404, 'Booking not found'],
+    ['BOOKING_STARTED (started or cancelled under the lock)', { ok: false, code: 'BOOKING_STARTED', status: 'cancelled' }, 409, NOT_STARTED_EDIT],
+    ['TIME_INVALID, end not after start', { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }, 400, END_NOT_AFTER],
+    ['TIME_INVALID, start not in the future', { ok: false, code: 'TIME_INVALID', reason: 'START_NOT_IN_FUTURE' }, 400, PAST_START],
+    ['QUANTITY_INVALID MORE_THAN_EXIST (the item\'s stock lowered)', { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST',
+      requested: 10, quantity_available: 5 }, 400, 'Only 5 units of Monobloc Chair exist — you asked for 10'],
+    ['NOT_ENOUGH_LEFT with 2 stuck', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
+      stuck: 2, resting: 0 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 2 are overdue and not yet returned.'],
+    ['NOT_ENOUGH_LEFT with 3 resting', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
+      stuck: 0, resting: 3 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 3 are resting for 24 hours after being returned.'],
+  ];
+  for (const [what, answer, status, words] of EDIT_REFUSALS) {
+    r = await edit(601, editBody(), { setup: (db) => { db.rpcAnswer.update_rental_booking_time = answer; } });
+    check(`Edit, ${what}: ${status} "${words.length > 60 ? `${words.slice(0, 60)}…` : words}"`, r.status === status && r.body?.error === words, said(r));
+    check('  the booking is as it was, nobody notified, nothing logged', r.booking(601).start_datetime === at(72)
+      && !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update')
+      && r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+  }
+  r = await edit(601, editBody(), {
+    setup: (db) => { db.rental_items.find((i) => i.item_id === 802).quantity_available = 5; },
+  });
+  check('Edit applies no quantity rule of its own: with the stock lowered below the booking, the function\'s answer stands (here, ok)',
+    r.status === 200 && r.rpcCalls().length === 1, said(r));
+  r = await edit(601, editBody(), { setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('Edit: an unknown refusal code is a 500 and nothing is written', r.status === 'threw' && r.db.notifications.length === 0
+    && r.db.activity_logs.length === 0, said(r));
+  r = await edit(601, editBody(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('Edit: a failed call to the function is a 500', r.status === 'threw' && /function exploded/.test(r.body?.error || ''), said(r));
 
   // ============================================================ Secretary cancel
   section('POST /:id/cancel — Secretary Cancel');
@@ -683,6 +990,89 @@ const REASON = 'Hall needed for an emergency meeting';
   check('  and an upcoming booking reads not_started true, cancellation_reason null', r.body?.request?.not_started === true
     && r.body?.request?.cancellation_reason === null, JSON.stringify(r.body?.request && {
     not_started: r.body.request.not_started, reason: r.body.request.cancellation_reason }));
+
+  // ============================================================ availability
+  // What the booking forms ask before a booking (step C1b): numbers from
+  // rental_availability, and nothing about any booking but its times.
+  section('GET /availability — what is free, before booking');
+  const ask = (user, query, opts = {}) => call({ method: 'get', path: '/availability', user, id: '', query, chain: true, ...opts });
+  const AV_DAY = dayAhead(5);
+  const avQuery = (extra = {}) => ({ item_id: '801', date: AV_DAY, start_time: '08:00', end_time: '10:00', ...extra });
+  const STAFF = { user_id: 7201, username: 'rentals_probe_staff', role: 'staff' };
+  const TREASURER = { user_id: 7202, username: 'rentals_probe_treasurer', role: 'treasurer' };
+  const PB = { user_id: 7203, username: 'rentals_probe_pb', role: 'punong_barangay' };
+  for (const user of [TREASURER, STAFF, PB]) {
+    r = await ask(user, avQuery());
+    check(`${user.role} is refused with 403 and the function is never called`, r.status === 403 && r.rpcCalls().length === 0, said(r));
+  }
+  for (const user of [RES_A, SEC]) {
+    r = await ask(user, avQuery());
+    check(`${user.role} gets 200`, r.status === 200 && r.rpcCalls().length === 1, said(r));
+  }
+
+  r = await ask(RES_A, avQuery());
+  check('The date and times are read as Manila time, as POST reads them, and only the item and the two times are sent',
+    sortedJson(r.rpcCalls()[0]?.args) === sortedJson({ p_item_id: 801, p_start: manilaIso(AV_DAY, '08:00'), p_end: manilaIso(AV_DAY, '10:00') }),
+    JSON.stringify(r.rpcCalls()[0]?.args));
+  check('  the route reads no booking itself (the function decides)', !r.db.calls.some((c) => c.table === 'rental_requests'),
+    JSON.stringify(r.db.calls.map((c) => `${c.op} ${c.table}`)));
+  r = await ask(RES_A, avQuery({ exclude_request_id: '601' }));
+  check('  an exclude_request_id in the query is ignored (none is sent)', !('p_exclude_request_id' in (r.rpcCalls()[0]?.args ?? {}))
+    && r.status === 200, JSON.stringify(r.rpcCalls()[0]?.args));
+
+  const AV_BAD = [
+    ['no item_id', { item_id: undefined }, 'An item_id is required'],
+    ['a date not YYYY-MM-DD', { date: '11/02/2026' }, 'date must be in YYYY-MM-DD format'],
+    ['a time not HH:MM', { start_time: '8am' }, 'start_time and end_time must be in HH:MM (24-hour) format'],
+    ['an end not after the start', { start_time: '10:00', end_time: '10:00' }, END_NOT_AFTER],
+    ['a date that does not exist', { date: '2026-13-45' }, 'Invalid date or time'],
+  ];
+  for (const [what, extra, words] of AV_BAD) {
+    r = await ask(RES_A, avQuery(extra));
+    check(`${what}: 400 "${words}", function not called`, r.status === 400 && r.body?.error === words && r.rpcCalls().length === 0, said(r));
+  }
+  r = await ask(RES_A, avQuery({ item_id: '999' }));
+  check('An unknown item: 404 "Rental item not found", function not called', r.status === 404 && r.body?.error === ITEM_GONE
+    && r.rpcCalls().length === 0, said(r));
+  r = await ask(RES_A, avQuery({ item_id: '802' }), { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('An inactive item: 400 in POST\'s words, function not called', r.status === 400 && r.body?.error === ITEM_OFF
+    && r.rpcCalls().length === 0, said(r));
+  r = await ask(RES_A, avQuery({ date: '2020-01-06' }));
+  check('A start already past may still be asked about (it shows what is taken)', r.status === 200 && r.rpcCalls().length === 1, said(r));
+
+  const LEAKY = {
+    ok: true, item_type: 'facility', total: 1, used: 1, booked: 1, stuck: 0, resting: 0, left: 0,
+    taken: [{ start: clashA.start, end: clashA.end, request_id: 620, purpose: 'Family reunion', name: 'Ana Probe', contact: '09170000001' }],
+    names: ['Ana Probe'], contact: '09170000001', request_ids: [620], purpose: 'Family reunion',
+  };
+  r = await ask(SEC, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = LEAKY; } });
+  check('A facility answer carries exactly ok, item_type, total, used, booked, stuck, resting, left and taken',
+    r.status === 200 && JSON.stringify(Object.keys(r.body ?? {}).sort())
+      === JSON.stringify(['booked', 'item_type', 'left', 'ok', 'resting', 'stuck', 'taken', 'total', 'used']), JSON.stringify(r.body));
+  check('  each taken entry is { start, end } only', JSON.stringify(r.body?.taken) === JSON.stringify([{ start: clashA.start, end: clashA.end }]),
+    JSON.stringify(r.body?.taken));
+  check('  no name, account, purpose, contact or booking id anywhere in it',
+    !/Ana|Probe|0917|reunion|request_id|620/.test(JSON.stringify(r.body)), JSON.stringify(r.body));
+  check('  the numbers are the function\'s', r.body?.total === 1 && r.body?.used === 1 && r.body?.left === 0 && r.body?.ok === true);
+  r = await ask(RES_A, avQuery({ item_id: '802' }), {
+    setup: (db) => { db.rpcAnswer.rental_availability = { ok: true, item_type: 'furniture', total: 100, used: 40, booked: 25, stuck: 10,
+      resting: 5, left: 60, names: ['Ana Probe'] }; },
+  });
+  check('An item answer carries the eight numbers and words, no taken, nothing else',
+    r.status === 200 && JSON.stringify(r.body) === JSON.stringify({ ok: true, item_type: 'furniture', total: 100, used: 40, booked: 25,
+      stuck: 10, resting: 5, left: 60 }), JSON.stringify(r.body));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }; } });
+  check('The function refusing the times: 400 with its code', r.status === 400 && r.body?.code === 'TIME_INVALID'
+    && r.body?.error === END_NOT_AFTER, said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'ITEM_NOT_FOUND' }; } });
+  check('The function not finding the item: 404', r.status === 404 && r.body?.error === ITEM_GONE, said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('An unknown code: 500', r.status === 'threw', said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('A failed call: 500', r.status === 'threw' && /function exploded/.test(r.body?.error || ''), said(r));
+  r = await ask(RES_A, avQuery());
+  check('Asking writes nothing', !r.db.calls.some((c) => c.op !== 'select') && r.db.notifications.length === 0
+    && r.db.activity_logs.length === 0, JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
 
   // ======================================================================= webhook
   section('the PayMongo webhook — a payment for a cancelled booking');

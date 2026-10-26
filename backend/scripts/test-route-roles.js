@@ -26,10 +26,11 @@
 //
 // rentalRequests.js joined with rental Edit and Cancel (25 Oct 2026), when
 // residents gained POST /mine/:id/cancel. Like documentRequests.js it guards
-// per route under a router-level authenticate, so every one of its nine
-// routes is declared below. Who may cancel WHICH booking — their own online
-// booking, 24 hours ahead, unpaid — is rentals:test's job; this file checks
-// who reaches each route at all.
+// per route under a router-level authenticate, so every one of its routes
+// (ten since GET /availability, step C1b) is declared below. Who may cancel
+// WHICH booking — their own online booking, 24 hours ahead, unpaid — is
+// rentals:test's job; this file checks who reaches each route at all, and
+// that /mine and /availability are declared before /:id.
 //
 // WHY THIS EXISTS. Both files used to be Secretary-only: residentRecords.js
 // opened with `router.use(authenticate, requireRole('secretary'))`, so every
@@ -144,6 +145,7 @@ const EXPECTED = {
   },
   'rentalRequests.js': {
     'POST /': BOOKERS,                       // a resident's own booking, or the Secretary's walk-in
+    'GET /availability': BOOKERS,            // what is free before booking: the two booking forms only (step C1b)
     'POST /mine/:id/pay': OWNERSHIP_SCOPED,  // scoped by resident_id, like the document routes
     'POST /mine/:id/cancel': OWNERSHIP_SCOPED, // own ONLINE booking only: resident_id AND requested_by_user_id
     'GET /mine': OWNERSHIP_SCOPED,
@@ -311,6 +313,22 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   const rentalByIdAt = indexOf(rentalRequests, 'get', '/:id');
   check('rentalRequests.js registers GET /mine before GET /:id', rentalMineAt !== -1 && rentalByIdAt !== -1 && rentalMineAt < rentalByIdAt,
     `GET /mine at stack index ${rentalMineAt}, GET /:id at ${rentalByIdAt}`);
+  // Below GET /:id, "/availability" would be read as a booking id: a resident
+  // would get 403 from its view guard and the Secretary 400 "Invalid booking id".
+  const rentalAvailabilityAt = indexOf(rentalRequests, 'get', '/availability');
+  check('rentalRequests.js registers GET /availability before GET /:id',
+    rentalAvailabilityAt !== -1 && rentalByIdAt !== -1 && rentalAvailabilityAt < rentalByIdAt,
+    `GET /availability at stack index ${rentalAvailabilityAt}, GET /:id at ${rentalByIdAt}`);
+
+  // The table above already fails a widened guard; said once more by name,
+  // because the availability answer exists for the two booking forms only.
+  section('rentalRequests.js — GET /availability refuses the other three roles');
+  const availabilityRoute = routesOf(rentalRequests).find((r) => r.keys.includes('GET /availability'));
+  for (const role of ['treasurer', 'staff', 'punong_barangay']) {
+    const admitted = !!availabilityRoute && admits(availabilityRoute, role);
+    check(`GET /availability refuses ${role}`, !!availabilityRoute && !admitted,
+      availabilityRoute ? (admitted ? 'admitted' : 'refused') : 'route not found');
+  }
 
   // -- the 401: no token never reaches a rental route --------------------------
   // The probe above skips authenticate (it reads the database); with NO token
