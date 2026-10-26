@@ -8832,10 +8832,13 @@ const root = () => dom.window.document.getElementById('root');
     };
     const NOTE = (r) => (r.guest ? `Guest · ${r.guest[1]}` : r.noAccount ? 'No online account' : `@res_${r.id}`);
     // Since step B2 the Secretary's Edit and Cancel are on bookings that have
-    // not started only, never an Overdue or Completed one (section AM).
+    // not started only, never an Overdue or Completed one (section AM); since
+    // step C3 Staff's Mark returned is the other way round, never on one that
+    // has not started (here the upcoming ones, not_started; section AR).
     const ACTIONS = {
       Secretary: (r) => (r.status === 'confirmed' && r.derived === 'confirmed' ? 'Edit + Cancel' : '(none)'),
-      Staff: (r) => (r.status === 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1]) ? 'Mark returned' : '(none)'),
+      Staff: (r) => (r.status === 'confirmed' && r.derived !== 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1])
+        ? 'Mark returned' : '(none)'),
       'Punong Barangay': null,
     };
     const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], scheduleOf(r.id), String(r.qty), `Purpose ${r.id}`,
@@ -9125,7 +9128,8 @@ const root = () => dom.window.document.getElementById('root');
             + 'once, keeps Overdue, and the booking leaves it: "2 overdue bookings", Returned 4',
           panel === 'Mark returned — booking #503' && backCalls.length === 0
             && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/503/return', 'GET /rental-requests?status=all'])
-            && /"outcome":"returned"/.test(String(posted?.body))
+            // An overdue booking starts on Returned late (step C3, section AR).
+            && /"outcome":"returned_late"/.test(String(posted?.body))
             && said(v.pressed) === said(['Overdue 2']) && v.heading === '2 overdue bookings'
             && said(v.rows) === said(['Maria Lourdes Villanueva-Santos', 'Dino Tan'])
             && v.strip === 'Upcoming 2 · Overdue 2 · Completed 3 · Returned 4 · Cancelled 1 · All 12',
@@ -9406,6 +9410,13 @@ const root = () => dom.window.document.getElementById('root');
         not_started: status === 'confirmed',
       };
     };
+    // Since step C3 Staff's Mark returned reads not_started too, and is not
+    // drawn where it is true. The stand-in above is true on bookings that
+    // have ended, which the server never sends; so while Staff are signed in
+    // the list answers lift it on those (derived overdue or completed), as
+    // the server would, and their Mark returned shows where it did.
+    const signedInRole = () => { try { return JSON.parse(store.data.get(STORAGE_KEY))?.user?.role ?? null; } catch { return null; } };
+    const asServerFor = (b) => (signedInRole() === 'staff' && b.derived_status !== 'confirmed' ? { ...b, not_started: false } : b);
     const LIST_AE = ROWS_AE.map(asBooking);
     const SENT = ROWS_AE.map((r) => r[0]);
     // A row as the tests name it: who it is for and the item, "Liza Bantilan ·
@@ -9520,7 +9531,7 @@ const root = () => dom.window.document.getElementById('root');
 
     // b. The real page, for the three roles.
     const makeStateAE = () => ({ rows: ROWS_AE.map((r) => [...r]) });
-    const listAnswerAE = (state) => ({ requests: state.rows.map(asBooking) });
+    const listAnswerAE = (state) => ({ requests: state.rows.map(asBooking).map(asServerFor) });
     const answerForAE = (state) => (url, method) => {
       if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerAE(state);
       const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
@@ -10019,7 +10030,7 @@ const root = () => dom.window.document.getElementById('root');
       const listAnswerP = (state) => {
         const n = state.loads;
         state.loads += 1;
-        return { requests: state.arrange(state.list, n).map((b) => ({ ...b })) };
+        return { requests: state.arrange(state.list, n).map((b) => asServerFor({ ...b })) };
       };
       const answerForP = (state) => (url, method) => {
         if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerP(state);
@@ -10849,7 +10860,7 @@ const root = () => dom.window.document.getElementById('root');
       };
       const LIST13 = ROWS_AF.map(asBookingAF);
       const answerAF = (list) => (url, method) => (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)
-        ? { requests: list.map((b) => ({ ...b })) } : undefined);
+        ? { requests: list.map((b) => asServerFor({ ...b })) } : undefined);
       const nameAF = (id) => SHOWN_AS[ROWS_AF.find((r) => r[0] === id)[2]];
       const wantRowAF = (id) => `${nameAF(id)} | #${id} | ${MARKER_AF[id]}`;
       const TAB_AF = { Upcoming: [112, 61, 21], Overdue: [19, 12], Completed: [11, 10], Returned: [7, 6, 2],
@@ -10875,9 +10886,11 @@ const root = () => dom.window.document.getElementById('root');
       // Edit and Cancel on every booking stored as confirmed (since step B2,
       // where not_started says so: asBooking's stand-in), Staff's Mark
       // returned on stored-confirmed equipment and furniture, and none, with
-      // no actions column, for the Punong Barangay.
+      // no actions column, for the Punong Barangay. Since step C3 Mark
+      // returned is not drawn on a booking that has not started (section
+      // AR), so not on the upcoming 61 and 21.
       const CONFIRMED_AF = [112, 61, 21, 19, 12, 11, 10];
-      const RETURNABLE_AF = [61, 21, 19, 12];
+      const RETURNABLE_AF = [19, 12];
       const ACTIONS_AF = {
         Secretary: (id) => (CONFIRMED_AF.includes(id) ? 'Edit + Cancel' : '(none)'),
         Staff: (id) => (RETURNABLE_AF.includes(id) ? 'Mark returned' : '(none)'),
@@ -11533,7 +11546,12 @@ const root = () => dom.window.document.getElementById('root');
         // as the server would: a cancel voids an unpaid charge and leaves a
         // paid one, a return leaves the charge as it was.
         const makeStateF = (rows = ROWS_F) => ({ rows: rows.map((r) => [...r]) });
-        const listAnswerF = (state) => ({ requests: state.rows.map(asBookingF) });
+        // #147 is the booking these checks open a panel on: Edit for the
+        // Secretary, Mark returned for Staff. Since step C3 Mark returned is
+        // not drawn before a booking starts, so for Staff #147 is under way
+        // (begun, its end ahead: still Upcoming), and not_started is false.
+        const underWayForStaff = (b) => (signedInRole() === 'staff' && b.request_id === 147 ? { ...b, not_started: false } : b);
+        const listAnswerF = (state) => ({ requests: state.rows.map(asBookingF).map(asServerFor).map(underWayForStaff) });
         const answerForF = (state) => (url, method) => {
           if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerF(state);
           const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
@@ -15358,6 +15376,373 @@ const root = () => dom.window.document.getElementById('root');
     check('sections AN and AO sent only GETs (the items, the list, the availability) and booking POSTs',
       methods.length > 0 && methods.every((m) => /^GET \/(rental-items|rental-requests\/availability|rental-requests)$/.test(m)
         || m === 'POST /rental-requests'), said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AP, AQ and AR. Small rental fixes (step C3)
+  // =========================================================================
+  // AP: the Secretary's Edit panel shows what is free under its time fields,
+  // as the two booking forms do, asking GET /rental-requests/availability
+  // with the booking's own id as exclude_request_id (so it is not counted
+  // against its new time); the booking's quantity decides whether Save is
+  // blocked, with the reason beside it; a check that failed blocks nothing;
+  // the date's earliest day is today in Manila and the fields are prefilled
+  // in Manila time, whatever the computer's clock. AQ: Rental items, where a
+  // lower total below what bookings hold is answered 409 STOCK_BELOW_BOOKED:
+  // an in-page warning (never window.confirm), "Lower anyway" resending with
+  // confirm_lower_stock, "Keep the current number" putting the number back.
+  // AR: Mark returned starts on "Returned late" for an overdue booking (the
+  // Overdue tab's own rule) and on time otherwise, and is not offered for a
+  // booking that has not started.
+  console.log('\n--- Small rental fixes: Edit availability, the lower-stock warning, Mark returned ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const bodyOf = (call) => { try { return JSON.parse(call?.body ?? 'null'); } catch { return call?.body ?? null; } };
+    const A = globalThis.rentalAvailability || {};
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const fn = (obj, name, ...args) => {
+      try { return typeof obj[name] === 'function' ? obj[name](...args) : `${name} is not exported`; } catch (e) { return `threw: ${e.message}`; }
+    };
+    const previousConfirm = dom.window.confirm;
+    const asked = [];
+    dom.window.confirm = (message) => { asked.push(message); return true; };
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '').replace(/\?.*$/, '').replace(/\d+/g, ':id')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+    const submitIf = async (pg) => { if (pg.query('form')) await pg.submit(); };
+    const wait = async (pg, ms = 450) => { await new Promise((r) => setTimeout(r, ms)); await pg.settle(); };
+    const FULL = 'Fully booked for that time.';
+    const NOT_FREE = 'Not free. That time overlaps a booking.';
+    const EDIT_FAILED = "Couldn't check availability. You can still save; the system checks again when you do.";
+    const editOnlyLeft = (left, need) => `Only ${left} left for that time; this booking needs ${need}. Choose another time.`;
+    const facility = (left, taken = []) => ({ ok: true, item_type: 'facility', total: 1, used: 1 - left, booked: 1 - left,
+      stuck: 0, resting: 0, left, taken });
+    const items = (o = {}) => ({ ok: true, item_type: 'equipment', total: 10, used: 0, booked: 0, stuck: 0, resting: 0, left: 10, ...o });
+
+    // --- AP-a. editBlock, case by case ------------------------------------
+    const EDIT_BLOCKS = [
+      ['a facility taken', { answer: facility(0), quantity: 1 }, NOT_FREE],
+      ['a facility free', { answer: facility(1), quantity: 1 }, null],
+      ['an item with none left', { answer: items({ left: 0 }), quantity: 2 }, FULL],
+      ['2 needed, 1 left', { answer: items({ left: 1 }), quantity: 2 }, editOnlyLeft(1, 2)],
+      ['2 needed, 2 left', { answer: items({ left: 2 }), quantity: 2 }, null],
+      ['no answer (idle, loading or failed): nothing blocks', { answer: null, quantity: 99 }, null],
+    ];
+    for (const [name, args, want] of EDIT_BLOCKS) {
+      check(`editBlock: ${name}: ${want === null ? 'no block' : `"${want}"`}`, fn(A, 'editBlock', args) === want,
+        said(fn(A, 'editBlock', args)));
+    }
+    const withExclude = fn(A, 'availabilityPath', 21, { date: '2026-11-11', start_time: '09:00', end_time: '13:00' }, 901);
+    const exUrl = typeof withExclude === 'string' ? new URL(withExclude, 'http://x') : null;
+    check('availabilityPath with an exclude id adds exclude_request_id after the four fields; without one it adds nothing',
+      said([...(exUrl?.searchParams.entries() ?? [])]) === said([['item_id', '21'], ['date', '2026-11-11'], ['start_time', '09:00'],
+        ['end_time', '13:00'], ['exclude_request_id', '901']])
+        && !/exclude/.test(fn(A, 'availabilityPath', 21, { date: '2026-11-11', start_time: '09:00', end_time: '13:00' })),
+      said(withExclude));
+
+    // --- AP-b. the Edit panel against a stubbed API -----------------------
+    // MANAGE_FIELDS' shape, as GET /rental-requests sends it.
+    const booking = (id, item, type, extra = {}) => ({
+      request_id: id, quantity_requested: 2,
+      // 1 AM UTC is 9 AM in Manila and still the day before in Los Angeles.
+      start_datetime: '2026-11-11T01:00:00+00:00', end_datetime: '2026-11-11T05:00:00+00:00',
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null,
+      resident_id: 800 + id, outside_borrower_name: null, outside_borrower_contact: null,
+      rental_items: { item_id: 600 + id, name: item, type, fee: '75.00', quantity_total: 10, quantity_available: 10 },
+      resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: `Cruz${id}`, suffix: null,
+        account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: null, profiles: null },
+      returned_by: null,
+      charges: { charge_id: 950 + id, amount: '150.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', not_started: true, ...extra,
+    });
+    const st = { list: [], answers: {}, put: { message: 'Booking updated' } };
+    const isAsk = (url) => /\/rental-requests\/availability\?/.test(url);
+    const stub = (url, method) => {
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: st.list };
+      if (method === 'GET' && isAsk(url)) {
+        const p = Object.fromEntries(new URL(url).searchParams.entries());
+        return st.answers[`${p.item_id} ${p.start_time} ${p.end_time}`] ?? st.answers.default;
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return st.put;
+      if (method === 'POST' && /\/rental-requests\/\d+\/return$/.test(url)) return { message: 'Return recorded' };
+      return undefined;
+    };
+    const asks = () => net.calls.filter((c) => isAsk(c.url));
+    const paramsOf = (c) => (c ? Object.fromEntries(new URL(c.url).searchParams.entries()) : null);
+    const puts = () => net.calls.filter((c) => c.method === 'PUT');
+    const rowOf = (pg, id) => pg.queryAll('table.data-table tbody tr')
+      .find((tr) => text(tr.querySelector('.doc-requests-number')) === `#${id}`) ?? null;
+    const rowButton = (pg, id, label) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label) ?? null;
+    const tabNamed = (pg, label) => pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const put = async (pg, name, value) => { if (pg.query(`input[name="${name}"]`)) await pg.fill(`input[name="${name}"]`, value); };
+    const look = (pg) => {
+      const panel = pg.query('.pending-card');
+      const region = panel?.querySelector('.rental-availability [role="status"]') ?? null;
+      const failed = panel?.querySelector('.rental-availability [role="alert"]') ?? null;
+      const button = panel ? [...panel.querySelectorAll('button[type="submit"]')][0] ?? null : null;
+      const reasonId = button?.getAttribute('aria-describedby') || null;
+      const reason = reasonId ? dom.window.document.getElementById(reasonId) : null;
+      const grid = panel?.querySelector('input[name="start_time"]')?.closest('.grid-2') ?? null;
+      return {
+        title: text(panel?.querySelector('h3')),
+        region: !!region && region.getAttribute('aria-live') === 'polite',
+        underTimes: !!grid && grid.nextElementSibling?.classList.contains('rental-availability'),
+        lines: region ? [...region.querySelectorAll('.rental-availability-line')].map(text) : [],
+        failed: text(failed),
+        enabled: button ? !button.disabled : null,
+        label: text(button),
+        reason: text(reason),
+        reasonBeside: !!reason && reason.parentElement === button?.parentElement,
+        date: panel?.querySelector('input[name="date"]')?.value ?? null,
+        min: panel?.querySelector('input[name="date"]')?.getAttribute('min') ?? null,
+        start: panel?.querySelector('input[name="start_time"]')?.value ?? null,
+        end: panel?.querySelector('input[name="end_time"]')?.value ?? null,
+      };
+    };
+
+    // 00:30 on 2 Nov 2026 in Manila; in UTC (and in Los Angeles) still 1 Nov.
+    setNow('2026-11-01T16:30:00Z');
+    const homeZone = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    st.list = [booking(901, 'Sound System', 'equipment'), booking(902, 'Covered Court', 'facility', { quantity_requested: 1 })];
+    st.answers = { default: items({ used: 3, booked: 3, left: 7 }) };
+    seedSession(VALID);
+    resetNet(200, stub);
+    let page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 901, 'Edit'));
+    let v = look(page);
+    check('Edit (on a Los Angeles clock): the fields are prefilled in Manila time: 2026-11-11, 09:00 to 13:00 (never 2026-11-10, 18:00)',
+      v.title === 'Edit booking #901' && v.date === '2026-11-11' && v.start === '09:00' && v.end === '13:00', said(v));
+    check('  the date\'s earliest day is 2026-11-02, today in Manila at 00:30, never 2026-11-01 (UTC\'s day)', v.min === '2026-11-02', said(v.min));
+    await wait(page);
+    process.env.TZ = homeZone;
+    v = look(page);
+    check('Edit: one GET /rental-requests/availability for the item, the prefilled date and times, and exclude_request_id=901',
+      asks().length === 1 && said(paramsOf(asks()[0])) === said({ item_id: '1501', date: '2026-11-11', start_time: '09:00',
+        end_time: '13:00', exclude_request_id: '901' }), said(asks().map((c) => c.url)));
+    check('  the answer shows under the time fields in the shared display (role="status", aria-live="polite"): '
+        + '"For that time: 3 booked, 7 left of 10."; Save is pressable, no reason',
+      v.region && v.underTimes && said(v.lines) === said(['For that time: 3 booked, 7 left of 10.']) && v.enabled === true && v.reason === null,
+      said(v));
+    // Fewer left than this booking's 2 units: Save blocked, with the reason.
+    st.answers['1501 14:00 16:00'] = items({ used: 9, booked: 9, left: 1 });
+    await put(page, 'start_time', '14:00');
+    await put(page, 'end_time', '16:00');
+    await wait(page);
+    v = look(page);
+    check(`Edit: 1 left for a booking of 2: Save is disabled with "${editOnlyLeft(1, 2)}" beside it (aria-describedby)`,
+      v.enabled === false && v.reason === editOnlyLeft(1, 2) && v.reasonBeside, said(v));
+    let sent = puts().length;
+    await submitIf(page);
+    check('  and submitting anyway (the Enter key) sends nothing', puts().length === sent, String(puts().length - sent));
+    st.answers['1501 16:00 18:00'] = items({ used: 10, booked: 10, left: 0 });
+    await put(page, 'start_time', '16:00');
+    await put(page, 'end_time', '18:00');
+    await wait(page);
+    v = look(page);
+    check(`Edit: none left: Save disabled with "${FULL}"`, v.enabled === false && v.reason === FULL, said(v));
+    st.answers['1501 08:00 10:00'] = items({ used: 8, booked: 8, left: 2 });
+    await put(page, 'start_time', '08:00');
+    await put(page, 'end_time', '10:00');
+    await wait(page);
+    v = look(page);
+    check('Edit: exactly 2 left for a booking of 2: Save pressable again, no reason', v.enabled === true && v.reason === null, said(v));
+    // A 409 at Save: the server's sentence, and the check asked again.
+    const CLASH = 'Only 1 of 10 Sound System is available for that time — you asked for 2.';
+    st.put = { error: CLASH };
+    st.answers['1501 08:00 10:00'] = items({ used: 9, booked: 9, left: 1 });
+    sent = asks().length;
+    net.status = 409;
+    await submitIf(page);
+    net.status = 200;
+    const refusal = page.queryAll('.pending-card [role="alert"]').map(text);
+    await wait(page);
+    v = look(page);
+    check('Edit: a 409 at Save shows the server\'s sentence (role="alert") and asks the availability again, which now blocks',
+      refusal.includes(CLASH) && asks().length === sent + 1 && v.enabled === false && v.reason === editOnlyLeft(1, 2),
+      said({ refusal, asks: asks().length - sent, v }));
+    // A failed check blocks nothing, and Save sends.
+    net.status = 500;
+    st.answers.default = { error: 'Something broke' };
+    await put(page, 'start_time', '10:00');
+    await put(page, 'end_time', '12:00');
+    await wait(page);
+    net.status = 200;
+    v = look(page);
+    check(`Edit: a failed check (a 500) says "${EDIT_FAILED}" (role="alert"), shows no result and leaves Save pressable`,
+      v.failed === EDIT_FAILED && v.lines.length === 0 && v.enabled === true && v.reason === null, said(v));
+    st.put = { message: 'Booking updated' };
+    sent = puts().length;
+    await submitIf(page);
+    const sentBody = bodyOf(puts().at(-1));
+    check('  and Save sends one PUT with the date, the times and the purpose only (no quantity, no exclude id), and the panel closes',
+      puts().length === sent + 1 && said(sentBody) === said({ date: '2026-11-11', start_time: '10:00', end_time: '12:00', purpose: 'Purpose 901' })
+        && !page.query('input[name="start_time"]'), said({ puts: puts().length - sent, sentBody }));
+    // A facility taken.
+    st.answers = { default: facility(1), '1502 09:00 13:00': facility(0, [{ start: '2026-11-11T00:00:00+00:00', end: '2026-11-11T02:00:00+00:00' }]) };
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 902, 'Edit'));
+    await wait(page);
+    v = look(page);
+    check(`Edit: a facility that is taken says "${NOT_FREE}" and Save is disabled with that reason`,
+      v.lines[0] === NOT_FREE && v.enabled === false && v.reason === NOT_FREE, said(v));
+    await put(page, 'start_time', '14:00');
+    await put(page, 'end_time', '16:00');
+    await wait(page);
+    v = look(page);
+    check('  and a free time lets Save be pressed again', v.lines[0] === 'Free for 2:00 PM to 4:00 PM.' && v.enabled === true, said(v));
+    await finish(page);
+
+    // --- AQ. Rental items: lowering below what bookings hold ---------------
+    const TENT = { item_id: 803, name: 'Tent', type: 'equipment', description: 'Big tent', quantity_total: 20, quantity_available: 20,
+      fee: '100.00', is_active: true };
+    const iSt = { items: [{ ...TENT }], warn: null };
+    const itemsStub = (url, method) => {
+      if (method === 'GET' && /\/rental-items\/all$/.test(url)) return { rental_items: iSt.items };
+      if (method === 'PUT' && /\/rental-items\/803$/.test(url)) {
+        if (net.status === 409) return iSt.warn;
+        const b = bodyOf(net.calls.at(-1));
+        Object.assign(iSt.items[0], { quantity_total: b.quantity_total, quantity_available: b.quantity_total });
+        return { message: 'Rental item updated', rental_item: iSt.items[0] };
+      }
+      return undefined;
+    };
+    const warnBody = (o) => ({ error: 'Upcoming or overdue bookings hold 12 units of this item, more than the new total of 4.',
+      code: 'STOCK_BELOW_BOOKED', bookings: 3, units: 12, largest: 5, new_total: 4, ...o });
+    const WARN_TEXT = '3 upcoming or overdue bookings hold 12 units of Tent. The largest asks for 5. If you lower the total to 4, '
+      + 'those bookings stay, but new bookings will be refused until enough units are free. Lower it anyway?';
+    const WARN_ONE = '1 upcoming or overdue booking holds 3 units of Tent. If you lower the total to 2, that booking stays, '
+      + 'but new bookings will be refused until enough units are free. Lower it anyway?';
+    const itemPuts = () => net.calls.filter((c) => c.method === 'PUT');
+    const warning = (pg) => {
+      const el = pg.query('.stock-warning');
+      return {
+        shown: !!el,
+        role: el?.getAttribute('role') ?? null,
+        text: text(el?.querySelector('p')),
+        buttons: el ? [...el.querySelectorAll('button')].map((b) => `${b.textContent}:${b.type}`) : [],
+      };
+    };
+    const qtyField = (pg) => pg.query('input[name="quantity_total"]');
+    const pressNamed = async (pg, label) => { const b = [...root().querySelectorAll('button')].find((x) => x.textContent === label); if (b) await pg.click(b); };
+    seedSession(VALID);
+    resetNet(200, itemsStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
+    await page.settle();
+    await pressNamed(page, 'Edit');
+    await put(page, 'quantity_total', '25');
+    sent = itemPuts().length;
+    await submitIf(page);
+    check('Rental items: raising the total (20 to 25) saves with one PUT, no confirm_lower_stock, and no warning',
+      itemPuts().length === sent + 1 && !('confirm_lower_stock' in (bodyOf(itemPuts().at(-1)) ?? {})) && !warning(page).shown
+        && /Rental item updated/.test(text(page.query('.alert.success')) ?? ''), said({ body: bodyOf(itemPuts().at(-1)), w: warning(page) }));
+    iSt.items[0].quantity_total = 20;
+    iSt.items[0].quantity_available = 20;
+    await pressNamed(page, 'Refresh');
+    await pressNamed(page, 'Edit');
+    await put(page, 'quantity_total', '4');
+    iSt.warn = warnBody();
+    net.status = 409;
+    await submitIf(page);
+    net.status = 200;
+    let w = warning(page);
+    check('Rental items: a 409 STOCK_BELOW_BOOKED shows an in-page warning with role="alert", in plain words',
+      w.shown && w.role === 'alert' && w.text === WARN_TEXT, said(w));
+    check('  with "Lower anyway" and "Keep the current number" (both type="button"), and no window.confirm',
+      said(w.buttons) === said(['Lower anyway:button', 'Keep the current number:button']) && asked.length === 0, said({ w, asked }));
+    check('  the form stays open with the 4 typed, and nothing else was shown as an error',
+      qtyField(page)?.value === '4' && !page.query('form .alert.error'), said(qtyField(page)?.value));
+    sent = net.calls.length;
+    await pressNamed(page, 'Keep the current number');
+    check('"Keep the current number" closes the warning, puts the total back to 20 and sends nothing',
+      !warning(page).shown && qtyField(page)?.value === '20' && net.calls.length === sent && page.active() === qtyField(page),
+      said({ w: warning(page), qty: qtyField(page)?.value, calls: net.calls.length - sent }));
+    await put(page, 'quantity_total', '4');
+    net.status = 409;
+    await submitIf(page);
+    net.status = 200;
+    await put(page, 'quantity_total', '5');
+    check('Changing the number while the warning shows takes the warning away', !warning(page).shown, said(warning(page)));
+    await put(page, 'quantity_total', '4');
+    net.status = 409;
+    await submitIf(page);
+    net.status = 200;
+    sent = itemPuts().length;
+    await pressNamed(page, 'Lower anyway');
+    const lowered = bodyOf(itemPuts().at(-1));
+    check('"Lower anyway" sends the same PUT once more with confirm_lower_stock: true, and the form closes with the server\'s message',
+      itemPuts().length === sent + 1 && lowered?.confirm_lower_stock === true && lowered?.quantity_total === 4 && lowered?.name === 'Tent'
+        && !qtyField(page) && /Rental item updated/.test(text(page.query('.alert.success')) ?? ''),
+      said({ lowered, puts: itemPuts().length - sent }));
+    await pressNamed(page, 'Edit');
+    await put(page, 'quantity_total', '2');
+    iSt.warn = warnBody({ bookings: 1, units: 3, largest: 3, new_total: 2 });
+    net.status = 409;
+    await submitIf(page);
+    net.status = 200;
+    w = warning(page);
+    check('One booking: the singular words and no "largest" sentence', w.text === WARN_ONE, said(w));
+    await finish(page);
+
+    // --- AR. Mark returned (Staff) ------------------------------------------
+    st.list = [
+      booking(911, 'Tent (10x10)', 'equipment', { start_datetime: '2026-10-01T01:00:00+00:00', end_datetime: '2026-10-01T05:00:00+00:00',
+        derived_status: 'overdue', not_started: false }),
+      // Started an hour ago, still running: stored and derived confirmed.
+      booking(912, 'Plastic Chairs', 'furniture', { start_datetime: '2026-11-01T15:30:00+00:00', end_datetime: '2026-11-01T20:00:00+00:00',
+        not_started: false }),
+      booking(913, 'Sound System', 'equipment'),
+      booking(914, 'Folding Tables', 'furniture'),
+    ];
+    const STAFF_TOKEN = makeToken({ sub: '3', role: 'staff', exp: VALID_EXP });
+    seedSession(STAFF_TOKEN, { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false });
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/staff');
+    await page.settle();
+    await clickIf(page, tabNamed(page, 'All'));
+    const offered = [911, 912, 913, 914].map((id) => `${id}:${!!rowButton(page, id, 'Mark returned')}`);
+    check('Mark returned is offered for the overdue and the under-way booking, and not for the two that have not started',
+      said(offered) === said(['911:true', '912:true', '913:false', '914:false']), said(offered));
+    const outcomeOf = () => page.query('.pending-card select')?.value ?? null;
+    await clickIf(page, rowButton(page, 911, 'Mark returned'));
+    const lateStart = outcomeOf();
+    await pressNamed(page, '← Back to list');
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 912, 'Mark returned'));
+    const onTimeStart = outcomeOf();
+    check('Mark returned starts on "Returned late" for the overdue booking, "Returned — on time, good condition" otherwise',
+      lateStart === 'returned_late' && onTimeStart === 'returned', said({ lateStart, onTimeStart }));
+    await pressNamed(page, '← Back to list');
+    await clickIf(page, tabNamed(page, 'Overdue'));
+    await clickIf(page, rowButton(page, 911, 'Mark returned'));
+    const sel = page.query('.pending-card select') ?? { dispatchEvent() {} };
+    sel.value = 'returned_with_issue';
+    sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await page.settle();
+    sent = net.calls.length;
+    await submitIf(page);
+    const ret = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  Staff can change it: "Returned with an issue" is what is sent', bodyOf(ret)?.outcome === 'returned_with_issue', said(bodyOf(ret)));
+    await finish(page);
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    dom.window.confirm = previousConfirm;
+    check('sections AP to AR asked no window.confirm and kept nothing in the browser (no localStorage or sessionStorage write)',
+      asked.length === 0 && kept.sets === 0 && domStorage.writes === kept.dom,
+      said({ asked: asked.length, stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('sections AP to AR sent only the list, the availability, the items, the edits and the return',
+      methods.length > 0 && methods.every((m) => ['GET /rental-requests', 'GET /rental-requests/availability', 'PUT /rental-requests/:id',
+        'GET /rental-items/all', 'PUT /rental-items/:id', 'POST /rental-requests/:id/return'].includes(m)), said([...new Set(methods)]));
   }
 
   console.error = origError;
