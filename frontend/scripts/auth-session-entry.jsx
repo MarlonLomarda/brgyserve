@@ -4,14 +4,48 @@
 // between the stored session and the first request, which no API-level test
 // can see.
 import { createRoot } from 'react-dom/client';
-import { act, useEffect } from 'react';
+import { act, StrictMode, useEffect } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../src/App.jsx';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext.jsx';
 import { decodeJwtPayload, isTokenExpired } from '../src/auth/session.js';
+import * as activityLog from '../src/constants/activityLog.js';
+import * as bookingTimes from '../src/utils/bookingTimes.js';
+import * as chargeMethod from '../src/utils/chargeMethod.js';
+import * as chargeFilters from '../src/utils/chargeFilters.js';
+import * as chargeSearch from '../src/utils/chargeSearch.js';
+import * as chargeTotals from '../src/utils/chargeTotals.js';
+import * as paging from '../src/utils/paging.js';
+import * as rentalList from '../src/utils/rentalList.js';
+import * as requestList from '../src/utils/requestList.js';
 
 globalThis.isTokenExpired = isTokenExpired;
 globalThis.decodeJwtPayload = decodeJwtPayload;
+// The Payments page's Method label, checked on its own in section N.
+globalThis.methodOf = chargeMethod.methodOf;
+// The "No fee" test of My requests, My rentals and the request detail,
+// checked on its own in section T.
+globalThis.isNoFeeCharge = chargeMethod.isNoFeeCharge;
+// The Payments page's search, totals and paging helpers, checked on their
+// own in section O.
+globalThis.chargeSearch = chargeSearch;
+globalThis.chargeTotals = chargeTotals;
+globalThis.paging = paging;
+// The Payments page's Method and date filters, and the clock "today" comes
+// from, checked on their own in section Q.
+globalThis.chargeFilters = chargeFilters;
+// The Document requests list's status tabs, counts and heading, checked on
+// their own in section W.
+globalThis.requestList = requestList;
+// The Rental bookings list's status tabs, counts, heading, empty text and
+// opening tab, checked on their own in section AD.
+globalThis.rentalList = rentalList;
+// The booking form's earliest date and time checks, checked on their own in
+// section AJ.
+globalThis.bookingTimes = bookingTimes;
+// The Activity Log page's labels and one-line summaries, checked on their own
+// in section AM.
+globalThis.activityLog = activityLog;
 
 // Mount the whole app at a protected route with whatever is in localStorage.
 // Returns the rendered HTML so the test can assert which view came up.
@@ -33,17 +67,20 @@ globalThis.mountApp = async (container, route) => {
 
 // Mount the whole app at `route` and KEEP it mounted, so the test can fill in
 // a form and submit it the way a person would, then read what is on screen.
-globalThis.mountInteractive = async (container, route) => {
+// `strict` wraps it in StrictMode, which runs every effect twice on mount, as
+// the dev server does (main.jsx).
+globalThis.mountInteractive = async (container, route, { strict = false } = {}) => {
   const win = container.ownerDocument.defaultView;
   const root = createRoot(container);
+  const app = (
+    <AuthProvider>
+      <MemoryRouter initialEntries={[route]}>
+        <App />
+      </MemoryRouter>
+    </AuthProvider>
+  );
   await act(async () => {
-    root.render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <App />
-        </MemoryRouter>
-      </AuthProvider>
-    );
+    root.render(strict ? <StrictMode>{app}</StrictMode> : app);
   });
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   return {

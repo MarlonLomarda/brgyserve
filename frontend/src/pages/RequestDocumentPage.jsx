@@ -106,7 +106,6 @@ export default function RequestDocumentPage() {
         </div>
       ) : (
         <form className="pending-card section-card" onSubmit={handleSubmit}>
-          <h3>Request a document</h3>
           {loadError && <div className="alert error">{loadError}</div>}
           {error && <div className="alert error">{error}</div>}
 

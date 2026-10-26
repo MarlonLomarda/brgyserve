@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import ListFilters from "../components/ListFilters";
+import ListPager from "../components/ListPager";
+import ListTabs from "../components/ListTabs";
+import ListToolbar from "../components/ListToolbar";
+import CancelBookingPanel from "../components/CancelBookingPanel";
 import ResidentPicker from "../components/ResidentPicker";
-import { formatDate } from "../constants/requestStatus";
+import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
   RETURN_OUTCOMES,
@@ -10,61 +15,142 @@ import {
   isReturnable,
   rentalMeta,
 } from "../constants/rentals";
+import { ANY, backwards, manilaToday } from "../utils/chargeFilters";
+import { searchTerms } from "../utils/chargeSearch";
+import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
+import {
+  accountHandle,
+  ANY_ITEM,
+  bookedForName,
+  bookingNumber,
+  emptyText,
+  filterCount,
+  filtersNoMatchText,
+  inTab,
+  isGuest,
+  itemOptions,
+  matchesItem,
+  matchesPayment,
+  matchesStarts,
+  matchingBookings,
+  noMatchText,
+  openingTab,
+  orderBookings,
+  paymentMarker,
+  paymentOptions,
+  RENTAL_TABS,
+  scheduleParts,
+  searchHeading,
+  searchPlaceholder,
+  STARTS_OPTIONS,
+  startsRange,
+  tabCounts,
+  tabHeading,
+} from "../utils/rentalList";
 
 // All-bookings view, shared by three roles: the Secretary manages
 // (canManage — edit/cancel), Barangay Staff mark physical items returned
 // (canReturn), the Punong Barangay is read-only. Pass the role's title and
 // nav like PaymentsPage.
-
-const FILTERS = [
-  "confirmed",
-  "overdue",
-  "completed",
-  "returned",
-  "returned_late",
-  "returned_with_issue",
-  "cancelled",
-  "all",
-];
-const FILTER_LABELS = {
-  confirmed: "Confirmed / upcoming",
-  overdue: "Overdue (awaiting return)",
-  completed: "Completed (facilities)",
-  returned: "Returned",
-  returned_late: "Returned late",
-  returned_with_issue: "Returned with issue",
-  cancelled: "Cancelled",
-  all: "All bookings",
-};
-
-const fullName = (p) => {
-  if (!p) return null;
-  const name = [p.first_name, p.middle_name, p.last_name]
-    .filter(Boolean)
-    .join(" ");
-  if (!name) return null;
-  return p.suffix ? `${name}, ${p.suffix}` : name;
-};
-
-const isGuest = (booking) => Boolean(booking.outside_borrower_name);
+//
+// STATUS TABS (14 Oct 2026). The list is loaded once, every booking
+// (?status=all), and six tabs split it in the browser with no further
+// request: Upcoming, Overdue, Completed, Returned, Cancelled and All, each
+// with its count over the whole list (utils/rentalList.js). A booking is in
+// the tab of the status its badge reads, the server's derived_status. They
+// replace a status select whose every choice sent a new request, and whose
+// first choice, "Confirmed / upcoming", asked for the STORED status, so it
+// listed every past confirmed booking too. The strip is the Payments page's
+// type tabs, as components/ListTabs.jsx, as on Document requests. Staff open
+// on Overdue, as the select did; the Secretary and the Punong Barangay on
+// Upcoming. The chosen tab lives through every reload: Refresh, Try again, and
+// the reload after an edit, a return, a cancel or a filed walk-in.
+//
+// SEARCH (15 Oct 2026). The Document requests search box, as
+// components/ListToolbar.jsx, in a row of its own between the row that holds
+// Refresh and the tabs. It filters the loaded list as you type, with no
+// request, over what a row shows of who and what: the name in the Booked for
+// column, the @account under it where the row shows one, and the item
+// (utils/rentalList.js); never the purpose or a guest's contact number. The
+// search runs over the whole list and the tabs split what matches, so their
+// counts follow it; the chosen tab stays. While a search is on, the heading
+// reads "4 of 7 overdue bookings match". The search lives through every
+// reload and through Back from a panel, and is kept nowhere in the browser:
+// the barangay hall's PC is shared.
+//
+// PAGES (15 Oct 2026). The Document requests pager, as
+// components/ListPager.jsx, under the rows: "Showing 1 to 25 of 28 results",
+// Rows per page (10, 25, 50 or 100, 25 to start), then Previous, the page
+// numbers and Next. It pages the list already loaded, with no request, and
+// shows from 11 matches. Only the rows drawn are one page: the heading and
+// the tab counts still count every match, and the search runs over the whole
+// list. A tab, a search or a new Rows per page goes back to page 1; Rows per
+// page stays as chosen. Refresh, Try again, Back from a panel and the reload
+// after an action keep the page, and a list that shrank under it lands on its
+// last page. Like the search, neither is kept in the browser. The list is
+// kept in ONE order (orderBookings in utils/rentalList.js), the route's with
+// its ties settled, so a page never repeats a row or leaves one out.
+//
+// PAYMENT AND NUMBER (15 Oct 2026). Every row shows its booking number, "#12"
+// as the Edit and Mark returned panels name it, on a line of its own under
+// the name, and under the status badge where the booking stands with its
+// fee: "Paid", "No fee", "Unpaid", "Void" or "Not billed", read from its
+// charge alone by the Document requests list's own function
+// (utils/rentalList.js). Both sit in cells the table already had, so it has
+// no new column, and neither is a <strong>: a row's first <strong> is still
+// the name. The search reads the number and never the marker. They carry the
+// Document requests number's and marker's classes, so they look as those do,
+// and on a phone card each is labelled from its own data-label (index.css).
+//
+// FILTERS (15 Oct 2026). The Document requests filters row, as
+// components/ListFilters.jsx, between the search and the tabs: Item (the
+// items the loaded rows hold, by the name each row shows), Payment (the
+// marker's words, matched through the marker itself) and Starts (the Manila
+// day a booking starts on, with presets both ways and "Choose dates";
+// utils/rentalList.js). The list shown is tab AND search AND filters: the
+// tab counts, the heading ("3 of 5 upcoming bookings match") and the pager
+// follow the search and the filters, and any filter change goes back to page
+// 1, with no request. Like the search, the filters live through every reload
+// and Back from a panel, a choice a reload no longer offers goes back to Any,
+// and nothing is kept in the browser. On a phone the row is a panel behind a
+// "Filters" button that counts the filters on ("Filters (2)") and opens it in
+// place; whether it is open lives here too, closed on every visit. The
+// wrapper carries the Document requests filters' class as well as its own,
+// so the button, the panel and Clear filters' kept place look as they do
+// there (index.css).
+//
+// COLUMNS (15 Oct 2026). Above 640px the table keeps its columns in the same
+// places on every tab, page, search and filter result: it is
+// .rental-bookings-table, with fixed widths set through its header cells'
+// classes (index.css); Purpose has none and takes the rest. The Schedule cell
+// is two spans in every row, the date with its comma and the times
+// (scheduleParts in utils/rentalList.js), each a line of its own there, so
+// every row breaks after the year. On a phone the cards are as they were.
+//
+// RETURNED BY (15 Oct 2026). A returned booking's line after its payment
+// marker names the return, "Returned by @staff1 on Oct 8, 2026, 1:20 PM"
+// (ReturnedBy, below), where it read "by @staff1 on …", as if staff1 had
+// marked the booking unpaid; a return note follows it.
+//
+// EDIT AND CANCEL (25 Oct 2026, step B2). The Secretary's Edit and Cancel are
+// drawn only where the server's not_started says the booking has not started
+// (routes/rentalRequests.js, hasNotStarted()), so never on one that is under
+// way, Overdue, Completed, cancelled or returned. Edit shows the date, the
+// times and the purpose, and the quantity as text only. Cancel opens
+// CancelBookingPanel with a required reason, and for a paid booking says the
+// payment stays recorded and a refund is due. A cancelled booking shows its
+// reason under its status, as text.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
 // Three forms and nothing else: 09XXXXXXXXX, 639XXXXXXXXX, +639XXXXXXXXX.
 const PH_MOBILE_RE = /^(09\d{9}|\+?639\d{9})$/;
 
-// WHO THE BOOKING IS FOR — the borrower, not the requester. Since migration
-// 022 a row names its borrower directly (resident_records for a resident,
-// outside_borrower_name for a guest) and the requester is only who FILED it;
-// for a walk-in that is the Secretary. The requester's profile is kept as a
-// last fallback for rows the server did not embed a borrower on.
+// WHO THE BOOKING IS FOR — the borrower, not the requester: bookedForName in
+// utils/rentalList.js, which the search reads too, so a search finds a booking
+// by exactly the name its row shows. "—" when there is nothing to name.
 function residentName(booking) {
-  return (
-    fullName(booking.resident_records) ||
-    booking.outside_borrower_name ||
-    fullName(booking.requester?.profiles) ||
-    (booking.requester?.username ? `@${booking.requester.username}` : "—")
-  );
+  return bookedForName(booking) || "—";
 }
 
 // The handle beneath the borrower's name is the BORROWER'S account, never the
@@ -73,14 +159,65 @@ function residentName(booking) {
 // arrives inside resident_records when the server sends it; this tests the
 // key, not the viewer's role. Null means the resident has no online account,
 // said plainly rather than left blank. Guests never reach this: they have no
-// resident record, and their row says "Guest" instead.
+// resident record, and their row says "Guest" instead. The handle is
+// accountHandle's (utils/rentalList.js), which the search reads too.
 function AccountNote({ record }) {
   if (!record || !("account" in record)) return null;
   return (
     <div className="muted small-note">
-      {record.account?.username
-        ? `@${record.account.username}`
-        : "No online account"}
+      {accountHandle(record) || "No online account"}
+    </div>
+  );
+}
+
+// Where the booking stands with its fee, under its status badge, in the
+// colours .charge-word gives the charge's own status words. The class is the
+// Document requests marker's, reused by name, so the two look the same;
+// data-label is the phone card's label for it, and above 640px nothing reads
+// it.
+function PaymentMarker({ booking }) {
+  const marker = paymentMarker(booking);
+  return (
+    <div
+      className={`charge-word ${marker.className} doc-requests-pay`}
+      data-label="Payment"
+    >
+      {marker.label}
+    </div>
+  );
+}
+
+// The Cancel panel's warning for a booking with a PAID charge above PHP 0:
+// the charge stays PAID (the server never rewrites money) and the borrower's
+// notice says a refund is due. Null otherwise, an open GCash checkout
+// included: the server expires that one itself.
+function paidWarning(booking) {
+  const charge = chargeOf(booking);
+  if (charge?.status !== "PAID" || !(Number(charge.amount) > 0)) return null;
+  return `This booking was paid (PHP ${Number(charge.amount).toFixed(2)}). The payment stays recorded. The resident is told to contact the barangay about the refund.`;
+}
+
+// Who took a returned booking back, and when, the line after its payment
+// marker: "Returned by @staff1 on Oct 8, 2026, 1:20 PM". It read "by @staff1
+// on …" there, as if staff1 had marked the booking unpaid. Only a return
+// writes returned_at (routes/rentalRequests.js), so only a returned, returned
+// late or returned with an issue booking shows it. Two spans, who and when:
+// above 640px each is a line of its own and the date never breaks
+// (index.css), so every row breaks the note in one place. On a phone card the
+// line is labelled from its own data-label ("Return"), so it cannot read as
+// part of the payment above it, and a return note follows it there.
+function ReturnedBy({ booking }) {
+  return (
+    <div
+      className="muted small-note rental-bookings-return"
+      data-label="Return"
+    >
+      <span className="rental-bookings-return-by">
+        Returned by @{booking.returned_by.username} on
+      </span>{" "}
+      <span className="rental-bookings-return-at">
+        {formatDate(booking.returned_at)}
+      </span>
     </div>
   );
 }
@@ -95,15 +232,17 @@ const toTimeInput = (iso) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// Edit changes the date, the times and the purpose, and nothing else (step
+// B2): the server refuses a different quantity, and the item and borrower
+// were never editable. So the quantity is shown, not offered, and the PUT
+// carries no quantity_requested; to change either, cancel and book again.
 function EditPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const isCountable = item?.quantity_total > 1;
   const [form, setForm] = useState({
     date: toDateInput(booking.start_datetime),
     start_time: toTimeInput(booking.start_datetime),
     end_time: toTimeInput(booking.end_datetime),
-    quantity: String(booking.quantity_requested),
     purpose: booking.purpose,
   });
   const [error, setError] = useState("");
@@ -125,7 +264,6 @@ function EditPanel({ booking, onDone }) {
           date: form.date,
           start_time: form.start_time,
           end_time: form.end_time,
-          quantity_requested: isCountable ? Number(form.quantity) : 1,
           purpose: form.purpose,
         },
       });
@@ -147,13 +285,23 @@ function EditPanel({ booking, onDone }) {
             {residentName(booking)} · {item?.name} (
             {ITEM_TYPE_LABELS[item?.type] || item?.type})
           </p>
+          <p className="muted">
+            Quantity: {booking.quantity_requested}
+          </p>
+          <p className="muted small-note">
+            To change the item or quantity, cancel this booking and book again.
+          </p>
         </div>
         <button className="btn secondary" onClick={() => onDone(null)}>
           ← Back to list
         </button>
       </div>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="grid-2">
@@ -168,22 +316,6 @@ function EditPanel({ booking, onDone }) {
               required
             />
           </label>
-          {isCountable && (
-            <label>
-              Quantity{" "}
-              <span className="hint">(up to {item.quantity_total})</span>
-              <input
-                name="quantity"
-                type="number"
-                min="1"
-                max={item.quantity_total}
-                step="1"
-                value={form.quantity}
-                onChange={handleChange}
-                required
-              />
-            </label>
-          )}
           <label>
             Start time
             <input
@@ -632,58 +764,258 @@ function WalkInBookingPanel({ onDone }) {
   );
 }
 
+// Why a load failed, for "Could not load the bookings: …". The server's own
+// message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// The Document requests and Payments pages word their load errors with the
+// same function, each its own copy.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
 export default function RentalBookingsPage({
   canManage = false,
   canReturn = false,
 }) {
   const { authFetch } = useAuth();
-  const [filter, setFilter] = useState(canReturn ? "overdue" : "confirmed");
-  const [requests, setRequests] = useState(null); // null = loading
-  const [listError, setListError] = useState("");
+  // The chosen status tab: Overdue for Staff, Upcoming for the others.
+  const [tab, setTab] = useState(() => openingTab(canReturn));
+  const [requests, setRequests] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
-  const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null); // booking being edited
   const [returning, setReturning] = useState(null); // booking being returned
+  const [cancelling, setCancelling] = useState(null); // booking being cancelled
+  const refocusId = useRef(null); // whose Cancel button gets the focus back
+  const flashRef = useRef(null);
+  const focusFlash = useRef(false); // a cancel went through: focus its message
   const [encoding, setEncoding] = useState(false); // walk-in panel open
+  // The search, as typed. Here rather than in the box, so it outlives the list
+  // while the Edit, Mark returned or walk-in panel takes its place.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null); // the search box, for Clear search
+  // The page of the chosen tab's matches, and how many rows a page holds.
+  // Like the search, both live through every reload and Back from a panel.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // The filters: Item, Payment and Starts (its choice, and From and To under
+  // "Choose dates"). Like the search, they live here, so they outlive the list
+  // while a panel takes its place; every visit starts them at Any, and none
+  // is kept in the browser.
+  const [itemChoice, setItemChoice] = useState(ANY_ITEM);
+  const [paymentChoice, setPaymentChoice] = useState(ANY);
+  const [dateChoice, setDateChoice] = useState(ANY);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  // Whether a phone's Filters panel is open. Here, not in the filters row,
+  // which is not drawn while the list loads or while a panel takes its place,
+  // so it lives through those as the filters do: closed on every visit, kept
+  // through Refresh, Try again, a tab, a search and Back, and kept nowhere in
+  // the browser.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const headingRef = useRef(null); // the list's heading, for a page change
+  // Numbers each load, so only the newest one may change the list.
+  const loadSeq = useRef(0);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST. This used to store [] beside the
+  // error, so the page said "0 bookings" and "No confirmed / upcoming
+  // bookings." under the server's bare message while it knew nothing, which
+  // reads as nothing booked. requests now stays null and the error, with Try
+  // again, takes the place of the rows, the count and the empty text
+  // (CLAUDE.md: a list that failed to load), as on Document requests. Every
+  // load starts from the loading state, and an older answer that arrives late
+  // (Refresh pressed during a reload) is dropped rather than shown over a
+  // newer one. It asks for every booking, whatever tab is chosen: a tab only
+  // splits what is loaded, so choosing one sends nothing. load depends on
+  // authFetch alone; the tab in its dependencies would reload on every press.
+  // The list is kept in one order (orderBookings): the route's, newest start
+  // first, with the bookings that start together, which the route leaves in
+  // no fixed order, settled by booking number, so a page shows the same rows
+  // on every load.
   const load = useCallback(async () => {
-    setListError("");
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setRequests(null);
     try {
-      const query = filter === "all" ? "" : `?status=${filter}`;
-      const data = await authFetch(`/rental-requests${query}`);
-      setRequests(data.requests);
+      const data = await authFetch("/rental-requests?status=all");
+      if (seq === loadSeq.current) setRequests(orderBookings(data.requests));
     } catch (err) {
-      setListError(err.message);
-      setRequests([]);
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
     }
-  }, [authFetch, filter]);
+  }, [authFetch]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function handleCancel(r) {
-    const when = formatSchedule(r.start_datetime, r.end_datetime);
-    if (
-      !window.confirm(
-        `Cancel ${residentName(r)}'s booking of ${r.rental_items?.name} (${when})? The slot will be freed for others.`,
-      )
-    ) {
-      return;
+  // CANCEL ASKS FOR A REASON (step B2). Cancel opens CancelBookingPanel in the
+  // list's place, where window.confirm used to ask and the cancel went out
+  // with no body; the server now refuses a Secretary cancel without a reason
+  // of 3 to 300 characters, and sends it to the borrower. A refusal shows in
+  // the panel; closing after one loads the list again, since the booking
+  // usually changed underneath. Keep booking and Escape put the focus back on
+  // the row's Cancel button; a cancel that went through moves it to the
+  // success message, since that row's buttons are gone.
+  async function sendCancel(r, reason) {
+    const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, {
+      method: "POST",
+      body: { reason },
+    });
+    setCancelling(null);
+    focusFlash.current = true;
+    setFlash({ type: "success", text: data.message });
+    load();
+  }
+
+  function closeCancel(refused) {
+    refocusId.current = cancelling?.request_id ?? null;
+    setCancelling(null);
+    if (refused) load();
+  }
+
+  // After the panel closes, back to the row's Cancel button once it is drawn
+  // again (after the reload, when there was one); after a cancel, to the
+  // success message.
+  useEffect(() => {
+    if (cancelling) return;
+    if (refocusId.current !== null) {
+      const button = document.querySelector(`[data-cancel-for="${refocusId.current}"]`);
+      if (button) {
+        button.focus();
+        refocusId.current = null;
+      }
+    } else if (focusFlash.current && flashRef.current) {
+      flashRef.current.focus();
+      focusFlash.current = false;
     }
-    setFlash(null);
-    setBusyId(r.request_id);
-    try {
-      const data = await authFetch(`/rental-requests/${r.request_id}/cancel`, {
-        method: "POST",
-      });
-      setFlash({ type: "success", text: data.message });
-      await load();
-    } catch (err) {
-      setFlash({ type: "error", text: err.message });
-    } finally {
-      setBusyId(null);
-    }
+  }, [cancelling, requests, flash]);
+
+  // The search runs over the whole list, then the filters over what it
+  // leaves, then the tabs split what matches. The tab counts come from every
+  // match, so they read the same on every tab and follow the search and the
+  // filters; the rows and the heading are the chosen tab's. With no search
+  // and no filter every booking matches, as before. "Today" is read on every
+  // render, as on Document requests, so a page left open past midnight in
+  // Manila moves its presets on with the day.
+  const searching = searchTerms(query).length > 0;
+  const range = startsRange(dateChoice, from, to, manilaToday());
+  // A filter that restricts something: "Choose dates" with no date is on
+  // (Clear filters shows) but restricts nothing.
+  const filtered =
+    itemChoice !== ANY_ITEM || paymentChoice !== ANY || range !== null;
+  // How many filters are on: the "(2)" on a phone's Filters button, and Clear
+  // filters is offered while it is above 0.
+  const filtersOn = filterCount({
+    item: itemChoice,
+    payment: paymentChoice,
+    date: dateChoice,
+  });
+  const searched = requests === null ? [] : matchingBookings(requests, query);
+  const matching = searched.filter(
+    (r) =>
+      matchesItem(r, itemChoice) &&
+      matchesPayment(r, paymentChoice) &&
+      matchesStarts(r, range),
+  );
+  const counts = requests === null ? null : tabCounts(matching);
+  const shown = matching.filter((r) => inTab(r, tab));
+  // One page of the tab's matches (utils/paging.js). Only the rows drawn are
+  // a page: the heading and the counts still count every match.
+  const paging = pageOf(shown.length, page, pageSize);
+  const rows = shown.slice(paging.start, paging.end);
+  // A reload that shrank the list lands on its last page, and stays there.
+  // Not while a list is loading: the page must survive the reload itself.
+  if (requests !== null && paging.page !== page) setPage(paging.page);
+  // The Item and Payment choices are the loaded rows', made by
+  // utils/rentalList.js. A choice a reload no longer offers (its item
+  // renamed, the last void charge no longer void) goes back to Any, and the
+  // page to 1: a select never reads a choice over rows that do not hold it.
+  const itemChoices = requests === null ? null : itemOptions(requests);
+  const paymentChoices = requests === null ? null : paymentOptions(requests);
+  if (itemChoices && !itemChoices.some((o) => o.value === itemChoice)) {
+    setItemChoice(ANY_ITEM);
+    setPage(1);
+  }
+  if (
+    paymentChoices &&
+    !paymentChoices.some((o) => o.value === paymentChoice)
+  ) {
+    setPaymentChoice(ANY);
+    setPage(1);
+  }
+  // "4 of 7 overdue bookings match": how many of the tab's bookings match, of
+  // how many it holds with no search and no filter.
+  let heading = "Bookings";
+  if (requests !== null) {
+    heading =
+      searching || filtered
+        ? searchHeading(
+            tab,
+            shown.length,
+            requests.filter((r) => inTab(r, tab)).length,
+          )
+        : tabHeading(tab, shown.length);
+  }
+
+  // A new search, tab, filter or Rows per page goes back to page 1, as on
+  // Document requests. Rows per page itself stays as chosen through the
+  // others.
+  function changeQuery(text) {
+    setQuery(text);
+    setPage(1);
+  }
+
+  // Item, Payment, Starts, From and To.
+  function narrowBy(set, value) {
+    set(value);
+    setPage(1);
+  }
+
+  function resetFilters() {
+    setItemChoice(ANY_ITEM);
+    setPaymentChoice(ANY);
+    setDateChoice(ANY);
+    setFrom("");
+    setTo("");
+  }
+
+  // "Clear filters" in the row: the filters only; the search and the tab
+  // stay. The row moves focus to its first select (components/ListFilters).
+  function clearFilters() {
+    resetFilters();
+    setPage(1);
+  }
+
+  // "Clear search and filters", where they leave the tab nothing: the search
+  // and the filters, as on Document requests; the tab stays. Focus goes to
+  // the box: the button pressed is gone once the rows are back.
+  function clearSearchAndFilters() {
+    setQuery("");
+    resetFilters();
+    setPage(1);
+    searchRef.current?.focus();
+  }
+
+  function chooseTab(key) {
+    setTab(key);
+    setPage(1);
+  }
+
+  function changePageSize(size) {
+    setPageSize(PAGE_SIZES.includes(size) ? size : PAGE_SIZE);
+    setPage(1);
+  }
+
+  // "Clear search", where nothing matches: the search only, and the tab stays.
+  // Focus goes to the box, as the Clear (x) button's does: the button pressed
+  // is gone once the rows are back.
+  function clearSearch() {
+    changeQuery("");
+    searchRef.current?.focus();
   }
 
   return (
@@ -709,6 +1041,20 @@ export default function RentalBookingsPage({
             }
           }}
         />
+      ) : cancelling ? (
+        <CancelBookingPanel
+          title={`Cancel booking ${bookingNumber(cancelling)}`}
+          lines={[
+            `${residentName(cancelling)} · ${cancelling.rental_items?.name || "—"}`,
+            formatSchedule(cancelling.start_datetime, cancelling.end_datetime),
+          ]}
+          warning={paidWarning(cancelling)}
+          reasonLabel="Reason for cancelling"
+          required
+          helper="The resident receives this reason by text message. Keep it short and use plain letters."
+          onSubmit={(reason) => sendCancel(cancelling, reason)}
+          onClose={closeCancel}
+        />
       ) : returning ? (
         <ReturnPanel
           booking={returning}
@@ -722,26 +1068,22 @@ export default function RentalBookingsPage({
         />
       ) : (
         <>
-          {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-          {listError && <div className="alert error">{listError}</div>}
+          {flash && (
+            <div className={`alert ${flash.type}`} ref={flashRef} tabIndex={-1}>
+              {flash.text}
+            </div>
+          )}
 
-          <div className="list-head">
-            <h2>
-              {requests === null
-                ? "Bookings"
-                : `${requests.length} booking${requests.length === 1 ? "" : "s"}`}
+          {/* The heading is a polite live region, as on Document requests, so
+              a screen reader hears "4 of 7 overdue bookings match" as the
+              search is typed. rental-bookings-head: a page change brings the
+              heading into view, and index.css keeps it clear of the sticky
+              header. */}
+          <div className="list-head rental-bookings-head">
+            <h2 ref={headingRef} aria-live="polite">
+              {heading}
             </h2>
             <div className="head-actions">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                {FILTERS.map((f) => (
-                  <option key={f} value={f}>
-                    {FILTER_LABELS[f]}
-                  </option>
-                ))}
-              </select>
               <button className="btn secondary" onClick={load}>
                 Refresh
               </button>
@@ -763,37 +1105,133 @@ export default function RentalBookingsPage({
             </div>
           </div>
 
-          {requests === null ? (
+          {/* The search, the filters, then the tabs, under the row that holds
+              Refresh, so a reload leaves Refresh where it was: all three are
+              drawn only once the list has loaded, never while it loads or
+              after it failed, as on Document requests. The filters' wrapper
+              carries that list's class too, for its look (index.css). */}
+          {requests !== null && (
+            <>
+              <ListToolbar
+                className="rental-bookings-toolbar"
+                label="Search bookings"
+                placeholder={searchPlaceholder(requests)}
+                value={query}
+                onChange={changeQuery}
+                inputRef={searchRef}
+              />
+              <ListFilters
+                className="rental-bookings-filters doc-requests-filters"
+                selects={[
+                  {
+                    label: "Item",
+                    value: itemChoice,
+                    options: itemChoices,
+                    onChange: (value) => narrowBy(setItemChoice, value),
+                  },
+                  {
+                    label: "Payment",
+                    value: paymentChoice,
+                    options: paymentChoices,
+                    onChange: (value) => narrowBy(setPaymentChoice, value),
+                  },
+                  {
+                    label: "Starts",
+                    value: dateChoice,
+                    options: STARTS_OPTIONS,
+                    onChange: (value) => narrowBy(setDateChoice, value),
+                  },
+                ]}
+                range={{
+                  shown: dateChoice === "custom",
+                  from,
+                  to,
+                  onFrom: (value) => narrowBy(setFrom, value),
+                  onTo: (value) => narrowBy(setTo, value),
+                  reversed: backwards(range),
+                }}
+                count={filtersOn}
+                onClear={clearFilters}
+                open={filtersOpen}
+                onToggle={() => setFiltersOpen((open) => !open)}
+              />
+              <ListTabs
+                label="Status"
+                tabs={RENTAL_TABS}
+                counts={counts}
+                active={tab}
+                onChoose={chooseTab}
+              />
+            </>
+          )}
+
+          {/* The error first, then loading, then empty, then rows: a load that
+              failed shows neither a count nor the empty text. Try again
+              repeats the same load, as Refresh does; Refresh above stays
+              usable. The markup is the Document requests page's. A tab with
+              no bookings keeps its own text; one whose bookings the filters
+              hide, with or without a search, says so in Document requests'
+              words, naming the tab, and offers to clear the search and the
+              filters; one whose bookings a search alone hides says so, naming
+              the tab, and offers to clear the search. */}
+          {loadError ? (
+            <>
+              <div className="alert error" role="alert">
+                Could not load the bookings: {loadError}
+              </div>
+              <button type="button" className="btn secondary" onClick={load}>
+                Try again
+              </button>
+            </>
+          ) : requests === null ? (
             <p className="muted">Loading bookings…</p>
-          ) : requests.length === 0 ? (
+          ) : shown.length === 0 && filtered ? (
             <div className="empty">
-              <p>
-                No{" "}
-                {filter === "all"
-                  ? ""
-                  : `${FILTER_LABELS[filter].toLowerCase()} `}
-                bookings.
-              </p>
+              <p>{filtersNoMatchText(tab)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearchAndFilters}
+              >
+                Clear search and filters
+              </button>
+            </div>
+          ) : shown.length === 0 && searching ? (
+            <div className="empty">
+              <p>{noMatchText(tab, query)}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearSearch}
+              >
+                Clear search
+              </button>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="empty">
+              <p>{emptyText(tab)}</p>
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="data-table stack-narrow">
+              <table className="data-table stack-narrow rental-bookings-table">
                 <thead>
                   <tr>
-                    <th>Booked for</th>
-                    <th>Item</th>
-                    <th>Schedule</th>
-                    <th className="num">Qty</th>
+                    <th className="rental-bookings-booked">Booked for</th>
+                    <th className="rental-bookings-item">Item</th>
+                    <th className="rental-bookings-schedule">Schedule</th>
+                    <th className="num rental-bookings-qty">Qty</th>
                     <th>Purpose</th>
-                    <th>Status</th>
-                    {(canManage || canReturn) && <th></th>}
+                    <th className="rental-bookings-status">Status</th>
+                    {(canManage || canReturn) && (
+                      <th className="rental-bookings-actions"></th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => {
-                    const shown = displayStatus(r);
-                    const meta = rentalMeta(shown);
+                  {rows.map((r) => {
+                    const meta = rentalMeta(displayStatus(r));
                     const returnable = isReturnable(r.rental_items?.type);
+                    const schedule = scheduleParts(r);
                     return (
                       <tr key={r.request_id}>
                         <td>
@@ -805,10 +1243,27 @@ export default function RentalBookingsPage({
                           ) : (
                             <AccountNote record={r.resident_records} />
                           )}
+                          <div
+                            className="muted doc-requests-number"
+                            data-label="Booking"
+                          >
+                            {bookingNumber(r)}
+                          </div>
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>
                         <td data-label="Schedule">
-                          {formatSchedule(r.start_datetime, r.end_datetime)}
+                          {schedule ? (
+                            <>
+                              <span className="rental-bookings-date">
+                                {schedule.date}
+                              </span>{" "}
+                              <span className="rental-bookings-times">
+                                {schedule.times}
+                              </span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="num" data-label="Qty">
                           {r.quantity_requested}
@@ -820,37 +1275,45 @@ export default function RentalBookingsPage({
                           <span className={`badge ${meta.className}`}>
                             {meta.label}
                           </span>
+                          <PaymentMarker booking={r} />
+                          {r.returned_at && r.returned_by?.username && (
+                            <ReturnedBy booking={r} />
+                          )}
                           {r.return_note && (
                             <div className="muted reason-note">
                               Note: {r.return_note}
                             </div>
                           )}
-                          {r.returned_at && r.returned_by?.username && (
-                            <div className="muted small-note">
-                              by @{r.returned_by.username} on{" "}
-                              {formatDate(r.returned_at)}
-                            </div>
-                          )}
+                          {r.status === "cancelled" &&
+                            r.cancellation_reason && (
+                              <div className="muted reason-note">
+                                Reason: {r.cancellation_reason}
+                              </div>
+                            )}
                         </td>
                         {(canManage || canReturn) && (
                           <td className="row-actions">
-                            {canManage && r.status === "confirmed" && (
+                            {/* Edit and Cancel only where the server says the
+                                booking has not started (not_started: stored
+                                confirmed and its start ahead, the rule both
+                                routes apply), online or walk-in. */}
+                            {canManage && r.not_started === true && (
                               <>
                                 <button
                                   className="btn secondary"
-                                  disabled={busyId === r.request_id}
                                   onClick={() => setEditing(r)}
                                 >
                                   Edit
                                 </button>
                                 <button
                                   className="btn secondary danger"
-                                  disabled={busyId === r.request_id}
-                                  onClick={() => handleCancel(r)}
+                                  data-cancel-for={r.request_id}
+                                  onClick={() => {
+                                    setFlash(null);
+                                    setCancelling(r);
+                                  }}
                                 >
-                                  {busyId === r.request_id
-                                    ? "Cancelling…"
-                                    : "Cancel"}
+                                  Cancel
                                 </button>
                               </>
                             )}
@@ -859,7 +1322,6 @@ export default function RentalBookingsPage({
                               returnable && (
                                 <button
                                   className="btn secondary"
-                                  disabled={busyId === r.request_id}
                                   onClick={() => setReturning(r)}
                                 >
                                   Mark returned
@@ -873,6 +1335,19 @@ export default function RentalBookingsPage({
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* The pager, under the rows, as on Document requests, from 11
+              matches (components/ListPager.jsx). Drawn only once the list has
+              loaded, never while it loads or beside a failed load, as the
+              search and the tabs are. */}
+          {requests !== null && (
+            <ListPager
+              paging={paging}
+              onPage={setPage}
+              onSize={changePageSize}
+              headingRef={headingRef}
+            />
           )}
         </>
       )}

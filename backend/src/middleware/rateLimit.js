@@ -15,7 +15,9 @@ const { SET_PASSWORD_TTL_HOURS } = require('../constants/passwordReset');
 // routes reachable with no credentials at all — /login is an unlimited
 // password oracle, /register writes rows to `users` AND `profiles` on every
 // call, and /forgot-password has an outbound, metered side effect.
-// `/set-password` joined them later; see setPasswordLimiter below for why.
+// `/set-password` joined them later, and `/set-password/check`, the read-only
+// check its page makes, after that; see setPasswordLimiter and
+// setPasswordCheckLimiter below for why.
 //
 // THIS DOES NOT REPLACE THE FORGOT-PASSWORD COOLDOWN in routes/auth.js. That
 // one keys on a resolved `user_id` and lives in the `password_resets` table,
@@ -159,11 +161,35 @@ const setPasswordLimiter = authLimiter({
     `Your link still works if it has not been used and is less than ${SET_PASSWORD_TTL_HOURS} hours old.`,
 });
 
+// 30 per 15 minutes, with successful requests refunded.
+//
+// FOR POST /set-password/check, which the /set-password page asks each time
+// it opens (twice in development, where StrictMode runs effects twice). A
+// usable link is answered 200 and refunded, so officials opening their links
+// one after another on one office connection are never limited; a dead link
+// is answered 400 and counts. That is why the check answers a dead link with
+// a 400 and not a 200: the count goes by status.
+//
+// Like setPasswordLimiter, this is not what stops a guessed token. It caps
+// the lookups an anonymous caller can make, at 120 an hour. It is its own
+// object with its own counts, separate from setPasswordLimiter's, and the
+// shorter window is deliberate: being locked out of the first screen is worse
+// than being locked out of a submit.
+const setPasswordCheckLimiter = authLimiter({
+  windowMs: 15 * 60_000,
+  limit: 30,
+  skipSuccessfulRequests: true,
+  message:
+    `Too many link checks from this connection. Please wait ${waitPhrase(15 * 60_000)} and try again. ` +
+    'Checking a link does not use it up.',
+});
+
 module.exports = {
   loginLimiter,
   registerLimiter,
   forgotPasswordLimiter,
   setPasswordLimiter,
+  setPasswordCheckLimiter,
   clientKey,
   waitPhrase,
 };

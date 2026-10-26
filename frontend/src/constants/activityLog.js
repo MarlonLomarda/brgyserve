@@ -51,6 +51,9 @@ export const ACTION_META = {
   SEND_SET_PASSWORD_LINK: { label: 'Set-password link', className: 'status-pending' },
   PASSWORD_SET: { label: 'Password set', className: 'status-pending' },
   IMPORT: { label: 'Imported', className: 'status-ready' },
+  // A GCash payment that arrived for a cancelled booking's VOID charge: money
+  // the barangay must refund, so yellow, as money is.
+  PAYMENT_ON_VOID_CHARGE: { label: 'Payment after cancellation', className: 'status-pending' },
 };
 
 export function actionMeta(action) {
@@ -149,6 +152,15 @@ const FIELD_LABELS = {
   // A blotter edit's count of corrected walk-in names — the log keeps the
   // count, never the names (typedNamesCorrected in routes/disputes.js).
   parties_renamed: 'Party names corrected',
+  // A rental cancel's facts (step B1), and the late-payment row's reference.
+  // A CANCEL row on a booking is worded whole by rentalCancelSummary; these
+  // name the fields wherever a row is listed field by field.
+  charge_outcome: 'Charge',
+  refund_due: 'Refund due',
+  session_expired: 'GCash checkout closed',
+  session_expire_failure: 'GCash checkout error',
+  reason_given: 'Reason given',
+  gateway_payment_id: 'PayMongo payment',
 };
 
 function humanize(key) {
@@ -164,7 +176,7 @@ const BOOLEAN_WORDS = {
   is_archived: ['Not archived', 'Archived'],
   is_settled: ['Open', 'Settled'],
 };
-const MONEY_KEYS = ['fee', 'fine_amount', 'amount', 'amount_each', 'total_amount'];
+const MONEY_KEYS = ['fee', 'fine_amount', 'amount', 'amount_each', 'total_amount', 'refund_due'];
 const TIME_KEYS = ['start_datetime', 'end_datetime', 'date_created', 'registered_at', 'timestamp'];
 
 function statusLabel(table, value) {
@@ -318,9 +330,39 @@ function updateSummary(table, before, after, withheld) {
   return changes.length ? changes.join('; ') : 'No fields changed';
 }
 
+// A booking's CANCEL row, as one sentence, from the facts routes/
+// rentalRequests.js's cancelBooking() logs: "Cancelled. Charge: paid, refund
+// due ₱50.00. GCash checkout: not needed. Reason given." The reason's own
+// words are never in the log, only whether one was given. A row from before
+// step B1 has none of these and reads as before, "Confirmed to Cancelled".
+const CHARGE_OUTCOME_WORDS = { VOID: 'voided', NONE: 'none' };
+function rentalCancelSummary(after) {
+  if (!('charge_outcome' in after)) return null;
+  const charge = after.charge_outcome === 'PAID_REFUND_DUE'
+    ? `paid, refund due ${formatPeso(after.refund_due)}`
+    : CHARGE_OUTCOME_WORDS[after.charge_outcome] || humanize(after.charge_outcome);
+  let checkout = 'not needed';
+  if (after.session_expired === true) checkout = 'closed';
+  if (after.session_expired === false) {
+    checkout = after.session_expire_failure
+      ? `could not be closed (${after.session_expire_failure})`
+      : 'could not be closed';
+  }
+  return `Cancelled. Charge: ${charge}. GCash checkout: ${checkout}. ${after.reason_given ? 'Reason given.' : 'No reason given.'}`;
+}
+
 function actionSummary(row, before, after, withheld) {
   const t = row.table_name;
   switch (row.action) {
+    case 'PAYMENT_ON_VOID_CHARGE':
+      return `GCash payment of ${formatPeso(after.amount)} received after the booking was cancelled. Not applied; a refund is due.`
+        + `${after.gateway_payment_id ? ` PayMongo payment ${after.gateway_payment_id}.` : ''}`;
+    case 'CANCEL':
+      if (t === 'rental_requests') {
+        const sentence = rentalCancelSummary(after);
+        if (sentence) return sentence;
+      }
+      return otherSummary(t, before, after);
     case 'PASSWORD_CHANGE':
       return 'Changed their password';
     case 'PASSWORD_RESET':
@@ -399,9 +441,15 @@ function actionSummary(row, before, after, withheld) {
     case 'UPDATE':
       return updateSummary(t, before, after, withheld);
     default:
-      if ('status' in before || 'status' in after) return transition(t, before.status, after.status);
-      return fieldList({ ...before, ...after });
+      return otherSummary(t, before, after);
   }
+}
+
+// Any action without wording of its own: its status change, or else the
+// names of the fields it recorded.
+function otherSummary(t, before, after) {
+  if ('status' in before || 'status' in after) return transition(t, before.status, after.status);
+  return fieldList({ ...before, ...after });
 }
 
 export function summarize(row) {

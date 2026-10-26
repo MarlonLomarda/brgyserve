@@ -19,8 +19,9 @@ const {
 const router = express.Router();
 
 // The GCash gateway is an ADDITIONAL option on top of the manual flow, not a
-// replacement: a resident can still pay cash at the barangay hall, or declare
-// a GCash reference for the Treasurer to verify. Nothing here changes the
+// replacement: a resident can still pay cash at the barangay hall, and the
+// Treasurer can still record a GCash payment by its reference; residents
+// stopped declaring references on 10 Oct 2026. Nothing here changes the
 // charges/payments model — a gateway payment produces exactly the same kind of
 // `payments` row a verified manual payment does, so it lands on the Treasurer's
 // normal screen. The only difference is received_by_user_id, which stays NULL
@@ -353,6 +354,32 @@ async function webhookHandler(req, res) {
   }
 
   const result = await settlePaidCharge(charge, payment, { source: 'webhook' });
+
+  // Money arrived for a VOID charge: a booking was cancelled while its GCash
+  // page was still open, or the expire call failed. settlePaidCharge applies
+  // nothing — no payments row, no change to the charge, no notification — so
+  // without this row the payment would be visible only in PayMongo. One row
+  // for the Activity Log page, where the Secretary and the Punong Barangay see
+  // it; the refund is theirs to arrange. The actor is the charge's account,
+  // the resident who paid: a GCash checkout can only be started by that
+  // account (see /gcash/checkout), and activity_logs.user_id is NOT NULL.
+  // The PayMongo payment id is kept under gateway_payment_id: the paymongo_
+  // prefix is on the log's deny-list, and this id is the reference the
+  // Treasurer needs to find the money in PayMongo, the same value a recorded
+  // payment's reference_no shows on the Payments page.
+  if (result.outcome === SETTLE_OUTCOME.VOID) {
+    console.warn(
+      `[paymongo] payment ${payment.paymentId} of PHP ${payment.amountPesos.toFixed(2)} arrived for VOID charge ${charge.charge_id} — not applied; logged for a refund`
+    );
+    await logActivity({
+      userId: charge.user_id,
+      action: ACTIONS.PAYMENT_ON_VOID_CHARGE,
+      table: 'charges',
+      recordId: charge.charge_id,
+      after: { charge_id: charge.charge_id, gateway_payment_id: payment.paymentId, amount: payment.amountPesos },
+    });
+  }
+
   // Always 2xx once the signature is valid — retrying will not change any of
   // these outcomes, and PayMongo disables endpoints that keep failing.
   return res.json({ received: true, outcome: result.outcome });

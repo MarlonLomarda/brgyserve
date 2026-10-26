@@ -32,6 +32,7 @@ import RoleLandingPage from "./pages/RoleLandingPage";
 import SecretaryRequestsPage from "./pages/SecretaryRequestsPage";
 import SecretaryReviewPage from "./pages/SecretaryReviewPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
+import StaffAccountsPage from "./pages/StaffAccountsPage";
 import {
   NAV_BY_ROLE,
   PUNONG_BARANGAY_NAV,
@@ -49,7 +50,7 @@ const ROLE_PAGES = {
   secretary: (
     <PageLayout
       dashTitle={"Resident review"}
-      dashSubtitle={"Manage accounts and review pending residents"}
+      dashSubtitle={"Review pending resident registrations"}
       navItems={SECRETARY_NAV}
     >
       <SecretaryReviewPage />
@@ -156,6 +157,26 @@ export default function App() {
               navItems={NAV_BY_ROLE[user?.role] || []}
             >
               <ProfilePage />
+            </PageLayout>
+          </ProtectedRoute>
+        }
+      />
+      {/* The Secretary's staff accounts, on their own page. Opened from the
+          account menu, not the sidebar, and Secretary only: ProtectedRoute
+          sends any other role to its own home before the page can ask for
+          the list, and the server refuses them regardless. */}
+      <Route
+        path="/secretary/staff-accounts"
+        element={
+          <ProtectedRoute role="secretary">
+            <PageLayout
+              dashTitle={"Staff accounts"}
+              dashSubtitle={
+                "Create accounts for barangay officials and send set-password links"
+              }
+              navItems={SECRETARY_NAV}
+            >
+              <StaffAccountsPage />
             </PageLayout>
           </ProtectedRoute>
         }

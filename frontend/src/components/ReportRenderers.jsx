@@ -280,11 +280,17 @@ export function FacilityReport({ data }) {
 export function CollectionsReport({ data }) {
   const monthly = data.monthly.map((m) => ({ ...m, label: monthLabel(m.month) }));
   const moneyKeys = ['total_collected', 'total_outstanding', 'total_billed', 'voided_amount'];
+  // humanize() would say "No fee charges", which reads as "there are no fee
+  // charges". These are the PHP 0 charges marked paid with no payment row.
+  const tileLabels = { no_fee_charges: 'No-fee charges' };
+  // The monthly series puts each paid charge in the month it was billed, not
+  // the month it was paid, and its name says so.
+  const collectedLabel = 'Collected (by billed month)';
   return (
     <>
       <div className="stat-row" data-pdf-block>
         {Object.entries(data.totals).map(([k, v]) => (
-          <Headline key={k} label={humanize(k)} value={moneyKeys.includes(k) ? formatPeso(v) : formatCount(v)} />
+          <Headline key={k} label={tileLabels[k] ?? humanize(k)} value={moneyKeys.includes(k) ? formatPeso(v) : formatCount(v)} />
         ))}
       </div>
 
@@ -295,7 +301,7 @@ export function CollectionsReport({ data }) {
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip formatter={(v) => formatPeso(v)} />
           <Legend />
-          <Line type="monotone" dataKey="collected" name="Collected" stroke={CHART_COLORS[4]} strokeWidth={2} />
+          <Line type="monotone" dataKey="collected" name={collectedLabel} stroke={CHART_COLORS[4]} strokeWidth={2} />
           <Line type="monotone" dataKey="billed" name="Billed" stroke={CHART_COLORS[3]} strokeWidth={2} />
         </LineChart>
       </ChartCard>
@@ -324,7 +330,7 @@ export function CollectionsReport({ data }) {
       />
       <DataTable
         title="Monthly"
-        columns={['Month', num('Collected'), num('Billed')]}
+        columns={['Month', num(collectedLabel), num('Billed')]}
         rows={monthly.map((r) => [r.label, formatPeso(r.collected), formatPeso(r.billed)])}
       />
     </>

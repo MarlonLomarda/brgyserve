@@ -23,9 +23,9 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // payer's profile name covers them). A booking now carries EITHER a
 // resident_id — a registered resident, whether they booked it themselves or
 // the Secretary encoded a walk-in — OR an outside_borrower_name/contact pair
-// for a guest from another barangay. Both are embedded here because the payer
-// link no longer covers either case: a walk-in resident may never have
-// registered online, and a guest CANNOT have an account at all, so
+// for a guest from another barangay. Both are embedded here, by name, because
+// the payer link no longer covers either case: a walk-in resident may never
+// have registered online, and a guest CANNOT have an account at all, so
 // charges.user_id is null on both and the payer embed comes back null with
 // it.
 //
@@ -33,21 +33,39 @@ router.use(authenticate, requireRole('treasurer', 'secretary'));
 // most households have no linked account (charges.user_id is nullable for
 // exactly this reason). Its household and event are embedded so the queue can
 // still say who owes what; the head's name is resolved separately below.
+//
+// EACH CHARGE CARRIES ITS PAYMENT RECORD as `payments`, an ARRAY: nothing in
+// the schema stops a second row (payments.charge_id has no UNIQUE
+// constraint), so it is never flattened to one object. A charge with no
+// payment row has an empty array: every unpaid or void charge, and any paid
+// one that has none. `recorder` is whoever received the payment. A PayMongo
+// payment was received by nobody, so its received_by_user_id and recorder are
+// both null. The recorder is named, never contacted: username, role and
+// profile name only, no email or phone number.
+//
+// NO CONTACT DATA. The list names people and never says how to reach them: no
+// email, and no contact number from a resident record, a guest's booking or a
+// household head. The Payments page reads none of them, so none is sent (data
+// minimisation, CLAUDE.md). The verify route below still reads contact
+// numbers, server-side, for the SMS it records; none reaches the client.
 const CHARGE_FIELDS = `
   charge_id, charge_type, amount, status, created_at,
   declared_method, declared_reference, declared_at,
   paymongo_session_id, paymongo_payment_id, household_id,
-  payer:users ( user_id, username, email,
+  payer:users ( user_id, username,
     profiles ( first_name, middle_name, last_name, suffix ) ),
   document_requests ( request_id, purpose, status,
     document_types ( name ),
-    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix ) ),
   rental_requests ( request_id, quantity_requested, start_datetime, end_datetime, status,
-    resident_id, outside_borrower_name, outside_borrower_contact,
+    resident_id, outside_borrower_name,
     rental_items ( name ),
-    resident_records ( resident_id, first_name, middle_name, last_name, suffix, contact_number ) ),
+    resident_records ( resident_id, first_name, middle_name, last_name, suffix ) ),
   events ( event_id, title, start_datetime, end_datetime ),
-  household_records ( household_id, address )
+  household_records ( household_id, address ),
+  payments ( payment_id, payment_method, reference_no, created_at, received_by_user_id,
+    recorder:users ( username, role,
+      profiles ( first_name, middle_name, last_name, suffix ) ) )
 `;
 
 // The head's name lives two joins away from a charge (household_members ->
@@ -60,7 +78,7 @@ async function attachHouseholdHeads(charges) {
 
   const { data: heads, error } = await supabase
     .from('household_members')
-    .select('household_id, resident_records ( first_name, middle_name, last_name, suffix, contact_number )')
+    .select('household_id, resident_records ( first_name, middle_name, last_name, suffix )')
     .eq('role', 'Head')
     .is('date_ended', null)
     .in('household_id', ids);
@@ -77,21 +95,27 @@ async function attachHouseholdHeads(charges) {
     const r = byHousehold.get(c.household_id);
     const name = r ? [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ') : null;
     c.household_records.head_name = r?.suffix && name ? `${name}, ${r.suffix}` : name || null;
-    c.household_records.head_contact = r?.contact_number || null;
   }
 }
 
 // GET /api/charges?status=UNPAID|PAID|VOID|all — defaults to UNPAID (the
-// verification queue: plain unpaid charges plus those with a submitted-but-
-// unverified GCash reference, which stay UNPAID until verified). Oldest
-// first, so the queue is worked in billing order.
+// verification queue: every unpaid charge, including any that still carry a
+// GCash reference a resident declared before 10 Oct 2026). Newest
+// first, under every filter, so the most recent transactions are at the top
+// of the Payments page; charge_id breaks a tie on created_at, newest first.
+//
+// `total` is the number of charges the filter matches, counted by the same
+// query. The list has no range, so once Supabase's cap of 1,000 rows per
+// response is reached it would be cut silently; a total larger than the list
+// is how the page can tell.
 router.get('/', async (req, res) => {
   const status = String(req.query.status || CHARGE_STATUS.UNPAID).toUpperCase();
 
   let query = supabase
     .from('charges')
-    .select(CHARGE_FIELDS)
-    .order('created_at', { ascending: true });
+    .select(CHARGE_FIELDS, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('charge_id', { ascending: false });
 
   if (status !== 'ALL') {
     if (!Object.values(CHARGE_STATUS).includes(status)) {
@@ -102,19 +126,21 @@ router.get('/', async (req, res) => {
     query = query.eq('status', status);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) {
     throw new Error(`Failed to load charges: ${error.message}`);
   }
   await attachHouseholdHeads(data || []);
-  res.json({ charges: data });
+  res.json({ charges: data, total: count });
 });
 
 // POST /api/charges/:id/verify — record/verify a payment: create the payments
 // row (the verified financial record, with the verifier in
 // received_by_user_id) and mark the charge PAID. payment_method/reference_no
 // default from the resident's declaration but the verifier can override
-// (e.g. resident declared GCash but showed up with cash).
+// (e.g. a resident who declared onsite but paid by GCash, whose reference the
+// verifier types). A declared GCash reference exists only on charges from
+// before 10 Oct 2026, when residents could still submit one.
 router.post('/:id/verify', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {

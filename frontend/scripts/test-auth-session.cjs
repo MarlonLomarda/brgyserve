@@ -15,6 +15,236 @@
 // Section G adds a third: a wrong current password on the change-password
 // screen must leave the session alone and show the server's message.
 //
+// Section I is the /set-password page's check of its link: what it shows
+// while the check is out, for a usable link, a dead one, and a check that
+// could not be made, and that the check sends the token in its body, with no
+// session header, and leaves a signed-in session alone.
+//
+// Section J is the Secretary's Staff accounts page: its route, the account
+// menu item that opens it, and that no other role gets either.
+//
+// Section K is Resident review without the staff section: no staff list, no
+// request for one, and the residents' queue still all there.
+//
+// Section L is the Staff accounts page itself: one heading, two-line rows,
+// the search box, and the create, send and confirmation behaviour the page
+// must keep.
+//
+// Section M is the Payments page's charges list: a load that fails says so,
+// with Try again, and never shows an empty list; every way of loading again
+// starts from the loading state; and an older answer that arrives late cannot
+// replace a newer one.
+//
+// Section N is the Payments page's Method column: how each paid charge was
+// paid, read from its payment record; what an unpaid or void charge shows
+// instead; and the paid charge's View panel, which shows the record itself.
+//
+// Section O is the Payments page's search, type tabs, totals and paging: the
+// pure helpers case by case, then the real page against 64 stubbed charges.
+//
+// Section P is the Payments pager itself: the count line, Rows per page, the
+// numbered page buttons and Previous and Next, against 89 stubbed charges. It
+// sits inside section O's block, to use the same charges and helpers.
+//
+// Section Q is the Payments page's Method and date filters: the pure helpers
+// (utils/chargeFilters.js, and the totals line's date phrase) case by case,
+// then the real page against 23 stubbed charges, with "today" fixed at 12 Oct
+// 2026 by the helpers' one clock. It sits inside section O's block too.
+//
+// Section R is the Payments toolbar on a phone: the "Filters" button and the
+// panel it opens in place, holding the one set of Method and date controls,
+// and Refresh, which keeps its name. Against section Q's 23 charges, inside
+// section O's block.
+//
+// Section T is "No fee" on My requests, My rentals and the request detail: a
+// PAID PHP 0 charge says "No fee" instead of "₱0.00 — Paid", and a billed
+// request shows the fee it was charged, not its type's fee today.
+//
+// Section U is the Collections report: the "No-fee charges" tile beside
+// "Payments recorded", and the monthly series named "Collected (by billed
+// month)" in the chart's legend and the Monthly table.
+//
+// Section V is the Document requests list, for the Secretary, Staff and the
+// Punong Barangay: what section M checks on Payments. A load that fails says
+// so, with Try again, and never shows an empty list; every way of loading
+// again starts from the loading state; an older answer that arrives late
+// cannot replace a newer one; and the status tabs are labelled.
+//
+// Section W is the Document requests list's status tabs, for the same three
+// roles: seven tabs with counts in place of the status select, the list
+// loaded once with ?status=all and filtered in the browser, the page opening
+// on Pending, and the chosen tab kept through every reload; then the tab
+// strip on a narrow phone, as section S checks Payments'.
+//
+// Section X is the Document requests list's search box, for the same three
+// roles: the Payments box (components/ListToolbar.jsx) over the list already
+// loaded, matching only what a row shows of who and what, with the tab counts
+// and the heading following it, no request per keystroke, and the search kept
+// through Refresh, Try again and Back from a request.
+//
+// Section Y is the Document requests list's pager, for the same three roles:
+// the Payments pager (components/ListPager.jsx) under the rows, from 11
+// matches, paging the list already loaded with no request; the heading and
+// the tab counts still counting every match; page 1 again on a tab, search
+// or Rows per page change; and the page kept, or clamped to the last one,
+// through Refresh, Try again and Back from a request.
+//
+// Section Z is the Document requests list's payment marker and request
+// number, for the same three roles: every row says "Paid", "No fee",
+// "Unpaid", "Void" or "Not billed" under its status badge and "#91" under the
+// requester, with no new column; the search finds a request by its number,
+// part of it matching as on Payments, and never by a marker's word; and on a
+// phone card both are labelled, which index.css does (read from the file,
+// as jsdom applies no width media query).
+//
+// Section AA is the Document requests list's filters row, for the same three
+// roles: the Payments second row (components/ListFilters.jsx) with Document,
+// Payment and Submitted; the list shown is tab AND search AND filters, with
+// the tab counts, the heading and the pager following them; Submitted counts
+// Manila days whatever the machine's time zone (checked on three); Clear
+// filters and "Clear search and filters"; no request for a filter change;
+// the filters kept through every reload and kept nowhere in the browser; and
+// on a phone, the row stacked with every field shown (read from index.css).
+//
+// Section AB is the Document requests list's Filters button, for the same
+// three roles: on a phone the filters row sits in a panel behind one
+// full-width "Filters" button, which counts the filters that are on
+// ("Filters (2)", From and To counting once, with Submitted) and opens the
+// panel in place and closes it, by its button (and Escape, section AC); the
+// open state kept through every reload and Back and never in the browser;
+// Clear filters keeping its place in the row while nothing is on, disabled
+// and hidden, so the first filter never makes the row taller; and above
+// 640px no button and the row as it was (read from index.css). It sits
+// inside section AA's block.
+//
+// Section AC is the Document requests table's columns, for the same three
+// roles: above 640px the table is .doc-requests-table, table-layout fixed,
+// with a width for every column but Purpose, which takes the rest, each width
+// holding what was measured in Chrome on the 77 live requests; none of it on
+// a phone; the protected col-*, .row-actions, .num, .dash-main and
+// .pending-card rules as they were at 85dbba4. And the Filters panel's
+// Escape: in the open panel, or on its button, it closes the panel and gives
+// focus back to the button, as on Payments, while Escape anywhere else leaves
+// it open, and nothing else changes. It sits inside section AA's block.
+//
+// Section AD is the Rental bookings list, for the Secretary, Staff and the
+// Punong Barangay: what section V checks on Document requests. A load that
+// fails (a 500, a server that cannot be reached, an answer with no message)
+// says so, with Try again, and never shows an empty list or "0 bookings"; a
+// 401 ends the session once and goes to the login screen; every way of
+// loading again starts from the loading state; and an older answer that
+// arrives late cannot replace a newer one. Then the list's status tabs, for
+// the same three roles: Upcoming, Overdue, Completed, Returned, Cancelled and
+// All in place of the status select, each with its count over the whole
+// list, which is loaded once with ?status=all and split in the browser by
+// each booking's derived status, as its badge reads it; Staff opening on
+// Overdue and the others on Upcoming; the heading and the empty text naming
+// the tab; every row with the columns, badges and actions it had, a row
+// moving tab when an action reloads the list; nothing kept in the browser;
+// and the strip on a narrow phone. utils/rentalList.js is checked case by
+// case first.
+//
+// Section AE is the Rental bookings list's search box, for the same three
+// roles: what section X checks on Document requests. components/ListToolbar.jsx
+// over the list already loaded, matching only what a row shows of who and
+// what (the name the Booked for column shows, the @account under it where the
+// row shows one, and the item), never the purpose or a guest's contact
+// number; the tab counts and the heading following it; no request per
+// keystroke; and the search kept through Refresh, Try again, Back from a panel
+// and the reload after an action. utils/rentalList.js's new helpers are
+// checked case by case first.
+//
+// Section AF is the Rental bookings list's payment marker and booking
+// number, for the same three roles: what section Z checks on Document
+// requests. Every row says "Paid", "No fee", "Unpaid", "Void" or "Not billed"
+// under its status badge, read from its charge alone by Document requests'
+// own paymentMarker, and "#12" under the name, with no new column; the search
+// finds a booking by its number, part of it matching, and never by a marker's
+// word; and on a phone card both are labelled, which index.css does (read
+// from the file). Then the list's filters row, what sections AA to AC check
+// on Document requests: components/ListFilters.jsx with Item (the loaded
+// bookings' items, by the name each shows, which a booking reads live from
+// its item, so a renamed item is offered once under its new name and a
+// deactivated one while a booking holds it), Payment (the marker's words,
+// matched through the marker) and Starts (the Manila day a booking starts on,
+// with presets both ways, checked on three machine clocks); the list shown is
+// tab AND search AND filters, with the counts, the heading and the pager
+// following; Clear filters and "Clear search and filters"; no request; kept
+// through every reload and nowhere in the browser; and on a phone the Filters
+// button, its count, its panel and Escape. It sits inside section AE's
+// block, to use its bookings and helpers.
+//
+// Section AG is the Rental bookings table's columns, for the same three
+// roles: what section AC checks on Document requests. Above 640px the table
+// is .rental-bookings-table, table-layout fixed, with a width for every
+// column but Purpose, which takes the rest, each width holding what was
+// measured in Chrome on the 28 live-shaped bookings, and the table fitting
+// beside Chrome's scrollbar at 1280 and 1024; the Schedule cell the same two
+// spans in every row, the date over the times; none of it on a phone; and
+// the protected col-*, .row-actions, .num, .dash-main and .pending-card
+// rules, the Document requests ones and the heading row's as they were at
+// a52f978. Then the returned-by note: "Returned by @staff1 on …" for each of
+// the three return outcomes, where it read "by @staff1 on …" under the
+// payment marker; the line after the marker, which stays under the badge,
+// and before a return note; two spans that break in one place above 640px;
+// on a phone card a label of its own, "Return"; never searched. It sits
+// inside section AF's block, to use its bookings, its helpers and its
+// index.css reader.
+//
+// Section AH is the Terms of Use and the Help Center on rental bookings, read
+// in /login's modals and in docs/legal-copy.md, their source of truth: a
+// booking is confirmed as soon as it is submitted, if it is free, and neither
+// says the Barangay approves, reviews or declines one; section 8's other two
+// paragraphs and the other two answers about bookings are as they were; and
+// the markdown and the two modals say the same, block for block.
+//
+// Section AI is the resident's My rentals and Book a rental: what section AD
+// checks on Rental bookings. A load that fails (a 500, a server that cannot
+// be reached, an answer with no message) says so, in Rental bookings' words,
+// with Try again, and never shows an empty list, a Pay button or the booking
+// form; a 401 ends the session once and goes to the login screen; every way
+// of loading again starts from the loading state, which clears on a failure;
+// an older answer that arrives late cannot replace a newer one; a successful
+// load of nothing is still a real empty state; and neither page stores an
+// empty list for one it could not load, nor anything in the browser.
+//
+// Section AJ is Book a rental's dates and times, in Manila time whatever the
+// computer's clock: the date field's earliest day is today in Manila, and
+// before the form sends anything it refuses a start already past (a date
+// before today included) and an end not after the start, in the server's
+// order and the server's own words, shown under the time fields, with no
+// request sent; valid times send one; the server's own refusal is still
+// shown. utils/bookingTimes.js is checked case by case first, at fixed
+// moments, and everything runs on a UTC clock and a Los Angeles one.
+//
+// Section AK is where the Terms of Use, the Help Center and the landing
+// page's FAQ tell a resident to look: under My requests and My rentals,
+// never "inside the portal" or "under notifications", since a resident has
+// no notifications page; and the FAQ's "How do I pay the fee?" tells a
+// document request (Pay once it is approved) apart from a rental (Pay as soon
+// as it is confirmed). docs/legal-copy.md says the same words; the Terms are
+// dated 25 October 2026, and since step B2 the Privacy Policy is too.
+//
+// Section AL is Book a rental's two messages and its Try again: the server's
+// refusal of a booking is read out (role="alert"), as the time message and
+// the load error are; and the Try again row under the load error sits 16px
+// below the error, by one rule of the page's own (.actions.book-rental-retry
+// in index.css), read as a browser of 390, 768 and 1280px applies it, while
+// every other .actions row and the shared .alert, .actions and .pending-card
+// .alert rules keep their spacing.
+//
+// Section AM is rental Edit and Cancel on the screens (step B2): the
+// Secretary's Cancel opens a panel with a required reason (3 to 300
+// characters, its submit disabled below 3, the focus in the box, Escape and
+// Keep booking closing it with the focus back on Cancel), warns on a paid
+// booking, shows the server's refusal with role="alert", and asks no
+// window.confirm; Edit shows only the date, the times and the purpose and
+// sends no quantity; Edit and Cancel are drawn only where the server's
+// not_started says so; a cancelled booking shows its reason as text; My
+// rentals draws Cancel booking only on can_cancel_online and shows
+// cancel_online_note otherwise; the Activity Log page words the cancel's
+// facts and the late-payment row; and the Privacy Policy names both.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -72,26 +302,57 @@ const localStorageStub = {
 global.localStorage = localStorageStub;
 dom.window.localStorage = localStorageStub;
 
+// The stub counts writes through bare localStorage, which the session uses. A
+// write through window.localStorage, or to sessionStorage, goes to jsdom's own
+// Storage instead: the stub's assignment to window.localStorage does not take,
+// jsdom's accessor having no setter. So writes to jsdom's Storage are counted
+// too, for every "nothing kept in the browser" check (section AE found the
+// gap; the older checks read it since the docs batch after R4).
+const storageProto = dom.window.Storage.prototype;
+const storageOwn = { setItem: storageProto.setItem, removeItem: storageProto.removeItem, clear: storageProto.clear };
+const domStorage = { writes: 0 };
+for (const name of Object.keys(storageOwn)) {
+  storageProto[name] = function counted(...args) {
+    domStorage.writes += 1;
+    return storageOwn[name].apply(this, args);
+  };
+}
+
 // fetch stub: counts calls, records whether each carried a token, and answers
 // with whatever status the current test wants. `reply`, when a test sets one,
 // is the body sent with that status; otherwise a 401 carries the token error.
 // A `reply` that is a function is asked per request, (url, method), so one
 // mount can answer two endpoints differently; returning undefined falls back.
-const net = { calls: [], status: 200, body: { ok: true }, reply: null };
+// Each call also records the body it was sent. `fail` makes fetch reject, the
+// way a browser does when the server cannot be reached. `hold` keeps every
+// answer back until the test calls `net.held[i](status, reply)`, so a test can
+// choose the order answers arrive in.
+const net = { calls: [], status: 200, body: { ok: true }, reply: null, fail: false, hold: false, held: [] };
 global.fetch = async (url, options = {}) => {
   const auth = options.headers?.Authorization || null;
-  net.calls.push({ url: String(url), method: options.method || 'GET', token: auth ? auth.replace('Bearer ', '') : null });
+  net.calls.push({
+    url: String(url),
+    method: options.method || 'GET',
+    token: auth ? auth.replace('Bearer ', '') : null,
+    body: options.body ?? null,
+  });
+  if (net.fail) throw new TypeError('Failed to fetch');
+  const answer = (status, reply) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => reply ?? (status === 401 ? { error: 'Invalid or expired token' } : net.body),
+  });
+  if (net.hold) return new Promise((resolve) => net.held.push((status, reply) => resolve(answer(status, reply))));
   const reply = typeof net.reply === 'function' ? net.reply(String(url), options.method || 'GET') : net.reply;
-  return {
-    ok: net.status >= 200 && net.status < 300,
-    status: net.status,
-    json: async () => reply ?? (net.status === 401 ? { error: 'Invalid or expired token' } : net.body),
-  };
+  return answer(net.status, reply);
 };
 function resetNet(status = 200, reply = null) {
   net.calls = [];
   net.status = status;
   net.reply = reply;
+  net.fail = false;
+  net.hold = false;
+  net.held = [];
 }
 function seedSession(token, user = USER) {
   store.data.clear();
@@ -137,6 +398,10 @@ const root = () => dom.window.document.getElementById('root');
   });
   await bundle.write({ file: out, format: 'cjs' });
   await bundle.close();
+  // The zone a formatter built when the bundle loads keeps for the whole run
+  // (constants/rentals.js builds its schedule formatters then): a TZ set
+  // later never reaches it. Section AD reads it.
+  const BUNDLE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
   require(out);
   check('real App + AuthProvider bundled and loaded', typeof globalThis.mountApp === 'function');
 
@@ -316,7 +581,8 @@ const root = () => dom.window.document.getElementById('root');
   // The menu replaced the Log out button in BOTH top bars. jsdom applies no
   // stylesheet, so both headers are in the DOM here, as they are in the
   // browser before CSS hides one; interactions use the narrow header's menu,
-  // which comes first in the markup.
+  // which comes first in the markup. These mounts are the Secretary's, whose
+  // menu has a third item, Staff accounts, between the two (section J).
   console.log('\n--- account menu, Profile page, voluntary change ---');
   const RES_USER = { user_id: 2, username: 'res_one', role: 'resident', must_change_password: false };
   const RES_TOKEN = makeToken({ sub: '2', role: 'resident', exp: VALID_EXP });
@@ -331,13 +597,17 @@ const root = () => dom.window.document.getElementById('root');
     linked: true,
   };
   // The profile endpoint, a successful password change, and an empty list in
-  // its real shape for each page loader these mounts pass through.
+  // its real shape for each page loader these mounts pass through, the four
+  // role homes section J lands on included.
   const answer = (profileBody) => (url, method) => {
     if (url.endsWith('/auth/profile')) return profileBody;
     if (url.endsWith('/auth/change-password') && method === 'POST') return { message: 'Password changed successfully' };
     if (url.includes('/document-types/all')) return { document_types: [] };
     if (url.includes('/secretary/staff-accounts')) return { accounts: [] };
     if (url.includes('/secretary/pending-residents')) return { pending: [] };
+    if (url.includes('/rental-requests?')) return { requests: [] };
+    if (url.includes('/charges?status=')) return { charges: [] };
+    if (url.includes('/document-requests/mine')) return { requests: [] };
     return undefined;
   };
   const labels = (page) => page.queryAll('dt').map((d) => d.textContent);
@@ -358,16 +628,26 @@ const root = () => dom.window.document.getElementById('root');
 
   const menuBtn = menuButtons[0];
   const items = () => menuPage.queryAll('[role="menu"] [role="menuitem"]');
+  const focused = () => menuPage.active()?.textContent;
   await menuPage.click(menuBtn);
-  check('a click opens it: Profile and Log out as role="menuitem" in role="menu", under "@secretary1"',
-    menuBtn.getAttribute('aria-expanded') === 'true' && items().map((i) => i.textContent).join('|') === 'Profile|Log out'
+  check('a click opens it: Profile, Staff accounts and Log out as role="menuitem" in role="menu", under "@secretary1"',
+    menuBtn.getAttribute('aria-expanded') === 'true' && items().map((i) => i.textContent).join('|') === 'Profile|Staff accounts|Log out'
       && /@secretary1/.test(menuPage.query('.account-menu-panel')?.textContent || ''),
     items().map((i) => i.textContent).join('|'));
   check('  focus moves to the first item', menuPage.active() === items()[0]);
   await menuPage.key('ArrowDown');
-  check('ArrowDown moves to Log out', menuPage.active() === items()[1]);
+  check('ArrowDown moves to Staff accounts', focused() === 'Staff accounts', focused());
   await menuPage.key('ArrowDown');
-  check('  and wraps round to Profile', menuPage.active() === items()[0]);
+  check('  then to Log out', focused() === 'Log out', focused());
+  await menuPage.key('ArrowDown');
+  check('  and wraps round to Profile', menuPage.active() === items()[0], focused());
+  await menuPage.key('ArrowUp');
+  check('ArrowUp on Profile wraps round to Log out', focused() === 'Log out', focused());
+  await menuPage.key('Home');
+  const homeKeyOn = focused();
+  await menuPage.key('End');
+  check('  Home goes to Profile and End to Log out', homeKeyOn === 'Profile' && focused() === 'Log out',
+    `${homeKeyOn} / ${focused()}`);
   await menuPage.click(menuBtn);
   check('a second click on the button closes it',
     items().length === 0 && menuBtn.getAttribute('aria-expanded') === 'false');
@@ -379,7 +659,7 @@ const root = () => dom.window.document.getElementById('root');
   check('Escape closes it and puts focus back on the button', items().length === 0 && menuPage.active() === menuBtn);
   await menuPage.key('ArrowDown', menuBtn);
   check('ArrowDown on the button opens it with focus on the first item',
-    items().length === 2 && menuPage.active() === items()[0]);
+    items().length === 3 && menuPage.active() === items()[0]);
 
   net.calls = [];
   await menuPage.click(items()[0]);
@@ -399,7 +679,7 @@ const root = () => dom.window.document.getElementById('root');
     menuPage.query('a[href="/change-password"]')?.textContent === 'Change password');
 
   await menuPage.click('button[aria-label="Account menu"]');
-  await menuPage.click(items()[1]);
+  await menuPage.click(items().find((i) => i.textContent === 'Log out'));
   check('"Log out" in the menu ends the session once and lands on the login screen',
     store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(menuPage.html()),
     `${store.removes} teardown(s)`);
@@ -452,9 +732,14104 @@ const root = () => dom.window.document.getElementById('root');
   check('  and the session is kept', store.removes === 0 && store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
   await voluntaryPage.unmount();
 
+  // =========================================================================
+  // I. /set-password checks its link before it shows the form
+  // =========================================================================
+  // The page asks POST /auth/set-password/check as soon as it opens. Only the
+  // server's dead-link code makes it call the link dead; a check that could
+  // not be made (no network, a server still waking, a 429, a 500) gets "Try
+  // again" and never a verdict. The page reads its token from
+  // window.location, not from the router, so each mount sets jsdom's address
+  // first. LINK stands in for a token; it is not one.
+  console.log('\n--- /set-password: the link is checked before the form shows ---');
+  const LINK = 'stand-in-for-a-set-password-link-token-01';
+  const DEAD_LINK = {
+    error: 'This set-password link is no longer valid. Links work only once and expire after 72 hours, so this happens most often when the link has already been used or an older email was opened. Please ask the Barangay Office to send you a new link.',
+    code: 'SET_PASSWORD_TOKEN_INVALID',
+  };
+  const CHECK_FAILED =
+    'We could not check this link just now. The system may still be starting up, which can take up to a minute. Checking does not use the link up.';
+  const TOO_MANY = {
+    error: 'Too many link checks from this connection. Please wait 15 minutes and try again. Checking a link does not use it up.',
+  };
+  const SET_OK = {
+    message: 'Your password is set. You can now sign in with your username and this password. Your username is in the email that brought you here.',
+  };
+  const NEW_PASSWORD = 'Brand-New-Set-2026!';
+  const openSetPassword = (search, options) => {
+    dom.window.history.replaceState(null, '', `/set-password${search}`);
+    return globalThis.mountInteractive(root(), `/set-password${search}`, options);
+  };
+  const sentBody = (call) => {
+    try { return JSON.parse(call?.body || ''); } catch { return null; }
+  };
+  const isCheck = (call) => call?.method === 'POST' && call.url.endsWith('/auth/set-password/check');
+  const passwordFields = (page) => page.queryAll('input[autocomplete="new-password"]');
+  const tryAgainButton = (page) => page.queryAll('button').find((b) => b.textContent === 'Try again');
+  const deadPanel = (page) => page.query('h1')?.textContent === 'This link no longer works';
+  // Answers the i-th held request. A request that was never sent fails the
+  // checks that need it instead of crashing the run before the rest.
+  const release = (i, status, reply) => {
+    if (typeof net.held[i] === 'function') net.held[i](status, reply);
+  };
+
+  seedSession(null);
+  resetNet(200);
+  const noToken = await openSetPassword('');
+  await noToken.settle();
+  check('no token in the address: the no-code panel, and no request at all',
+    deadPanel(noToken) && /has no set-password code in it/.test(noToken.html()) && net.calls.length === 0,
+    `${net.calls.length} call(s)`);
+  await noToken.unmount();
+
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const setPage = await openSetPassword(`?token=${LINK}`);
+  const checkingSubtitle = setPage.query('.subtitle')?.textContent;
+  check('while the check is out: "Checking your link…" under the usual heading, and no form',
+    setPage.query('h1')?.textContent === 'Set your password' && !!checkingSubtitle
+      && setPage.query('p.muted[role="status"]')?.textContent === 'Checking your link…'
+      && passwordFields(setPage).length === 0 && !deadPanel(setPage));
+  check('  one request: POST /auth/set-password/check, with the token in its BODY',
+    net.calls.length === 1 && isCheck(net.calls[0]) && sentBody(net.calls[0])?.token === LINK,
+    `${net.calls.length} call(s)`);
+  check('  not in its URL, and with no session header',
+    !net.calls[0]?.url.includes(LINK) && net.calls[0]?.token === null);
+  check('  and the address bar was cleaned, as before',
+    dom.window.location.pathname === '/set-password' && dom.window.location.search === '');
+  release(0, 200, { usable: true });
+  await setPage.settle();
+  check("a usable answer shows today's form under the same heading, and the checking line is gone",
+    passwordFields(setPage).length === 2 && setPage.query('form h1')?.textContent === 'Set your password'
+      && setPage.query('.subtitle')?.textContent === checkingSubtitle && !setPage.query('[role="status"]'));
+  await setPage.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 0);
+  await setPage.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 1);
+  await setPage.submit();
+  check('submitting sends POST /auth/set-password with the same token and the password, no session header',
+    net.calls.length === 2 && net.calls[1].method === 'POST' && net.calls[1].url.endsWith('/auth/set-password')
+      && sentBody(net.calls[1])?.token === LINK && sentBody(net.calls[1])?.new_password === NEW_PASSWORD
+      && net.calls[1].token === null, `${net.calls.length} call(s)`);
+  release(1, 200, SET_OK);
+  await setPage.settle();
+  check("  and a success shows \"Password set\" with the server's message",
+    setPage.query('h1')?.textContent === 'Password set' && setPage.query('.alert.success')?.textContent === SET_OK.message);
+  await setPage.unmount();
+
+  seedSession(null);
+  resetNet(400, DEAD_LINK);
+  const deadOnOpen = await openSetPassword(`?token=${LINK}`);
+  await deadOnOpen.settle();
+  check("a dead answer shows the dead-link panel with the server's message, and no form",
+    deadPanel(deadOnOpen) && deadOnOpen.query('.alert.error')?.textContent === DEAD_LINK.error
+      && !deadOnOpen.query('input') && !!deadOnOpen.query('a[href="/login"]'));
+  await deadOnOpen.unmount();
+
+  seedSession(null);
+  resetNet(400, { error: 'Invalid JSON in request body' });
+  const otherBadRequest = await openSetPassword(`?token=${LINK}`);
+  await otherBadRequest.settle();
+  check('a 400 WITHOUT the dead-link code is not a verdict: the could-not-check note',
+    !deadPanel(otherBadRequest) && otherBadRequest.query('.alert.info')?.textContent === CHECK_FAILED
+      && !otherBadRequest.query('input'));
+  await otherBadRequest.unmount();
+
+  seedSession(null);
+  resetNet(200, { usable: true });
+  net.fail = true;
+  const offline = await openSetPassword(`?token=${LINK}`);
+  await offline.settle();
+  check('no network: the could-not-check note in blue, "Try again" and "Back to sign in"',
+    offline.query('.alert.info')?.textContent === CHECK_FAILED && !!tryAgainButton(offline)
+      && !!offline.query('a[href="/login"]') && offline.query('h1')?.textContent === 'Set your password');
+  check('  and NOT the dead-link panel, and no form', !deadPanel(offline) && !offline.query('input'));
+  net.fail = false;
+  if (tryAgainButton(offline)) await offline.click(tryAgainButton(offline));
+  check('"Try again" asks once more, and a usable answer then shows the form',
+    net.calls.length === 2 && isCheck(net.calls[1]) && sentBody(net.calls[1])?.token === LINK
+      && passwordFields(offline).length === 2, `${net.calls.length} call(s)`);
+  await offline.unmount();
+
+  seedSession(null);
+  resetNet(429, TOO_MANY);
+  const limited = await openSetPassword(`?token=${LINK}`);
+  await limited.settle();
+  check("a 429 shows the limiter's own message, with \"Try again\", and not the dead-link panel",
+    limited.query('.alert.info')?.textContent === TOO_MANY.error && !!tryAgainButton(limited) && !deadPanel(limited),
+    JSON.stringify(limited.query('.alert.info')?.textContent ?? null));
+  await limited.unmount();
+
+  seedSession(null);
+  resetNet(500, { error: 'Internal server error' });
+  const broken = await openSetPassword(`?token=${LINK}`);
+  await broken.settle();
+  check("a 500 shows the page's own sentence, never \"Internal server error\", and not the dead-link panel",
+    broken.query('.alert.info')?.textContent === CHECK_FAILED && !/Internal server error/.test(broken.html())
+      && !deadPanel(broken));
+  await broken.unmount();
+
+  seedSession(VALID);
+  resetNet(200, { usable: true });
+  const signedIn = await openSetPassword(`?token=${LINK}`);
+  await signedIn.settle();
+  check('signed in: the check still carries no session header, and the form shows',
+    net.calls.length === 1 && isCheck(net.calls[0]) && net.calls[0].token === null
+      && passwordFields(signedIn).length === 2, `${net.calls.length} call(s)`);
+  check('  and the signed-in session is left alone',
+    store.removes === 0 && store.data.has(STORAGE_KEY), `${store.removes} teardown(s)`);
+  await signedIn.unmount();
+
+  // The accepted trade-off: a link can die between the check and the submit.
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const diesLater = await openSetPassword(`?token=${LINK}`);
+  release(0, 200, { usable: true });
+  await diesLater.settle();
+  await diesLater.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 0);
+  await diesLater.fill('input[autocomplete="new-password"]', NEW_PASSWORD, 1);
+  await diesLater.submit();
+  release(1, 400, DEAD_LINK);
+  await diesLater.settle();
+  check('a link that dies between the check and the submit still lands on the dead-link panel',
+    deadPanel(diesLater) && diesLater.query('.alert.error')?.textContent === DEAD_LINK.error
+      && !diesLater.query('input'));
+  await diesLater.unmount();
+
+  // StrictMode runs the effect twice on mount, as the dev server does: the
+  // first check is cleaned up, and its answer must be ignored however late
+  // it arrives. Here it arrives last, and dead.
+  seedSession(null);
+  resetNet(200);
+  net.hold = true;
+  const strict = await openSetPassword(`?token=${LINK}`, { strict: true });
+  check('under StrictMode two checks go out, and both carry the token',
+    net.calls.length === 2 && net.calls.every((c) => isCheck(c) && sentBody(c)?.token === LINK),
+    `${net.calls.length} call(s)`);
+  release(1, 200, { usable: true });
+  await strict.settle();
+  release(0, 400, DEAD_LINK);
+  await strict.settle();
+  check('  the late answer to the cleaned-up first check is ignored: the form stays',
+    passwordFields(strict).length === 2 && !deadPanel(strict));
+  await strict.unmount();
+  dom.window.history.replaceState(null, '', '/');
+
+  // =========================================================================
+  // J. Staff accounts: a Secretary-only page, opened from the account menu
+  // =========================================================================
+  // The page has its own route, /secretary/staff-accounts, and is reached
+  // from the account menu, not the sidebar. Only the Secretary's menu offers
+  // it. Every other role's menu is still exactly Profile and Log out, and its
+  // arrow keys wrap with no gap where the Secretary's item would be.
+  //
+  // The MemoryRouter here exposes no address, so where a mount landed is read
+  // from the page: its title, and the sidebar link marked aria-current="page".
+  // NavLink sets that from the router's own location, and each role home is
+  // the exact-match first link of that role's nav, so the link names the
+  // address. No sidebar link is current on Staff accounts, which has none.
+  console.log('\n--- Staff accounts: a Secretary-only page, opened from the account menu ---');
+  const menuItems = (page) => page.queryAll('[role="menu"] [role="menuitem"]');
+  const menuLabels = (page) => menuItems(page).map((i) => i.textContent).join(' | ');
+  const itemNamed = (page, label) => menuItems(page).find((i) => i.textContent === label);
+  const pageTitle = (page) => page.query('.page-title h1')?.textContent ?? null;
+  const currentNav = (page) => page.query('.dash-side-nav a[aria-current="page"]')?.getAttribute('href') ?? null;
+  const staffListCalls = () => net.calls.filter((c) => c.url.endsWith('/secretary/staff-accounts'));
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const staffDirect = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await staffDirect.settle();
+  check('the Secretary opening /secretary/staff-accounts gets the Staff accounts page, not Resident review',
+    pageTitle(staffDirect) === 'Staff accounts' && currentNav(staffDirect) === null,
+    `title ${JSON.stringify(pageTitle(staffDirect))}, current sidebar link ${currentNav(staffDirect)}`);
+  await staffDirect.unmount();
+
+  seedSession(VALID);
+  resetNet(200, answer(STAFF_PROFILE));
+  const staffViaMenu = await globalThis.mountInteractive(root(), '/secretary/document-types');
+  await staffViaMenu.click('button[aria-label="Account menu"]');
+  const staffItem = itemNamed(staffViaMenu, 'Staff accounts');
+  check('the Secretary\'s account menu offers "Staff accounts"', !!staffItem, menuLabels(staffViaMenu));
+  net.calls = [];
+  if (staffItem) await staffViaMenu.click(staffItem);
+  await staffViaMenu.settle();
+  check('  choosing it opens the Staff accounts page, and the menu closes behind it',
+    pageTitle(staffViaMenu) === 'Staff accounts' && currentNav(staffViaMenu) === null && menuItems(staffViaMenu).length === 0,
+    `title ${JSON.stringify(pageTitle(staffViaMenu))}`);
+  check('  which asks GET /secretary/staff-accounts with the session and shows "New staff account"',
+    staffListCalls().length === 1 && staffListCalls()[0].method === 'GET' && staffListCalls()[0].token === VALID
+      && staffViaMenu.queryAll('button').some((b) => b.textContent === 'New staff account'),
+    `${staffListCalls().length} staff-accounts request(s)`);
+  await staffViaMenu.unmount();
+
+  const OTHER_ROLES = [
+    { role: 'punong_barangay', home: '/punong-barangay' },
+    { role: 'treasurer', home: '/treasurer' },
+    { role: 'staff', home: '/staff' },
+    { role: 'resident', home: '/resident' },
+  ];
+  for (const { role, home } of OTHER_ROLES) {
+    seedSession(makeToken({ sub: '7', role, exp: VALID_EXP }), { user_id: 7, username: `${role}_one`, role, must_change_password: false });
+    resetNet(200, answer(STAFF_PROFILE));
+    const other = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await other.settle();
+    check(`${role} opening /secretary/staff-accounts is sent to ${home}, with no staff-accounts request`,
+      currentNav(other) === home && pageTitle(other) !== 'Staff accounts'
+        && !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+      `current sidebar link ${currentNav(other)}, title ${JSON.stringify(pageTitle(other))}, `
+        + `${net.calls.filter((c) => c.url.includes('/secretary/staff-accounts')).length} staff-accounts request(s)`);
+    await other.click('button[aria-label="Account menu"]');
+    check(`  the ${role} menu is exactly Profile | Log out`, menuLabels(other) === 'Profile | Log out', menuLabels(other));
+    const logOut = itemNamed(other, 'Log out');
+    if (logOut) await other.key('ArrowDown', logOut);
+    check(`  ${role}: ArrowDown on Log out wraps round to Profile`, other.active()?.textContent === 'Profile',
+      `focus on ${JSON.stringify(other.active()?.textContent)}`);
+    const profile = itemNamed(other, 'Profile');
+    if (profile) await other.key('ArrowUp', profile);
+    check(`  ${role}: ArrowUp on Profile wraps round to Log out`, other.active()?.textContent === 'Log out',
+      `focus on ${JSON.stringify(other.active()?.textContent)}`);
+    await other.unmount();
+  }
+
+  seedSession(VALID, FORCED_USER);
+  resetNet(200, answer(STAFF_PROFILE));
+  const forcedStaff = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await forcedStaff.settle();
+  check('a Secretary on a temporary password is still sent to /change-password, with no staff-accounts request',
+    forcedStaff.query('h1')?.textContent === 'Change password'
+      && !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+    JSON.stringify(forcedStaff.query('h1')?.textContent ?? null));
+  await forcedStaff.unmount();
+
+  // =========================================================================
+  // K. Resident review is the residents' queue only
+  // =========================================================================
+  // The staff section has its own page (section J), so Resident review neither
+  // shows it nor asks for the staff list. The queue must still be all there:
+  // the page gets two pending accounts, one unlinked and one linked, in the
+  // real shape of GET /secretary/pending-residents, so a removal that took the
+  // queue with it fails here instead of passing as "no staff section".
+  console.log('\n--- Resident review: the residents\' queue only ---');
+  const queueRow = (over) => ({
+    user_id: 0, username: '', email: '', is_rejected: false, rejection_reason: null, rejection_note: null,
+    rejected_at: null, rejected_by_user_id: null, rejected_by_username: null, linked_record: null, ...over,
+  });
+  const queueProfile = (over) => ({
+    resident_id: null, first_name: '', middle_name: null, last_name: '', suffix: null, birthdate: null,
+    address: null, phone_number: null, resident_records: null, ...over,
+  });
+  const QUEUE = { status: 'pending', pending: [
+    queueRow({ user_id: 31, username: 'queue_unlinked', email: 'queue.unlinked@example.invalid',
+      profiles: queueProfile({ first_name: 'Una', last_name: 'Queue', birthdate: '1990-01-02', address: 'Purok 1' }) }),
+    queueRow({ user_id: 32, username: 'queue_linked', email: 'queue.linked@example.invalid',
+      profiles: queueProfile({ resident_id: 77, first_name: 'Lino', last_name: 'Queue',
+        resident_records: { resident_id: 77, masterlist_registered_on: null } }),
+      linked_record: { resident_id: 77, masterlist_registered_on: null, residency: null } }),
+  ] };
+  // The queue and the unlinked account's suggestions; everything else as in
+  // section H. Suggestions first: their URL also contains pending-residents.
+  const queueAnswer = (url, method) => {
+    if (url.endsWith('/secretary/pending-residents/31/match-suggestions')) {
+      return { claimed: QUEUE.pending[0].profiles, suggestions: [] };
+    }
+    if (url.includes('/secretary/pending-residents?status=pending')) return QUEUE;
+    return answer(STAFF_PROFILE)(url, method);
+  };
+  const buttonsIn = (card) => (card ? [...card.querySelectorAll('button')].map((b) => b.textContent) : []);
+
+  seedSession(VALID);
+  resetNet(200, queueAnswer);
+  const review = await globalThis.mountInteractive(root(), '/secretary');
+  await review.settle();
+  const subtitles = [review.query('.page-title span')?.textContent, review.query('.dash-header-section p')?.textContent];
+  check('Resident review keeps its title, and its subtitle is "Review pending resident registrations" in both headers',
+    pageTitle(review) === 'Resident review' && subtitles.every((s) => s === 'Review pending resident registrations'),
+    JSON.stringify(subtitles));
+  check('  no "New staff account" button',
+    !review.queryAll('button').some((b) => b.textContent === 'New staff account'));
+  const staffHeadings = review.queryAll('h1, h2, h3, h4, h5, h6').map((h) => h.textContent).filter((t) => /Staff accounts/.test(t));
+  check('  no "Staff accounts" heading', staffHeadings.length === 0, staffHeadings.join(' / '));
+  check('  and no request for the staff list',
+    !net.calls.some((c) => c.url.includes('/secretary/staff-accounts')),
+    net.calls.map((c) => c.url.replace(/^https?:\/\/[^/]+\/api/, '')).join(', '));
+
+  const queueCards = review.queryAll('.pending-list > .pending-card');
+  const cardNames = queueCards.map((c) => c.querySelector('h3')?.textContent).join(' | ');
+  check("the residents' queue still renders: both stubbed accounts, under \"2 accounts awaiting review\"",
+    review.query('.list-head h2')?.textContent === '2 accounts awaiting review' && cardNames === 'Una Queue | Lino Queue',
+    `${JSON.stringify(review.query('.list-head h2')?.textContent ?? null)}: ${cardNames}`);
+  const statusFilter = review.query('.list-head select');
+  check('  with the status filter and Refresh',
+    statusFilter?.value === 'pending'
+      && [...(statusFilter?.options || [])].map((o) => o.textContent).join(' | ') === 'Awaiting review | Rejected | All'
+      && review.queryAll('.list-head button').some((b) => b.textContent === 'Refresh'));
+  check('  and each card\'s actions: Create & link, Link by ID and Reject when unlinked; Activate and Reject when linked',
+    ['Create new resident record & link', 'Link by ID', 'Reject registration'].every((t) => buttonsIn(queueCards[0]).includes(t))
+      && ['Activate account', 'Reject registration'].every((t) => buttonsIn(queueCards[1]).includes(t)),
+    `${buttonsIn(queueCards[0]).join(', ')} / ${buttonsIn(queueCards[1]).join(', ')}`);
+  check('  and the unlinked account\'s match suggestions were asked for',
+    net.calls.some((c) => c.url.endsWith('/secretary/pending-residents/31/match-suggestions')));
+  await review.unmount();
+
+  // =========================================================================
+  // L. The Staff accounts page: one heading, two-line rows, a search box
+  // =========================================================================
+  // The card no longer repeats the page title, each account is two lines, and
+  // a search box filters the list already loaded, without a request. The
+  // search HIDES rows rather than removing them, so a row's open "send a
+  // link?" question, and the focus, survive typing. A search with no match
+  // says so in its own words and never claims there are no accounts.
+  //
+  // The behaviour around the list is pinned here too: the in-row question,
+  // sending, the 15-minute cooldown, and creating an account by email or with
+  // a temporary password. There were no frontend checks for any of it; these
+  // pass on the page as it was and must still pass on the page as it is.
+  console.log('\n--- Staff accounts page: one heading, two-line rows, search, same actions ---');
+  // The real GET /secretary/staff-accounts row: newest first, every status.
+  const STAFF_LIST = [
+    { user_id: 64, username: 'staff_old', role: 'staff', email: 'old.staff@example.invalid', is_active: false, must_change_password: false, last_link_sent_at: null },
+    { user_id: 63, username: 'staff_mabini', role: 'staff', email: 'Mabini.Office@Example.invalid', is_active: true, must_change_password: false, last_link_sent_at: '2026-10-05T01:30:00Z' },
+    { user_id: 62, username: 'treasurer_dela_cruz', role: 'treasurer', email: 'tdc@example.invalid', is_active: true, must_change_password: true, last_link_sent_at: '2026-10-08T03:00:00Z' },
+    { user_id: 61, username: 'kap_reyes', role: 'punong_barangay', email: 'kap.reyes@example.invalid', is_active: true, must_change_password: false, last_link_sent_at: null },
+  ];
+  const ROLE_TEXT = { punong_barangay: 'Punong Barangay', treasurer: 'Barangay Treasurer', staff: 'Barangay Staff' };
+  const SEARCH = '.staff-accounts input[type="search"]';
+  // The staff list for GETs, `extra` for anything a check posts, section H's
+  // answers for the rest.
+  const staffAnswer = (list, extra = () => undefined) => (url, method) => extra(url, method)
+    ?? (method === 'GET' && url.endsWith('/secretary/staff-accounts') ? { accounts: list } : answer(STAFF_PROFILE)(url, method));
+  const listRows = (page) => page.queryAll('.staff-accounts li.suggestion');
+  const shownRows = (page) => listRows(page).filter((li) => !li.hidden && !li.parentElement?.hidden);
+  const userOf = (li) => (li.querySelector('strong')?.textContent || '').trim().split(/\s/)[0];
+  const shownUsers = (page) => shownRows(page).map(userOf).join(' ');
+  const rowOf = (page, username) => listRows(page).find((li) => userOf(li) === `@${username}`);
+  const sendButtonOf = (page, username) => [...(rowOf(page, username)?.children || [])].find((c) => c.tagName === 'BUTTON');
+  const buttonNamed = (scope, label) => [...scope.querySelectorAll('button')].find((b) => b.textContent === label);
+  const questionIn = (page, username) => rowOf(page, username)?.querySelector('.alert.info') ?? null;
+  const searchStatus = (page) => page.query('.staff-accounts [role="status"]')?.textContent ?? null;
+  const typeSearch = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
+  const yetShown = (page) => page.queryAll('.staff-accounts p').some((p) => p.textContent === 'No staff accounts yet.');
+  const clickIf = async (page, el) => { if (el) await page.click(el); };
+  // Since step B2 a rental booking's Cancel opens a panel that asks for a
+  // reason (section AM) where window.confirm used to ask: type one and send.
+  const cancelWithReason = async (page, reason = 'Needed for an official event') => {
+    const box = page.query('.cancel-booking-panel textarea');
+    if (!box) return;
+    Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(box, reason);
+    box.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await page.settle();
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+  };
+
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST));
+  const staffPage = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await staffPage.settle();
+  const titled = staffPage.queryAll('main.dash-main h1, main.dash-main h2, main.dash-main h3, main.dash-main h4, main.dash-main h5, main.dash-main h6')
+    .filter((h) => h.textContent.trim() === 'Staff accounts');
+  check('"Staff accounts" is a heading once on the page, the page title, not again in the card',
+    titled.length === 1 && !!titled[0].closest('.page-title'), titled.map((h) => h.tagName.toLowerCase()).join(', '));
+  check('  the card\'s explanation reads word for word, "Residents register themselves" is nowhere on the page, '
+      + 'and "New staff account" and the list label stay',
+    staffPage.query('.pending-head p')?.textContent
+      === 'Create accounts for barangay officials, who set their own password from an emailed link.'
+      && !/Residents register themselves/i.test(staffPage.html())
+      && staffPage.query('.pending-head button')?.textContent === 'New staff account'
+      && staffPage.query('.staff-accounts h4')?.textContent === 'Punong Barangay, Treasurer and Staff accounts',
+    JSON.stringify(staffPage.query('.pending-head p')?.textContent ?? null));
+  const twoLines = STAFF_LIST.map((a) => {
+    const lines = [...(rowOf(staffPage, a.username)?.querySelector('.suggestion-info')?.children || [])];
+    return lines.length === 2 && !!lines[0].querySelector('.badge') && lines[0].textContent.startsWith(`@${a.username} · ${ROLE_TEXT[a.role]}`)
+      && lines[1].textContent.includes(a.email)
+      && lines[1].textContent.includes(a.last_link_sent_at ? 'Last link sent' : 'No set-password link sent');
+  });
+  check('each account is two lines: "@username · Role" with its status chip, then the email and the link status',
+    twoLines.every(Boolean), STAFF_LIST.map((a, i) => `${a.username} ${twoLines[i] ? 'ok' : 'not two lines'}`).join(', '));
+
+  const box = staffPage.query(SEARCH);
+  const boxName = box ? (box.labels?.[0]?.textContent || box.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim() : '';
+  const listEl = staffPage.query('.staff-accounts ul');
+  check('a search box with a label sits above the list',
+    !!box && /search/i.test(boxName) && !!listEl && (box.compareDocumentPosition(listEl) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    JSON.stringify(boxName));
+  const callsBeforeTyping = net.calls.length;
+  await typeSearch(staffPage, 'dela_cruz');
+  check('"dela_cruz" finds the account by username, and says "Showing 1 of 4 accounts"',
+    shownUsers(staffPage) === '@treasurer_dela_cruz' && searchStatus(staffPage) === 'Showing 1 of 4 accounts',
+    `${shownUsers(staffPage)} | ${JSON.stringify(searchStatus(staffPage))}`);
+  await typeSearch(staffPage, 'punong');
+  check('  "punong" finds the Punong Barangay by role label', shownUsers(staffPage) === '@kap_reyes', shownUsers(staffPage));
+  await typeSearch(staffPage, 'tdc@');
+  check('  "tdc@" finds the Treasurer by email', shownUsers(staffPage) === '@treasurer_dela_cruz', shownUsers(staffPage));
+  await typeSearch(staffPage, 'MABINI.OFFICE');
+  const upperEmail = shownUsers(staffPage);
+  await typeSearch(staffPage, 'KAP_REYES');
+  check('  and case does not matter: "MABINI.OFFICE" and "KAP_REYES"',
+    upperEmail === '@staff_mabini' && shownUsers(staffPage) === '@kap_reyes', `${upperEmail} / ${shownUsers(staffPage)}`);
+  await typeSearch(staffPage, 'zzz');
+  const noMatch = staffPage.queryAll('.staff-accounts p').find((p) => p.textContent.startsWith('No staff accounts match'));
+  const clearButton = buttonNamed(root(), 'Clear search');
+  check('a search with no match says so in its own words, with "Clear search"',
+    shownRows(staffPage).length === 0 && noMatch?.textContent === 'No staff accounts match "zzz".' && !!clearButton
+      && searchStatus(staffPage) === 'Showing 0 of 4 accounts', JSON.stringify(noMatch?.textContent ?? null));
+  check('  and never as "No staff accounts yet."', !yetShown(staffPage));
+  await clickIf(staffPage, clearButton);
+  check('"Clear search" brings every account back, empties the box and puts the focus in it',
+    shownRows(staffPage).length === 4 && staffPage.query(SEARCH)?.value === '' && staffPage.active() === staffPage.query(SEARCH)
+      && !searchStatus(staffPage), `${shownRows(staffPage).length} shown`);
+  check('no request went out while searching', net.calls.length === callsBeforeTyping,
+    `${net.calls.length - callsBeforeTyping} request(s) while typing`);
+
+  await clickIf(staffPage, sendButtonOf(staffPage, 'kap_reyes'));
+  const openedFirst = !!questionIn(staffPage, 'kap_reyes');
+  const searchBox = staffPage.query(SEARCH);
+  searchBox?.focus();
+  await typeSearch(staffPage, 'kap');
+  const keptWhileShown = !!questionIn(staffPage, 'kap_reyes') && shownUsers(staffPage) === '@kap_reyes';
+  await typeSearch(staffPage, 'zzz');
+  await typeSearch(staffPage, '');
+  check('an open "send a link?" question survives typing, even after its row is filtered out and back',
+    openedFirst && keptWhileShown && !!questionIn(staffPage, 'kap_reyes') && !!searchBox && staffPage.active() === searchBox,
+    `opened ${openedFirst}, kept ${keptWhileShown}, back ${!!questionIn(staffPage, 'kap_reyes')}, `
+      + `focus on ${JSON.stringify(staffPage.active()?.textContent || staffPage.active()?.tagName || null)}`);
+  await staffPage.unmount();
+
+  seedSession(VALID);
+  resetNet(200, staffAnswer([]));
+  const noStaff = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await noStaff.settle();
+  check('with no staff accounts at all: "No staff accounts yet." and no search box',
+    yetShown(noStaff) && !noStaff.query(SEARCH) && !noStaff.query('.staff-accounts [role="status"]'));
+  await noStaff.unmount();
+
+  // The behaviour the layout change must not touch.
+  const sentReply = (url, method) => {
+    const sent = method === 'POST' && url.match(/\/secretary\/staff-accounts\/(\d+)\/send-set-password-link$/);
+    return sent ? { message: 'A set-password link was emailed.', user_id: Number(sent[1]), set_password_email: { ok: true, status: 'SENT' } } : undefined;
+  };
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST, sentReply));
+  const actions = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await actions.settle();
+  let callsSoFar = net.calls.length;
+  await clickIf(actions, sendButtonOf(actions, 'kap_reyes'));
+  check('an active account is asked about first, in its row, and nothing is sent yet',
+    /Send @kap_reyes a link to set a new password\? Their current password keeps working until they use the link\./
+      .test(questionIn(actions, 'kap_reyes')?.textContent || '') && net.calls.length === callsSoFar,
+    `${net.calls.length - callsSoFar} request(s)`);
+  check('  with the focus on Cancel', actions.active()?.textContent === 'Cancel');
+  await clickIf(actions, questionIn(actions, 'kap_reyes') && buttonNamed(questionIn(actions, 'kap_reyes'), 'Cancel'));
+  check('  Cancel closes it and hands the focus back to that row\'s button',
+    !questionIn(actions, 'kap_reyes') && !!sendButtonOf(actions, 'kap_reyes') && actions.active() === sendButtonOf(actions, 'kap_reyes'));
+  await clickIf(actions, sendButtonOf(actions, 'kap_reyes'));
+  callsSoFar = net.calls.length;
+  await clickIf(actions, questionIn(actions, 'kap_reyes') && buttonNamed(questionIn(actions, 'kap_reyes'), 'Send link'));
+  await actions.settle();
+  const sendCalls = net.calls.slice(callsSoFar);
+  check('  "Send link" posts once, shows the email result in the row, and reloads the list',
+    sendCalls.length === 2 && sendCalls[0].method === 'POST' && sendCalls[0].url.endsWith('/secretary/staff-accounts/61/send-set-password-link')
+      && sendCalls[1].method === 'GET' && sendCalls[1].url.endsWith('/secretary/staff-accounts')
+      && rowOf(actions, 'kap_reyes')?.querySelector('.alert.success')?.textContent
+        === 'Set-password link emailed to kap.reyes@example.invalid. It works once and lasts 72 hours.',
+    sendCalls.map((c) => `${c.method} ${c.url.replace(/^https?:\/\/[^/]+\/api/, '')}`).join(', '));
+  callsSoFar = net.calls.length;
+  await clickIf(actions, sendButtonOf(actions, 'treasurer_dela_cruz'));
+  await actions.settle();
+  check('an account still waiting for its password is sent the link straight away, with no question',
+    !questionIn(actions, 'treasurer_dela_cruz') && net.calls[callsSoFar]?.method === 'POST'
+      && !!net.calls[callsSoFar]?.url.endsWith('/secretary/staff-accounts/62/send-set-password-link'));
+  check('an inactive account\'s button is disabled', sendButtonOf(actions, 'staff_old')?.disabled === true);
+  await actions.unmount();
+
+  const COOLDOWN = {
+    error: 'A set-password link was sent to @kap_reyes less than 15 minutes ago. Ask them to check their inbox and spam folder, or send another in 12 minutes.',
+    code: 'SET_PASSWORD_LINK_COOLDOWN',
+    retry_after_minutes: 12,
+  };
+  seedSession(VALID);
+  resetNet(200);
+  net.hold = true;
+  const cooldown = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  release(0, 200, { accounts: STAFF_LIST });
+  await cooldown.settle();
+  await clickIf(cooldown, sendButtonOf(cooldown, 'kap_reyes'));
+  await clickIf(cooldown, questionIn(cooldown, 'kap_reyes') && buttonNamed(questionIn(cooldown, 'kap_reyes'), 'Send link'));
+  release(1, 429, COOLDOWN);
+  await cooldown.settle();
+  check('the 15-minute cooldown shows the server\'s own sentence in the row, as information, not an error',
+    rowOf(cooldown, 'kap_reyes')?.querySelector('.alert.info')?.textContent === COOLDOWN.error
+      && !rowOf(cooldown, 'kap_reyes')?.querySelector('.alert.error'));
+  await cooldown.unmount();
+
+  const CREATED_BY_EMAIL = {
+    message: 'Account created. A set-password link was emailed to the address you entered. It works once and expires in 72 hours.',
+    user: { user_id: 71, username: 'new_official', email: 'new.official@example.invalid', role: 'staff' },
+    set_password_email: { ok: true, status: 'SENT' },
+  };
+  const CREATED_WITH_TEMP = {
+    message: 'Account created. Hand over the temporary password below; it must be changed at first sign-in.',
+    user: { user_id: 72, username: 'temp_official', email: 'temp.official@example.invalid', role: 'treasurer' },
+    temporary_password: 'Fixture-Temp-Pass-0',
+  };
+  let createdReply = CREATED_BY_EMAIL;
+  const fillAccount = async (page, username, email) => {
+    for (const [name, value] of [['first_name', 'New'], ['last_name', 'Official'], ['email', email], ['username', username]]) {
+      if (page.query(`input[name="${name}"]`)) await page.fill(`input[name="${name}"]`, value);
+    }
+  };
+  seedSession(VALID);
+  resetNet(200, staffAnswer(STAFF_LIST, (url, method) => (method === 'POST' && url.endsWith('/secretary/accounts') ? createdReply : undefined)));
+  const create = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+  await create.settle();
+  await clickIf(create, buttonNamed(root(), 'New staff account'));
+  await fillAccount(create, 'new_official', 'new.official@example.invalid');
+  callsSoFar = net.calls.length;
+  if (create.query('form')) await create.submit();
+  await create.settle();
+  const createCall = net.calls[callsSoFar];
+  check('creating an account by email posts the form once with delivery "email", and shows the email result',
+    createCall?.method === 'POST' && createCall.url.endsWith('/secretary/accounts') && sentBody(createCall)?.delivery === 'email'
+      && sentBody(createCall)?.username === 'new_official'
+      && !!create.query('.created-panel .alert.success')?.textContent
+        .startsWith('Account created. A set-password link was emailed to new.official@example.invalid.'),
+    JSON.stringify(create.query('.created-panel .alert')?.textContent ?? null));
+  check('  and the list reloads', net.calls.slice(callsSoFar + 1).some((c) => c.method === 'GET' && c.url.endsWith('/secretary/staff-accounts')));
+  createdReply = CREATED_WITH_TEMP;
+  await clickIf(create, buttonNamed(root(), 'Create another'));
+  await fillAccount(create, 'temp_official', 'temp.official@example.invalid');
+  const delivery = create.query('select[name="delivery"]');
+  if (delivery) {
+    delivery.value = 'temporary_password';
+    delivery.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  }
+  await create.settle();
+  check('  choosing the temporary-password fallback shows its warning first',
+    /Use this only if email is not working\./.test(create.query('.account-form .alert.info')?.textContent || ''));
+  callsSoFar = net.calls.length;
+  if (create.query('form')) await create.submit();
+  await create.settle();
+  check('a temporary password is shown once, in its own panel, when the server sends one',
+    sentBody(net.calls[callsSoFar])?.delivery === 'temporary_password'
+      && create.queryAll('.created-panel dt').some((d) => d.textContent === 'Temporary password (shown only once)')
+      && create.query('.created-panel code.temp-pass')?.textContent === CREATED_WITH_TEMP.temporary_password);
+  await create.unmount();
+
+  // =========================================================================
+  // M. Payments: a failed load is an error, never an empty list
+  // =========================================================================
+  // A charges request that failed (a server asleep, a dropped connection, a
+  // 500) used to leave "0 charges" and "No charges awaiting verification" on
+  // the screen, which reads as nobody owing anything. A failed load must say
+  // so, with Try again, and show no rows, no count and no empty text. Every
+  // request below is answered by the fetch stub, the Record and Re-check
+  // POSTs included, so nothing reaches a server.
+  console.log('\n--- Payments: a failed load is an error, never an empty list ---');
+  {
+    const LIST = '/charges?status=';
+    const isList = (call) => call?.method === 'GET' && call.url.includes(LIST);
+    // A charge in the list's real shape: a document fee, named by its resident.
+    const payCharge = (id, first, last, documentType, extra = {}) => ({
+      charge_id: id, charge_type: 'DOCUMENT', amount: 100, status: 'UNPAID', created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: { user_id: 900 + id, username: `res_${id}`, profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      document_requests: { request_id: 700 + id, purpose: 'Employment', status: 'approved', document_types: { name: documentType },
+        resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null } },
+      rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    const UNPAID_TWO = [
+      payCharge(41, 'Ana', 'Cruz', 'Barangay Clearance', { paymongo_session_id: 'cs_test_41' }),
+      payCharge(42, 'Ben', 'Reyes', 'Certificate of Residency'),
+    ];
+    const PAID_TWO = [
+      payCharge(43, 'Carla', 'Santos', 'Barangay Clearance', { status: 'PAID' }),
+      payCharge(44, 'Dino', 'Tan', 'Certificate of Residency', { status: 'PAID' }),
+    ];
+    const VOID_ONE = [payCharge(45, 'Elsa', 'Uy', 'Barangay Clearance', { status: 'VOID' })];
+    const listBody = (charges) => ({ charges, total: charges.length });
+    const listOf = (charges) => (url) => (url.includes(LIST) ? listBody(charges) : undefined);
+    const openPayments = async () => {
+      const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+      await page.settle();
+      return page;
+    };
+    const viewButton = (page, name) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${name}:`));
+    // The status dropdown, changed the way the Staff accounts form's is.
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // What the list area says, read the way a person would. The heading is
+    // the one h2 outside the View panel: the totals line since section O, the
+    // "{n} charges" heading before it.
+    const listView = (page) => {
+      const text = root().textContent;
+      return {
+        heading: page.queryAll('h2').find((h) => !h.closest('.pay-panel'))?.textContent ?? null,
+        error: page.queryAll('[role="alert"]').map((el) => el.textContent)
+          .find((t) => t.startsWith('Could not load the charges')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.payments-table tbody tr').map((tr) => tr.querySelector('strong')?.textContent),
+        zero: text.includes('0 charges'),
+        empty: /No charges (awaiting verification|here)/.test(text),
+        loading: text.includes('Loading charges…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing to
+    // verify": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Charges' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Charges' && v.rows.length === 0
+      && !v.zero && !v.empty;
+    const said = (v) => JSON.stringify(v);
+    const callsSaid = () => net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`).join(', ');
+    let paySoFar;
+
+    // a. A failure with the server's own message.
+    seedSession(VALID);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    const down = await openPayments();
+    const downView = listView(down);
+    check('a failed load shows "Could not load the charges: Network down", with a Try again button',
+      downView.error === 'Could not load the charges: Network down' && downView.tryAgain, said(downView));
+    check('  and no rows, no "0 charges", no "No charges awaiting verification": it cannot read as nothing to verify',
+      errorOnly(downView), said(downView));
+    await down.unmount();
+
+    // b. No message from the server: unreachable, or an answer without one.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const unreachable = await openPayments();
+    const unreachableView = listView(unreachable);
+    check('a server that cannot be reached gets the plain fallback, "Could not load the charges: the server did not respond"',
+      unreachableView.error === 'Could not load the charges: the server did not respond' && errorOnly(unreachableView)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachableView));
+    await unreachable.unmount();
+
+    seedSession(VALID);
+    resetNet(502);
+    const bare = await openPayments();
+    const bareView = listView(bare);
+    check('  so does an error answer with no message in it, never "Request failed (502)"',
+      bareView.error === 'Could not load the charges: the server did not respond' && errorOnly(bareView)
+        && !/Request failed/.test(root().textContent), said(bareView));
+    await bare.unmount();
+
+    // c. Try again repeats the SAME load: here the Paid list, which failed.
+    seedSession(VALID);
+    resetNet(200, listOf(UNPAID_TWO));
+    const again = await openPayments();
+    net.fail = true;
+    await choose(again, 'PAID');
+    const failedPaid = listView(again);
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await clickIf(again, tryAgainButton(again));
+    const retrying = listView(again);
+    const retryCall = net.calls[paySoFar];
+    release(0, 200, listBody(PAID_TWO));
+    await again.settle();
+    const retried = listView(again);
+    check('Try again repeats the same load (status=PAID), showing the loading state, not the error, while it is out',
+      errorOnly(failedPaid) && net.calls.length === paySoFar + 1 && isList(retryCall)
+        && retryCall.url.endsWith('status=PAID') && loadingOnly(retrying),
+      `${said(failedPaid)} then ${retryCall?.url ?? 'no request'} ${said(retrying)}`);
+    check('  and when it answers with 2 charges the error is gone: "2 charges · ₱200.00 paid" and both rows',
+      !retried.error && !retried.tryAgain && retried.heading === '2 charges · ₱200.00 paid'
+        && retried.rows.join('|') === 'Carla Santos|Dino Tan', said(retried));
+    await again.unmount();
+
+    // d. Zero charges, loaded successfully, is a real empty state.
+    seedSession(VALID);
+    resetNet(200, listOf([]));
+    const none = await openPayments();
+    const noneView = listView(none);
+    check('a successful load of no charges still shows "0 charges" and "No charges awaiting verification.", and no error',
+      noneView.heading === '0 charges' && /No charges awaiting verification\./.test(root().textContent)
+        && !noneView.error && !noneView.tryAgain && noneView.rows.length === 0, said(noneView));
+    await none.unmount();
+
+    // e. Changing the status after a failure, and Refresh after one.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const switched = await openPayments();
+    const beforeSwitch = listView(switched);
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await choose(switched, 'PAID');
+    const switching = listView(switched);
+    const switchCall = net.calls[paySoFar];
+    release(0, 200, listBody(PAID_TWO));
+    await switched.settle();
+    const switchedView = listView(switched);
+    check('changing the status after a failure loads that status and clears the error: the loading state shows',
+      errorOnly(beforeSwitch) && isList(switchCall) && switchCall.url.endsWith('status=PAID') && loadingOnly(switching),
+      `${switchCall?.url ?? 'no request'} ${said(switching)}`);
+    check('  and its answer replaces it', switchedView.heading === '2 charges · ₱200.00 paid' && !switchedView.error
+      && switchedView.rows.join('|') === 'Carla Santos|Dino Tan', said(switchedView));
+    await switched.unmount();
+
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    const refreshed = await openPayments();
+    net.fail = false;
+    net.hold = true;
+    paySoFar = net.calls.length;
+    await clickIf(refreshed, buttonNamed(root(), 'Refresh'));
+    const refreshing = listView(refreshed);
+    const refreshCall = net.calls[paySoFar];
+    release(0, 200, listBody(UNPAID_TWO));
+    await refreshed.settle();
+    const refreshedView = listView(refreshed);
+    check('Refresh after a failure clears the error, shows the loading state, then the list',
+      isList(refreshCall) && refreshCall.url.endsWith('status=UNPAID') && loadingOnly(refreshing)
+        && refreshedView.heading === '2 charges · ₱200.00 unpaid' && !refreshedView.error, `${said(refreshing)} then ${said(refreshedView)}`);
+    await refreshed.unmount();
+
+    // f. A reload that fails after Record payment, then after Re-check. The
+    // stub answers the POST and makes the reload after it fail.
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'GET' && url.includes(LIST)) return listBody(UNPAID_TWO);
+      if (method === 'POST' && url.endsWith('/charges/41/verify')) {
+        net.fail = true;
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 77 } };
+      }
+      return undefined;
+    });
+    const recorded = await openPayments();
+    await clickIf(recorded, viewButton(recorded, 'Ana Cruz'));
+    if (recorded.query('form')?.closest('.pay-panel')) await recorded.submit();
+    await recorded.settle();
+    const recordedView = listView(recorded);
+    check('a reload that fails after Record payment shows the load error: not the old list, not "0 charges"',
+      errorOnly(recordedView) && !recorded.query('.pay-panel'), said(recordedView));
+    check('  the Record message above it is unchanged, and the stub answered every request',
+      recorded.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #77)'
+        && callsSaid() === 'GET /charges?status=UNPAID, POST /charges/41/verify, GET /charges?status=UNPAID',
+      `${JSON.stringify(recorded.query('.alert.success')?.textContent ?? null)}; ${callsSaid()}`);
+    await recorded.unmount();
+
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'GET' && url.includes(LIST)) return listBody(UNPAID_TWO);
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/41')) {
+        net.fail = true;
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return undefined;
+    });
+    const rechecked = await openPayments();
+    await clickIf(rechecked, viewButton(rechecked, 'Ana Cruz'));
+    await clickIf(rechecked, buttonNamed(root(), 'Re-check with PayMongo'));
+    await rechecked.settle();
+    const recheckedView = listView(rechecked);
+    check('a reload that fails after Re-check shows the load error, and the panel closes as before',
+      errorOnly(recheckedView) && !rechecked.query('.pay-panel'), said(recheckedView));
+    check('  the Re-check message above it is unchanged, and the stub answered every request',
+      rechecked.query('.alert.success')?.textContent === 'PayMongo confirmed the payment. The charge is now paid.'
+        && callsSaid() === 'GET /charges?status=UNPAID, POST /payments/gcash/reconcile/41, GET /charges?status=UNPAID',
+      `${JSON.stringify(rechecked.query('.alert.success')?.textContent ?? null)}; ${callsSaid()}`);
+    await rechecked.unmount();
+
+    // g. An older answer that arrives last must not replace a newer one.
+    seedSession(VALID);
+    resetNet(200);
+    net.hold = true;
+    const raced = await openPayments();
+    release(0, 200, listBody(UNPAID_TWO));
+    await raced.settle();
+    await choose(raced, 'PAID');
+    await choose(raced, 'VOID');
+    release(2, 200, listBody(VOID_ONE));
+    await raced.settle();
+    release(1, 200, listBody(PAID_TWO));
+    await raced.settle();
+    const racedView = listView(raced);
+    check('an older answer that arrives last cannot replace the newer list: Void keeps its one charge',
+      raced.query('.list-head select')?.value === 'VOID' && racedView.heading === '1 charge · ₱100.00 void'
+        && racedView.rows.join('|') === 'Elsa Uy', said(racedView));
+    await choose(raced, 'all');
+    await choose(raced, 'UNPAID');
+    release(4, 200, listBody(UNPAID_TWO));
+    await raced.settle();
+    release(3, 500, { error: 'boom' });
+    await raced.settle();
+    const racedLater = listView(raced);
+    check('  nor can an older load that fails last put its error over the newer list',
+      racedLater.heading === '2 charges · ₱200.00 unpaid' && racedLater.rows.join('|') === 'Ana Cruz|Ben Reyes' && !racedLater.error,
+      said(racedLater));
+    await raced.unmount();
+  }
+
+  // =========================================================================
+  // N. Payments: the Method column says how each paid charge was paid
+  // =========================================================================
+  // The column used to show what a RESIDENT declared ("Onsite", "GCash ref")
+  // or that a checkout had started, which says nothing about how a paid charge
+  // was actually paid. It now reads the charge's payment record: "Paid online"
+  // for a payment nobody received, which only PayMongo makes; "Cash" or
+  // "GCash" for one a staff member recorded. A paid charge with no payment row
+  // is "No fee" when its amount is 0, because approval marks a PHP 0 charge
+  // paid without one, and "No record" otherwise. The amount may arrive as a
+  // number or a numeric string, and a missing, null or blank one is never 0.
+  // An unpaid or void charge shows "Online pending" while a PayMongo checkout
+  // is open, otherwise a dash. methodOf is checked on its own, case by case,
+  // then through the real page, whose View panel shows the record itself. The
+  // clock is UTC for this section, so "Paid on" must be Manila time by the
+  // page's own doing, not because this machine is in Manila. Every request is
+  // answered by the fetch stub.
+  console.log('\n--- Payments: the Method column says how each paid charge was paid ---');
+  {
+    const previousTZ = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const LIST = '/charges?status=';
+    // Recorders in the payload's real shape: username, role and profile name.
+    const TREASURER = { username: 'treasurer_one', role: 'treasurer',
+      profiles: { first_name: 'Teresa', middle_name: 'Lim', last_name: 'Ocampo', suffix: null } };
+    const NO_PROFILE = { username: 'secretary_one', role: 'secretary', profiles: null };
+    const payment = (id, method, recorderId, recorder, createdAt, reference = null) => ({
+      payment_id: id, payment_method: method, reference_no: reference, created_at: createdAt,
+      received_by_user_id: recorderId, recorder,
+    });
+    const PAY_ID = 'pay_tEsT51aBcDeFgHiJkLmNoPqR'; // 28 characters, as a real PayMongo id is
+    // A document fee in the list's real shape, as in section M, paid unless
+    // `extra` says otherwise.
+    const charge = (id, first, last, extra = {}) => ({
+      charge_id: id, charge_type: 'DOCUMENT', amount: 100, status: 'PAID', created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: { user_id: 900 + id, username: `res_${id}`, profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      document_requests: { request_id: 700 + id, purpose: 'Employment', status: 'approved', document_types: { name: 'Barangay Clearance' },
+        resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null } },
+      rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    // The same charge with no amount key at all.
+    const withoutAmount = (c) => {
+      delete c.amount;
+      return c;
+    };
+    // Every case, with the label it must get, written by hand.
+    const CASES = [
+      { name: 'a PayMongo payment (no recorder)', want: 'Paid online', c: charge(51, 'Lorna', 'Abad', {
+        paymongo_session_id: 'cs_test_51', paymongo_payment_id: PAY_ID,
+        payments: [payment(501, 'gcash', null, null, '2026-10-06T02:15:00+00:00', PAY_ID)] }) },
+      { name: 'cash recorded by a staff member', want: 'Cash', c: charge(52, 'Mario', 'Bautista', {
+        declared_method: 'onsite', declared_at: '2026-10-05T03:00:00+00:00',
+        payments: [payment(502, 'onsite', 12, TREASURER, '2026-10-06T06:40:00+00:00')] }) },
+      { name: 'GCash recorded by a staff member', want: 'GCash', c: charge(53, 'Nena', 'Cortez', {
+        declared_method: 'gcash', declared_reference: '1029384756', declared_at: '2026-10-05T04:00:00+00:00',
+        payments: [payment(503, 'gcash', 3, NO_PROFILE, '2026-10-07T01:05:00+00:00', '1029384756')] }) },
+      { name: 'PAID with no payment row, amount 100', want: 'No record', c: charge(54, 'Oscar', 'Dizon') },
+      { name: 'UNPAID with an open PayMongo session', want: 'Online pending', c: charge(55, 'Pilar', 'Estrada', {
+        status: 'UNPAID', paymongo_session_id: 'cs_test_55' }) },
+      { name: 'UNPAID with no session', want: '—', c: charge(56, 'Quintin', 'Fajardo', { status: 'UNPAID' }) },
+      { name: 'UNPAID declared onsite (a dash, not "Cash")', want: '—', c: charge(57, 'Rosa', 'Gomez', {
+        status: 'UNPAID', declared_method: 'onsite', declared_at: '2026-10-08T00:30:00+00:00' }) },
+      { name: 'VOID with an open PayMongo session', want: 'Online pending', c: charge(58, 'Santi', 'Hizon', {
+        status: 'VOID', paymongo_session_id: 'cs_test_58' }) },
+      { name: 'VOID with no session', want: '—', c: charge(59, 'Tess', 'Ilagan', { status: 'VOID' }) },
+      { name: 'two payment rows, the latest second', want: 'Cash', c: charge(60, 'Ugo', 'Jacinto', {
+        paymongo_session_id: 'cs_test_60', paymongo_payment_id: 'pay_test_60',
+        payments: [payment(600, 'gcash', null, null, '2026-10-02T01:00:00+00:00', 'pay_test_60'),
+          payment(601, 'onsite', 12, TREASURER, '2026-10-03T01:00:00+00:00')] }) },
+      { name: 'two payment rows, the latest first', want: 'GCash', c: charge(61, 'Vilma', 'Katigbak', {
+        payments: [payment(611, 'gcash', 12, TREASURER, '2026-10-04T01:00:00+00:00', '5647382910'),
+          payment(610, 'onsite', 12, TREASURER, '2026-10-01T01:00:00+00:00')] }) },
+      { name: 'an unknown method, shown as it is', want: 'cheque', c: charge(62, 'Wena', 'Lacson', {
+        payments: [payment(620, 'cheque', 12, TREASURER, '2026-10-06T01:00:00+00:00', 'CHK-0042')] }) },
+      { name: 'an empty method, never blank', want: '—', c: charge(63, 'Xavier', 'Manalo', {
+        payments: [payment(630, '', 12, TREASURER, '2026-10-06T01:30:00+00:00')] }) },
+      // Approval creates a PHP 0 charge PAID with no payment row, so it had no
+      // fee to pay. Only a paid charge with an amount above 0 and no row is
+      // missing its record, and an amount that is not a number is never 0.
+      { name: 'PAID, no payment row, amount 0', want: 'No fee', c: charge(64, 'Yolanda', 'Navarro', { amount: 0 }) },
+      { name: 'PAID, no payment row, amount "0.00" (a string)', want: 'No fee', c: charge(65, 'Zaldy', 'Ortega', { amount: '0.00' }) },
+      { name: 'PAID, no payment row, amount "0" (a string)', want: 'No fee', c: charge(66, 'Alma', 'Pascual', { amount: '0' }) },
+      { name: 'PAID, no payment row, amount 0.01', want: 'No record', c: charge(67, 'Bernie', 'Quiambao', { amount: 0.01 }) },
+      { name: 'PAID, no payment row, amount null', want: 'No record', c: charge(68, 'Carmen', 'Ramos', { amount: null }) },
+      { name: 'PAID, no payment row, no amount at all', want: 'No record', c: withoutAmount(charge(69, 'Danilo', 'Salcedo')) },
+      { name: 'PAID, no payment row, amount "" (blank, which Number() reads as 0)', want: 'No record',
+        c: charge(70, 'Edna', 'Tolentino', { amount: '' }) },
+      { name: 'PAID, amount 0, a PayMongo payment row', want: 'Paid online', c: charge(71, 'Fely', 'Umali', {
+        amount: 0, paymongo_session_id: 'cs_test_71', paymongo_payment_id: 'pay_test_71',
+        payments: [payment(710, 'gcash', null, null, '2026-10-06T03:00:00+00:00', 'pay_test_71')] }) },
+      { name: 'PAID, amount 0, cash a staff member recorded', want: 'Cash', c: charge(72, 'Gardo', 'Villanueva', {
+        amount: 0, payments: [payment(720, 'onsite', 12, TREASURER, '2026-10-06T04:00:00+00:00')] }) },
+      { name: 'PAID, amount 0, GCash a staff member recorded', want: 'GCash', c: charge(73, 'Hilda', 'Yap', {
+        amount: 0, payments: [payment(730, 'gcash', 12, TREASURER, '2026-10-06T05:00:00+00:00', '3141592653')] }) },
+      { name: 'UNPAID, amount 0, no session (a dash, not "No fee")', want: '—', c: charge(74, 'Isko', 'Zamora', {
+        status: 'UNPAID', amount: 0 }) },
+      { name: 'VOID, amount 0, no session (a dash, not "No fee")', want: '—', c: charge(75, 'Jun', 'Aquino', {
+        status: 'VOID', amount: 0 }) },
+    ];
+    const caseOf = (id) => CASES.find((k) => k.c.charge_id === id);
+
+    // a. methodOf on its own.
+    const methodOf = globalThis.methodOf;
+    for (const { name, want, c } of CASES) {
+      let got;
+      try { got = typeof methodOf === 'function' ? methodOf(c) : 'methodOf is not exported'; } catch (e) { got = `threw: ${e.message}`; }
+      check(`methodOf: ${name} = "${want}"`, got === want, String(JSON.stringify(got)));
+    }
+
+    // b. The real page. The list answer holds the cases of the status asked
+    // for, as the server's does.
+    const listAnswer = (url) => {
+      if (!url.includes(LIST)) return undefined;
+      const status = url.split(LIST)[1].toUpperCase();
+      const charges = CASES.map((k) => k.c).filter((c) => status === 'ALL' || c.status === status);
+      return { charges, total: charges.length };
+    };
+    const nameOf = (c) => `${c.document_requests.resident_records.first_name} ${c.document_requests.resident_records.last_name}`;
+    const viewButton = (page, c) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${nameOf(c)}:`));
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // Each case's row, found by its resident, must show `want` in the cell the
+    // phone card labels "Method", and the list must hold exactly those rows.
+    const labelsMatch = (page, cases) => {
+      const rows = page.queryAll('table.payments-table tbody tr').map((tr) => ({
+        name: tr.querySelector('strong')?.textContent ?? null,
+        method: tr.querySelector('td[data-label="Method"]')?.textContent ?? null,
+        fourth: tr.children[3]?.textContent ?? null,
+      }));
+      const wrong = cases.flatMap(({ want, c }) => {
+        const row = rows.find((r) => r.name === nameOf(c));
+        if (row?.method === want) return [];
+        const got = !row ? 'no row' : row.method === null ? `no Method cell, fourth column "${row.fourth}"` : `"${row.method}"`;
+        return [`${nameOf(c)}: ${got}, want "${want}"`];
+      });
+      return {
+        ok: rows.length === cases.length && wrong.length === 0,
+        detail: `${rows.length} row(s) for ${cases.length} case(s)${wrong.length ? `; ${wrong.join('; ')}` : ''}`,
+      };
+    };
+    // The View panel's rows as label → value, any run of whitespace as one
+    // space (the time has a narrow no-break space before AM and PM).
+    const panelRows = (page) => {
+      const out = {};
+      let label = null;
+      for (const el of page.query('.pay-panel dl.pay-panel-list')?.children || []) {
+        if (el.tagName === 'DT') label = el.textContent;
+        else if (label !== null) {
+          out[label] = el.textContent.replace(/\s+/g, ' ').trim();
+          label = null;
+        }
+      }
+      return out;
+    };
+    const RECORD = ['Paid on', 'Method', 'Reference', 'Recorded by'];
+    const noRecordRows = (rows) => RECORD.every((label) => !(label in rows));
+    const panelText = (page) => page.query('.pay-panel')?.textContent ?? '';
+    const readOnly = (page) => page.query('.pay-panel .pay-panel-note')?.textContent === 'Read-only' && !page.query('.pay-panel form');
+    const said = (rows) => JSON.stringify(rows);
+
+    seedSession(VALID);
+    resetNet(200, listAnswer);
+    const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+    await page.settle();
+    const headers = page.queryAll('table.payments-table thead th').map((th) => th.textContent);
+    check('the column header reads "Method", and no header reads "Declared"',
+      headers.includes('Method') && !headers.includes('Declared'), headers.join(' | '));
+    const needs = labelsMatch(page, CASES.filter((k) => k.c.status === 'UNPAID'));
+    check('Needs verification: each unpaid row shows "Online pending" or "—" under Method', needs.ok, needs.detail);
+    await choose(page, 'all');
+    const everyRow = labelsMatch(page, CASES);
+    check('All charges: each row shows its own label under Method', everyRow.ok, everyRow.detail);
+    const cardLabels = page.queryAll('table.payments-table tbody td[data-label]').map((td) => td.getAttribute('data-label'));
+    check('  and the phone card labels that line "Method", never "Declared"',
+      cardLabels.filter((l) => l === 'Method').length === CASES.length && !cardLabels.includes('Declared'),
+      `${cardLabels.filter((l) => l === 'Method').length} "Method", ${cardLabels.filter((l) => l === 'Declared').length} "Declared"`);
+    // One row's Method cell, found by its resident.
+    const methodCell = (c) => page.queryAll('table.payments-table tbody tr')
+      .find((tr) => tr.querySelector('strong')?.textContent === nameOf(c))
+      ?.querySelector('td[data-label="Method"]')?.textContent ?? null;
+    check('All charges: a paid PHP 0 charge with no payment row reads "No fee" under Method, a paid PHP 100 one "No record"',
+      methodCell(caseOf(64).c) === 'No fee' && methodCell(caseOf(54).c) === 'No record',
+      `${JSON.stringify(methodCell(caseOf(64).c))}, ${JSON.stringify(methodCell(caseOf(54).c))}`);
+
+    // c. The View panel of each kind of charge.
+    const openFor = async (id) => {
+      await clickIf(page, viewButton(page, caseOf(id).c));
+      return panelRows(page);
+    };
+    const closeIt = () => clickIf(page, page.query('.pay-panel button[aria-label="Close"]'));
+
+    let rows = await openFor(51);
+    check('a PayMongo payment\'s panel: Paid on in Manila time (02:15 UTC is 10:15 AM), Method "Paid online", '
+        + 'its pay_ id as the reference, recorded by "PayMongo (automatic)"',
+      rows['Paid on'] === 'Oct 6, 2026, 10:15 AM' && rows.Method === 'Paid online' && rows.Reference === PAY_ID
+        && rows['Recorded by'] === 'PayMongo (automatic)', said(rows));
+    check('  the old "Payment: Paid." and "Online payment" rows are gone, and the panel stays read-only',
+      !('Payment' in rows) && !('Online payment' in rows) && readOnly(page), said(rows));
+    await closeIt();
+
+    rows = await openFor(52);
+    check('cash a staff member recorded: Method "Cash", Reference "—", recorded by the staff member\'s full name',
+      rows['Paid on'] === 'Oct 6, 2026, 2:40 PM' && rows.Method === 'Cash' && rows.Reference === '—'
+        && rows['Recorded by'] === 'Teresa Lim Ocampo' && readOnly(page), said(rows));
+    check('  and what the resident declared still shows beside it', rows['Declared payment'] === 'Cash (on-site)'
+      && 'Declared on' in rows, said(rows));
+    await closeIt();
+
+    rows = await openFor(53);
+    check('GCash a staff member recorded: Method "GCash", the typed reference, and @username when there is no profile name',
+      rows['Paid on'] === 'Oct 7, 2026, 9:05 AM' && rows.Method === 'GCash' && rows.Reference === '1029384756'
+        && rows['Recorded by'] === '@secretary_one', said(rows));
+    await closeIt();
+
+    rows = await openFor(60);
+    check('two payment rows: the panel shows the latest, as the column does',
+      rows['Paid on'] === 'Oct 3, 2026, 9:00 AM' && rows.Method === 'Cash' && rows.Reference === '—'
+        && rows['Recorded by'] === 'Teresa Lim Ocampo', said(rows));
+    await closeIt();
+
+    rows = await openFor(54);
+    check('a paid PHP 100 charge with no payment row: "Payment: No payment record on file." in place of the record, still read-only',
+      rows.Payment === 'No payment record on file.' && noRecordRows(rows) && !('Online payment' in rows) && readOnly(page),
+      said(rows));
+    await closeIt();
+
+    rows = await openFor(64);
+    check('a paid PHP 0 charge with no payment row: "Payment: No payment needed (no fee).", no record rows, still read-only',
+      rows.Payment === 'No payment needed (no fee).' && !panelText(page).includes('No payment record on file.')
+        && noRecordRows(rows) && readOnly(page), said(rows));
+    await closeIt();
+
+    rows = await openFor(65);
+    check('  the same when the amount arrives as the string "0.00"',
+      rows.Payment === 'No payment needed (no fee).' && noRecordRows(rows), said(rows));
+    await closeIt();
+
+    rows = await openFor(72);
+    check('a paid PHP 0 charge WITH a payment row shows that record (Method "Cash") and no "Payment" line',
+      rows.Method === 'Cash' && rows['Recorded by'] === 'Teresa Lim Ocampo' && !('Payment' in rows), said(rows));
+    await closeIt();
+
+    rows = await openFor(57);
+    check('an unpaid charge\'s panel is unchanged: "Declared payment: Cash (on-site)", "Declared on" and the Record form',
+      rows['Declared payment'] === 'Cash (on-site)' && 'Declared on' in rows && !!page.query('.pay-panel form')
+        && noRecordRows(rows) && !page.query('.pay-panel .pay-panel-note'), said(rows));
+    await closeIt();
+
+    rows = await openFor(55);
+    check('  one with an open checkout still says "GCash online — started, not yet confirmed" and offers Re-check',
+      rows['Online payment'] === 'GCash online — started, not yet confirmed' && noRecordRows(rows)
+        && !!buttonNamed(root(), 'Re-check with PayMongo'), said(rows));
+    await closeIt();
+
+    rows = await openFor(59);
+    check('a void charge\'s panel still says "Void.", with no payment record',
+      rows.Payment === 'Void.' && noRecordRows(rows) && readOnly(page), said(rows));
+    await closeIt();
+    await page.unmount();
+
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
+  }
+
+  // =========================================================================
+  // O. Payments: search, type tabs, totals and paging
+  // =========================================================================
+  // The page listed every charge of a status in one long table. It now has a
+  // search box that filters as you type (case and accents ignored, every word
+  // required, in any order) over the payer name as shown, the @username, the
+  // charge number, the references the View panel can show and the "For" text,
+  // but never the purpose; type tabs whose counts follow the search; a totals
+  // line over EVERY matching charge, summed in whole centavos, not just the
+  // page shown; and pages, 25 a page unless Rows per page says otherwise (the
+  // pager itself is section P, below). Filters start fresh on every visit and
+  // live through Refresh, Record payment and Re-check. The pure helpers
+  // (utils/chargeSearch.js, chargeTotals.js, paging.js) are checked case by
+  // case, then the real page against 64 stubbed charges: 30 waiting, 26 paid
+  // and 8 void. Every request is answered by the fetch stub.
+  console.log('\n--- Payments: search, type tabs, totals and paging ---');
+  {
+    const S = globalThis.chargeSearch || {};
+    const T = globalThis.chargeTotals || {};
+    const P = globalThis.paging || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const LIST = '/charges?status=';
+    const PAY_ID = 'pay_tEsT51aBcDeFgHiJkLmNoPqR';
+
+    // Charges in the list's real shape (sections M and N). NAME holds each
+    // one's payer name as the page shows it, written by hand.
+    const NAME = new Map();
+    const who = (first, middle, last) => ({ first_name: first, middle_name: middle, last_name: last, suffix: null });
+    const STAFF = { username: 'treasurer_one', role: 'treasurer', profiles: who('Teresa', 'Lim', 'Ocampo') };
+    const paidRow = (id, method, reference, auto = false) => [{
+      payment_id: 5000 + id, payment_method: method, reference_no: reference, created_at: '2026-10-06T01:00:00+00:00',
+      received_by_user_id: auto ? null : 12, recorder: auto ? null : STAFF,
+    }];
+    const charge = (id, type, status, amount, extra) => ({
+      charge_id: id, charge_type: type, amount, status, created_at: '2026-10-05T01:00:00+00:00',
+      declared_method: null, declared_reference: null, declared_at: null,
+      paymongo_session_id: null, paymongo_payment_id: null, household_id: null,
+      payer: null, document_requests: null, rental_requests: null, events: null, household_records: null, payments: [],
+      ...extra,
+    });
+    const docOf = (id, status, amount, [first, middle, last], documentType, { purpose = 'Employment', ...extra } = {}) => {
+      NAME.set(id, [first, middle, last].filter(Boolean).join(' '));
+      return charge(id, 'DOCUMENT', status, amount, {
+        payer: { user_id: 900 + id, username: `res_${id}`, profiles: who(first, middle, last) },
+        document_requests: { request_id: 700 + id, purpose, status: 'approved', document_types: { name: documentType },
+          resident_records: { resident_id: 800 + id, ...who(first, middle, last) } },
+        ...extra,
+      });
+    };
+    // `person` is [first, last] for a resident, or { guest } for a borrower
+    // from another barangay, who has no account and no resident record.
+    const rentalOf = (id, status, amount, person, item, quantity, extra = {}) => {
+      const guest = Array.isArray(person) ? null : person.guest;
+      NAME.set(id, guest || person.join(' '));
+      return charge(id, 'RENTAL', status, amount, {
+        payer: guest ? null : { user_id: 900 + id, username: `res_${id}`, profiles: who(person[0], null, person[1]) },
+        rental_requests: { request_id: 600 + id, quantity_requested: quantity, start_datetime: '2026-10-20T00:00:00+00:00',
+          end_datetime: '2026-10-20T08:00:00+00:00', status: 'confirmed', resident_id: guest ? null : 800 + id,
+          outside_borrower_name: guest, rental_items: { name: item },
+          resident_records: guest ? null : { resident_id: 800 + id, ...who(person[0], null, person[1]) } },
+        ...extra,
+      });
+    };
+    // A household's fine, with no account behind it, named by its head.
+    const fineOf = (id, status, amount, head, title, extra = {}) => {
+      NAME.set(id, head);
+      return charge(id, 'FINE', status, amount, {
+        household_id: id,
+        events: { event_id: 400 + id, title, start_datetime: '2026-10-01T00:00:00+00:00', end_datetime: '2026-10-01T08:00:00+00:00' },
+        household_records: { household_id: id, address: 'Purok 2, Ubujan', head_name: head },
+        ...extra,
+      });
+    };
+
+    // a. Search, on its own. `shown` is what the page shows for the charge,
+    // its payer name and its "For" text, written here by hand.
+    const textOf = (c, name, forText) => attempt(() => S.chargeSearchText(c, { name, forText }));
+    const finds = (text, query) => attempt(() => S.matchesTerms(text, S.searchTerms(query)));
+    const sJuan = docOf(148, 'UNPAID', 50, ['Juan', 'Torralba', 'Dela Cruz'], 'Barangay Clearance', { purpose: 'Scholarship' });
+    // Two keys the list never sends, a contact number and an email: the
+    // search must read only the fields it is meant to, never the whole charge.
+    sJuan.document_requests.resident_records.contact_number = '09171234567';
+    sJuan.payer.email = 'juan@example.com';
+    const tJuan = textOf(sJuan, 'Juan Torralba Dela Cruz', 'Barangay Clearance');
+    const tNino = textOf(docOf(52, 'PAID', 100, ['Niño', null, 'Peñaflor'], 'Certificate of Residency',
+      { payments: paidRow(52, 'onsite', 'OR-2026-0042') }), 'Niño Peñaflor', 'Certificate of Residency');
+    const tOnline = textOf(docOf(53, 'PAID', 100, ['Maria', null, 'Santos'], 'Barangay Clearance', {
+      paymongo_session_id: 'cs_test_53', paymongo_payment_id: PAY_ID, payments: paidRow(53, 'gcash', PAY_ID, true) }),
+    'Maria Santos', 'Barangay Clearance');
+    const tDeclared = textOf(docOf(54, 'UNPAID', 50, ['Ana', null, 'Cruz'], 'Barangay Clearance',
+      { declared_method: 'gcash', declared_reference: '5550001234' }), 'Ana Cruz', 'Barangay Clearance');
+    const sGuest = rentalOf(55, 'UNPAID', 300, { guest: 'Lito Guest' }, 'Monobloc Chairs', 20);
+    const tGuest = textOf(sGuest, 'Lito Guest', 'Monobloc Chairs × 20');
+    const sFine = fineOf(56, 'UNPAID', 100, 'Rosa Lim', 'General Assembly');
+    const tFine = textOf(sFine, 'Rosa Lim', 'Missed General Assembly');
+    const sPlain = docOf(57, 'UNPAID', 50, ['Nino', null, 'Salazar'], 'Barangay Clearance');
+    const tPlain = textOf(sPlain, 'Nino Salazar', 'Barangay Clearance');
+    const TEXTS = [tJuan, tNino, tOnline, tDeclared, tGuest, tFine, tPlain];
+
+    check('search: accents are folded in the charge: "nino penaflor" finds Niño Peñaflor',
+      finds(tNino, 'nino penaflor') === true, said(tNino));
+    check('  and in the search: "Niño" and "NIÑO" find Nino Salazar',
+      finds(tPlain, 'Niño') === true && finds(tPlain, 'NIÑO') === true, said(tPlain));
+    check('search: every word is required, in any order: "cruz juan" and "dela JUAN" find Juan Torralba Dela Cruz, "juan reyes" does not',
+      finds(tJuan, 'cruz juan') === true && finds(tJuan, 'dela JUAN') === true && finds(tJuan, 'juan reyes') === false, said(tJuan));
+    check('search: every name part as shown: "torralba" (the middle name) finds him', finds(tJuan, 'torralba') === true);
+    check('search: the charge number with or without #: "148" and "#148" find charge #148, "#149" does not',
+      finds(tJuan, '148') === true && finds(tJuan, '#148') === true && finds(tJuan, '#149') === false);
+    check('search: the @username: "@res_148" and "res_148" find it',
+      finds(tJuan, '@res_148') === true && finds(tJuan, 'res_148') === true);
+    check('search: a payment reference, here an OR number: "OR-2026-0042", "or-2026" and "0042" find it',
+      finds(tNino, 'OR-2026-0042') === true && finds(tNino, 'or-2026') === true && finds(tNino, '0042') === true);
+    check('search: the pay_ id, in any case: "pay_tEsT51" and "PAY_TEST51ABC" find it',
+      finds(tOnline, 'pay_tEsT51') === true && finds(tOnline, 'PAY_TEST51ABC') === true, said(tOnline));
+    check('search: a declared GCash reference: "5550001234" finds it', finds(tDeclared, '5550001234') === true);
+    check('search: the For text: "clearance" (a document type), "monobloc" (a rental item), "general assembly" (an event title)',
+      finds(tJuan, 'clearance') === true && finds(tGuest, 'monobloc') === true && finds(tFine, 'general assembly') === true);
+    check('search: the name as shown for a guest borrower and a household head: "lito guest", "rosa lim"',
+      finds(tGuest, 'lito guest') === true && finds(tFine, 'rosa lim') === true);
+    check('search: the purpose is NOT searched: "scholarship" (his purpose) finds nothing', finds(tJuan, 'scholarship') === false);
+    check('search: a phone-like or email-like string finds nothing, not even one hidden in the charge: "09171234567", "juan@example.com"',
+      TEXTS.every((t) => finds(t, '09171234567') === false && finds(t, 'juan@example.com') === false));
+    check('search: an empty or blank search has no words and matches every charge',
+      said(attempt(() => S.searchTerms(''))) === '[]' && said(attempt(() => S.searchTerms('   '))) === '[]'
+        && TEXTS.every((t) => finds(t, '') === true && finds(t, '  ') === true));
+
+    // Tabs, on their own.
+    const tabList = attempt(() => S.TYPE_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('tabs: All, Documents, Rentals, Fines, in that order',
+      tabList === 'all:All | DOCUMENT:Documents | RENTAL:Rentals | FINE:Fines', said(tabList));
+    const counted = attempt(() => S.tabCounts([sJuan, sGuest, sFine, sPlain]));
+    check('tab counts: All plus one per type, over whatever list they are given',
+      counted?.all === 4 && counted.DOCUMENT === 2 && counted.RENTAL === 1 && counted.FINE === 1, said(counted));
+    const none = attempt(() => S.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count',
+      none?.all === 0 && none.DOCUMENT === 0 && none.RENTAL === 0 && none.FINE === 0, said(none));
+    check('inTab: All takes every charge, a type tab only its own type',
+      attempt(() => S.inTab(sGuest, 'all') && S.inTab(sGuest, 'RENTAL') && !S.inTab(sGuest, 'DOCUMENT') && !S.inTab(sFine, 'RENTAL')) === true);
+
+    // b. Totals, on their own.
+    const cents = (a) => attempt(() => T.toCentavos(a));
+    check('toCentavos: 0.1 is 10, 0.2 is 20, "100.50" is 10050, 1500 is 150000',
+      cents(0.1) === 10 && cents(0.2) === 20 && cents('100.50') === 10050 && cents(1500) === 150000,
+      said([cents(0.1), cents(0.2), cents('100.50'), cents(1500)]));
+    check('  a missing, null, blank or non-numeric amount adds 0',
+      cents(undefined) === 0 && cents(null) === 0 && cents('') === 0 && cents('abc') === 0);
+    const sum = attempt(() => T.sumCentavos([{ amount: 0.1 }, { amount: 0.2 }]));
+    check('sums are whole centavos: 0.1 + 0.2 is exactly 30, not 30.000000000000004',
+      sum === 30 && Number.isInteger(sum), String(sum));
+    const peso = (c) => attempt(() => T.formatPeso(c));
+    check('formatPeso: thousands separators and two decimals: ₱1,500.00, ₱10,549.00, ₱1,234,567.89, ₱0.30, ₱0.05, ₱0.00',
+      peso(150000) === '₱1,500.00' && peso(1054900) === '₱10,549.00' && peso(123456789) === '₱1,234,567.89'
+        && peso(30) === '₱0.30' && peso(5) === '₱0.05' && peso(0) === '₱0.00',
+      said([peso(150000), peso(1054900), peso(123456789), peso(30), peso(5), peso(0)]));
+
+    const line = (args) => attempt(() => T.totalsLine(args));
+    const owing = (status, list) => list.map((amount, i) => charge(9000 + i, 'DOCUMENT', status, amount, {}));
+    // A paid charge: cash or GCash a staff member recorded, a PayMongo
+    // payment, or no payment row at all.
+    const paidWith = (id, amount, how) => charge(id, 'DOCUMENT', 'PAID', amount, {
+      payments: how === 'none' ? [] : paidRow(id, how === 'online' ? 'gcash' : how, null, how === 'online') });
+    const UNPAID14 = owing('UNPAID', [...Array(13).fill(100), 1050]);
+    let got = line({ status: 'UNPAID', shown: UNPAID14, received: 14, total: 14, filtered: false });
+    check('totals, Needs verification: "14 charges · ₱2,350.00 unpaid", and no second line',
+      got?.heading === '14 charges · ₱2,350.00 unpaid' && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [100]), received: 1, total: 1, filtered: false });
+    check('  one charge: "1 charge · ₱100.00 unpaid"', got?.heading === '1 charge · ₱100.00 unpaid', said(got));
+    const PAID6 = [paidWith(1, 100, 'onsite'), paidWith(2, 50.5, 'onsite'), paidWith(3, 250, 'gcash'),
+      paidWith(4, 0.1, 'online'), paidWith(5, 0.2, 'online'), paidWith(6, 0, 'none')];
+    got = line({ status: 'PAID', shown: PAID6, received: 6, total: 6, filtered: false });
+    check('totals, Paid: "6 charges · ₱400.80 paid", then "Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30" (0.1 + 0.2 online)',
+      got?.heading === '6 charges · ₱400.80 paid' && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30', said(got));
+    check('  a No fee charge is never listed, and "No payment record" only appears when there is one',
+      typeof got?.detail === 'string' && !got.detail.includes('No fee') && !got.detail.includes('No payment record'), said(got));
+    got = line({ status: 'PAID', shown: [...PAID6, paidWith(7, 1500, 'none')], received: 7, total: 7, filtered: false });
+    check('  with a paid PHP 1,500 charge that has no payment record: "· No payment record ₱1,500.00" at the end',
+      got?.heading === '7 charges · ₱1,900.80 paid'
+        && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30 · No payment record ₱1,500.00', said(got));
+    got = line({ status: 'VOID', shown: owing('VOID', [500, 500, 500, 500, 537, 100]), received: 6, total: 6, filtered: false });
+    check('totals, Void: "6 charges · ₱2,637.00 void", and no second line',
+      got?.heading === '6 charges · ₱2,637.00 void' && got.detail === null, said(got));
+    const MIXED = [paidWith(1, 100, 'onsite'), ...owing('UNPAID', [50, 0.3]), ...owing('VOID', [25.5])];
+    got = line({ status: 'all', shown: MIXED, received: 4, total: 4, filtered: false });
+    check('totals, All charges: "4 charges", then "₱100.00 paid · ₱50.30 unpaid · ₱25.50 void"',
+      got?.heading === '4 charges' && got.detail === '₱100.00 paid · ₱50.30 unpaid · ₱25.50 void', said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true });
+    check('totals with a search or tab: "3 of 14 charges match · ₱1,250.00 unpaid"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid' && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [100]), received: 14, total: 14, filtered: true });
+    check('  one match: "1 of 14 charges matches · ₱100.00 unpaid"', got?.heading === '1 of 14 charges matches · ₱100.00 unpaid', said(got));
+    got = line({ status: 'all', shown: [paidWith(1, 100, 'onsite'), ...owing('UNPAID', [50])], received: 64, total: 64, filtered: true });
+    check('  on All charges: "2 of 64 charges match", then the amounts of those two',
+      got?.heading === '2 of 64 charges match' && got.detail === '₱100.00 paid · ₱50.00 unpaid · ₱0.00 void', said(got));
+    got = line({ status: 'UNPAID', shown: [], received: 14, total: 14, filtered: true });
+    const nothing = line({ status: 'PAID', shown: [], received: 0, total: 0, filtered: false });
+    const nothingFiltered = line({ status: 'all', shown: [], received: 0, total: 0, filtered: true });
+    check('totals with nothing to show: "0 of 14 charges match" with no amount; an empty status view "0 charges", searched or not',
+      got?.heading === '0 of 14 charges match' && got.detail === null && nothing?.heading === '0 charges' && nothing.detail === null
+        && nothingFiltered?.heading === '0 charges' && nothingFiltered.detail === null, said([got, nothing, nothingFiltered]));
+    const THIRTY = owing('UNPAID', Array(30).fill(100));
+    got = line({ status: 'UNPAID', shown: THIRTY, received: 30, total: 1234, filtered: false });
+    const cappedSearch = line({ status: 'UNPAID', shown: THIRTY.slice(0, 2), received: 30, total: 1234, filtered: true });
+    check('totals over a capped list never claim to cover everything: "Newest 30 of 1,234 charges · ₱3,000.00 unpaid", '
+        + '"2 of the newest 30 charges match · ₱200.00 unpaid"',
+      got?.heading === 'Newest 30 of 1,234 charges · ₱3,000.00 unpaid'
+        && cappedSearch?.heading === '2 of the newest 30 charges match · ₱200.00 unpaid', said([got, cappedSearch]));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', Array(1000).fill(1)), received: 1000, total: 1000, filtered: false });
+    check('  counts get thousands separators too: "1,000 charges · ₱1,000.00 unpaid"',
+      got?.heading === '1,000 charges · ₱1,000.00 unpaid', said(got));
+
+    // c. Paging, on its own: 25 a page unless Rows per page says otherwise,
+    // the count line ("Showing 1 to 25 of 88 results"), the phone's "Page 1
+    // of 4", and which page numbers the pager draws.
+    const pg = (count, pageNo, size) => attempt(() => P.pageOf(count, pageNo, size));
+    const words = (p) => attempt(() => P.pagerText(p));
+    // The count line as the page writes it, from pagerText's three numbers.
+    const showing = (p) => {
+      const w = words(p);
+      return w && typeof w === 'object' ? `Showing ${w.from} to ${w.to} of ${w.of} results` : String(w);
+    };
+    check('paging: 25 a page unless chosen otherwise, and the choices are 10, 25, 50 and 100',
+      P.PAGE_SIZE === 25 && said(P.PAGE_SIZES) === '[10,25,50,100]', said([P.PAGE_SIZE, P.PAGE_SIZES]));
+    let p = pg(88, 1);
+    check('paging: 88 charges, page 1: rows 1-25 of 4 pages, "Showing 1 to 25 of 88 results", "Page 1 of 4", pager shown',
+      p?.page === 1 && p.pages === 4 && p.start === 0 && p.end === 25 && p.show === true
+        && showing(p) === 'Showing 1 to 25 of 88 results' && words(p)?.page === 'Page 1 of 4', said([p, words(p)]));
+    p = pg(88, 2);
+    check('  page 2: rows 26-50, "Showing 26 to 50 of 88 results"',
+      p?.start === 25 && p.end === 50 && showing(p) === 'Showing 26 to 50 of 88 results', said([p, words(p)]));
+    p = pg(88, 4);
+    check('  the last page holds what is left: rows 76-88, "Page 4 of 4", "Showing 76 to 88 of 88 results"',
+      p?.page === 4 && p.start === 75 && p.end === 88 && words(p)?.page === 'Page 4 of 4'
+        && showing(p) === 'Showing 76 to 88 of 88 results', said([p, words(p)]));
+    check('paging clamps: page 9 of 88 is page 4; page 4 of a list shrunk to 60 is page 3 ("Showing 51 to 60 of 60 results"); 0, -2 and NaN are page 1',
+      pg(88, 9)?.page === 4 && pg(60, 4)?.page === 3 && showing(pg(60, 4)) === 'Showing 51 to 60 of 60 results'
+        && pg(10, 0)?.page === 1 && pg(10, -2)?.page === 1 && pg(10, NaN)?.page === 1,
+      said([pg(88, 9)?.page, pg(60, 4)?.page, pg(10, 0)?.page, pg(10, -2)?.page, pg(10, NaN)?.page]));
+    check('the pager shows from 11 matches, even when they fit on one page: 10 hides it, 11 and 25 show it with one page, '
+        + '26 makes two, none hides it',
+      pg(10, 1)?.show === false && pg(11, 1)?.show === true && pg(11, 1).pages === 1 && pg(25, 1)?.show === true
+        && pg(25, 1).pages === 1 && pg(26, 1)?.show === true && pg(26, 1).pages === 2
+        && pg(0, 3)?.page === 1 && pg(0, 3).pages === 1 && pg(0, 3).show === false,
+      said([pg(10, 1), pg(11, 1), pg(25, 1), pg(26, 1), pg(0, 3)]));
+    p = pg(1000, 40);
+    check('  with thousands separators: "Page 40 of 40", "Showing 976 to 1,000 of 1,000 results"',
+      words(p)?.page === 'Page 40 of 40' && showing(p) === 'Showing 976 to 1,000 of 1,000 results', said(words(p)));
+    p = pg(89, 9, 10);
+    const firstOfTen = pg(89, 1, 10);
+    check('paging at 10 a page: 89 charges make 9 pages; page 1 is rows 1-10, page 9 rows 81-89, "Showing 81 to 89 of 89 results"',
+      firstOfTen?.pages === 9 && firstOfTen.start === 0 && firstOfTen.end === 10 && p?.page === 9 && p.start === 80 && p.end === 89
+        && showing(p) === 'Showing 81 to 89 of 89 results' && words(p)?.page === 'Page 9 of 9', said([firstOfTen, p, words(p)]));
+    check('  at 50 a page 89 charges make 2 pages, at 100 one page ("Showing 1 to 89 of 89 results")',
+      pg(89, 2, 50)?.pages === 2 && pg(89, 2, 50).start === 50 && pg(89, 1, 100)?.pages === 1
+        && showing(pg(89, 1, 100)) === 'Showing 1 to 89 of 89 results', said([pg(89, 2, 50), pg(89, 1, 100)]));
+    check('  a size that is not a whole number above 0 is 25: 0, -10, 2.5 and NaN all make 89 charges 4 pages',
+      [0, -10, 2.5, NaN].every((size) => pg(89, 1, size)?.pages === 4), said([0, -10, 2.5, NaN].map((size) => pg(89, 1, size)?.pages)));
+
+    // Which page numbers the pager draws: up to 7 pages, every number; above
+    // 7, exactly 7 slots, "…" standing for the pages left out.
+    const drawn = (current, pages) => {
+      const items = attempt(() => P.pageItems(current, pages));
+      return Array.isArray(items) ? items.map((it) => (it === P.GAP ? '…' : String(it))).join(' ') : String(items);
+    };
+    check('page numbers, 1 page: "1"', drawn(1, 1) === '1', drawn(1, 1));
+    check('page numbers, 7 pages: every number whatever the page; 1, 4 and 7 all draw "1 2 3 4 5 6 7"',
+      [1, 4, 7].every((c) => drawn(c, 7) === '1 2 3 4 5 6 7'), said([1, 4, 7].map((c) => drawn(c, 7))));
+    check('page numbers, 8 pages: 1 and 4 draw "1 2 3 4 5 … 8", 5 and 8 draw "1 … 4 5 6 7 8"',
+      drawn(1, 8) === '1 2 3 4 5 … 8' && drawn(4, 8) === '1 2 3 4 5 … 8' && drawn(5, 8) === '1 … 4 5 6 7 8'
+        && drawn(8, 8) === '1 … 4 5 6 7 8', said([1, 4, 5, 8].map((c) => drawn(c, 8))));
+    const TWENTY_ONE = {
+      1: '1 2 3 4 5 … 21', 2: '1 2 3 4 5 … 21', 4: '1 2 3 4 5 … 21', 5: '1 … 4 5 6 … 21', 11: '1 … 10 11 12 … 21',
+      17: '1 … 16 17 18 … 21', 18: '1 … 17 18 19 20 21', 21: '1 … 17 18 19 20 21',
+    };
+    const wrong21 = Object.entries(TWENTY_ONE).filter(([c, want]) => drawn(Number(c), 21) !== want)
+      .map(([c, want]) => `page ${c}: "${drawn(Number(c), 21)}", want "${want}"`);
+    check('page numbers, 21 pages: 1, 2 and 4 draw "1 2 3 4 5 … 21"; 5 "1 … 4 5 6 … 21"; 11, the middle, "1 … 10 11 12 … 21"; '
+        + '17 "1 … 16 17 18 … 21"; 18, the last but 3, and 21, the last, "1 … 17 18 19 20 21"',
+      wrong21.length === 0, said(wrong21));
+    // Every page of every list from 1 to 40 pages, against the rules the
+    // numbers keep whatever the window looks like.
+    const broken = [];
+    for (let pages = 1; pages <= 40; pages += 1) {
+      for (let current = 1; current <= pages; current += 1) {
+        const items = attempt(() => P.pageItems(current, pages));
+        const why = [];
+        if (!Array.isArray(items)) why.push(String(items));
+        else {
+          const nums = items.filter((it) => it !== P.GAP);
+          if (items.length > 7) why.push(`${items.length} slots`);
+          if (pages > 7 && items.length !== 7) why.push('not exactly 7 slots');
+          if (pages <= 7 && items.length !== pages) why.push('not every number');
+          if (items.some((it, i) => it === P.GAP && items[i + 1] === P.GAP)) why.push('two … in a row');
+          if (items[0] !== 1 || items[items.length - 1] !== pages) why.push('first or last page missing');
+          if (!items.includes(current)) why.push('current page missing');
+          if (nums.some((n) => !Number.isInteger(n))) why.push('a slot that is neither a page number nor …');
+          if (nums.some((n, i) => i > 0 && n <= nums[i - 1])) why.push('out of order');
+          if (items.some((it, i) => it === P.GAP && items[i + 1] - items[i - 1] < 3)) why.push('… for a single page');
+        }
+        if (why.length) broken.push(`page ${current} of ${pages}: ${why.join(', ')}`);
+      }
+    }
+    check('page numbers, every page of lists of 1 to 40 pages: at most 7 slots, exactly 7 above 7 pages, never two "…" in a row, '
+        + 'always the first, the last and the current page, in order, and every "…" stands for at least two pages',
+      broken.length === 0, `${broken.length} broken${broken.length ? `: ${said(broken.slice(0, 4))}` : ''}`);
+
+    // d. The real page, against 64 charges. 30 waiting: 18 documents at PHP
+    // 50, 8 rentals at 300, 4 fines at 100 (PHP 3,700). 26 paid: 14
+    // documents (one of them PHP 0) and 2 fines, cash, GCash and PayMongo, 10
+    // rentals by PayMongo (PHP 4,500). 8 void: 6 rentals at 500, a fine at
+    // 100, a document at 50 (PHP 3,150).
+    const UNPAID = [
+      docOf(148, 'UNPAID', 50, ['Juan', null, 'Dela Cruz'], 'Barangay Clearance', { purpose: 'Scholarship' }),
+      docOf(331, 'UNPAID', 50, ['Niño', null, 'Peñaflor'], 'Certificate of Residency'),
+      rentalOf(330, 'UNPAID', 300, ['Juan', 'Ramos'], 'Tent', 1, { paymongo_session_id: 'cs_test_330' }),
+      rentalOf(329, 'UNPAID', 300, { guest: 'Lito Guest' }, 'Monobloc Chairs', 20),
+      fineOf(328, 'UNPAID', 100, 'Rosa Lim', 'General Assembly'),
+      docOf(327, 'UNPAID', 50, ['Ana', null, 'Cruz'], 'Barangay Clearance',
+        { declared_method: 'gcash', declared_reference: '5550001234', declared_at: '2026-10-05T02:00:00+00:00' }),
+      ...['Alma', 'Berto', 'Celia', 'Dante', 'Elena', 'Fidel', 'Gina', 'Hector', 'Ines', 'Jaime', 'Karla', 'Leon', 'Mila',
+        'Nestor', 'Olga'].map((first, i) => docOf(300 + i, 'UNPAID', 50, [first, null, 'Abad'], 'Barangay Clearance')),
+      ...['Pablo', 'Quina', 'Rico', 'Sara', 'Tomas', 'Ursula'].map((first, i) =>
+        rentalOf(315 + i, 'UNPAID', 300, [first, 'Bello'], 'Tent', 1)),
+      ...['Victor Cano', 'Wilma Cano', 'Xenia Cano'].map((head, i) => fineOf(321 + i, 'UNPAID', 100, head, 'Clean-up Drive')),
+    ];
+    const PAID = [
+      docOf(340, 'PAID', 100, ['Carla', null, 'Santos'], 'Barangay Clearance', { payments: paidRow(340, 'onsite', 'OR-2026-0042') }),
+      docOf(341, 'PAID', 100, ['Dino', null, 'Tan'], 'Barangay Clearance', { payments: paidRow(341, 'gcash', '9876543210') }),
+      docOf(342, 'PAID', 100, ['Elsa', null, 'Uy'], 'Barangay Clearance', {
+        paymongo_session_id: 'cs_test_342', paymongo_payment_id: PAY_ID, payments: paidRow(342, 'gcash', PAY_ID, true) }),
+      docOf(343, 'PAID', 0, ['Fe', null, 'Vera'], 'Certificate of Indigency'),
+      ...['Gabo', 'Hilda', 'Igme', 'Jojo', 'Kiko', 'Lorna', 'Mario', 'Nena', 'Oscar', 'Pilar'].map((first, i) =>
+        docOf(344 + i, 'PAID', 100, [first, null, 'Cortez'], 'Barangay Clearance', { payments: paidRow(344 + i, 'onsite', null) })),
+      ...['Quintin', 'Rosario', 'Santi', 'Tess', 'Ugo', 'Vilma', 'Wena', 'Xavier', 'Yolanda', 'Zaldy'].map((first, i) =>
+        rentalOf(354 + i, 'PAID', 300, [first, 'Diaz'], 'Tent', 1, { paymongo_session_id: `cs_test_${354 + i}`,
+          paymongo_payment_id: `pay_test_${354 + i}`, payments: paidRow(354 + i, 'gcash', `pay_test_${354 + i}`, true) })),
+      ...['Alfredo Ely', 'Bea Ely'].map((head, i) =>
+        fineOf(364 + i, 'PAID', 100, head, 'General Assembly', { payments: paidRow(364 + i, 'onsite', null) })),
+    ];
+    const VOID = [
+      ...['Celso', 'Divina', 'Efren', 'Flor', 'Goyo', 'Herminia'].map((first, i) =>
+        rentalOf(370 + i, 'VOID', 500, [first, 'Ebro'], 'Tent', 1)),
+      fineOf(376, 'VOID', 100, 'Isabel Fuentes', 'Clean-up Drive'),
+      docOf(377, 'VOID', 50, ['Jun', null, 'Galang'], 'Barangay Clearance'),
+    ];
+    const fresh = () => ({ UNPAID: [...UNPAID], PAID: [...PAID], VOID: [...VOID] });
+    // The list answer for the status asked for, from `state`, which a check
+    // may change between loads; `total` stands in for a server cap.
+    const answerFrom = (state, total = null) => (url, method) => {
+      if (method !== 'GET' || !url.includes(LIST)) return undefined;
+      const status = url.split(LIST)[1].toUpperCase();
+      const charges = status === 'ALL' ? [...state.UNPAID, ...state.PAID, ...state.VOID] : state[status] || [];
+      return { charges, total: total ?? charges.length };
+    };
+    const SEARCH = 'input[aria-label="Search charges"]';
+    const mountPayments = async () => {
+      const page = await globalThis.mountInteractive(root(), '/secretary/payments');
+      await page.settle();
+      return page;
+    };
+    const openWith = async (state, total) => {
+      seedSession(VALID);
+      resetNet(200, answerFrom(state, total));
+      return mountPayments();
+    };
+    const listHeading = (page) => page.queryAll('h2').find((h) => !h.closest('.pay-panel')) ?? null;
+    // What the page says, read the way a person would. The pager's parts are
+    // read one by one: the count line, the page number marked current, the
+    // numbers drawn ("…" for a gap), the phone's "Page 2 of 4" and the Rows
+    // per page choice.
+    const look = (page) => ({
+      heading: listHeading(page)?.textContent ?? null,
+      detail: page.query('.pay-totals-detail')?.textContent ?? null,
+      tabs: page.queryAll('.pay-tabs button').map((b) => b.textContent).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map((b) => b.textContent),
+      rows: page.queryAll('table.payments-table tbody tr').map((tr) => tr.querySelector('strong')?.textContent ?? null),
+      pager: page.query('.pay-pager')?.textContent ?? null,
+      showing: page.query('.pay-pager-count')?.textContent ?? null,
+      current: page.queryAll('.pay-pager [aria-current="page"]').map((b) => b.textContent),
+      numbers: page.queryAll('.pay-pager-numbers li').map((li) => li.textContent).join(' '),
+      short: page.query('.pay-pager-short')?.textContent ?? null,
+      size: page.query('#pay-page-size')?.value ?? null,
+      cap: page.query('.pay-cap')?.textContent ?? null,
+      search: page.query(SEARCH)?.value ?? null,
+      noMatch: root().textContent.includes('No charges match your search or filters.'),
+    });
+    // The pager is on page n of m, which three parts must agree on: the count
+    // line, the one number marked aria-current="page", and "Page n of m".
+    const pagerSays = (v, short, showingText) => {
+      const n = /^Page (\d+) of /.exec(short)?.[1];
+      return v.short === short && v.showing === showingText && said(v.current) === said([n]);
+    };
+    const type = async (page, text) => { if (page.query(SEARCH)) await page.fill(SEARCH, text); };
+    const tabNamed = (page, label) => page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const viewFor = (page, name) =>
+      page.queryAll('button').find((b) => (b.getAttribute('aria-label') || '').startsWith(`View charge for ${name}:`));
+    const choose = async (page, value) => {
+      const select = page.query('.list-head select');
+      if (select) {
+        select.value = value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const namesOf = (list) => list.map((c) => NAME.get(c.charge_id));
+    // jsdom has no scrollIntoView; this one records what asked to be shown.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+
+    let page = await openWith(fresh());
+    let v = look(page);
+    check('Payments opens on Needs verification: "30 charges · ₱3,700.00 unpaid", tabs All 30 · Documents 18 · Rentals 8 · Fines 4, All pressed',
+      page.query('.list-head select')?.value === 'UNPAID' && v.heading === '30 charges · ₱3,700.00 unpaid' && v.detail === null
+        && v.tabs === 'All 30 · Documents 18 · Rentals 8 · Fines 4' && said(v.pressed) === said(['All 30']), said(v));
+    check('  the first 25 rows in the order sent, and the pager reads "Showing 1 to 25 of 30 results", page 1 of 2',
+      said(v.rows) === said(namesOf(UNPAID.slice(0, 25))) && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results'),
+      said({ rows: v.rows.length, first: v.rows[0], showing: v.showing, current: v.current, short: v.short }));
+    const box = page.query(SEARCH);
+    check('  the search box is labelled "Search charges", reads "Search name, charge no. or reference" and starts empty; no Clear button, no cap notice',
+      !!box && box.getAttribute('placeholder') === 'Search name, charge no. or reference' && box.value === ''
+        && !page.query('button[aria-label="Clear search"]') && v.cap === null,
+      said({ placeholder: box?.getAttribute('placeholder') ?? null, cap: v.cap }));
+
+    await type(page, 'juan');
+    v = look(page);
+    check('typing "juan" narrows the rows to Juan Dela Cruz and Juan Ramos as you type, with no button pressed',
+      said(v.rows) === said(['Juan Dela Cruz', 'Juan Ramos']), said(v.rows));
+    check('  the tab counts follow the search: All 2 · Documents 1 · Rentals 1 · Fines 0, Fines dimmed but still a button you can press',
+      v.tabs === 'All 2 · Documents 1 · Rentals 1 · Fines 0' && tabNamed(page, 'Fines')?.classList.contains('pay-tab-empty') === true
+        && tabNamed(page, 'Fines')?.disabled === false && tabNamed(page, 'Rentals')?.classList.contains('pay-tab-empty') === false,
+      said(v.tabs));
+    check('  the totals follow it: "2 of 30 charges match · ₱350.00 unpaid", and the pager is hidden',
+      v.heading === '2 of 30 charges match · ₱350.00 unpaid' && v.pager === null, said(v));
+
+    const rowsFor = async (text) => { await type(page, text); return look(page).rows; };
+    const found = {
+      nino: await rowsFor('nino'), cruzJuan: await rowsFor('cruz juan'), hash: await rowsFor('#148'), bare: await rowsFor('148'),
+    };
+    check('accents, word order and the charge number: "nino" finds Niño Peñaflor; "cruz juan" only Juan Dela Cruz; "#148" and "148" charge #148',
+      said(found.nino) === said(['Niño Peñaflor']) && said(found.cruzJuan) === said(['Juan Dela Cruz'])
+        && said(found.hash) === said(['Juan Dela Cruz']) && said(found.bare) === said(['Juan Dela Cruz']), said(found));
+    const more = {
+      reference: await rowsFor('5550001234'), item: await rowsFor('monobloc'), event: await rowsFor('general assembly'),
+    };
+    check('a declared reference, a rental item, an event title: "5550001234" finds Ana Cruz, "monobloc" Lito Guest, "general assembly" Rosa Lim',
+      said(more.reference) === said(['Ana Cruz']) && said(more.item) === said(['Lito Guest']) && said(more.event) === said(['Rosa Lim']),
+      said(more));
+    await type(page, 'scholarship');
+    v = look(page);
+    check('the purpose is not searched: "scholarship" (Juan Dela Cruz\'s purpose) matches nothing: "No charges match your search or filters."',
+      v.rows.length === 0 && v.noMatch && !!buttonNamed(root(), 'Clear search and filters') && v.heading === '0 of 30 charges match',
+      said(v));
+
+    await type(page, 'juan');
+    const clearX = page.query('button[aria-label="Clear search"]');
+    await clickIf(page, clearX);
+    v = look(page);
+    check('the Clear (x) button shows while the box has text; pressing it empties the box, brings all 30 back and leaves focus in the box',
+      !!clearX && v.search === '' && v.heading === '30 charges · ₱3,700.00 unpaid' && v.rows.length === 25
+        && page.active() === page.query(SEARCH) && !page.query('button[aria-label="Clear search"]'), said(v));
+    await type(page, 'juan');
+    if (page.query(SEARCH)) await page.key('Escape', SEARCH);
+    v = look(page);
+    check('Escape in the box clears it too', v.search === '' && v.rows.length === 25, said({ search: v.search, rows: v.rows.length }));
+
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    v = look(page);
+    check('the Rentals tab: only the 8 rentals, Rentals pressed, "8 of 30 charges match · ₱2,400.00 unpaid"',
+      said(v.rows) === said(namesOf(UNPAID.filter((c) => c.charge_type === 'RENTAL'))) && said(v.pressed) === said(['Rentals 8'])
+        && v.heading === '8 of 30 charges match · ₱2,400.00 unpaid', said(v));
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Fines'));
+    v = look(page);
+    const clearAll = buttonNamed(root(), 'Clear search and filters');
+    check('a tab with nothing in it: "juan", then Fines (0), says "No charges match your search or filters." with a "Clear search and filters" button',
+      v.rows.length === 0 && v.noMatch && !!clearAll && said(v.pressed) === said(['Fines 0']) && v.heading === '0 of 30 charges match',
+      said(v));
+    await clickIf(page, clearAll);
+    v = look(page);
+    check('  pressing it clears the search, goes back to All and puts focus in the search box',
+      v.search === '' && said(v.pressed) === said(['All 30']) && v.rows.length === 25 && page.active() === page.query(SEARCH), said(v));
+
+    scrolled.length = 0;
+    const focusBefore = page.active();
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    v = look(page);
+    const nextButton = buttonNamed(root(), 'Next');
+    check('Next: page 2 holds the last 5 rows, "Showing 26 to 30 of 30 results", page 2 of 2, and Next is no longer available',
+      said(v.rows) === said(namesOf(UNPAID.slice(25))) && pagerSays(v, 'Page 2 of 2', 'Showing 26 to 30 of 30 results')
+        && nextButton?.getAttribute('aria-disabled') === 'true', said(v));
+    check('  it scrolls the list heading into view and moves nothing else: focus stays where it was',
+      scrolled.length === 1 && scrolled[0].el === listHeading(page) && page.active() === focusBefore,
+      `${scrolled.length} scroll(s), onto ${scrolled[0]?.el?.tagName ?? 'nothing'}`);
+    await clickIf(page, nextButton);
+    check('  pressing the unavailable Next does nothing',
+      pagerSays(look(page), 'Page 2 of 2', 'Showing 26 to 30 of 30 results') && scrolled.length === 1);
+    await clickIf(page, buttonNamed(root(), 'Previous'));
+    v = look(page);
+    check('  Previous goes back to page 1, where Previous is the one not available',
+      pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results') && buttonNamed(root(), 'Previous')?.getAttribute('aria-disabled') === 'true'
+        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true', said([v.showing, v.current]));
+
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await choose(page, 'all');
+    v = look(page);
+    check('a status change returns to page 1: page 2 of Needs verification, then All charges, reads page 1 of 3',
+      pagerSays(v, 'Page 1 of 3', 'Showing 1 to 25 of 64 results'), said([v.showing, v.current, v.short]));
+    check('All charges: "64 charges", then "₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void"; tabs All 64 · Documents 33 · Rentals 24 · Fines 7',
+      v.heading === '64 charges' && v.detail === '₱4,500.00 paid · ₱3,700.00 unpaid · ₱3,150.00 void'
+        && v.tabs === 'All 64 · Documents 33 · Rentals 24 · Fines 7', said(v));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, tabNamed(page, 'Documents'));
+    v = look(page);
+    check('a tab change returns to page 1: page 2 of All charges, then Documents, reads page 1 of 2 and "33 of 64 charges match"',
+      pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 33 results') && v.heading === '33 of 64 charges match', said(v));
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const onThird = look(page);
+    await type(page, 'clearance');
+    v = look(page);
+    check('a search change returns to page 1: page 3 of All charges, then "clearance", reads page 1 of 2 of 31',
+      pagerSays(onThird, 'Page 3 of 3', 'Showing 51 to 64 of 64 results') && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 31 results'),
+      said([onThird.showing, v.showing]));
+
+    await clickIf(page, tabNamed(page, 'Documents'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const beforeRefresh = look(page);
+    const callsBefore = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('Refresh keeps the search, the tab and the page: "clearance", Documents and page 2 of All charges, before and after the reload',
+      pagerSays(beforeRefresh, 'Page 2 of 2', 'Showing 26 to 31 of 31 results') && net.calls.length === callsBefore + 1
+        && v.search === 'clearance' && said(v.pressed) === said(['Documents 31'])
+        && pagerSays(v, 'Page 2 of 2', 'Showing 26 to 31 of 31 results'),
+      said({ before: beforeRefresh.showing, after: v }));
+
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+    await choose(page, 'PAID');
+    v = look(page);
+    check('Paid: "26 charges · ₱4,500.00 paid", split "Cash ₱1,300.00 · GCash ₱100.00 · Paid online ₱3,100.00"; the No fee charge is not listed',
+      v.heading === '26 charges · ₱4,500.00 paid' && v.detail === 'Cash ₱1,300.00 · GCash ₱100.00 · Paid online ₱3,100.00', said(v));
+    await choose(page, 'VOID');
+    v = look(page);
+    check('Void: "8 charges · ₱3,150.00 void", no second line, and 10 or fewer, so no pager',
+      v.heading === '8 charges · ₱3,150.00 void' && v.detail === null && v.pager === null, said(v));
+
+    await choose(page, 'UNPAID');
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await choose(page, 'all');
+    v = look(page);
+    check('a status change keeps the search and the tab: "juan" and Rentals on Needs verification, then All charges: both kept, "1 of 64 charges matches"',
+      v.search === 'juan' && said(v.pressed) === said(['Rentals 1']) && v.heading === '1 of 64 charges matches'
+        && said(v.rows) === said(['Juan Ramos']) && v.detail === '₱0.00 paid · ₱300.00 unpaid · ₱0.00 void', said(v));
+    await page.unmount();
+
+    // A reload that brings back fewer charges: page 3 of 3 becomes the last
+    // page there is, and stays where it landed when the list grows again.
+    const shrinking = fresh();
+    page = await openWith(shrinking);
+    await choose(page, 'all');
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    await clickIf(page, buttonNamed(root(), 'Next'));
+    const third = look(page);
+    shrinking.PAID = PAID.filter((c) => c.charge_type !== 'RENTAL');
+    shrinking.VOID = VOID.filter((c) => c.charge_type !== 'RENTAL');
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const shrunk = look(page);
+    Object.assign(shrinking, fresh());
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const regrown = look(page);
+    check('a reload that shrinks the list moves to its last page: page 3 of 3, then 48 charges, reads page 2 of 2, "Showing 26 to 48 of 48 results"',
+      pagerSays(third, 'Page 3 of 3', 'Showing 51 to 64 of 64 results') && pagerSays(shrunk, 'Page 2 of 2', 'Showing 26 to 48 of 48 results')
+        && shrunk.rows.length === 23, said([third.showing, shrunk.showing]));
+    check('  and stays there when the list grows back: page 2 of 3',
+      pagerSays(regrown, 'Page 2 of 3', 'Showing 26 to 50 of 64 results'), said([regrown.showing, regrown.current]));
+    await page.unmount();
+
+    // Filters reset on every visit and are never kept in the browser. The
+    // second mount does NOT reseed the session, which would clear storage.
+    page = await openWith(fresh());
+    const writesAtOpen = store.sets;
+    const domWritesAtOpen = domStorage.writes;
+    await type(page, 'juan');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await choose(page, 'PAID');
+    const writesAfter = store.sets;
+    const domWritesAfter = domStorage.writes;
+    await page.unmount();
+    resetNet(200, answerFrom(fresh()));
+    page = await mountPayments();
+    v = look(page);
+    check('filters start fresh each time the page opens: after "juan", Rentals and Paid, a new visit shows Needs verification, an empty box and All',
+      v.search === '' && said(v.pressed) === said(['All 30']) && page.query('.list-head select')?.value === 'UNPAID'
+        && pagerSays(v, 'Page 1 of 2', 'Showing 1 to 25 of 30 results'), said(v));
+    check('  and nothing about them was stored in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0,
+      `${writesAfter - writesAtOpen} stub write(s), ${domWritesAfter - domWritesAtOpen} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}`);
+    await page.unmount();
+
+    // Record payment: the reload after it keeps the search.
+    const recordState = fresh();
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/148/verify')) {
+        recordState.UNPAID = recordState.UNPAID.filter((c) => c.charge_id !== 148);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 88 } };
+      }
+      return answerFrom(recordState)(url, method);
+    });
+    page = await mountPayments();
+    await type(page, 'juan');
+    await clickIf(page, viewFor(page, 'Juan Dela Cruz'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = look(page);
+    check('Record payment keeps the filters: "juan", Record on Juan Dela Cruz, and the reload still reads "juan": "1 of 29 charges matches · ₱300.00 unpaid"',
+      v.search === 'juan' && v.heading === '1 of 29 charges matches · ₱300.00 unpaid' && said(v.rows) === said(['Juan Ramos'])
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #88)' && !page.query('.pay-panel'),
+      said(v));
+    await page.unmount();
+
+    // A charge that a search hides while its panel is open: the panel works
+    // from the whole list, never the filtered one.
+    const recheckState = fresh();
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/330')) {
+        recheckState.UNPAID = recheckState.UNPAID.filter((c) => c.charge_id !== 330);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(recheckState)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, viewFor(page, 'Juan Ramos'));
+    const opened = page.query('.pay-panel #pay-panel-title')?.textContent ?? null;
+    await type(page, 'nino');
+    v = look(page);
+    check('a charge filtered out of view keeps its panel: View Juan Ramos, then "nino": the panel stays open on Juan Ramos, the list shows Niño Peñaflor',
+      opened === 'Juan Ramos' && page.query('.pay-panel #pay-panel-title')?.textContent === 'Juan Ramos'
+        && said(v.rows) === said(['Niño Peñaflor']), said({ opened, rows: v.rows }));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = look(page);
+    check('  and Re-check still closes it when the reload shows the charge paid: focus on the message, "nino" kept',
+      !page.query('.pay-panel') && page.active() === page.query('.alert.success') && v.search === 'nino'
+        && said(v.rows) === said(['Niño Peñaflor']), said({ panel: !!page.query('.pay-panel'), focus: page.active()?.className, v }));
+    await page.unmount();
+
+    // The 1,000-row cap: a total larger than the list received.
+    page = await openWith(fresh(), 1234);
+    v = look(page);
+    const capEl = page.query('.pay-cap');
+    const capFirst = !!capEl && !!listHeading(page)
+      && (capEl.compareDocumentPosition(listHeading(page)) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    check('the 1,000-row cap: a total of 1,234 with 30 received says "Showing the newest 30 of 1,234 charges." above the totals, '
+        + 'which say "Newest 30 of 1,234 charges · ₱3,700.00 unpaid"',
+      typeof v.cap === 'string' && v.cap.startsWith('Showing the newest 30 of 1,234 charges.') && capFirst
+        && v.heading === 'Newest 30 of 1,234 charges · ₱3,700.00 unpaid', said(v));
+    await type(page, 'juan');
+    v = look(page);
+    check('  with a search: "2 of the newest 30 charges match · ₱350.00 unpaid", and the notice stays',
+      v.heading === '2 of the newest 30 charges match · ₱350.00 unpaid' && typeof v.cap === 'string', said(v));
+    await page.unmount();
+
+    // The batch 4 load error: still no rows, counts, tabs, totals or pager.
+    seedSession(VALID);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    v = look(page);
+    const statusSelect = page.query('.list-head select');
+    check('a load error shows no tabs, no totals, no pager and no rows, the heading just "Charges"; the search box and status dropdown still work',
+      root().textContent.includes('Could not load the charges: Network down') && v.heading === 'Charges' && !page.query('.pay-tabs')
+        && v.detail === null && v.pager === null && v.rows.length === 0 && v.cap === null
+        && !!page.query(SEARCH) && !page.query(SEARCH).disabled && !!statusSelect && !statusSelect.disabled, said(v));
+    await type(page, 'juan');
+    v = look(page);
+    check('  typing during the error changes none of that, and says nothing about matches',
+      v.search === 'juan' && v.heading === 'Charges' && !page.query('.pay-tabs') && v.rows.length === 0 && !v.noMatch, said(v));
+    await page.unmount();
+
+    // A status view with no charges at all keeps its own empty text.
+    page = await openWith({ ...fresh(), VOID: [] });
+    await type(page, 'juan');
+    await choose(page, 'VOID');
+    v = look(page);
+    check('a status view with no charges at all keeps its own text: Void with none says "No charges here.", not the no-match text, search or not',
+      root().textContent.includes('No charges here.') && !v.noMatch && v.heading === '0 charges' && v.rows.length === 0, said(v));
+    await page.unmount();
+
+    // =======================================================================
+    // P. Payments: the pager, its page numbers and rows per page
+    // =======================================================================
+    // The pager was Previous, "Page 2 of 4" over "Showing 26–50 of 88", and
+    // Next, always 25 a page. It is one bar now: "Showing 26 to 50 of 89
+    // results", a Rows per page select (10, 25, 50 or 100, 25 to start), then
+    // Previous, the page numbers and Next. The current page is a filled
+    // button marked aria-current="page"; above 7 pages there are exactly 7
+    // slots, "…" standing for the pages left out, and a "…" is text, never a
+    // button. The bar shows from 11 matches, even when they fit on one page,
+    // so Rows per page stays within reach; at 10 or fewer it is not drawn. A
+    // new rows per page goes back to page 1 and brings the list heading into
+    // view, as a page change does. Refresh, Record payment and Re-check keep
+    // the rows per page and the page; a tab, status or search change keeps the
+    // rows per page and goes back to page 1; nothing is kept in the browser.
+    // A phone draws "Page 2 of 4" in place of the numbers (index.css decides
+    // which shows), so both are in the markup, and checked, at every width.
+    console.log('\n--- Payments: the pager, its page numbers and rows per page ---');
+    const SIZE = '#pay-page-size';
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const setRows = async (page, value) => {
+      const select = page.query(SIZE);
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // Focus first, as a press does in a browser: a dispatched click in jsdom
+    // moves no focus, and these checks are about where focus ends up.
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    // n document charges named "Res 001" onwards, from position `first` of
+    // All charges, so a row's name says where it sits in the list.
+    const bulk = (first, n, status) => Array.from({ length: n }, (_, i) => {
+      const k = first + i;
+      return docOf(2000 + k, status, 50, ['Res', null, String(k).padStart(3, '0')], 'Barangay Clearance');
+    });
+    const names = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => `Res ${String(from + i).padStart(3, '0')}`);
+    // 89 charges, as the live list held on 12 Oct 2026: 14 waiting, 60 paid
+    // and 15 void, "Res 001" to "Res 089" in All charges' order.
+    const EIGHTY_NINE = () => ({ UNPAID: bulk(1, 14, 'UNPAID'), PAID: bulk(15, 60, 'PAID'), VOID: bulk(75, 15, 'VOID') });
+
+    page = await openWith(EIGHTY_NINE());
+    const writesAtOpen89 = store.sets;
+    const domWritesAtOpen89 = domStorage.writes;
+    await choose(page, 'all');
+    v = look(page);
+    const sizeSelect = page.query(SIZE);
+    const sizeLabel = sizeSelect ? page.query(`label[for="${sizeSelect.id}"]`)?.textContent ?? null : null;
+    const sizeOptions = sizeSelect ? [...sizeSelect.options].map((o) => o.textContent) : null;
+    check('Rows per page: a select labelled "Rows per page" offering 10, 25, 50 and 100, with 25 chosen',
+      sizeLabel === 'Rows per page' && said(sizeOptions) === said(['10', '25', '50', '100']) && v.size === '25',
+      said({ label: sizeLabel, options: sizeOptions, size: v.size }));
+    const nav = page.query('nav.pay-pager');
+    check('All charges with 89: a nav named "Pagination" reads "Showing 1 to 25 of 89 results", with pages 1 2 3 4 and 1 the current page',
+      nav?.getAttribute('aria-label') === 'Pagination' && v.showing === 'Showing 1 to 25 of 89 results' && v.numbers === '1 2 3 4'
+        && said(v.current) === said(['1']) && v.short === 'Page 1 of 4' && said(v.rows) === said(names(1, 25)),
+      said({ label: nav?.getAttribute('aria-label') ?? null, showing: v.showing, numbers: v.numbers, current: v.current, short: v.short }));
+    const numberButtons = page.queryAll('.pay-pager-numbers button')
+      .map((b) => `${b.getAttribute('type')}:${b.getAttribute('aria-label')}:${b.getAttribute('aria-current')}`);
+    check('  each number is a button named "Page N", and only the current one carries aria-current="page"',
+      said(numberButtons) === said(['button:Page 1:page', 'button:Page 2:null', 'button:Page 3:null', 'button:Page 4:null']),
+      said(numberButtons));
+
+    scrolled.length = 0;
+    const three = numberButton(page, 3);
+    await press(page, three);
+    v = look(page);
+    check('clicking 3: rows 51 to 75 ("Res 051" to "Res 075"), "Showing 51 to 75 of 89 results", 3 the current page; '
+        + 'the list heading is brought into view, and focus stays on 3',
+      said(v.rows) === said(names(51, 75)) && v.showing === 'Showing 51 to 75 of 89 results' && said(v.current) === said(['3'])
+        && v.short === 'Page 3 of 4' && scrolled.length === 1 && scrolled[0].el === listHeading(page)
+        && !!three && page.active() === three && three.getAttribute('aria-current') === 'page',
+      said({ showing: v.showing, current: v.current, rows: [v.rows[0], v.rows.at(-1)], scrolls: scrolled.length,
+        focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    scrolled.length = 0;
+    await press(page, numberButton(page, 3));
+    check('  pressing the current page again does nothing: no scroll, still 51 to 75',
+      look(page).showing === 'Showing 51 to 75 of 89 results' && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+
+    scrolled.length = 0;
+    await setRows(page, 10);
+    v = look(page);
+    check('Rows per page 10, from page 3: back to page 1 with 10 rows ("Res 001" to "Res 010"), "Showing 1 to 10 of 89 results", '
+        + 'pages 1 2 3 4 5 … 9, and the list heading brought into view as for a page change',
+      v.size === '10' && said(v.rows) === said(names(1, 10)) && v.showing === 'Showing 1 to 10 of 89 results'
+        && v.numbers === '1 2 3 4 5 … 9' && said(v.current) === said(['1']) && v.short === 'Page 1 of 9'
+        && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+      said({ size: v.size, showing: v.showing, numbers: v.numbers, current: v.current, rows: v.rows.length, scrolls: scrolled.length }));
+    const gaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+    check('  the "…" is plain text: not a button, and nothing in it can take focus',
+      gaps.length === 1 && gaps.every((li) => !li.matches('[tabindex]') && !li.querySelector('button, a, input, select, [tabindex]')),
+      gaps.map((li) => li.outerHTML).join(' ') || 'no "…" drawn');
+
+    await press(page, numberButton(page, 5));
+    v = look(page);
+    check('clicking 5 of 9: "1 … 4 5 6 … 9", "Showing 41 to 50 of 89 results", and focus stays on the button for page 5',
+      v.numbers === '1 … 4 5 6 … 9' && v.showing === 'Showing 41 to 50 of 89 results' && said(v.current) === said(['5'])
+        && page.active()?.getAttribute('aria-label') === 'Page 5',
+      said({ numbers: v.numbers, showing: v.showing, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    await press(page, numberButton(page, 9));
+    v = look(page);
+    const nextAtEnd = buttonNamed(root(), 'Next');
+    check('clicking 9: the last page, its 9 rows ("Res 081" to "Res 089"), "Showing 81 to 89 of 89 results", "1 … 5 6 7 8 9", and Next unavailable',
+      v.showing === 'Showing 81 to 89 of 89 results' && said(v.rows) === said(names(81, 89)) && v.numbers === '1 … 5 6 7 8 9'
+        && said(v.current) === said(['9']) && v.short === 'Page 9 of 9' && nextAtEnd?.getAttribute('aria-disabled') === 'true'
+        && page.active()?.getAttribute('aria-label') === 'Page 9',
+      said({ showing: v.showing, numbers: v.numbers, next: nextAtEnd?.getAttribute('aria-disabled') ?? null }));
+    scrolled.length = 0;
+    await press(page, nextAtEnd);
+    v = look(page);
+    check('  pressing the unavailable Next does nothing and focus stays on it: aria-disabled, never disabled',
+      v.showing === 'Showing 81 to 89 of 89 results' && scrolled.length === 0 && !!nextAtEnd && page.active() === nextAtEnd
+        && nextAtEnd.disabled === false && nextAtEnd.getAttribute('aria-disabled') === 'true',
+      said({ showing: v.showing, scrolls: scrolled.length, focusOnNext: !!nextAtEnd && page.active() === nextAtEnd,
+        disabled: nextAtEnd?.disabled ?? null }));
+    await press(page, numberButton(page, 1));
+    const prevAtStart = buttonNamed(root(), 'Previous');
+    scrolled.length = 0;
+    await press(page, prevAtStart);
+    v = look(page);
+    check('on page 1, Previous is unavailable the same way: pressing it does nothing and focus stays on it; Next is available',
+      v.showing === 'Showing 1 to 10 of 89 results' && scrolled.length === 0 && !!prevAtStart && page.active() === prevAtStart
+        && prevAtStart.disabled === false && prevAtStart.getAttribute('aria-disabled') === 'true'
+        && buttonNamed(root(), 'Next')?.getAttribute('aria-disabled') !== 'true',
+      said({ showing: v.showing, scrolls: scrolled.length, focusOnPrevious: !!prevAtStart && page.active() === prevAtStart }));
+
+    await press(page, numberButton(page, 5));
+    const callsBeforeRefresh = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('Refresh keeps the rows per page and the page: 10 a page on page 5, and after the reload still "Showing 41 to 50 of 89 results"',
+      net.calls.length === callsBeforeRefresh + 1 && v.size === '10' && v.showing === 'Showing 41 to 50 of 89 results'
+        && said(v.current) === said(['5']), said({ size: v.size, showing: v.showing, current: v.current }));
+
+    await clickIf(page, tabNamed(page, 'Documents'));
+    const afterTab = look(page);
+    await press(page, numberButton(page, 3));
+    await choose(page, 'PAID');
+    const afterStatus = look(page);
+    await press(page, numberButton(page, 2));
+    await type(page, 'res');
+    const afterSearch = look(page);
+    check('a tab, a status or a search change keeps 10 a page and goes back to page 1: page 5, then Documents, "Showing 1 to 10 of 89 results"; '
+        + 'page 3, then Paid, "Showing 1 to 10 of 60 results"; page 2, then "res", "Showing 1 to 10 of 60 results"',
+      [afterTab, afterStatus, afterSearch].every((x) => x.size === '10' && said(x.current) === said(['1']))
+        && afterTab.showing === 'Showing 1 to 10 of 89 results' && afterStatus.showing === 'Showing 1 to 10 of 60 results'
+        && afterSearch.showing === 'Showing 1 to 10 of 60 results',
+      said([afterTab, afterStatus, afterSearch].map((x) => `${x.size} a page: ${x.showing} (${x.current})`)));
+    check('nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty, no cookie',
+      store.sets === writesAtOpen89 && domStorage.writes === domWritesAtOpen89 && dom.window.sessionStorage.length === 0
+        && dom.window.document.cookie === '',
+      `${store.sets - writesAtOpen89} stub write(s), ${domStorage.writes - domWritesAtOpen89} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}, `
+        + `cookie ${JSON.stringify(dom.window.document.cookie)}`);
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(EIGHTY_NINE()));
+    page = await mountPayments();
+    await choose(page, 'all');
+    v = look(page);
+    check('  and a new visit starts again at 25 a page, page 1: "Showing 1 to 25 of 89 results"',
+      v.size === '25' && v.showing === 'Showing 1 to 25 of 89 results' && said(v.current) === said(['1']),
+      said({ size: v.size, showing: v.showing, current: v.current }));
+    await page.unmount();
+
+    // Needs verification holds 14: the bar with one page, then Record payment
+    // and Re-check at 10 a page, on page 2.
+    const settling = EIGHTY_NINE();
+    settling.UNPAID.find((c) => c.charge_id === 2013).paymongo_session_id = 'cs_test_2013';
+    seedSession(VALID);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/2012/verify')) {
+        settling.UNPAID = settling.UNPAID.filter((c) => c.charge_id !== 2012);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 89 } };
+      }
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/2013')) {
+        settling.UNPAID = settling.UNPAID.filter((c) => c.charge_id !== 2013);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(settling)(url, method);
+    });
+    page = await mountPayments();
+    v = look(page);
+    const prev14 = buttonNamed(root(), 'Previous');
+    const next14 = buttonNamed(root(), 'Next');
+    check('14 charges at 25 a page (Needs verification): the bar still shows, "Showing 1 to 14 of 14 results", Rows per page 25, '
+        + 'a single "1" as the current page, and Previous and Next both unavailable',
+      v.showing === 'Showing 1 to 14 of 14 results' && v.size === '25' && v.numbers === '1' && said(v.current) === said(['1'])
+        && v.short === 'Page 1 of 1' && v.rows.length === 14
+        && prev14?.getAttribute('aria-disabled') === 'true' && next14?.getAttribute('aria-disabled') === 'true',
+      said({ showing: v.showing, size: v.size, numbers: v.numbers, previous: prev14?.getAttribute('aria-disabled') ?? null,
+        next: next14?.getAttribute('aria-disabled') ?? null }));
+    await setRows(page, 10);
+    await press(page, numberButton(page, 2));
+    const pageTwo = look(page);
+    await clickIf(page, viewFor(page, 'Res 012'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = look(page);
+    check('Record payment keeps the rows per page and the page: 10 a page, page 2 ("Res 011" to "Res 014"), Record on Res 012, '
+        + 'and the reload still shows page 2, "Showing 11 to 13 of 13 results"',
+      pageTwo.showing === 'Showing 11 to 14 of 14 results' && said(pageTwo.rows) === said(names(11, 14))
+        && v.size === '10' && v.showing === 'Showing 11 to 13 of 13 results' && said(v.current) === said(['2'])
+        && said(v.rows) === said(['Res 011', 'Res 013', 'Res 014']) && !page.query('.pay-panel')
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #89)',
+      said({ before: pageTwo.showing, after: v.showing, rows: v.rows, size: v.size }));
+    await clickIf(page, viewFor(page, 'Res 013'));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = look(page);
+    check('  and so does Re-check: it settles Res 013, and the reload shows page 2, "Showing 11 to 12 of 12 results", still 10 a page',
+      v.size === '10' && v.showing === 'Showing 11 to 12 of 12 results' && said(v.current) === said(['2'])
+        && said(v.rows) === said(['Res 011', 'Res 014']) && !page.query('.pay-panel'),
+      said({ showing: v.showing, rows: v.rows, size: v.size, panel: !!page.query('.pay-panel') }));
+    await page.unmount();
+
+    // A reload that shrinks the list under the page, at 10 a page.
+    const shrinkingTen = EIGHTY_NINE();
+    page = await openWith(shrinkingTen);
+    await choose(page, 'all');
+    await setRows(page, 10);
+    await press(page, numberButton(page, 9));
+    const ninth = look(page);
+    shrinkingTen.PAID = shrinkingTen.PAID.slice(0, 31);
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = look(page);
+    check('a reload that shrinks the list under the page lands on its last page at any rows per page: page 9 of 89 at 10 a page, '
+        + 'then 60 charges, page 6, "Showing 51 to 60 of 60 results", pages 1 2 3 4 5 6',
+      ninth.showing === 'Showing 81 to 89 of 89 results' && v.size === '10' && v.showing === 'Showing 51 to 60 of 60 results'
+        && said(v.current) === said(['6']) && v.numbers === '1 2 3 4 5 6',
+      said({ before: ninth.showing, after: v.showing, numbers: v.numbers }));
+    await page.unmount();
+
+    // 10 matches or fewer: no bar at all. 11: the bar, one page.
+    page = await openWith({ UNPAID: bulk(1, 10, 'UNPAID'), PAID: [], VOID: [] });
+    const ten = look(page);
+    await page.unmount();
+    page = await openWith({ UNPAID: bulk(1, 11, 'UNPAID'), PAID: [], VOID: [] });
+    const eleven = look(page);
+    await page.unmount();
+    check('10 charges: no pager at all, not even Rows per page; 11: the bar, "Showing 1 to 11 of 11 results", one page',
+      ten.rows.length === 10 && ten.pager === null && ten.size === null
+        && eleven.rows.length === 11 && eleven.showing === 'Showing 1 to 11 of 11 results' && eleven.numbers === '1' && eleven.size === '25',
+      said({ ten: { rows: ten.rows.length, pager: ten.pager }, eleven: { rows: eleven.rows.length, showing: eleven.showing } }));
+    page = await openWith(EIGHTY_NINE());
+    await choose(page, 'all');
+    await type(page, 'zzzz');
+    v = look(page);
+    check('no matches: no pager, only "No charges match your search or filters."',
+      v.noMatch && v.pager === null && v.rows.length === 0, said({ noMatch: v.noMatch, pager: v.pager }));
+    await page.unmount();
+
+    // =======================================================================
+    // Q. Payments: the Method and date filters
+    // =======================================================================
+    // A second toolbar row under the search: a Method select that mirrors
+    // the Method column (methodOf, never the raw payment_method, so "GCash"
+    // is a GCash payment a staff member recorded and never a PayMongo one), a
+    // date select, "Billed date" or, under Paid, "Paid date" (the latest
+    // payment row's, or the billed date for a paid charge with no row), From
+    // and To under "Choose dates", and a quiet "Clear filters" while either
+    // is on. Days are Manila days, both ends included. "Today" comes from the
+    // helpers' one clock, fixed here at 12 Oct 2026, 12:00 in Manila, and this
+    // machine is put on Los Angeles time, where that moment is still Oct 11,
+    // so every Manila day has to be the code's own doing. Everything
+    // composes with the status, the search and the tabs: the tab counts
+    // follow the method and date, the totals cover every match and name the
+    // date, and every change goes back to page 1. The helpers are checked
+    // case by case, then the real page against 23 stubbed charges. Every
+    // request is answered by the fetch stub.
+    console.log('\n--- Payments: the Method and date filters ---');
+    const previousTZQ = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const FIXED_NOW = '2026-10-12T04:00:00Z'; // 12:00 on Oct 12 in Manila, 21:00 on Oct 11 in Los Angeles
+
+    // a. Method, on its own.
+    const optionLabels = (status) => attempt(() => F.methodOptions(status).map((o) => o.label).join(' | '));
+    check('method options per status view: Needs verification offers Any method and Online pending',
+      optionLabels('UNPAID') === 'Any method | Online pending', said(optionLabels('UNPAID')));
+    check('  Paid offers Any method, Cash, GCash, Paid online and No fee',
+      optionLabels('PAID') === 'Any method | Cash | GCash | Paid online | No fee', said(optionLabels('PAID')));
+    check('  Void offers Any method only', optionLabels('VOID') === 'Any method', said(optionLabels('VOID')));
+    check('  All charges offers all six: Any method, Cash, GCash, Paid online, No fee and Online pending',
+      optionLabels('all') === 'Any method | Cash | GCash | Paid online | No fee | Online pending', said(optionLabels('all')));
+
+    // Payment rows in the list's real shape: one a staff member recorded, and
+    // one PayMongo made (nobody received it; its payment_method is "gcash").
+    const STAFF_ROW = (id, method, at, reference = null) => ({ payment_id: 8000 + id, payment_method: method,
+      reference_no: reference, created_at: at, received_by_user_id: 12, recorder: STAFF });
+    const AUTO_ROW = (id, at) => ({ payment_id: 8000 + id, payment_method: 'gcash', reference_no: `pay_q_${id}`,
+      created_at: at, received_by_user_id: null, recorder: null });
+    const AT = '2026-10-06T01:00:00+00:00';
+    // Every case, with the one method it must match (or none), written by hand.
+    const M_CASES = [
+      { name: 'cash a staff member recorded', want: 'Cash',
+        c: charge(8101, 'DOCUMENT', 'PAID', 100, { payments: [STAFF_ROW(8101, 'onsite', AT)] }) },
+      { name: 'GCash a staff member recorded', want: 'GCash',
+        c: charge(8102, 'DOCUMENT', 'PAID', 100, { payments: [STAFF_ROW(8102, 'gcash', AT, '1029384756')] }) },
+      { name: 'a PayMongo payment (payment_method "gcash", nobody received it)', want: 'Paid online',
+        c: charge(8103, 'DOCUMENT', 'PAID', 100, { paymongo_session_id: 'cs_q_8103', paymongo_payment_id: 'pay_q_8103',
+          payments: [AUTO_ROW(8103, AT)] }) },
+      { name: 'unpaid, with an open checkout', want: 'Online pending',
+        c: charge(8104, 'DOCUMENT', 'UNPAID', 100, { paymongo_session_id: 'cs_q_8104' }) },
+      { name: 'unpaid, no checkout', want: '', c: charge(8105, 'DOCUMENT', 'UNPAID', 100, {}) },
+      { name: 'paid, PHP 0, no payment row', want: 'No fee', c: charge(8106, 'DOCUMENT', 'PAID', 0, {}) },
+      { name: 'paid, PHP 100, no payment row ("No record", which is not a choice)', want: '',
+        c: charge(8107, 'DOCUMENT', 'PAID', 100, {}) },
+      { name: 'paid, PHP 0, WITH a cash row', want: 'Cash',
+        c: charge(8108, 'DOCUMENT', 'PAID', 0, { payments: [STAFF_ROW(8108, 'onsite', AT)] }) },
+      { name: 'unpaid, PHP 0, no checkout', want: '', c: charge(8109, 'DOCUMENT', 'UNPAID', 0, {}) },
+      { name: 'paid in cash after a checkout was opened', want: 'Cash',
+        c: charge(8110, 'DOCUMENT', 'PAID', 100, { paymongo_session_id: 'cs_q_8110', payments: [STAFF_ROW(8110, 'onsite', AT)] }) },
+      { name: 'void, with an open checkout (its Method column reads "Online pending")', want: 'Online pending',
+        c: charge(8111, 'DOCUMENT', 'VOID', 100, { paymongo_session_id: 'cs_q_8111' }) },
+      { name: 'void, no checkout', want: '', c: charge(8112, 'DOCUMENT', 'VOID', 100, {}) },
+    ];
+    const FIVE = ['Cash', 'GCash', 'Paid online', 'No fee', 'Online pending'];
+    const matched = (c) => attempt(() => FIVE.filter((m) => F.matchesMethod(c, m) === true).join(','));
+    const wrongM = M_CASES.filter(({ want, c }) => matched(c) !== want)
+      .map(({ name, want, c }) => `${name}: ${said(matched(c))}, want ${said(want)}`);
+    check('matchesMethod mirrors the Method column: each charge matches the one method its column shows, or none',
+      wrongM.length === 0, wrongM.length ? said(wrongM) : `${M_CASES.length} cases`);
+    const mm = (i, method) => attempt(() => F.matchesMethod(M_CASES[i].c, method));
+    check('  GCash never takes a PayMongo payment, though both carry payment_method "gcash"; Paid online takes only the PayMongo one',
+      mm(2, 'GCash') === false && mm(2, 'Paid online') === true && mm(1, 'GCash') === true && mm(1, 'Paid online') === false,
+      said([mm(2, 'GCash'), mm(2, 'Paid online'), mm(1, 'GCash'), mm(1, 'Paid online')]));
+    check('  Online pending takes an unpaid charge with an open checkout, never a paid one, not even one whose checkout was opened',
+      mm(3, 'Online pending') === true && mm(9, 'Online pending') === false && mm(2, 'Online pending') === false
+        && mm(4, 'Online pending') === false, said([mm(3, 'Online pending'), mm(9, 'Online pending'), mm(2, 'Online pending')]));
+    check('  No fee takes only a paid PHP 0 charge with no payment row: not one someone recorded, not an unpaid PHP 0 one, not a paid one with no record',
+      mm(5, 'No fee') === true && mm(7, 'No fee') === false && mm(8, 'No fee') === false && mm(6, 'No fee') === false,
+      said([mm(5, 'No fee'), mm(7, 'No fee'), mm(8, 'No fee'), mm(6, 'No fee')]));
+    check('  "Any method" takes every charge', M_CASES.every(({ c }) => attempt(() => F.matchesMethod(c, F.ANY)) === true),
+      said(M_CASES.map(({ c }) => attempt(() => F.matchesMethod(c, F.ANY)))));
+
+    // b. Days, on their own: Manila days, whatever this machine's clock says.
+    const day = (value) => attempt(() => F.manilaDay(value));
+    check('the Manila day of a UTC timestamp: 2026-10-11T17:00:00Z is Oct 12 in Manila, 2026-10-11T15:59:59Z is still Oct 11',
+      day('2026-10-11T17:00:00Z') === '2026-10-12' && day('2026-10-11T15:59:59Z') === '2026-10-11',
+      said([day('2026-10-11T17:00:00Z'), day('2026-10-11T15:59:59Z')]));
+    check('  midnight in Manila is 16:00 UTC: 16:00:00Z on Oct 11 is Oct 12; so is the live #161 shape, 2026-10-11T23:47:20.859+00:00; 07:30+08:00 on Oct 12 is Oct 12',
+      day('2026-10-11T16:00:00Z') === '2026-10-12' && day('2026-10-11T23:47:20.859+00:00') === '2026-10-12'
+        && day('2026-10-12T07:30:00+08:00') === '2026-10-12',
+      said([day('2026-10-11T16:00:00Z'), day('2026-10-11T23:47:20.859+00:00'), day('2026-10-12T07:30:00+08:00')]));
+    check('  no timestamp, a blank one or one that does not parse has no day (null), never a guess',
+      day(null) === null && day(undefined) === null && day('') === null && day('not a date') === null,
+      said([day(null), day(undefined), day(''), day('not a date')]));
+    const todayAt = (iso) => { setNow(iso); return attempt(() => F.manilaToday()); };
+    const todays = [todayAt('2026-10-12T04:00:00Z'), todayAt('2026-10-11T16:30:00Z'), todayAt('2026-10-12T15:59:59Z'),
+      todayAt('2026-10-12T16:00:00Z')];
+    check('"today" is the Manila day of the clock: 04:00Z on Oct 12 is Oct 12 (Los Angeles says Oct 11); 16:30Z on Oct 11 is already Oct 12 '
+        + '(UTC says Oct 11); 15:59:59Z on Oct 12 is still Oct 12; 16:00Z is Oct 13',
+      said(todays) === said(['2026-10-12', '2026-10-12', '2026-10-12', '2026-10-13']), said(todays));
+
+    // c. The presets, for a fixed "today".
+    const rng = (choice, today, from = '', to = '') => attempt(() => F.dateRange(choice, from, to, today));
+    const span = (r) => (r && typeof r === 'object' ? `${r.from} to ${r.to}` : String(r));
+    check('presets on 12 Oct 2026: Today is Oct 12 to Oct 12; Last 7 days Oct 6 to Oct 12 (today and the 6 days before it); This month Oct 1 to Oct 12',
+      span(rng('today', '2026-10-12')) === '2026-10-12 to 2026-10-12' && span(rng('week', '2026-10-12')) === '2026-10-06 to 2026-10-12'
+        && span(rng('month', '2026-10-12')) === '2026-10-01 to 2026-10-12',
+      said([span(rng('today', '2026-10-12')), span(rng('week', '2026-10-12')), span(rng('month', '2026-10-12'))]));
+    check('  This month on the 1st is the 1st alone (Nov 1 to Nov 1); on the 31st it is the whole month (Oct 1 to Oct 31)',
+      span(rng('month', '2026-11-01')) === '2026-11-01 to 2026-11-01' && span(rng('month', '2026-10-31')) === '2026-10-01 to 2026-10-31',
+      said([span(rng('month', '2026-11-01')), span(rng('month', '2026-10-31'))]));
+    check('  Last 7 days across a 28-day February (3 Mar 2027: Feb 25 to Mar 3), a 29-day one (3 Mar 2028: Feb 26 to Mar 3) and a new year (2 Jan 2027: Dec 27 to Jan 2)',
+      span(rng('week', '2027-03-03')) === '2027-02-25 to 2027-03-03' && span(rng('week', '2028-03-03')) === '2028-02-26 to 2028-03-03'
+        && span(rng('week', '2027-01-02')) === '2026-12-27 to 2027-01-02',
+      said([span(rng('week', '2027-03-03')), span(rng('week', '2028-03-03')), span(rng('week', '2027-01-02'))]));
+    setNow('2026-10-31T16:30:00Z');
+    const monthAtMidnight = attempt(() => F.dateRange('month', '', '', F.manilaToday()));
+    check('  at 00:30 on Nov 1 in Manila (16:30Z on Oct 31), This month is already Nov 1 to Nov 1, not October',
+      span(monthAtMidnight) === '2026-11-01 to 2026-11-01', span(monthAtMidnight));
+    check('Any date restricts nothing (no range), nor does Choose dates with neither date; only From is "from that day on", only To "up to that day"',
+      rng('any', '2026-10-12') === null && rng('custom', '2026-10-12') === null
+        && said(rng('custom', '2026-10-12', '2026-10-05', '')) === said({ from: '2026-10-05', to: null })
+        && said(rng('custom', '2026-10-12', '', '2026-10-05')) === said({ from: null, to: '2026-10-05' })
+        && said(rng('custom', '2026-10-12', '2026-10-01', '2026-10-05')) === said({ from: '2026-10-01', to: '2026-10-05' }),
+      said([rng('any', '2026-10-12'), rng('custom', '2026-10-12'), rng('custom', '2026-10-12', '2026-10-05', ''),
+        rng('custom', '2026-10-12', '', '2026-10-05')]));
+
+    // d. A range against a charge's date: both ends in.
+    const billedAt = (iso, status = 'UNPAID') => charge(8200, 'DOCUMENT', status, 100, { created_at: iso });
+    const inR = (iso, from, to) => attempt(() => F.matchesDate(billedAt(iso), 'billed', { from, to }));
+    check('From and To are both included, in Manila days: Oct 1 to Oct 12 takes 23:59 on Oct 12 (15:59Z) and 00:00 on Oct 1 (16:00Z on Sep 30), '
+        + 'not 00:00 on Oct 13 nor 23:59 on Sep 30',
+      inR('2026-10-12T15:59:00Z', '2026-10-01', '2026-10-12') === true && inR('2026-09-30T16:00:00Z', '2026-10-01', '2026-10-12') === true
+        && inR('2026-10-12T16:00:00Z', '2026-10-01', '2026-10-12') === false && inR('2026-09-30T15:59:00Z', '2026-10-01', '2026-10-12') === false,
+      said([inR('2026-10-12T15:59:00Z', '2026-10-01', '2026-10-12'), inR('2026-09-30T16:00:00Z', '2026-10-01', '2026-10-12'),
+        inR('2026-10-12T16:00:00Z', '2026-10-01', '2026-10-12'), inR('2026-09-30T15:59:00Z', '2026-10-01', '2026-10-12')]));
+    check('  only From (Oct 5): 00:00 on Oct 5 and a day next year are in, 23:59:59 on Oct 4 is not',
+      inR('2026-10-04T16:00:00Z', '2026-10-05', null) === true && inR('2027-06-01T04:00:00Z', '2026-10-05', null) === true
+        && inR('2026-10-04T15:59:59Z', '2026-10-05', null) === false);
+    check('  only To (Oct 5): 23:59:59 on Oct 5 and a day years before are in, 00:00 on Oct 6 is not',
+      inR('2026-10-05T15:59:59Z', null, '2026-10-05') === true && inR('2020-01-01T04:00:00Z', null, '2026-10-05') === true
+        && inR('2026-10-05T16:00:00Z', null, '2026-10-05') === false);
+    const BACK = { from: '2026-10-12', to: '2026-10-01' };
+    check('From after To (Oct 12 to Oct 1) matches nothing, not Oct 1, Oct 5 or Oct 12, and is never swapped: backwards() says so, and only for that',
+      ['2026-09-30T16:00:00Z', '2026-10-05T04:00:00Z', '2026-10-12T04:00:00Z'].every((iso) => attempt(() => F.matchesDate(billedAt(iso), 'billed', BACK)) === false)
+        && attempt(() => F.backwards(BACK)) === true && attempt(() => F.backwards({ from: '2026-10-01', to: '2026-10-12' })) === false
+        && attempt(() => F.backwards({ from: '2026-10-05', to: '2026-10-05' })) === false && attempt(() => F.backwards({ from: '2026-10-12', to: null })) === false
+        && attempt(() => F.backwards(null)) === false);
+    check('  no range (Any date) takes every charge, even one with no date',
+      attempt(() => F.matchesDate(billedAt('2026-10-05T04:00:00Z'), 'billed', null)) === true
+        && attempt(() => F.matchesDate(billedAt(null), 'billed', null)) === true
+        && attempt(() => F.matchesDate(billedAt(null), 'billed', { from: '2026-10-01', to: null })) === false);
+
+    // e. Which date: billed, or paid under Paid.
+    const twoRows = (rows) => charge(8300, 'DOCUMENT', 'PAID', 100, { created_at: '2026-09-01T04:00:00Z', payments: rows });
+    const dOf = (c, kind) => attempt(() => F.chargeDate(c, kind));
+    const EARLY = STAFF_ROW(8301, 'gcash', '2026-09-20T04:00:00Z', '1');
+    const LATE = STAFF_ROW(8302, 'onsite', '2026-10-07T02:00:00Z');
+    check('the paid date is the latest payment row\'s created_at, whichever order the rows come in',
+      dOf(twoRows([EARLY, LATE]), 'paid') === '2026-10-07T02:00:00Z' && dOf(twoRows([LATE, EARLY]), 'paid') === '2026-10-07T02:00:00Z',
+      said([dOf(twoRows([EARLY, LATE]), 'paid'), dOf(twoRows([LATE, EARLY]), 'paid')]));
+    check('  a paid charge with no payment row (approval creates a PHP 0 one already paid) is paid on its billed date',
+      dOf(charge(8303, 'DOCUMENT', 'PAID', 0, { created_at: '2026-10-11T23:47:20.859+00:00' }), 'paid') === '2026-10-11T23:47:20.859+00:00');
+    check('  unpaid and void charges use their billed date, and a paid one does too when the view filters on the billed date',
+      dOf(charge(8304, 'DOCUMENT', 'UNPAID', 100, { created_at: '2026-10-03T04:00:00Z' }), 'paid') === '2026-10-03T04:00:00Z'
+        && dOf(charge(8305, 'DOCUMENT', 'VOID', 100, { created_at: '2026-10-04T04:00:00Z' }), 'paid') === '2026-10-04T04:00:00Z'
+        && dOf(twoRows([EARLY, LATE]), 'billed') === '2026-09-01T04:00:00Z' && dOf(billedAt('2026-10-03T04:00:00Z'), 'billed') === '2026-10-03T04:00:00Z');
+    check('the date a view filters on: "paid" under Paid; "billed" under Needs verification, Void and All charges',
+      attempt(() => ['PAID', 'UNPAID', 'VOID', 'all'].map((s) => F.dateKind(s)).join(' ')) === 'paid billed billed billed',
+      said(attempt(() => ['PAID', 'UNPAID', 'VOID', 'all'].map((s) => F.dateKind(s)).join(' '))));
+    const billedOct1PaidToday = charge(8306, 'DOCUMENT', 'PAID', 100, { created_at: '2026-10-01T02:00:00Z',
+      payments: [STAFF_ROW(8306, 'onsite', '2026-10-11T16:10:00Z')] });
+    const TODAY = { from: '2026-10-12', to: '2026-10-12' };
+    check('  so a charge billed Oct 1 and paid at 00:10 on Oct 12 in Manila is "today" by its paid date and not by its billed date',
+      attempt(() => F.matchesDate(billedOct1PaidToday, 'paid', TODAY)) === true && attempt(() => F.matchesDate(billedOct1PaidToday, 'billed', TODAY)) === false);
+
+    // f. The date phrase the totals line ends with.
+    const dt = (kind, choice, range, today = '2026-10-12') => attempt(() => F.dateText(kind, choice, range, today));
+    check('the date phrase names the date and the range: "billed today", "paid in the last 7 days", "paid this month"',
+      dt('billed', 'today', TODAY) === 'billed today' && dt('paid', 'week', { from: '2026-10-06', to: '2026-10-12' }) === 'paid in the last 7 days'
+        && dt('paid', 'month', { from: '2026-10-01', to: '2026-10-12' }) === 'paid this month',
+      said([dt('billed', 'today', TODAY), dt('paid', 'week', { from: '2026-10-06', to: '2026-10-12' }), dt('paid', 'month', { from: '2026-10-01', to: '2026-10-12' })]));
+    check('  chosen dates: "paid Oct 1 to Oct 12"; one day, "billed on Oct 5"; only From, "billed from Oct 1"; only To, "billed up to Oct 12"',
+      dt('paid', 'custom', { from: '2026-10-01', to: '2026-10-12' }) === 'paid Oct 1 to Oct 12'
+        && dt('billed', 'custom', { from: '2026-10-05', to: '2026-10-05' }) === 'billed on Oct 5'
+        && dt('billed', 'custom', { from: '2026-10-01', to: null }) === 'billed from Oct 1'
+        && dt('billed', 'custom', { from: null, to: '2026-10-12' }) === 'billed up to Oct 12',
+      said([dt('paid', 'custom', { from: '2026-10-01', to: '2026-10-12' }), dt('billed', 'custom', { from: '2026-10-05', to: '2026-10-05' }),
+        dt('billed', 'custom', { from: '2026-10-01', to: null }), dt('billed', 'custom', { from: null, to: '2026-10-12' })]));
+    check('  a date outside this year carries its year, on both ends: "paid Dec 20, 2025 to Jan 5, 2026"',
+      dt('paid', 'custom', { from: '2025-12-20', to: '2026-01-05' }) === 'paid Dec 20, 2025 to Jan 5, 2026',
+      said(dt('paid', 'custom', { from: '2025-12-20', to: '2026-01-05' })));
+    check('  and there is no phrase when no date filter is on', dt('billed', 'any', null) === null && dt('paid', 'custom', null) === null,
+      said([dt('billed', 'any', null), dt('paid', 'custom', null)]));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true, dated: 'billed in the last 7 days' });
+    check('the totals line ends with the date phrase when a date filter is on: "3 of 14 charges match · ₱1,250.00 unpaid · billed in the last 7 days"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid · billed in the last 7 days' && got.detail === null, said(got));
+    got = line({ status: 'PAID', shown: PAID6, received: 69, total: 69, filtered: true, dated: 'paid Oct 1 to Oct 12' });
+    check('  on Paid: "6 of 69 charges match · ₱400.80 paid · paid Oct 1 to Oct 12", and the split still covers those 6',
+      got?.heading === '6 of 69 charges match · ₱400.80 paid · paid Oct 1 to Oct 12'
+        && got.detail === 'Cash ₱150.50 · GCash ₱250.00 · Paid online ₱0.30', said(got));
+    got = line({ status: 'all', shown: MIXED, received: 89, total: 89, filtered: true, dated: 'billed this month' });
+    check('  on All charges: "4 of 89 charges match · billed this month", with the amounts on the line under it',
+      got?.heading === '4 of 89 charges match · billed this month' && got.detail === '₱100.00 paid · ₱50.30 unpaid · ₱25.50 void', said(got));
+    got = line({ status: 'UNPAID', shown: [], received: 14, total: 14, filtered: true, dated: 'billed today' });
+    check('  with nothing matching: "0 of 14 charges match · billed today"', got?.heading === '0 of 14 charges match · billed today'
+      && got.detail === null, said(got));
+    got = line({ status: 'UNPAID', shown: owing('UNPAID', [1000, 200, 50]), received: 14, total: 14, filtered: true, dated: null });
+    check('  and nothing extra when no date filter is on: "3 of 14 charges match · ₱1,250.00 unpaid"',
+      got?.heading === '3 of 14 charges match · ₱1,250.00 unpaid', said(got));
+
+    // g. The real page, against 23 charges, on 12 Oct 2026 at 12:00 in
+    // Manila. 8 waiting (PHP 950), billed from 00:30 that morning back to
+    // Sep 20, three with an open checkout; 12 paid: cash, GCash a staff member
+    // recorded, PayMongo and No fee, paid from 00:10 that morning back to
+    // July; 3 void. Several sit a minute either side of a Manila midnight.
+    const Q_UNPAID = [
+      docOf(4001, 'UNPAID', 50, ['Aida', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-10-11T16:30:00Z' }),
+      rentalOf(4002, 'UNPAID', 300, ['Bert', 'Flores'], 'Tent', 1, { created_at: '2026-10-12T02:00:00Z', paymongo_session_id: 'cs_q_4002' }),
+      docOf(4003, 'UNPAID', 50, ['Cora', null, 'Flores'], 'Certificate of Residency',
+        { created_at: '2026-10-08T15:59:00Z', paymongo_session_id: 'cs_q_4003' }),
+      fineOf(4004, 'UNPAID', 100, 'Dodong Flores', 'General Assembly', { created_at: '2026-10-05T16:00:00Z' }),
+      docOf(4005, 'UNPAID', 50, ['Edna', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-10-05T15:59:00Z' }),
+      docOf(4006, 'UNPAID', 50, ['Fermin', null, 'Flores'], 'Barangay Clearance',
+        { created_at: '2026-10-01T00:00:00Z', paymongo_session_id: 'cs_q_4006' }),
+      rentalOf(4007, 'UNPAID', 300, ['Gloria', 'Flores'], 'Tent', 1, { created_at: '2026-09-30T15:59:00Z' }),
+      docOf(4008, 'UNPAID', 50, ['Hugo', null, 'Flores'], 'Barangay Clearance', { created_at: '2026-09-20T04:00:00Z' }),
+    ];
+    const online = (id, at) => ({ paymongo_session_id: `cs_q_${id}`, paymongo_payment_id: `pay_q_${id}`, payments: [AUTO_ROW(id, at)] });
+    const Q_PAID = [
+      docOf(4011, 'PAID', 100, ['Ines', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-10-01T02:00:00Z', payments: [STAFF_ROW(4011, 'onsite', '2026-10-11T16:10:00Z')] }),
+      docOf(4012, 'PAID', 150, ['Jose', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-28T03:00:00Z', payments: [STAFF_ROW(4012, 'gcash', '2026-10-12T01:00:00Z', '1112223334')] }),
+      rentalOf(4013, 'PAID', 300, ['Karen', 'Garcia'], 'Tent', 1, { created_at: '2026-10-09T04:00:00Z', ...online(4013, '2026-10-09T05:00:00Z') }),
+      docOf(4014, 'PAID', 100, ['Luis', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-15T04:00:00Z', ...online(4014, '2026-10-05T16:30:00Z') }),
+      docOf(4015, 'PAID', 100, ['Marta', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-09-10T04:00:00Z', payments: [STAFF_ROW(4015, 'onsite', '2026-10-02T03:00:00Z')] }),
+      fineOf(4016, 'PAID', 100, 'Nonoy Garcia', 'Clean-up Drive',
+        { created_at: '2026-09-05T04:00:00Z', payments: [STAFF_ROW(4016, 'onsite', '2026-09-29T04:00:00Z')] }),
+      docOf(4017, 'PAID', 0, ['Olive', null, 'Garcia'], 'Certificate of Indigency', { created_at: '2026-10-11T23:47:20.859+00:00' }),
+      docOf(4018, 'PAID', 0, ['Pedro', null, 'Garcia'], 'Certificate of Indigency', { created_at: '2026-07-07T11:59:10.124+00:00' }),
+      docOf(4019, 'PAID', 120, ['Queenie', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-08-01T04:00:00Z', payments: [STAFF_ROW(4019, 'gcash', '2026-08-02T04:00:00Z', '5556667778')] }),
+      rentalOf(4020, 'PAID', 300, ['Ramon', 'Garcia'], 'Tent', 1, { created_at: '2026-10-05T03:00:00Z', ...online(4020, '2026-10-05T03:30:00Z') }),
+      docOf(4021, 'PAID', 50, ['Sonia', null, 'Garcia'], 'Barangay Clearance',
+        { created_at: '2026-10-12T01:00:00Z', payments: [STAFF_ROW(4021, 'onsite', '2026-10-12T02:00:00Z')] }),
+      // Two rows: a PayMongo one on Sep 20, then cash on Oct 7, the latest.
+      docOf(4022, 'PAID', 100, ['Tonyo', null, 'Garcia'], 'Barangay Clearance', { created_at: '2026-09-19T04:00:00Z',
+        paymongo_session_id: 'cs_q_4022', paymongo_payment_id: 'pay_q_4022',
+        payments: [AUTO_ROW(4022, '2026-09-20T04:00:00Z'), STAFF_ROW(4122, 'onsite', '2026-10-07T02:00:00Z')] }),
+    ];
+    const Q_VOID = [
+      docOf(4031, 'VOID', 50, ['Ursula', null, 'Reyes'], 'Barangay Clearance', { created_at: '2026-10-10T02:00:00Z' }),
+      rentalOf(4032, 'VOID', 500, ['Vic', 'Reyes'], 'Tent', 1, { created_at: '2026-09-25T04:00:00Z' }),
+      fineOf(4033, 'VOID', 100, 'Wally Reyes', 'Clean-up Drive', { created_at: '2026-10-12T03:00:00Z' }),
+    ];
+    const qFresh = () => ({ UNPAID: [...Q_UNPAID], PAID: [...Q_PAID], VOID: [...Q_VOID] });
+    // A control found by its visible label, as a person finds it.
+    const labelled = (pg_, text) => {
+      const label = pg_.queryAll('label').find((l) => l.textContent === text);
+      return label ? label.control || (label.htmlFor ? dom.window.document.getElementById(label.htmlFor) : null) : null;
+    };
+    const methodSelect = (pg_) => labelled(pg_, 'Method');
+    const dateSelect = (pg_) => labelled(pg_, 'Billed date') || labelled(pg_, 'Paid date');
+    const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+    const HINT = 'The start date is after the end date.';
+    const hintEl = (pg_) => pg_.queryAll('[role="status"], [aria-live="polite"]').find((el) => el.textContent === HINT) ?? null;
+    const lookQ = (pg_) => {
+      const m = methodSelect(pg_);
+      const d = dateSelect(pg_);
+      return {
+        ...look(pg_),
+        method: chosen(m),
+        methods: m ? [...m.options].map((o) => o.textContent).join(' | ') : null,
+        methodOff: m ? m.disabled : null,
+        dateLabel: labelled(pg_, 'Paid date') ? 'Paid date' : labelled(pg_, 'Billed date') ? 'Billed date' : null,
+        date: chosen(d),
+        from: labelled(pg_, 'From')?.value ?? null,
+        to: labelled(pg_, 'To')?.value ?? null,
+        clear: !!buttonNamed(root(), 'Clear filters'),
+        hint: !!hintEl(pg_) || root().textContent.includes(HINT),
+      };
+    };
+    // Choose the option a select shows as `label`, the way a person does.
+    const pick = async (pg_, select, label) => {
+      const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+      if (option) {
+        select.value = option.value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await pg_.settle();
+    };
+    const pickMethod = (pg_, label) => pick(pg_, methodSelect(pg_), label);
+    const pickDate = (pg_, label) => pick(pg_, dateSelect(pg_), label);
+    const typeDate = async (pg_, label, value) => {
+      const input = labelled(pg_, label);
+      if (input?.id) await pg_.fill(`#${input.id}`, value);
+      await pg_.settle();
+    };
+    const openQ = (state = qFresh()) => { setNow(FIXED_NOW); return openWith(state); };
+
+    page = await openQ();
+    const writesAtOpenQ = store.sets;
+    const domWritesAtOpenQ = domStorage.writes;
+    v = lookQ(page);
+    const toolbarQ = page.query('.list-head.pay-toolbar');
+    const secondRow = toolbarQ?.nextElementSibling ?? null;
+    const m0 = methodSelect(page);
+    const d0 = dateSelect(page);
+    const tabsQ = page.query('.pay-tabs');
+    check('a second toolbar row sits under the search row and above the tabs, holding a native select labelled "Method" and one labelled "Billed date"',
+      !!secondRow && !!m0 && !!d0 && m0.tagName === 'SELECT' && d0.tagName === 'SELECT' && secondRow.contains(m0) && secondRow.contains(d0)
+        && !toolbarQ.contains(m0) && !!tabsQ && (secondRow.compareDocumentPosition(tabsQ) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      said({ secondRow: secondRow?.className ?? null, method: m0?.tagName ?? null, date: d0?.tagName ?? null }));
+    check('  the search row is as it was: the search box, the status (still the first select in .list-head, on Needs verification) and Refresh',
+      !!toolbarQ && toolbarQ.contains(page.query(SEARCH)) && page.query('.list-head select')?.value === 'UNPAID' && !!buttonNamed(toolbarQ, 'Refresh'));
+    check('  Method reads "Any method"; the date reads "Any date", choosing from Any date, Today, Last 7 days, This month and Choose dates; '
+        + 'no From or To yet, no Clear filters, no hint, and the totals as before',
+      v.method === 'Any method' && v.date === 'Any date'
+        && (d0 ? [...d0.options].map((o) => o.textContent).join(' | ') : null) === 'Any date | Today | Last 7 days | This month | Choose dates'
+        && v.from === null && v.to === null && !v.clear && !v.hint && v.heading === '8 charges · ₱950.00 unpaid', said(v));
+    check('Needs verification: Method offers Any method and Online pending, and the date is the "Billed date"',
+      v.methods === 'Any method | Online pending' && v.methodOff === false && v.dateLabel === 'Billed date', said(v));
+    await choose(page, 'PAID');
+    v = lookQ(page);
+    check('Paid: Method offers Any method, Cash, GCash, Paid online and No fee, and the date label reads "Paid date"',
+      v.methods === 'Any method | Cash | GCash | Paid online | No fee' && v.methodOff === false && v.dateLabel === 'Paid date', said(v));
+    await choose(page, 'VOID');
+    v = lookQ(page);
+    check('Void: Method offers only Any method and is disabled; the date is the "Billed date" again',
+      v.methods === 'Any method' && v.methodOff === true && v.dateLabel === 'Billed date', said(v));
+    await choose(page, 'all');
+    v = lookQ(page);
+    check('All charges: Method offers all six, and the date is the "Billed date"',
+      v.methods === 'Any method | Cash | GCash | Paid online | No fee | Online pending' && v.methodOff === false
+        && v.dateLabel === 'Billed date', said(v));
+
+    await pickMethod(page, 'GCash');
+    v = lookQ(page);
+    check('All charges, Method GCash: the 2 GCash payments a staff member recorded (Jose, Queenie Garcia), never a PayMongo one; '
+        + 'tabs "All 2 · Documents 2 · Rentals 0 · Fines 0", totals "2 of 23 charges match", then "₱270.00 paid · ₱0.00 unpaid · ₱0.00 void"',
+      said(v.rows) === said(['Jose Garcia', 'Queenie Garcia']) && v.tabs === 'All 2 · Documents 2 · Rentals 0 · Fines 0'
+        && v.heading === '2 of 23 charges match' && v.detail === '₱270.00 paid · ₱0.00 unpaid · ₱0.00 void' && v.clear, said(v));
+    const perMethod = {};
+    for (const label of ['Cash', 'Paid online', 'No fee', 'Online pending']) {
+      await pickMethod(page, label);
+      const x = lookQ(page);
+      perMethod[label] = { rows: x.rows, tabs: x.tabs };
+    }
+    check('  Cash: Ines, Marta, Nonoy, Sonia and Tonyo Garcia (his latest row is cash); Paid online: Karen, Luis, Ramon; No fee: Olive, Pedro; '
+        + 'Online pending: Bert, Cora, Fermin Flores; and the tab counts follow each',
+      said(perMethod.Cash?.rows) === said(['Ines Garcia', 'Marta Garcia', 'Nonoy Garcia', 'Sonia Garcia', 'Tonyo Garcia'])
+        && perMethod.Cash.tabs === 'All 5 · Documents 4 · Rentals 0 · Fines 1'
+        && said(perMethod['Paid online']?.rows) === said(['Karen Garcia', 'Luis Garcia', 'Ramon Garcia'])
+        && perMethod['Paid online'].tabs === 'All 3 · Documents 1 · Rentals 2 · Fines 0'
+        && said(perMethod['No fee']?.rows) === said(['Olive Garcia', 'Pedro Garcia'])
+        && said(perMethod['Online pending']?.rows) === said(['Bert Flores', 'Cora Flores', 'Fermin Flores'])
+        && perMethod['Online pending'].tabs === 'All 3 · Documents 2 · Rentals 1 · Fines 0', said(perMethod));
+
+    await choose(page, 'UNPAID');
+    v = lookQ(page);
+    const keptPending = v.method === 'Online pending' && said(v.rows) === said(['Bert Flores', 'Cora Flores', 'Fermin Flores']);
+    await choose(page, 'all');
+    await pickMethod(page, 'Cash');
+    await choose(page, 'PAID');
+    v = lookQ(page);
+    const keptCash = v.method === 'Cash' && v.rows.length === 5;
+    await choose(page, 'UNPAID');
+    v = lookQ(page);
+    check('a status change resets the method when the new view does not offer it: Cash on Paid, then Needs verification, reads Any method, all 8 rows',
+      v.method === 'Any method' && v.rows.length === 8 && v.heading === '8 charges · ₱950.00 unpaid', said(v));
+    check('  and keeps it when it does: Online pending from All charges to Needs verification, Cash from All charges to Paid',
+      keptPending && keptCash, said({ keptPending, keptCash }));
+
+    const presetRows = {};
+    for (const label of ['Today', 'Last 7 days', 'This month']) {
+      await pickDate(page, label);
+      const x = lookQ(page);
+      presetRows[label] = { rows: x.rows, heading: x.heading };
+    }
+    check('Needs verification by billed date: Today takes Aida (00:30 that morning, still Oct 11 in UTC) and Bert; Last 7 days adds Cora and Dodong '
+        + '(00:00 on Oct 6), not Edna (23:59 on Oct 5); This month adds Edna and Fermin, not Gloria (23:59 on Sep 30)',
+      said(presetRows.Today?.rows) === said(['Aida Flores', 'Bert Flores'])
+        && said(presetRows['Last 7 days']?.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores', 'Dodong Flores'])
+        && said(presetRows['This month']?.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores', 'Dodong Flores', 'Edna Flores', 'Fermin Flores']),
+      said(presetRows));
+    check('  the totals name the date and range: "2 of 8 charges match · ₱350.00 unpaid · billed today", "4 of 8 … ₱500.00 … billed in the last 7 days", '
+        + '"6 of 8 … ₱600.00 … billed this month"',
+      presetRows.Today?.heading === '2 of 8 charges match · ₱350.00 unpaid · billed today'
+        && presetRows['Last 7 days']?.heading === '4 of 8 charges match · ₱500.00 unpaid · billed in the last 7 days'
+        && presetRows['This month']?.heading === '6 of 8 charges match · ₱600.00 unpaid · billed this month', said(presetRows));
+
+    await choose(page, 'PAID');
+    const paidMonth = lookQ(page);
+    await pickDate(page, 'Today');
+    const paidToday = lookQ(page);
+    await pickDate(page, 'Last 7 days');
+    const paidWeek = lookQ(page);
+    check('a status change keeps the date: This month on Needs verification is still This month on Paid, by the paid date: '
+        + '"9 of 12 charges match · ₱1,200.00 paid · paid this month", split "Cash ₱350.00 · GCash ₱150.00 · Paid online ₱700.00"',
+      paidMonth.date === 'This month' && paidMonth.dateLabel === 'Paid date' && paidMonth.rows.length === 9
+        && paidMonth.heading === '9 of 12 charges match · ₱1,200.00 paid · paid this month'
+        && paidMonth.detail === 'Cash ₱350.00 · GCash ₱150.00 · Paid online ₱700.00', said(paidMonth));
+    check('Paid, Today: Ines (paid 00:10 that morning, billed Oct 1), Jose, Olive (no payment row, so billed and paid at 07:47) and Sonia',
+      said(paidToday.rows) === said(['Ines Garcia', 'Jose Garcia', 'Olive Garcia', 'Sonia Garcia']), said(paidToday));
+    check('  "4 of 12 charges match · ₱300.00 paid · paid today", and the split covers just those: "Cash ₱150.00 · GCash ₱150.00 · Paid online ₱0.00"',
+      paidToday.heading === '4 of 12 charges match · ₱300.00 paid · paid today'
+        && paidToday.detail === 'Cash ₱150.00 · GCash ₱150.00 · Paid online ₱0.00', said(paidToday));
+    check('  Last 7 days adds Karen, Luis (paid 00:30 on Oct 6) and Tonyo (by his latest row, Oct 7, not his first, Sep 20): '
+        + '"7 of 12 charges match · ₱800.00 paid · paid in the last 7 days"',
+      said(paidWeek.rows) === said(['Ines Garcia', 'Jose Garcia', 'Karen Garcia', 'Luis Garcia', 'Olive Garcia', 'Sonia Garcia', 'Tonyo Garcia'])
+        && paidWeek.heading === '7 of 12 charges match · ₱800.00 paid · paid in the last 7 days'
+        && paidWeek.detail === 'Cash ₱250.00 · GCash ₱150.00 · Paid online ₱400.00', said(paidWeek));
+    await pickDate(page, 'Today');
+    await pickMethod(page, 'No fee');
+    v = lookQ(page);
+    check('  Paid, No fee, Today: Olive Garcia alone, by her billed date; Pedro Garcia, billed in July, is not in it',
+      said(v.rows) === said(['Olive Garcia']) && v.heading === '1 of 12 charges matches · ₱0.00 paid · paid today', said(v));
+
+    await pickMethod(page, 'Any method');
+    await choose(page, 'all');
+    v = lookQ(page);
+    check('All charges goes by the billed date, paid charges too: Today takes Aida, Bert, Olive, Sonia and Wally Reyes, not Ines (paid today, billed Oct 1); '
+        + '"5 of 23 charges match · billed today", then "₱50.00 paid · ₱350.00 unpaid · ₱100.00 void"',
+      v.dateLabel === 'Billed date' && said(v.rows) === said(['Aida Flores', 'Bert Flores', 'Olive Garcia', 'Sonia Garcia', 'Wally Reyes'])
+        && v.tabs === 'All 5 · Documents 3 · Rentals 1 · Fines 1' && v.heading === '5 of 23 charges match · billed today'
+        && v.detail === '₱50.00 paid · ₱350.00 unpaid · ₱100.00 void', said(v));
+    await pickDate(page, 'This month');
+    await pickMethod(page, 'Cash');
+    v = lookQ(page);
+    check('  method and date together: Cash and This month on All charges take Ines and Sonia Garcia only, "2 of 23 charges match · billed this month"',
+      said(v.rows) === said(['Ines Garcia', 'Sonia Garcia']) && v.tabs === 'All 2 · Documents 2 · Rentals 0 · Fines 0'
+        && v.heading === '2 of 23 charges match · billed this month' && v.detail === '₱150.00 paid · ₱0.00 unpaid · ₱0.00 void', said(v));
+
+    await type(page, 'sonia');
+    await clickIf(page, tabNamed(page, 'Documents'));
+    const beforeClear = lookQ(page);
+    const clearButton = buttonNamed(root(), 'Clear filters');
+    await press(page, clearButton);
+    v = lookQ(page);
+    check('"Clear filters" shows while a method or date filter is on, and clears just those: Cash and This month go, "sonia" and the Documents tab stay',
+      beforeClear.clear && !!clearButton && v.method === 'Any method' && v.date === 'Any date' && v.search === 'sonia'
+        && said(v.pressed) === said(['Documents 1']) && said(v.rows) === said(['Sonia Garcia']) && v.heading === '1 of 23 charges matches' && !v.clear,
+      said({ before: beforeClear.clear, after: v }));
+    check('  the button goes once nothing is on, and focus moves to the Method select instead of being dropped',
+      !buttonNamed(root(), 'Clear filters') && !!methodSelect(page) && page.active() === methodSelect(page),
+      `focus on ${page.active()?.tagName ?? 'nothing'} ${page.active()?.id ?? ''}`);
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+
+    await choose(page, 'UNPAID');
+    await pickDate(page, 'Choose dates');
+    v = lookQ(page);
+    const fromInput = labelled(page, 'From');
+    const toInput = labelled(page, 'To');
+    check('Choose dates shows two native date inputs labelled "From" and "To", both empty; with neither filled nothing is narrowed, and Clear filters is offered',
+      fromInput?.type === 'date' && toInput?.type === 'date' && v.from === '' && v.to === '' && v.rows.length === 8
+        && v.heading === '8 charges · ₱950.00 unpaid' && v.clear && !v.hint, said(v));
+    await typeDate(page, 'From', '2026-10-05');
+    await typeDate(page, 'To', '2026-10-08');
+    v = lookQ(page);
+    check('  From Oct 5 to Oct 8, both days in: Cora (23:59 on Oct 8), Dodong and Edna (23:59 on Oct 5): "3 of 8 charges match · ₱200.00 unpaid · billed Oct 5 to Oct 8"',
+      said(v.rows) === said(['Cora Flores', 'Dodong Flores', 'Edna Flores'])
+        && v.heading === '3 of 8 charges match · ₱200.00 unpaid · billed Oct 5 to Oct 8', said(v));
+    await typeDate(page, 'To', '');
+    await typeDate(page, 'From', '2026-10-08');
+    const onlyFrom = lookQ(page);
+    await typeDate(page, 'From', '');
+    await typeDate(page, 'To', '2026-10-05');
+    const onlyTo = lookQ(page);
+    check('  only From (Oct 8): that day on, "billed from Oct 8"; only To (Oct 5): up to that day, "billed up to Oct 5"',
+      said(onlyFrom.rows) === said(['Aida Flores', 'Bert Flores', 'Cora Flores'])
+        && onlyFrom.heading === '3 of 8 charges match · ₱400.00 unpaid · billed from Oct 8'
+        && said(onlyTo.rows) === said(['Edna Flores', 'Fermin Flores', 'Gloria Flores', 'Hugo Flores'])
+        && onlyTo.heading === '4 of 8 charges match · ₱450.00 unpaid · billed up to Oct 5', said({ onlyFrom, onlyTo }));
+    await typeDate(page, 'From', '2026-10-08');
+    v = lookQ(page);
+    const hintNow = hintEl(page);
+    check('From after To (Oct 8 to Oct 5): "The start date is after the end date." in a polite status region; the range matches nothing and is not swapped',
+      !!hintNow && v.from === '2026-10-08' && v.to === '2026-10-05' && v.rows.length === 0 && v.noMatch
+        && v.tabs === 'All 0 · Documents 0 · Rentals 0 · Fines 0' && v.heading === '0 of 8 charges match · billed Oct 8 to Oct 5', said(v));
+    await typeDate(page, 'To', '2026-10-08');
+    v = lookQ(page);
+    check('  To set to Oct 8 as well: the hint goes, and the one day holds Cora Flores, "1 of 8 charges matches · ₱50.00 unpaid · billed on Oct 8"',
+      !v.hint && said(v.rows) === said(['Cora Flores']) && v.heading === '1 of 8 charges matches · ₱50.00 unpaid · billed on Oct 8', said(v));
+
+    await type(page, 'bert');
+    await pickMethod(page, 'Online pending');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    v = lookQ(page);
+    const emptyButton = buttonNamed(root(), 'Clear search and filters');
+    await clickIf(page, emptyButton);
+    const cleared = lookQ(page);
+    check('no match ("bert", Online pending, Rentals, Oct 8 to Oct 8): "Clear search and filters" clears the search, the tab, the method and the date, and leaves the status',
+      v.noMatch && !!emptyButton && cleared.search === '' && said(cleared.pressed) === said(['All 8']) && cleared.method === 'Any method'
+        && cleared.date === 'Any date' && cleared.from === null && cleared.to === null && page.query('.list-head select')?.value === 'UNPAID'
+        && cleared.rows.length === 8 && cleared.heading === '8 charges · ₱950.00 unpaid' && page.active() === page.query(SEARCH),
+      said({ v, cleared }));
+    await pickDate(page, 'Choose dates');
+    v = lookQ(page);
+    check('  and Choose dates opens empty afterwards: the From and To it held were cleared too', v.from === '' && v.to === '', said(v));
+
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Today');
+    const callsBeforeQ = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    v = lookQ(page);
+    check('Refresh keeps the method and the date: Online pending and Today before and after the reload, "1 of 8 charges matches · ₱300.00 unpaid · billed today"',
+      net.calls.length === callsBeforeQ + 1 && v.method === 'Online pending' && v.date === 'Today' && said(v.rows) === said(['Bert Flores'])
+        && v.heading === '1 of 8 charges matches · ₱300.00 unpaid · billed today', said(v));
+    check('nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      store.sets === writesAtOpenQ && domStorage.writes === domWritesAtOpenQ && dom.window.sessionStorage.length === 0,
+      `${store.sets - writesAtOpenQ} stub write(s), ${domStorage.writes - domWritesAtOpenQ} jsdom write(s), `
+        + `sessionStorage ${dom.window.sessionStorage.length}`);
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(qFresh()));
+    page = await mountPayments();
+    v = lookQ(page);
+    check('  and they start fresh each time the page opens: after Online pending and Today, a new visit reads Any method and Any date, no From or To, no Clear filters',
+      v.method === 'Any method' && v.date === 'Any date' && v.from === null && v.to === null && !v.clear && v.rows.length === 8, said(v));
+    await page.unmount();
+
+    // Record payment: the reload after it keeps the method and the date.
+    const qRecord = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/4003/verify')) {
+        qRecord.UNPAID = qRecord.UNPAID.filter((c) => c.charge_id !== 4003);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 90 } };
+      }
+      return answerFrom(qRecord)(url, method);
+    });
+    page = await mountPayments();
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Last 7 days');
+    const beforeRecord = lookQ(page);
+    await clickIf(page, viewFor(page, 'Cora Flores'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    v = lookQ(page);
+    check('Record payment keeps the method and the date: Online pending and Last 7 days, Record on Cora Flores, and the reload reads '
+        + '"1 of 7 charges matches · ₱300.00 unpaid · billed in the last 7 days"',
+      said(beforeRecord.rows) === said(['Bert Flores', 'Cora Flores']) && v.method === 'Online pending' && v.date === 'Last 7 days'
+        && said(v.rows) === said(['Bert Flores']) && v.heading === '1 of 7 charges matches · ₱300.00 unpaid · billed in the last 7 days'
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #90)' && !page.query('.pay-panel'),
+      said({ before: beforeRecord.rows, v }));
+    await page.unmount();
+
+    // A charge the filters hide while its panel is open: the panel works from
+    // the whole list, never the filtered one, and Re-check keeps the filters.
+    const qRecheck = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/payments/gcash/reconcile/4002')) {
+        qRecheck.UNPAID = qRecheck.UNPAID.filter((c) => c.charge_id !== 4002);
+        return { settled: true, outcome: 'recorded', message: 'PayMongo confirmed the payment. The charge is now paid.' };
+      }
+      return answerFrom(qRecheck)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, viewFor(page, 'Bert Flores'));
+    const openedQ = page.query('.pay-panel #pay-panel-title')?.textContent ?? null;
+    await pickDate(page, 'Choose dates');
+    await typeDate(page, 'From', '2026-10-01');
+    await typeDate(page, 'To', '2026-10-05');
+    v = lookQ(page);
+    check('a charge the filters hide keeps its panel: View Bert Flores (billed today), then Oct 1 to Oct 5: the panel stays on Bert Flores, the list shows Edna and Fermin',
+      openedQ === 'Bert Flores' && page.query('.pay-panel #pay-panel-title')?.textContent === 'Bert Flores'
+        && said(v.rows) === said(['Edna Flores', 'Fermin Flores']), said({ openedQ, rows: v.rows }));
+    await clickIf(page, buttonNamed(root(), 'Re-check with PayMongo'));
+    await page.settle();
+    v = lookQ(page);
+    check('  and Re-check still closes it once the reload shows it paid: focus on the message, Oct 1 to Oct 5 kept',
+      !page.query('.pay-panel') && page.active() === page.query('.alert.success') && v.date === 'Choose dates' && v.from === '2026-10-01'
+        && v.to === '2026-10-05' && said(v.rows) === said(['Edna Flores', 'Fermin Flores']),
+      said({ panel: !!page.query('.pay-panel'), focus: page.active()?.className ?? null, v }));
+    await page.unmount();
+
+    // Pages: 30 waiting, 15 with an open checkout, 20 billed today.
+    const PAGING_Q = () => ({
+      UNPAID: Array.from({ length: 30 }, (_, i) => docOf(4100 + i, 'UNPAID', 50, ['Pay', null, String(i + 1).padStart(2, '0')],
+        'Barangay Clearance', { created_at: i < 20 ? '2026-10-12T01:00:00Z' : '2026-10-03T01:00:00Z',
+          paymongo_session_id: i % 2 === 0 ? `cs_q_${4100 + i}` : null })),
+      PAID: [], VOID: [],
+    });
+    page = await openQ(PAGING_Q());
+    const writesQ = store.sets;
+    const domWritesQ = domStorage.writes;
+    await setRows(page, 10);
+    const toSecond = () => press(page, numberButton(page, 2));
+    await toSecond();
+    const onTwo = lookQ(page);
+    await pickMethod(page, 'Online pending');
+    const afterMethod = lookQ(page);
+    await pickMethod(page, 'Any method');
+    await toSecond();
+    await pickDate(page, 'Today');
+    const afterPreset = lookQ(page);
+    await toSecond();
+    await pickDate(page, 'Choose dates');
+    const afterChoose = lookQ(page);
+    await toSecond();
+    await typeDate(page, 'From', '2026-10-01');
+    const afterFrom = lookQ(page);
+    await toSecond();
+    await typeDate(page, 'To', '2026-10-12');
+    const afterTo = lookQ(page);
+    check('every filter change goes back to page 1 and keeps 10 a page: from page 2, Online pending reads "Showing 1 to 10 of 15 results"; '
+        + 'Today, "of 20"; Choose dates, "of 30"; a From date, "of 30"; a To date, "of 30"',
+      pagerSays(onTwo, 'Page 2 of 3', 'Showing 11 to 20 of 30 results')
+        && [afterMethod, afterPreset, afterChoose, afterFrom, afterTo].every((x) => x.size === '10' && said(x.current) === said(['1']))
+        && afterMethod.showing === 'Showing 1 to 10 of 15 results' && afterPreset.showing === 'Showing 1 to 10 of 20 results'
+        && afterChoose.showing === 'Showing 1 to 10 of 30 results' && afterFrom.showing === 'Showing 1 to 10 of 30 results'
+        && afterTo.showing === 'Showing 1 to 10 of 30 results',
+      said([onTwo, afterMethod, afterPreset, afterChoose, afterFrom, afterTo].map((x) => `${x.size}: ${x.showing} (${x.current})`)));
+    check('  and still nothing in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      store.sets === writesQ && domStorage.writes === domWritesQ && dom.window.sessionStorage.length === 0,
+      `${store.sets - writesQ} stub write(s), ${domStorage.writes - domWritesQ} jsdom write(s)`);
+    await page.unmount();
+
+    // A status change keeps the search, the tab and the date.
+    page = await openQ();
+    await type(page, 'tent');
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    await pickDate(page, 'Last 7 days');
+    const onUnpaid = lookQ(page);
+    await choose(page, 'all');
+    const onAll = lookQ(page);
+    await choose(page, 'PAID');
+    const onPaid = lookQ(page);
+    check('a status change keeps the search, the tab and the date: "tent", Rentals and Last 7 days on Needs verification (Bert), then All charges '
+        + '(Bert, Karen), then Paid, where the label turns to "Paid date" (Karen, paid Oct 9; not Ramon, paid Oct 5)',
+      said(onUnpaid.rows) === said(['Bert Flores']) && onAll.search === 'tent' && said(onAll.pressed) === said(['Rentals 2'])
+        && onAll.date === 'Last 7 days' && onAll.dateLabel === 'Billed date' && said(onAll.rows) === said(['Bert Flores', 'Karen Garcia'])
+        && onPaid.search === 'tent' && onPaid.date === 'Last 7 days' && onPaid.dateLabel === 'Paid date' && said(onPaid.rows) === said(['Karen Garcia']),
+      said({ onUnpaid: onUnpaid.rows, onAll, onPaid }));
+    await page.unmount();
+
+    // The batch 4 load error: the second row stays, and changes nothing.
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    const errMethod = methodSelect(page);
+    const errDate = dateSelect(page);
+    await pickMethod(page, 'Online pending');
+    await pickDate(page, 'Today');
+    v = lookQ(page);
+    check('a load error is unchanged: the second row stays usable, and with Online pending and Today chosen there are still no tabs, totals, pager or rows',
+      root().textContent.includes('Could not load the charges: Network down') && !!errMethod && !errMethod.disabled && !!errDate
+        && v.method === 'Online pending' && v.date === 'Today' && v.heading === 'Charges' && !page.query('.pay-tabs') && v.detail === null
+        && v.pager === null && v.rows.length === 0 && !v.noMatch, said(v));
+    await page.unmount();
+
+    // =======================================================================
+    // R. Payments: the Filters button and panel on a phone
+    // =======================================================================
+    // On a phone the toolbar is the search, then one row of the status, a
+    // "Filters" button and Refresh; Method, the date, From and To and Clear
+    // filters sit in a panel under that row, which the button opens and
+    // closes in place. "Filters (n)" counts the Method and date filters that
+    // are on, never the search or the tab; aria-expanded says whether the
+    // panel is open, and aria-controls names it. The panel holds the one set
+    // of those controls, not a copy; Escape inside it closes it and gives
+    // focus back to the button; it starts closed on every visit, stays as it
+    // was left through Refresh and Record payment, and nothing about it is
+    // kept in the browser. Refresh is an icon on a phone and keeps "Refresh"
+    // as its name. Which of these shows at which width is index.css's to
+    // decide (above 640px the button is hidden and the row always shown), and
+    // the layout harness's to measure: here the markup and the behaviour are
+    // checked, which are the same at every width.
+    console.log('\n--- Payments: the Filters button and panel on a phone ---');
+    const TOOLBAR = '.list-head.pay-toolbar';
+    // The toolbar's button whose text starts "Filters". "Clear filters" is a
+    // different button, in the panel.
+    const filtersButton = (pg_) => pg_.queryAll(`${TOOLBAR} button`).find((b) => b.textContent.startsWith('Filters')) ?? null;
+    // Refresh, found by where it is rather than by its name, so a check can
+    // see the name go missing: the last button in the status row.
+    const refreshButton = (pg_) => pg_.queryAll(`${TOOLBAR} .head-actions button`).at(-1) ?? null;
+    const panelOf = (pg_) => {
+      const id = filtersButton(pg_)?.getAttribute('aria-controls');
+      return id ? dom.window.document.getElementById(id) : null;
+    };
+    // The name a screen reader gives an element: its aria-label, else its
+    // aria-labelledby, else the text inside it, leaving out anything
+    // aria-hidden (an icon).
+    const accName = (el) => {
+      if (!el) return null;
+      if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+      const by = el.getAttribute('aria-labelledby');
+      if (by) return by.split(/\s+/).map((id) => dom.window.document.getElementById(id)?.textContent ?? '').join(' ').trim();
+      const text = (node) => {
+        if (node.nodeType === 3) return node.textContent;
+        if (node.nodeType !== 1 || node.getAttribute('aria-hidden') === 'true' || node.hidden) return '';
+        return [...node.childNodes].map(text).join('');
+      };
+      return text(el).replace(/\s+/g, ' ').trim();
+    };
+    // Whether the panel is open, as the button says it and as the panel is
+    // marked for index.css.
+    const panelState = () => {
+      const b = filtersButton(page);
+      const p = panelOf(page);
+      return { expanded: b?.getAttribute('aria-expanded') ?? null, open: p ? p.classList.contains('is-open') : null };
+    };
+    const OPEN = said({ expanded: 'true', open: true });
+    const CLOSED = said({ expanded: 'false', open: false });
+    const listGets = () => net.calls.filter((c) => c.method === 'GET' && c.url.includes(LIST)).length;
+    const follows = (a, b) => !!a && !!b && (a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    page = await openQ();
+    const writesAtOpenR = store.sets;
+    const domWritesAtOpenR = domStorage.writes;
+    const toolbarR = page.query(TOOLBAR);
+    const panelR = panelOf(page);
+    const buttonR = filtersButton(page);
+    check('the toolbar has a "Filters" button between the status and Refresh, with aria-expanded="false" and aria-controls naming the panel, '
+        + 'which sits under the row and holds the Method and date selects',
+      !!buttonR && buttonR.type === 'button' && buttonR.getAttribute('aria-expanded') === 'false' && !!panelR && !toolbarR.contains(panelR)
+        && follows(toolbarR, panelR) && follows(page.query('.list-head select'), buttonR) && follows(buttonR, refreshButton(page))
+        && panelR.contains(methodSelect(page)) && panelR.contains(dateSelect(page)),
+      said({ button: buttonR?.outerHTML.slice(0, 160) ?? null, controls: buttonR?.getAttribute('aria-controls') ?? null, panel: panelR?.id ?? null }));
+
+    const filtersName = () => accName(filtersButton(page));
+    const named = { none: filtersName() };
+    await pickMethod(page, 'Online pending');
+    named.method = filtersName();
+    await pickDate(page, 'Today');
+    named.both = filtersName();
+    named.bothText = filtersButton(page)?.textContent ?? null;
+    await pickMethod(page, 'Any method');
+    named.date = filtersName();
+    check('it reads "Filters" with nothing on, "Filters (1)" with a method, "Filters (2)" with a method and a date, and "Filters (1)" with the date alone',
+      named.none === 'Filters' && named.method === 'Filters (1)' && named.both === 'Filters (2)' && named.bothText === 'Filters (2)'
+        && named.date === 'Filters (1)', said(named));
+    await type(page, 'flores');
+    named.search = filtersName();
+    await clickIf(page, tabNamed(page, 'Documents'));
+    named.tab = filtersName();
+    await press(page, buttonNamed(root(), 'Clear filters'));
+    named.cleared = filtersName();
+    v = lookQ(page);
+    check('  a search and a tab are not filters: "flores" and the Documents tab leave it at "Filters (1)", '
+        + 'and Clear filters takes it back to "Filters" with both still on',
+      named.search === 'Filters (1)' && named.tab === 'Filters (1)' && named.cleared === 'Filters' && v.search === 'flores'
+        && v.pressed.length === 1 && v.pressed[0].startsWith('Documents '), said({ named, search: v.search, pressed: v.pressed }));
+    await type(page, '');
+    await clickIf(page, tabNamed(page, 'All'));
+
+    const toggled = [panelState()];
+    await clickIf(page, filtersButton(page));
+    toggled.push(panelState());
+    await clickIf(page, filtersButton(page));
+    toggled.push(panelState());
+    check('pressing Filters opens the panel (aria-expanded="true", the panel marked open) and pressing it again closes it',
+      said(toggled[0]) === CLOSED && said(toggled[1]) === OPEN && said(toggled[2]) === CLOSED, said(toggled));
+
+    await clickIf(page, filtersButton(page));
+    await pickDate(page, 'Choose dates');
+    const inPanel = (el) => !!el && !!panelOf(page) && panelOf(page).contains(el);
+    // Labels outside the View panel, whose own form has a "Payment method".
+    const labelsReading = (text) => page.queryAll('label').filter((l) => l.textContent === text && !l.closest('.pay-panel')).length;
+    const ids = page.queryAll('[id]').map((e) => e.id);
+    const one = {
+      method: labelsReading('Method'), date: labelsReading('Billed date') + labelsReading('Paid date'), from: labelsReading('From'),
+      to: labelsReading('To'), clear: page.queryAll('button').filter((b) => b.textContent === 'Clear filters').length,
+      doubledIds: [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))],
+    };
+    check('the panel holds the one set of controls, not a copy: one Method select, one date select, From and To under Choose dates '
+        + 'and one Clear filters, all inside it, and no id is used twice on the page',
+      one.method === 1 && one.date === 1 && one.from === 1 && one.to === 1 && one.clear === 1 && one.doubledIds.length === 0
+        && inPanel(methodSelect(page)) && inPanel(dateSelect(page)) && inPanel(labelled(page, 'From')) && inPanel(labelled(page, 'To'))
+        && inPanel(buttonNamed(root(), 'Clear filters')), said(one));
+    await typeDate(page, 'From', '2026-10-08');
+    await typeDate(page, 'To', '2026-10-05');
+    const hintR = hintEl(page);
+    check('  "The start date is after the end date." is inside the panel, in its polite status region',
+      !!hintR && inPanel(hintR) && hintR.getAttribute('role') === 'status', hintR?.outerHTML ?? 'no hint');
+
+    const fromR = labelled(page, 'From');
+    fromR?.focus();
+    const beforeEscape = panelState();
+    if (fromR) await page.key('Escape', fromR);
+    check('Escape inside the open panel closes it and puts focus back on the Filters button',
+      said(beforeEscape) === OPEN && said(panelState()) === CLOSED && !!filtersButton(page) && page.active() === filtersButton(page),
+      said({ beforeEscape, after: panelState(), focus: page.active()?.textContent || page.active()?.tagName }));
+
+    await clickIf(page, filtersButton(page));
+    const refreshNames = { open: accName(refreshButton(page)) };
+    const getsBeforeR = listGets();
+    await clickIf(page, refreshButton(page));
+    check('the panel stays open through Refresh, which reloads the list (one more request)',
+      listGets() === getsBeforeR + 1 && said(panelState()) === OPEN, said({ requests: listGets() - getsBeforeR, state: panelState() }));
+    await clickIf(page, filtersButton(page));
+    refreshNames.closed = accName(refreshButton(page));
+    await pickMethod(page, 'Online pending');
+    refreshNames.two = `${filtersName()}: ${accName(refreshButton(page))}`;
+    await clickIf(page, filtersButton(page));
+    const openAtLeave = panelState();
+    await page.unmount();
+    // A new visit, without reseeding the session (which would clear storage).
+    resetNet(200, answerFrom(qFresh()));
+    page = await mountPayments();
+    const openAtReturn = panelState();
+    check('it starts closed on every visit, and nothing about it is kept in the browser: left open, a new visit shows it closed; '
+        + 'no localStorage or sessionStorage write, through window or not, sessionStorage empty',
+      said(openAtLeave) === OPEN && said(openAtReturn) === CLOSED && store.sets === writesAtOpenR
+        && domStorage.writes === domWritesAtOpenR && dom.window.sessionStorage.length === 0,
+      said({ openAtLeave, openAtReturn, writes: store.sets - writesAtOpenR, domWrites: domStorage.writes - domWritesAtOpenR,
+        session: dom.window.sessionStorage.length }));
+    await page.unmount();
+
+    // Record payment: the reload after it leaves the panel as it was.
+    const rRecord = qFresh();
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(200, (url, method) => {
+      if (method === 'POST' && url.endsWith('/charges/4003/verify')) {
+        rRecord.UNPAID = rRecord.UNPAID.filter((c) => c.charge_id !== 4003);
+        return { message: 'Payment recorded — charge marked PAID', payment: { payment_id: 91 } };
+      }
+      return answerFrom(rRecord)(url, method);
+    });
+    page = await mountPayments();
+    await clickIf(page, filtersButton(page));
+    const openBeforeRecord = panelState();
+    await clickIf(page, viewFor(page, 'Cora Flores'));
+    if (page.query('form')?.closest('.pay-panel')) await page.submit();
+    await page.settle();
+    check('  and through Record payment: opened, Record on Cora Flores, and after the reload it is still open',
+      said(openBeforeRecord) === OPEN && said(panelState()) === OPEN && !page.query('.pay-panel') && lookQ(page).rows.length === 7
+        && page.query('.alert.success')?.textContent === 'Payment recorded — charge marked PAID (payment #91)',
+      said({ openBeforeRecord, now: panelState(), rows: lookQ(page).rows.length }));
+    await page.unmount();
+
+    // A load error: Refresh keeps its name, the panel still opens, and
+    // pressing Refresh loads again.
+    seedSession(VALID);
+    setNow(FIXED_NOW);
+    resetNet(500, (url) => (url.includes(LIST) ? { error: 'Network down' } : undefined));
+    page = await mountPayments();
+    refreshNames.error = accName(refreshButton(page));
+    await clickIf(page, filtersButton(page));
+    refreshNames.errorOpen = `${panelState().expanded}: ${accName(refreshButton(page))}`;
+    const getsAtError = listGets();
+    await clickIf(page, refreshButton(page));
+    check('Refresh is named "Refresh" in every state: the panel open and closed, with "Filters (2)", and after a load error with the panel open, '
+        + 'where pressing it loads again',
+      said(refreshNames) === said({ open: 'Refresh', closed: 'Refresh', two: 'Filters (2): Refresh', error: 'Refresh', errorOpen: 'true: Refresh' })
+        && listGets() === getsAtError + 1 && root().textContent.includes('Could not load the charges: Network down'),
+      said({ refreshNames, requests: listGets() - getsAtError }));
+    await page.unmount();
+
+    // =======================================================================
+    // S. Payments: the type tabs on a narrow phone
+    // =======================================================================
+    // Where the four tabs do not fit (below about 360px), the strip scrolls
+    // inside itself, with no scrollbar drawn, and fades the edge that has
+    // more tabs past it: data-fade on the strip names those edges, "start",
+    // "end" or "start end", and is absent while the tabs fit. It is measured
+    // after every render, on the strip's own scroll and on a resize. A tab
+    // chosen while part of it is out of view is scrolled fully into view,
+    // clear of the fade, by moving the strip and never the page. jsdom lays
+    // nothing out, so the strip's widths, its scroll position and the tabs'
+    // boxes are set by hand: a 300px strip holding 411px of tabs, 79, 135,
+    // 108 and 89 wide. Drawing the fade and hiding the scrollbar are
+    // index.css's, and the layout harness's to measure.
+    console.log('\n--- Payments: the type tabs on a narrow phone ---');
+    const FADE = 24; // the width of the faded edge in index.css
+    const TAB_WIDTHS = [79, 135, 108, 89];
+    // Lays the strip out by hand: its client and scroll widths, a scrollLeft
+    // held within them as a browser holds it, and each tab's box from where
+    // it sits in the strip.
+    const layOutStrip = (pg_, clientWidth, widths = TAB_WIDTHS) => {
+      const strip = pg_.query('.pay-tabs');
+      if (!strip) return null;
+      const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0));
+      const scrollWidth = Math.max(widths.reduce((a, b) => a + b, 0), clientWidth);
+      let left = 0;
+      const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+      Object.defineProperty(strip, 'clientWidth', { configurable: true, get: () => clientWidth });
+      Object.defineProperty(strip, 'scrollWidth', { configurable: true, get: () => scrollWidth });
+      Object.defineProperty(strip, 'scrollLeft', {
+        configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, scrollWidth - clientWidth)); },
+      });
+      strip.getBoundingClientRect = () => rect(0, clientWidth);
+      [...strip.querySelectorAll('.pay-tab')].forEach((b, i) => {
+        b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + widths[i] - left);
+      });
+      return strip;
+    };
+    const strip = () => page.query('.pay-tabs');
+    const fade = () => strip()?.getAttribute('data-fade') ?? null;
+    // The strip moved by hand, and the scroll event a browser then sends.
+    const scrollStripTo = async (x) => {
+      if (!strip()) return;
+      strip().scrollLeft = x;
+      strip().dispatchEvent(new dom.window.Event('scroll'));
+      await page.settle();
+    };
+    // Where a tab sits in the 300px strip, and whether all of it shows.
+    const tabBox = (label) => {
+      const b = tabNamed(page, label)?.getBoundingClientRect();
+      return b ? { left: b.left, right: b.right } : null;
+    };
+
+    page = await openQ();
+    const fitting = fade();
+    layOutStrip(page, 300);
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
+    await page.settle();
+    check('the tabs mark no edge while they fit, and "end" once the strip is narrower than they are (here on a resize)',
+      fitting === null && fade() === 'end', said({ fitting, narrow: fade() }));
+    const marks = [];
+    for (const x of [60, 111, 0]) {
+      await scrollStripTo(x);
+      marks.push(fade());
+    }
+    check('scrolling the strip moves the mark: "start end" partway, "start" at the end, "end" back at the start',
+      said(marks) === said(['start end', 'start', 'end']), said(marks));
+
+    const scrollsBefore = scrolled.length;
+    await clickIf(page, tabNamed(page, 'Rentals'));
+    const rentals = { at: strip()?.scrollLeft ?? null, box: tabBox('Rentals'), fade: fade() };
+    check('choosing a tab partly out of view scrolls the strip until all of it shows, clear of the faded edges: Rentals, '
+        + 'and the page itself does not scroll',
+      rentals.at > 0 && !!rentals.box && rentals.box.left >= FADE && rentals.box.right <= 300 - FADE && rentals.fade === 'start end'
+        && scrolled.length === scrollsBefore, said({ rentals, pageScrolls: scrolled.length - scrollsBefore }));
+    await clickIf(page, tabNamed(page, 'Fines'));
+    const fines = { at: strip()?.scrollLeft ?? null, box: tabBox('Fines'), fade: fade() };
+    check('  Fines, the last, scrolls it to its end, where nothing is past it and that edge is not faded',
+      fines.at === 111 && !!fines.box && fines.box.left >= 0 && fines.box.right <= 300 && fines.fade === 'start', said(fines));
+    await clickIf(page, tabNamed(page, 'All'));
+    const all = { at: strip()?.scrollLeft ?? null, box: tabBox('All'), fade: fade() };
+    check('  and All scrolls it back to its start',
+      all.at === 0 && !!all.box && all.box.left === 0 && all.fade === 'end' && scrolled.length === scrollsBefore, said(all));
+    // A browser scrolls a focused element into view only when none of it
+    // shows; a tab half under the faded end stays there unless the page
+    // moves it (measured in Chrome 155).
+    tabNamed(page, 'Rentals')?.focus();
+    await page.settle();
+    const focused = { at: strip()?.scrollLeft ?? null, box: tabBox('Rentals'), pressed: look(page).pressed };
+    check('a tab that takes keyboard focus while partly out of view is brought fully into view too, without being chosen',
+      page.active() === tabNamed(page, 'Rentals') && focused.at > 0 && !!focused.box && focused.box.left >= FADE
+        && focused.box.right <= 300 - FADE && said(focused.pressed) === said(['All 8']), said(focused));
+    await clickIf(page, tabNamed(page, 'All'));
+
+    layOutStrip(page, 420);
+    await type(page, 'flores');
+    const widened = fade();
+    layOutStrip(page, 300);
+    await type(page, '');
+    check('the mark follows the strip after any render, not only a scroll or a resize: widened to fit, a search drops it; '
+        + 'narrowed again, clearing the search brings "end" back',
+      widened === null && fade() === 'end', said({ widened, narrowed: fade() }));
+    await page.unmount();
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    if (previousTZQ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZQ;
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+  }
+
+  // =========================================================================
+  // T. No fee: PHP 0 charges on the request and rental pages
+  // =========================================================================
+  // Approval creates a PHP 0 document charge already PAID, with no payment
+  // row, and a booking does the same for a PHP 0 rental; the Payments page
+  // calls that "No fee" (section N). My requests and My rentals said "Amount
+  // due: ₱0.00 — Paid", and the request detail the Secretary, Staff and the
+  // Punong Barangay open said "Charge ₱0.00 Paid", which reads as a payment
+  // someone made. All three now say "No fee". An unpaid or void PHP 0 charge
+  // keeps its old wording, and so does every charge above 0. The Fee of My
+  // requests and of the detail showed the document type's fee as it is
+  // today; once approval has billed a request they show the charge's amount,
+  // the fee taken then (request 11's type costs PHP 20.00 now, but it was
+  // charged PHP 0). isNoFeeCharge is checked on its own, case by case, then
+  // through the three real pages and the Punong Barangay's read-only detail.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- No fee: PHP 0 charges on the request and rental pages ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // a. isNoFeeCharge on its own. The amount arrives as a number or as a
+    // numeric string; a missing, null or blank one is never 0 (isZeroFee,
+    // section N), and only a PAID charge is "No fee".
+    const NO_FEE_CASES = [
+      { name: 'PAID, amount 0', want: true, c: { status: 'PAID', amount: 0 } },
+      { name: 'PAID, amount "0.00" (a string)', want: true, c: { status: 'PAID', amount: '0.00' } },
+      { name: 'PAID, amount "0" (a string)', want: true, c: { status: 'PAID', amount: '0' } },
+      { name: 'PAID, amount 20', want: false, c: { status: 'PAID', amount: 20 } },
+      { name: 'PAID, amount "20.00"', want: false, c: { status: 'PAID', amount: '20.00' } },
+      { name: 'PAID, amount 0.01', want: false, c: { status: 'PAID', amount: 0.01 } },
+      { name: 'PAID, amount null', want: false, c: { status: 'PAID', amount: null } },
+      { name: 'PAID, no amount at all', want: false, c: { status: 'PAID' } },
+      { name: 'PAID, amount "" (blank, which Number() reads as 0)', want: false, c: { status: 'PAID', amount: '' } },
+      { name: 'UNPAID, amount 0', want: false, c: { status: 'UNPAID', amount: 0 } },
+      { name: 'VOID, amount "0.00"', want: false, c: { status: 'VOID', amount: '0.00' } },
+      { name: 'no charge at all (null)', want: false, c: null },
+    ];
+    const isNoFee = globalThis.isNoFeeCharge;
+    for (const { name, want, c } of NO_FEE_CASES) {
+      let got;
+      try { got = typeof isNoFee === 'function' ? isNoFee(c) : 'isNoFeeCharge is not exported'; } catch (e) { got = `threw: ${e.message}`; }
+      check(`isNoFeeCharge: ${name} = ${want}`, got === want, said(got));
+    }
+
+    // The pages' data, in each list's real shape. Every request names its own
+    // document type and every booking its own item, so a row is found by the
+    // name in its first cell; each detail is opened by its resident's name.
+    const docRequest = (id, status, name, typeFee, charge) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-01T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-05T03:00:00+00:00' : null, rejection_reason: null,
+      document_types: { document_type_id: 500 + id, name, fee: typeFee },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+    });
+    const MINE = [
+      // Request 91: a First-time Jobseeker certificate, a PHP 0 type, claimed.
+      docRequest(91, 'claimed', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }),
+      // Request 11: its type costs PHP 20.00 now; it cost nothing when approved.
+      docRequest(11, 'claimed', 'Certificate of Indigency', '20.00', { amount: 0, status: 'PAID' }),
+      docRequest(120, 'ready_for_release', 'Barangay Clearance', '20.00', { amount: '20.00', status: 'PAID' }),
+      // Billed at PHP 50.00; the type has cost PHP 75.00 since.
+      docRequest(121, 'approved', 'Certificate of Residency', '75.00', { amount: '50.00', status: 'UNPAID' }),
+      docRequest(122, 'pending', 'Barangay ID', '30.00', null),
+      docRequest(123, 'approved', 'Certificate of Good Moral Character', '0.00', { amount: '0', status: 'PAID' }),
+      docRequest(124, 'approved', 'Business Clearance', '0.00', { amount: 0, status: 'UNPAID' }),
+      docRequest(125, 'claimed', 'Certificate of Low Income', '20.00', { amount: null, status: 'PAID' }),
+      docRequest(126, 'claimed', 'Solo Parent Certificate', '20.00', { status: 'PAID' }),
+    ];
+    const booking = (id, name, itemFee, status, charge) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-10-20T01:00:00+00:00', end_datetime: '2026-10-20T05:00:00+00:00',
+      purpose: `Purpose ${id}`, status, return_note: null, returned_at: null,
+      rental_items: { item_id: 600 + id, name, type: 'equipment', fee: itemFee },
+      charges: charge && { charge_id: 950 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+    });
+    const RENTALS = [
+      booking(301, 'Monobloc Chairs', '0.00', 'confirmed', { amount: '0.00', status: 'PAID' }),
+      booking(302, 'Sound System', '25.00', 'confirmed', { amount: '25.00', status: 'PAID' }),
+      booking(303, 'Covered Court', '300.00', 'confirmed', { amount: '300.00', status: 'UNPAID' }),
+      booking(304, 'Folding Tables', '0.00', 'confirmed', { amount: 0, status: 'UNPAID' }),
+      booking(305, 'Event Tent', '0.00', 'cancelled', { amount: '0.00', status: 'VOID' }),
+    ];
+    // The detail's shape: the list's, with the resident record, the requester,
+    // who decided it, and the charge's billed date and payment rows.
+    const detailRequest = (id, status, name, typeFee, charge, first, last) => ({
+      ...docRequest(id, status, name, typeFee, charge && { created_at: '2026-10-02T02:00:00+00:00', payments: [], ...charge }),
+      processed_at: status === 'pending' ? null : '2026-10-02T02:00:00+00:00',
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        birthdate: '1990-01-01', birthplace: 'Tagbilaran City', address: 'Purok 2, Ubujan', sex: null, civil_status: null,
+        contact_number: null, date_registered: '2026-07-01T00:00:00+00:00', account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: null },
+      processed_by: status === 'pending' ? null : { user_id: 1, username: 'secretary1' },
+    });
+    const DETAIL = [
+      detailRequest(91, 'claimed', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }, 'Liza', 'Bantilan'),
+      detailRequest(11, 'claimed', 'Certificate of Indigency', '20.00', { amount: 0, status: 'PAID' }, 'Mario', 'Dagohoy'),
+      detailRequest(130, 'approved', 'First-time Jobseeker Certificate', '0.00', { amount: '0.00', status: 'PAID' }, 'Nora', 'Escabas'),
+      detailRequest(131, 'approved', 'Certificate of Residency', '75.00', { amount: '50.00', status: 'UNPAID' }, 'Oscar', 'Fuentes'),
+      detailRequest(132, 'ready_for_release', 'Barangay Clearance', '20.00', { amount: '20.00', status: 'PAID' }, 'Pia', 'Gallego'),
+      detailRequest(133, 'pending', 'Barangay ID', '30.00', null, 'Quino', 'Hontanosas'),
+    ];
+    const answer = (url) => {
+      if (url.includes('/document-requests/mine')) return { requests: MINE };
+      if (url.includes('/rental-requests/mine')) return { requests: RENTALS };
+      const one = url.match(/\/document-requests\/(\d+)$/);
+      if (one) {
+        const found = DETAIL.find((r) => r.request_id === Number(one[1]));
+        return found ? { request: found } : undefined;
+      }
+      if (url.includes('/document-requests?')) return { requests: DETAIL };
+      return undefined;
+    };
+    const methodsSent = [];
+    // A row's charge line is the one that says "No fee" or "Amount due …";
+    // the status cell's other notes ("Claimed on …") are not it.
+    const chargeLine = (cell) => [...(cell?.querySelectorAll('.reason-note') || [])].map(text)
+      .find((l) => l === 'No fee' || l.startsWith('Amount due')) ?? null;
+    const requestRow = (page, name) => {
+      const tr = page.queryAll('table.my-requests-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      if (!tr) return null;
+      const statusCell = tr.children[3];
+      return {
+        fee: text(tr.querySelector('td.num')),
+        charge: chargeLine(statusCell),
+        statusText: text(statusCell),
+        pay: !!tr.querySelector('.pay-menu'),
+        cancel: !!buttonNamed(tr, 'Cancel'),
+      };
+    };
+    const rentalRow = (page, name) => {
+      const tr = page.queryAll('table.my-rentals-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      if (!tr) return null;
+      return { charge: chargeLine(tr), rowText: text(tr), pay: !!tr.querySelector('.pay-menu') };
+    };
+
+    // b. My requests, as the resident who made them.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answer);
+    let page = await globalThis.mountInteractive(root(), '/resident');
+    await page.settle();
+    const r91 = requestRow(page, 'First-time Jobseeker Certificate');
+    check('My requests, request 91 (PAID ₱0.00): the charge line says "No fee", not "Amount due: ₱0.00 — Paid", with no '
+        + 'Pay menu; the Fee column shows the charge\'s ₱0.00',
+      r91?.charge === 'No fee' && !r91.statusText.includes('₱0.00') && !r91.statusText.includes('Amount due') && !r91.pay
+        && r91.fee === '₱0.00', said(r91));
+    const r11 = requestRow(page, 'Certificate of Indigency');
+    check('My requests, request 11 (its type costs ₱20.00 now, it was charged ₱0): Fee shows the charge\'s ₱0.00, not '
+        + '₱20.00, and the charge line says "No fee"',
+      r11?.fee === '₱0.00' && r11.charge === 'No fee' && !r11.pay, said(r11));
+    const r120 = requestRow(page, 'Barangay Clearance');
+    check('My requests, a PAID ₱20.00 charge still reads "Amount due: ₱20.00 — Paid", Fee ₱20.00',
+      r120?.charge === 'Amount due: ₱20.00 — Paid' && r120.fee === '₱20.00' && !r120.pay, said(r120));
+    const r121 = requestRow(page, 'Certificate of Residency');
+    check('My requests, an UNPAID ₱50.00 charge still reads "Amount due: ₱50.00 — Unpaid", with the Pay menu',
+      r121?.charge === 'Amount due: ₱50.00 — Unpaid' && r121.pay, said(r121));
+    check('  and its Fee is the ₱50.00 it was billed, not the ₱75.00 its type costs today', r121?.fee === '₱50.00', said(r121));
+    const r122 = requestRow(page, 'Barangay ID');
+    check('My requests, a pending request with no charge yet shows its type\'s ₱30.00 and no charge line',
+      r122?.fee === '₱30.00' && r122.charge === null && r122.cancel && !r122.pay, said(r122));
+    const r123 = requestRow(page, 'Certificate of Good Moral Character');
+    check('My requests, a PAID charge whose amount is the string "0" says "No fee" too',
+      r123?.charge === 'No fee' && !r123.pay, said(r123));
+    const r124 = requestRow(page, 'Business Clearance');
+    check('My requests, an UNPAID ₱0.00 charge keeps "Amount due: ₱0.00 — Unpaid" and the Pay menu, never "No fee"',
+      r124?.charge === 'Amount due: ₱0.00 — Unpaid' && r124.pay, said(r124));
+    const r125 = requestRow(page, 'Certificate of Low Income');
+    const r126 = requestRow(page, 'Solo Parent Certificate');
+    check('My requests, a PAID charge with a null amount, or with no amount at all, is never "No fee"',
+      !!r125 && !!r126 && r125.charge !== null && r125.charge !== 'No fee' && r126.charge !== null && r126.charge !== 'No fee',
+      said({ r125, r126 }));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // c. My rentals, as the same resident.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const chairs = rentalRow(page, 'Monobloc Chairs');
+    check('My rentals, a PAID ₱0.00 booking: the charge line says "No fee", no "₱0.00" anywhere in the row, and no Pay menu',
+      chairs?.charge === 'No fee' && !chairs.rowText.includes('₱0.00') && !chairs.rowText.includes('Amount due') && !chairs.pay,
+      said(chairs));
+    const sound = rentalRow(page, 'Sound System');
+    check('My rentals, a PAID ₱25.00 booking still reads "Amount due: ₱25.00 — Paid"',
+      sound?.charge === 'Amount due: ₱25.00 — Paid' && !sound.pay, said(sound));
+    const court = rentalRow(page, 'Covered Court');
+    check('My rentals, an UNPAID ₱300.00 booking still reads "Amount due: ₱300.00 — Unpaid", with the Pay menu',
+      court?.charge === 'Amount due: ₱300.00 — Unpaid' && court.pay, said(court));
+    const tables = rentalRow(page, 'Folding Tables');
+    check('My rentals, an UNPAID ₱0.00 booking keeps "Amount due: ₱0.00 — Unpaid" and the Pay menu, never "No fee"',
+      tables?.charge === 'Amount due: ₱0.00 — Unpaid' && tables.pay, said(tables));
+    const tent = rentalRow(page, 'Event Tent');
+    check('My rentals, a cancelled booking\'s VOID ₱0.00 charge keeps "Amount due: ₱0.00 — Void", never "No fee"',
+      tent?.charge === 'Amount due: ₱0.00 — Void' && !tent.pay, said(tent));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // d. The request detail, as the Secretary. Opened from the list's Review
+    // (View for the Punong Barangay) and left by Back to list; the workflow
+    // buttons are read, never pressed. The list opens on its Pending tab
+    // (section W) and most of these requests are not pending, so the All tab
+    // is chosen first; the tab is kept when Back to list returns to it.
+    const showAll = async (pg) => {
+      const all = pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith('All '));
+      if (all) await pg.click(all);
+    };
+    const detailOf = async (pg, first, last) => {
+      const row = pg.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === `${first} ${last}`);
+      const opener = row && [...row.querySelectorAll('button')].find((b) => /^(Review|View)$/.test(b.textContent));
+      if (!opener) return { fields: {}, missing: `${first} ${last}` };
+      await pg.click(opener);
+      await pg.settle();
+      const grid = pg.query('.pending-card dl.info-grid');
+      const out = {
+        fields: Object.fromEntries([...(grid?.children || [])].map((div) => [text(div.querySelector('dt')), text(div.querySelector('dd'))])),
+        release: !!buttonNamed(root(), 'Mark ready for release'),
+        claim: !!buttonNamed(root(), 'Mark as claimed'),
+        awaiting: root().textContent.includes('Awaiting payment'),
+      };
+      await clickIf(pg, buttonNamed(root(), '← Back to list'));
+      return out;
+    };
+    seedSession(VALID);
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    await showAll(page);
+    let d = await detailOf(page, 'Liza', 'Bantilan');
+    check('Request detail, request 91 (PAID ₱0.00): Charge says "No fee", not "₱0.00 Paid"; Fee is the charge\'s ₱0.00',
+      d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00', said(d.fields));
+    d = await detailOf(page, 'Mario', 'Dagohoy');
+    check('Request detail, request 11 (its type costs ₱20.00 now, it was charged ₱0): Fee shows the charge\'s ₱0.00, not '
+        + '₱20.00, and Charge says "No fee"',
+      d.fields.Fee === '₱0.00' && d.fields.Charge === 'No fee', said(d.fields));
+    d = await detailOf(page, 'Nora', 'Escabas');
+    check('Request detail, an approved request with a PAID ₱0.00 charge says "No fee" and still offers "Mark ready for '
+        + 'release": the release rule is unchanged',
+      d.fields.Charge === 'No fee' && d.release && !d.awaiting, said(d));
+    d = await detailOf(page, 'Oscar', 'Fuentes');
+    check('Request detail, an approved request with an UNPAID ₱50.00 charge: Charge "₱50.00 Unpaid", Fee the ₱50.00 it was '
+        + 'billed (not the type\'s ₱75.00 today), and it still awaits payment',
+      d.fields.Charge === '₱50.00 Unpaid' && d.fields.Fee === '₱50.00' && d.awaiting && !d.release, said(d));
+    d = await detailOf(page, 'Pia', 'Gallego');
+    check('Request detail, a PAID ₱20.00 charge still reads "₱20.00 Paid", Fee ₱20.00, and "Mark as claimed" is offered',
+      d.fields.Charge === '₱20.00 Paid' && d.fields.Fee === '₱20.00' && d.claim, said(d));
+    d = await detailOf(page, 'Quino', 'Hontanosas');
+    check('Request detail, a pending request with no charge: Fee is its type\'s ₱30.00, Charge "No charge (billed on approval)"',
+      d.fields.Fee === '₱30.00' && d.fields.Charge === 'No charge (billed on approval)', said(d.fields));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // e. The same detail, read-only, as the Punong Barangay.
+    seedSession(makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+      { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false });
+    resetNet(200, answer);
+    page = await globalThis.mountInteractive(root(), '/punong-barangay/requests');
+    await page.settle();
+    await showAll(page);
+    d = await detailOf(page, 'Nora', 'Escabas');
+    check('the Punong Barangay\'s read-only detail says "No fee" too, Fee ₱0.00, with no release button',
+      d.fields.Charge === 'No fee' && d.fields.Fee === '₱0.00' && !d.release, said(d));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    check('section T sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+  }
+
+  // =========================================================================
+  // U. The Collections report: the No-fee charges tile, and "by billed month"
+  // =========================================================================
+  // Paid charges counted more than Payments recorded (69 against 67 on the
+  // live data, 12 Oct 2026) with nothing on screen to say why: the PHP 0
+  // charges approval marks paid have no payment row. The report's totals now
+  // carry no_fee_charges, shown as a "No-fee charges" tile after "Payments
+  // recorded". The monthly "Collected" series counts each paid charge in the
+  // month it was billed, and is now named "Collected (by billed month)" in
+  // the chart's legend and the Monthly table; the by-type chart and table
+  // keep "Collected". The figure and the CSV are the server's
+  // (routes/reports.js); this is the page. jsdom has no ResizeObserver and
+  // lays nothing out, so for this section a stub one, and the chart box's
+  // getBoundingClientRect, report 800 by 260, and recharts draws the charts
+  // and their legends. Every request is answered by the fetch stub.
+  console.log('\n--- Collections report: the No-fee charges tile, and "by billed month" ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const TREASURER_USER = { user_id: 16, username: 'treasurer1', role: 'treasurer', must_change_password: false };
+    const TREASURER_TOKEN = makeToken({ sub: '16', role: 'treasurer', exp: VALID_EXP });
+    // The live report's totals on 12 Oct 2026, before no_fee_charges.
+    const TOTALS = { total_collected: 10549, total_outstanding: 2350, total_billed: 12899, voided_amount: 2637,
+      paid_charges: 69, unpaid_charges: 14, payments_recorded: 67 };
+    const report = (totals) => ({
+      range: { from: '2025-11-01', to: '2026-10-12' }, generated_at: '2026-10-12T11:00:00.000Z', totals,
+      by_type: [
+        { charge_type: 'DOCUMENT', charges: 50, collected: 1000, outstanding: 100 },
+        { charge_type: 'RENTAL', charges: 30, collected: 9000, outstanding: 2000 },
+        { charge_type: 'FINE', charges: 3, collected: 549, outstanding: 250 },
+      ],
+      by_payment_method: [
+        { payment_method: 'onsite', payments: 40, amount: 6000 },
+        { payment_method: 'gcash', payments: 27, amount: 4549 },
+      ],
+      monthly: [
+        { month: '2026-09', collected: 4000, billed: 5000 },
+        { month: '2026-10', collected: 6549, billed: 7899 },
+      ],
+    });
+    // recharts reads its box with getBoundingClientRect, then watches it with
+    // a ResizeObserver; both are put back at the end of the section.
+    const CHART_BOX = { width: 800, height: 260, top: 0, left: 0, right: 800, bottom: 260, x: 0, y: 0 };
+    class BoxObserver {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { this.callback([{ target, contentRect: CHART_BOX }]); }
+      unobserve() {}
+      disconnect() {}
+    }
+    const previousObserver = global.ResizeObserver;
+    global.ResizeObserver = BoxObserver;
+    const elementProto = dom.window.HTMLElement.prototype;
+    const realRect = elementProto.getBoundingClientRect;
+    elementProto.getBoundingClientRect = function rect() {
+      return this.classList?.contains('recharts-responsive-container') ? { ...CHART_BOX } : realRect.call(this);
+    };
+    // A drawn line animates, and asks for animation frames, which this jsdom
+    // does not provide: unanswered, the line stays at its first frame, which
+    // nothing here reads, and the legend is drawn all the same.
+    const previousFrame = global.requestAnimationFrame;
+    const previousCancel = global.cancelAnimationFrame;
+    global.requestAnimationFrame = () => 0;
+    global.cancelAnimationFrame = () => {};
+    // The tiles as "label value", each chart's legend and each table's header.
+    const readReport = (page) => {
+      const cardOf = (title) => page.queryAll('.chart-card').find((c) => text(c.querySelector('h4')) === title);
+      const legend = (title) => [...(cardOf(title)?.querySelectorAll('.recharts-legend-item-text') || [])].map(text);
+      const head = (title) => {
+        const block = page.queryAll('.report-sheet [data-pdf-block]')
+          .find((b) => b.querySelector('table') && text(b.querySelector('h4')) === title);
+        return [...(block?.querySelectorAll('thead th') || [])].map(text);
+      };
+      return {
+        tiles: page.queryAll('.stat-row .stat-tile')
+          .map((t) => `${text(t.querySelector('.stat-label'))} ${text(t.querySelector('.stat-value'))}`),
+        monthlyLegend: legend('Collected vs billed per month'),
+        byTypeLegend: legend('Collected vs outstanding by charge type'),
+        monthlyHead: head('Monthly'),
+        byTypeHead: head('By charge type'),
+        failed: /could not be displayed/i.test(root().textContent),
+      };
+    };
+
+    seedSession(TREASURER_TOKEN, TREASURER_USER);
+    resetNet(200, (url) => (url.includes('/reports/collections?') ? report({ ...TOTALS, no_fee_charges: 2 }) : undefined));
+    let page = await globalThis.mountInteractive(root(), '/treasurer/reports');
+    await page.settle();
+    let seen = readReport(page);
+    check('the Collections report shows a "No-fee charges" tile reading 2 right after "Payments recorded 67", so Paid '
+        + 'charges 69 = 67 + 2 reads off the tiles',
+      seen.tiles.includes('Paid charges 69') && seen.tiles.includes('No-fee charges 2')
+        && seen.tiles.indexOf('No-fee charges 2') === seen.tiles.indexOf('Payments recorded 67') + 1, said(seen.tiles));
+    check('  the seven tiles before it are unchanged and in their order; it is the eighth and last',
+      said(seen.tiles) === said(['Total collected ₱10,549.00', 'Total outstanding ₱2,350.00', 'Total billed ₱12,899.00',
+        'Voided amount ₱2,637.00', 'Paid charges 69', 'Unpaid charges 14', 'Payments recorded 67', 'No-fee charges 2']),
+      said(seen.tiles));
+    check('the monthly chart\'s legend names its series "Collected (by billed month)" and "Billed"',
+      said([...seen.monthlyLegend].sort()) === said(['Billed', 'Collected (by billed month)']), said(seen.monthlyLegend));
+    check('  and the Monthly table\'s header reads "Month | Collected (by billed month) | Billed"',
+      said(seen.monthlyHead) === said(['Month', 'Collected (by billed month)', 'Billed']), said(seen.monthlyHead));
+    check('the by-type chart and table, which are not by month, keep plain "Collected", and the report renders',
+      said([...seen.byTypeLegend].sort()) === said(['Collected', 'Outstanding'])
+        && said(seen.byTypeHead) === said(['Charge type', 'Charges', 'Collected', 'Outstanding']) && !seen.failed,
+      said({ legend: seen.byTypeLegend, head: seen.byTypeHead, failed: seen.failed }));
+    await page.unmount();
+
+    // A server without the change (one deployed behind this page) sends no
+    // no_fee_charges: no tile for it, and no blank one.
+    seedSession(TREASURER_TOKEN, TREASURER_USER);
+    resetNet(200, (url) => (url.includes('/reports/collections?') ? report({ ...TOTALS }) : undefined));
+    page = await globalThis.mountInteractive(root(), '/treasurer/reports');
+    await page.settle();
+    seen = readReport(page);
+    check('an answer without no_fee_charges shows the seven tiles as before, with no "No-fee charges" tile and no blank one',
+      seen.tiles.length === 7 && seen.tiles.every((t) => !/^No.fee/.test(t) && !/ $/.test(t)) && !seen.failed, said(seen.tiles));
+    await page.unmount();
+
+    if (previousObserver === undefined) delete global.ResizeObserver;
+    else global.ResizeObserver = previousObserver;
+    if (previousFrame === undefined) delete global.requestAnimationFrame;
+    else global.requestAnimationFrame = previousFrame;
+    if (previousCancel === undefined) delete global.cancelAnimationFrame;
+    else global.cancelAnimationFrame = previousCancel;
+    elementProto.getBoundingClientRect = realRect;
+  }
+
+  // =========================================================================
+  // V. Document requests: a failed load is an error, never an empty list
+  // =========================================================================
+  // One component (SecretaryRequestsPage) is the Document requests list on
+  // three routes: the Secretary's, Staff's and the Punong Barangay's. It had
+  // the defect section M fixed on Payments: a request that failed stored an
+  // empty list beside the error, so the page said "0 requests" and "No
+  // pending requests." while it knew nothing, which reads as nobody waiting.
+  // It showed "Loading requests…" on the first open only, so Refresh and a
+  // new status left the old rows on screen while they were out, and an older
+  // answer that arrived late could replace a newer one. A failed load must
+  // say so, with Try again, and show no rows, no count and no empty text;
+  // every load starts from the loading state; an older answer is dropped; and
+  // the status control is labelled "Status", as Payments' is. The same checks
+  // run for the three roles, each with its own projection: Staff's rows carry
+  // no requester email and no resident account. The clock is UTC for this
+  // section, so the Submitted dates are fixed. Every request is answered by
+  // the fetch stub, and only GETs are sent.
+  //
+  // Since the status tabs (section W) the list is loaded once, with
+  // ?status=all, and a tab filters what is loaded without a request. So a
+  // load is started by the first open, Try again and Refresh only: the
+  // checks that changed the status to start one now press Refresh or Try
+  // again, the one that changed it over loaded rows checks that a tab shows
+  // its own rows at once, and the select's label is now the tab group's.
+  console.log('\n--- Document requests: a failed load is an error, never an empty list ---');
+  {
+    const previousTZV = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The list's own URL: ?status=all since the tabs (before them, ?status=
+    // for one status and nothing after it for All).
+    const isList = (call) => call?.method === 'GET' && /\/document-requests(\?status=[a-z_]+)?$/.test(call.url);
+    const statusOf = (call) => (isList(call) ? (call.url.match(/\?status=([a-z_]+)$/)?.[1] ?? 'all') : null);
+    // A request in the list's real shape (SECRETARY_LIST_FIELDS in
+    // routes/documentRequests.js). Staff's drops what STAFF_LIST_FIELDS
+    // withholds: the resident's account and the requester's email.
+    const listRequest = (id, status, first, last, documentType, staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: { username: `res_${id}` } }) },
+      requester: { user_id: 700 + id, username: `res_${id}`, ...(staff ? {} : { email: `res_${id}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const PENDING_TWO = (staff) => [
+      listRequest(201, 'pending', 'Ana', 'Cruz', 'Barangay Clearance', staff),
+      listRequest(202, 'pending', 'Ben', 'Reyes', 'Certificate of Residency', staff),
+    ];
+    const APPROVED_ONE = (staff) => [listRequest(203, 'approved', 'Carla', 'Santos', 'Barangay ID', staff)];
+    const CLAIMED_TWO = (staff) => [
+      listRequest(204, 'claimed', 'Dino', 'Tan', 'Barangay Clearance', staff),
+      listRequest(205, 'claimed', 'Elsa', 'Uy', 'Certificate of Indigency', staff),
+    ];
+    const REJECTED_ONE = (staff) => [listRequest(206, 'rejected', 'Fe', 'Villa', 'Business Clearance', staff)];
+    // Every request, what ?status=all answers: two pending, one approved, two
+    // claimed, one rejected.
+    const MIXED = (staff) => [...PENDING_TWO(staff), ...APPROVED_ONE(staff), ...CLAIMED_TWO(staff), ...REJECTED_ONE(staff)];
+    // A status tab, by its label ("Approved 1"), as a person presses it.
+    const tabNamed = (page, label) => page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const pressedTab = (page) => page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text);
+    // Holds back every answer asked for from here on until a check releases
+    // it, so the page can be read while a load is out and answers can arrive
+    // in any order. Returns the index the next held answer will have.
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    // The page's words with a space between neighbouring elements' text:
+    // textContent runs them together ("Refresh" then "No pending requests."
+    // reads "RefreshNo pending requests."), where \b finds no word edge.
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // What the list area says, read the way a person would.
+    const listView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        // "0 requests", or "0 pending requests" since the heading names the tab.
+        zero: /\b0 [a-z ]*requests?\b/.test(all),
+        empty: /\bNo [a-z ]*requests\./.test(all),
+        loading: all.includes('Loading requests…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing to
+    // review": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Document requests' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Document requests'
+      && v.rows.length === 0 && !v.zero && !v.empty;
+    // Each row as a person reads it: the name, the account note under it, the
+    // document, purpose, status and submitted cells, and the row's button.
+    // Since section Z the Status cell holds the badge and the payment marker
+    // under it, so a cell's words are read with a space between elements.
+    const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
+      const cells = [...tr.children];
+      return [text(cells[0]?.querySelector('strong')), text(cells[0]?.querySelector('.small-note')) ?? '(no note)',
+        ...cells.slice(1, 5).map((cell) => (cell ? spaced(cell) : null)), text(cells[5]?.querySelector('button'))].join(' | ');
+    });
+    const headersRead = (page) => page.queryAll('table.data-table thead th').map(text);
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      // a. A successful load reads as it always has, on the Pending tab it
+      // opens on, and the tab group is named. Any list URL gets every
+      // request; which one the page asks for is check b's.
+      seedSession(token, user);
+      resetNet(200, (url) => (/\/document-requests\?/.test(url) ? { requests: MIXED(staff) } : undefined));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const note = (id) => (staff ? '(no note)' : `@res_${id}`);
+      const WANT_ROWS = [
+        `Ana Cruz | ${note(201)} | Barangay Clearance | Purpose 201 | Pending Not billed | Oct 8, 2026, 2:00 AM | ${opener}`,
+        `Ben Reyes | ${note(202)} | Certificate of Residency | Purpose 202 | Pending Not billed | Oct 8, 2026, 2:00 AM | ${opener}`,
+      ];
+      check(`${name}: a successful load shows its rows as before: "2 pending requests", the six column headers, and each `
+          + `row's name, ${staff ? 'no account note' : 'account note'}, document, purpose, status with its payment marker `
+          + `("Not billed", section Z), date and ${opener}, ${walkIn ? 'with' : 'with no'} Encode walk-in`,
+        text(page.query('.list-head h2')) === '2 pending requests'
+          && said(headersRead(page)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', ''])
+          && said(rowsRead(page)) === said(WANT_ROWS) && !!buttonNamed(root(), 'Encode walk-in') === walkIn,
+        said({ heading: text(page.query('.list-head h2')), headers: headersRead(page), rows: rowsRead(page) }));
+      const group = page.query('.pay-tabs');
+      check(`${name}: the status tabs are a group labelled "Status"`,
+        group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status',
+        said({ role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // b. The first open fails: the loading state while it is out, then the
+      // error, with Try again, and nothing else.
+      seedSession(token, user);
+      resetNet(200);
+      let at = holdNext();
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = listView(page);
+      const firstCall = net.calls[0];
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failed = listView(page);
+      check(`${name}: the first open shows "Loading requests…" while status=all is out, and when it fails, `
+          + '"Could not load the requests: Network down" with a Try again button',
+        loadingOnly(opening) && statusOf(firstCall) === 'all'
+          && failed.error === 'Could not load the requests: Network down' && failed.tryAgain,
+        `${said(opening)} then ${said(failed)}`);
+      check(`  ${name}: and no rows, no "0 requests", no "No pending requests.": it cannot read as nothing to review`,
+        errorOnly(failed), said(failed));
+
+      // c. Try again repeats the same load; its rows replace the error.
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      const retrying = listView(page);
+      const retryCall = net.calls[sent];
+      release(at, 200, { requests: MIXED(staff) });
+      await page.settle();
+      const retried = listView(page);
+      check(`${name}: Try again asks for status=all again, shows the loading state, not the error, while it is out, `
+          + 'then "2 pending requests" and both Pending rows',
+        net.calls.length === sent + 1 && statusOf(retryCall) === 'all' && loadingOnly(retrying)
+          && !retried.error && !retried.tryAgain && retried.heading === '2 pending requests'
+          && retried.rows.join('|') === 'Ana Cruz|Ben Reyes',
+        `${retryCall?.url ?? 'no request'} ${said(retrying)} then ${said(retried)}`);
+
+      // d. Another status over loaded rows: its own rows at once, never the
+      // old status's rows under the new name. A tab filters what is loaded,
+      // so there is nothing to wait for and no request.
+      sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'Approved'));
+      const switched = listView(page);
+      check(`${name}: choosing the Approved tab over the two Pending rows sends no request and shows only its own row at `
+          + 'once, "1 approved request", never the Pending rows under the new name',
+        net.calls.length === sent && said(pressedTab(page)) === said(['Approved 1']) && !switched.loading
+          && switched.heading === '1 approved request' && switched.rows.join('|') === 'Carla Santos' && !switched.error,
+        `${net.calls.length - sent} request(s) ${said(switched)}`);
+
+      // e. Refresh over loaded rows, failing: the loading state, then the
+      // error, and never the old row or its count.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const refreshing = listView(page);
+      const refreshCall = net.calls[sent];
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const refreshFailed = listView(page);
+      check(`${name}: Refresh asks for status=all, shows the loading state, not the old row, while it is out, and when it `
+          + 'fails, "Could not load the requests: Internal server error", never the old row or "1 approved request"',
+        statusOf(refreshCall) === 'all' && loadingOnly(refreshing)
+          && refreshFailed.error === 'Could not load the requests: Internal server error' && errorOnly(refreshFailed),
+        `${refreshCall?.url ?? 'no request'} ${said(refreshing)} then ${said(refreshFailed)}`);
+
+      // f. Two loads out at once, Try again and then Refresh before it has
+      // answered, the older answer last: it is dropped. The Approved tab
+      // chosen before the failed Refresh is still the one shown.
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: MIXED(staff) });
+      await page.settle();
+      release(at, 200, { requests: CLAIMED_TWO(staff) });
+      await page.settle();
+      const raced = listView(page);
+      check(`${name}: an older answer that arrives last cannot replace the newer list: Approved keeps its one row`,
+        statusOf(net.calls.at(-2)) === 'all' && statusOf(net.calls.at(-1)) === 'all'
+          && said(pressedTab(page)) === said(['Approved 1']) && raced.heading === '1 approved request'
+          && raced.rows.join('|') === 'Carla Santos' && !raced.error,
+        said(raced));
+
+      // g. The same, Refresh pressed twice, with the older load failing last.
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const olderCall = net.calls.at(-2);
+      release(at + 1, 200, { requests: MIXED(staff) });
+      await page.settle();
+      release(at, 500, { error: 'boom' });
+      await page.settle();
+      const racedFail = listView(page);
+      check(`  ${name}: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list`,
+        statusOf(olderCall) === 'all' && statusOf(net.calls.at(-1)) === 'all'
+          && said(pressedTab(page)) === said(['Approved 1']) && racedFail.heading === '1 approved request'
+          && racedFail.rows.join('|') === 'Carla Santos' && !racedFail.error && !racedFail.tryAgain,
+        `${olderCall?.url ?? 'no request'} ${said(racedFail)}`);
+
+      // h. No requests, loaded successfully, is a real empty state: on the
+      // Cancelled tab, Refresh answered with no requests at all.
+      await clickIf(page, tabNamed(page, 'Cancelled'));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 200, { requests: [] });
+      await page.settle();
+      const none = listView(page);
+      check(`${name}: a successful load of no requests still says "0 cancelled requests" and "No cancelled requests.", `
+          + 'with no error',
+        none.heading === '0 cancelled requests' && /\bNo cancelled requests\./.test(spaced(root())) && !none.error
+          && !none.tryAgain && !none.loading && none.rows.length === 0,
+        said(none));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // i. Why it failed, when the server sent no reason: Payments' wording.
+    seedSession(VALID);
+    resetNet(200);
+    net.fail = true;
+    let page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    const unreachable = listView(page);
+    check('a server that cannot be reached gets the plain fallback, "Could not load the requests: the server did not respond"',
+      unreachable.error === 'Could not load the requests: the server did not respond' && errorOnly(unreachable)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachable));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    seedSession(VALID);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    const bare = listView(page);
+    check('  so does an error answer with no message in it, never "Request failed (502)"',
+      bare.error === 'Could not load the requests: the server did not respond' && errorOnly(bare)
+        && !/Request failed/.test(root().textContent), said(bare));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    check('section V sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZV === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZV;
+  }
+
+  // =========================================================================
+  // W. Document requests: status tabs with counts
+  // =========================================================================
+  // The list had one status select, opening on Pending: each choice sent a
+  // new GET /document-requests?status=…, and nothing said how many requests
+  // a status held until it was chosen. It now loads every request once, GET
+  // ?status=all, and seven tabs filter that list in the browser with no
+  // request: Pending, Approved, Ready for release, Claimed, Rejected,
+  // Cancelled and All, each with its count. The counts come from the whole
+  // list, so they read the same whichever tab is chosen; the heading above
+  // the rows names the tab ("3 pending requests", "11 requests" on All); and
+  // a tab with nothing in it shows the empty text the select's status did.
+  // The page opens on Pending, as the select did, and keeps the chosen tab
+  // through Refresh, Try again, Back from a request and a filed walk-in,
+  // which load the list again exactly when they did before; a load that
+  // fails shows no tabs, as Payments does. The strip is the Payments page's
+  // own (.pay-tabs: toggle buttons with aria-pressed in a group, the count in
+  // a pill, the dimmed empty tab, the faded ends and the chosen tab brought
+  // into view), lifted into components/ListTabs.jsx. utils/requestList.js is
+  // checked case by case, then the real page for the Secretary, Staff and the
+  // Punong Barangay against eleven stubbed requests, then the strip on a
+  // narrow phone, laid out by hand as in section S. Every request is answered
+  // by the fetch stub; the only writes, the Secretary's approve and walk-in,
+  // go to the stub too.
+  console.log('\n--- Document requests: status tabs with counts ---');
+  {
+    const previousTZW = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const R = globalThis.requestList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const KEYS = ['pending', 'approved', 'ready_for_release', 'claimed', 'rejected', 'cancelled', 'all'];
+    // Counts compared key by key, whatever order they were built in, and
+    // with no key besides the seven.
+    const sameCounts = (got, want) => !!got && typeof got === 'object'
+      && said(Object.keys(got).sort()) === said([...KEYS].sort()) && KEYS.every((k) => got[k] === want[k]);
+    const counts = (pending, approved, ready, claimed, rejected, cancelled, all) =>
+      ({ pending, approved, ready_for_release: ready, claimed, rejected, cancelled, all });
+
+    // a. The helpers on their own.
+    const order = attempt(() => R.REQUEST_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('tabs: Pending, Approved, Ready for release, Claimed, Rejected, Cancelled, All, in that order, each status with its own label',
+      order === 'pending:Pending | approved:Approved | ready_for_release:Ready for release | claimed:Claimed | '
+        + 'rejected:Rejected | cancelled:Cancelled | all:All', said(order));
+    const req = (id, status) => ({ request_id: id, status });
+    const NINE = [req(1, 'claimed'), req(2, 'pending'), req(3, 'approved'), req(4, 'pending'), req(5, 'rejected'),
+      req(6, 'ready_for_release'), req(7, 'claimed'), req(8, 'pending'), req(9, 'approved')];
+    let got = attempt(() => R.tabCounts(NINE));
+    check('tab counts: one per status and All, over the whole list given: 3 pending, 2 approved, 1 ready for release, '
+        + '2 claimed, 1 rejected, 0 cancelled, 9 in all',
+      sameCounts(got, counts(3, 2, 1, 2, 1, 0, 9)), said(got));
+    got = attempt(() => R.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0, 0)), said(got));
+    got = attempt(() => R.tabCounts([req(1, 'pending'), req(2, 'archived')]));
+    check('  a status outside the six counts under All only, never as a tab of its own',
+      sameCounts(got, counts(1, 0, 0, 0, 0, 0, 2)), said(got));
+    const inTab = (r, tab) => attempt(() => R.inTab(r, tab));
+    const IN_TAB = [[req(1, 'claimed'), 'all', true], [req(2, 'archived'), 'all', true], [req(3, 'claimed'), 'claimed', true],
+      [req(4, 'claimed'), 'pending', false], [req(5, 'ready_for_release'), 'ready_for_release', true], [req(6, 'pending'), 'approved', false]];
+    check('inTab: All takes every request, a status tab only its own status',
+      IN_TAB.every(([r, tab, want]) => inTab(r, tab) === want), said(IN_TAB.map(([r, tab]) => inTab(r, tab))));
+    const HEADS = [['pending', 6, '6 pending requests'], ['pending', 1, '1 pending request'], ['pending', 0, '0 pending requests'],
+      ['ready_for_release', 2, '2 ready for release requests'], ['cancelled', 0, '0 cancelled requests'],
+      ['all', 77, '77 requests'], ['all', 1, '1 request'], ['all', 1234, '1,234 requests']];
+    const heads = HEADS.map(([tab, n]) => attempt(() => R.tabHeading(tab, n)));
+    check('the heading for a tab: "6 pending requests", "1 pending request", "0 pending requests", "2 ready for release requests", '
+        + '"0 cancelled requests", and on All "77 requests", "1 request", "1,234 requests"',
+      said(heads) === said(HEADS.map((h) => h[2])), said(heads));
+
+    // b. The real page. Eleven requests in the list's real shape (as in
+    // section V: Staff's carries no resident account and no requester email),
+    // newest first as the server sends them, the statuses mixed so that a tab
+    // keeping a wrong row, or its rows in the wrong order, shows it.
+    const listRequest = (id, status, first, last, staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: 'Barangay Clearance', fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: { username: `res_${id}` } }) },
+      requester: { user_id: 700 + id, username: `res_${id}`, ...(staff ? {} : { email: `res_${id}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const ELEVEN = [
+      [301, 'pending', 'Ana', 'Cruz'], [302, 'approved', 'Ben', 'Reyes'], [303, 'claimed', 'Carla', 'Santos'],
+      [304, 'pending', 'Dino', 'Tan'], [305, 'ready_for_release', 'Elsa', 'Uy'], [306, 'claimed', 'Fe', 'Villa'],
+      [307, 'rejected', 'Gil', 'Wong'], [308, 'approved', 'Hana', 'Yap'], [309, 'claimed', 'Ivy', 'Zamora'],
+      [310, 'pending', 'Jun', 'Abad'], [311, 'claimed', 'Kim', 'Bello'],
+    ];
+    // What each tab must show, written by hand: its rows, in the order sent,
+    // and its heading.
+    const WANT = {
+      Pending: { rows: ['Ana Cruz', 'Dino Tan', 'Jun Abad'], heading: '3 pending requests' },
+      Approved: { rows: ['Ben Reyes', 'Hana Yap'], heading: '2 approved requests' },
+      'Ready for release': { rows: ['Elsa Uy'], heading: '1 ready for release request' },
+      Claimed: { rows: ['Carla Santos', 'Fe Villa', 'Ivy Zamora', 'Kim Bello'], heading: '4 claimed requests' },
+      Rejected: { rows: ['Gil Wong'], heading: '1 rejected request' },
+      Cancelled: { rows: [], heading: '0 cancelled requests' },
+      All: { rows: ['Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong', 'Hana Yap',
+        'Ivy Zamora', 'Jun Abad', 'Kim Bello'], heading: '11 requests' },
+    };
+    const STRIP = 'Pending 3 · Approved 2 · Ready for release 1 · Claimed 4 · Rejected 1 · Cancelled 0 · All 11';
+    // The requests the stub holds, which Refresh, the approve and the walk-in
+    // change as the server would; the list answer is built from them.
+    const makeState = () => ({ list: ELEVEN.map(([id, status, first, last]) => ({ id, status, first, last })) });
+    const listAnswer = (state, staff) => ({ requests: state.list.map((r) => listRequest(r.id, r.status, r.first, r.last, staff)) });
+    const ROSA = { resident_id: 912, first_name: 'Rosa', middle_name: null, last_name: 'Lim', suffix: null,
+      birthdate: '1990-01-01', address: 'Purok 2, Ubujan' };
+    // Every list URL gets the whole list, whatever status it names: the page
+    // must ask for ?status=all, and the request checks say whether it did.
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(\/approve)?$/);
+      if (one) {
+        const r = state.list.find((x) => x.id === Number(one[1]));
+        if (!r) return undefined;
+        if (method === 'POST' && one[2]) r.status = 'approved';
+        const request = { ...listRequest(r.id, r.status, r.first, r.last, staff), processed_by: null };
+        return one[2] ? { request, message: 'Request approved.' } : { request };
+      }
+      if (method === 'GET' && url.endsWith('/document-types')) {
+        return { document_types: [{ document_type_id: 7, name: 'Barangay Clearance', fee: '20.00', description: null }] };
+      }
+      if (method === 'GET' && url.includes('/resident-records?search=')) return { records: [ROSA] };
+      if (method === 'POST' && url.endsWith('/document-requests')) {
+        state.list.unshift({ id: 312, status: 'pending', first: 'Rosa', last: 'Lim' });
+        return { message: 'Request recorded for Rosa Lim.' };
+      }
+      return undefined;
+    };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    // What the list says, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      table: !!page.query('table.data-table'),
+      empty: text(page.query('.empty')),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    // The requests a step sent to /document-requests, as "GET /document-requests?status=all".
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, name, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // jsdom has no scrollIntoView; this one records what asked to be shown,
+    // so a check can tell that the page itself was never scrolled.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      let v = look(page);
+      const group = page.query('.pay-tabs');
+      const buttons = tabsOf(page);
+      check(`${name}: seven tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
+        v.strip === STRIP && group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status'
+          && buttons.length === 7 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+        said({ strip: v.strip, role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null,
+          pressed: buttons.map((b) => b.getAttribute('aria-pressed')) }));
+      check(`${name}: it opens on Pending, as the status select did: Pending alone pressed, "3 pending requests", and the three `
+          + 'pending rows in the order sent',
+        said(v.pressed) === said(['Pending 3']) && v.heading === WANT.Pending.heading && said(v.rows) === said(WANT.Pending.rows),
+        said(v));
+      check(`${name}: exactly one request on open, GET /document-requests?status=all`,
+        net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /document-requests?status=all']),
+        said(net.calls.map((c) => `${c.method} ${c.url}`)));
+
+      // Every tab in turn, as a person presses them.
+      const sentBefore = net.calls.length;
+      const seen = {};
+      const missing = [];
+      for (const label of Object.keys(WANT)) {
+        const tab = tabNamed(page, label);
+        if (!tab) missing.push(label);
+        await clickIf(page, tab);
+        seen[label] = look(page);
+      }
+      check(`${name}: pressing each of the seven tabs in turn sends no request`,
+        missing.length === 0 && net.calls.length === sentBefore,
+        said({ missing, sent: net.calls.slice(sentBefore).map((c) => `${c.method} ${c.url}`) }));
+      const wrongTabs = Object.keys(WANT).filter((label) => label !== 'All').filter((label) => {
+        const s = seen[label];
+        return !(said(s.rows) === said(WANT[label].rows) && s.heading === WANT[label].heading
+          && s.pressed.length === 1 && s.pressed[0].startsWith(`${label} `));
+      });
+      check(`${name}: each status tab shows only its own requests, in the order sent, under its own heading, and is the one pressed`,
+        wrongTabs.length === 0, said(wrongTabs.map((label) => ({ tab: label, ...seen[label] }))));
+      check(`${name}: All shows every request, all eleven in the order sent, under "11 requests"`,
+        said(seen.All.rows) === said(WANT.All.rows) && seen.All.heading === WANT.All.heading
+          && said(seen.All.pressed) === said(['All 11']), said(seen.All));
+      const strips = [...new Set(Object.values(seen).map((s) => s.strip))];
+      check(`${name}: the counts are the whole list's, and read the same on every tab`, said(strips) === said([STRIP]), said(strips));
+      const dimmed = tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty'));
+      check(`${name}: Cancelled, with none, is the one tab dimmed, still a button; pressed, it shows "0 cancelled requests" and `
+          + 'the empty text the select showed, "No cancelled requests.", with no table',
+        said(dimmed.map(text)) === said(['Cancelled 0']) && dimmed[0].disabled === false
+          && said(seen.Cancelled.pressed) === said(['Cancelled 0']) && seen.Cancelled.heading === '0 cancelled requests'
+          && seen.Cancelled.empty === 'No cancelled requests.' && !seen.Cancelled.table,
+        said({ dimmed: dimmed.map(text), cancelled: seen.Cancelled }));
+
+      // Refresh on Claimed, after a fifth claimed request has arrived. The
+      // answer is held, so the page can be read while it is out.
+      await clickIf(page, tabNamed(page, 'Claimed'));
+      state.list.push({ id: 299, status: 'claimed', first: 'Lito', last: 'Gomez' });
+      const STRIP12 = 'Pending 3 · Approved 2 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 12';
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = look(page);
+      const refreshCall = net.calls[sent];
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, GET ?status=all, with no tabs while it is out, and keeps Claimed: `
+          + '"5 claimed requests" with the new count',
+        net.calls.length === sent + 1 && said(listCalls([refreshCall].filter(Boolean))) === said(['GET /document-requests?status=all'])
+          && reloading.strip === '' && reloading.loading
+          && said(v.pressed) === said(['Claimed 5']) && v.heading === '5 claimed requests'
+          && said(v.rows) === said([...WANT.Claimed.rows, 'Lito Gomez']) && v.strip === STRIP12,
+        said({ reloading, v }));
+
+      // A reload that fails: no tabs, as on Payments; then Try again.
+      const hadTabs = tabsOf(page).length === 7;
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      v = look(page);
+      check(`${name}: a load that fails takes the tabs away: the error and Try again under the heading "Document requests", `
+          + 'with no strip, no rows and no empty text',
+        hadTabs && !page.query('.pay-tabs') && v.heading === 'Document requests'
+          && v.error === 'Could not load the requests: Network down'
+          && !!tryAgainButton(page) && v.rows.length === 0 && !v.table && v.empty === null,
+        said({ hadTabs, v }));
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`  ${name}: Try again brings the tabs back, still on Claimed`,
+        said(v.pressed) === said(['Claimed 5']) && v.strip === STRIP12 && v.heading === '5 claimed requests' && !v.error,
+        said(v));
+
+      // Back from a request's detail, with nothing done there.
+      await clickIf(page, tabNamed(page, 'Approved'));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Ben Reyes', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail, with nothing done there, keeps Approved and does not load the list again `
+          + '(the one request is the detail\'s own)',
+        opened === 'Request #302' && said(v.pressed) === said(['Approved 2']) && said(v.rows) === said(WANT.Approved.rows)
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/302']),
+        said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, as it did, and the tab
+        // stays. The approve goes to the stub.
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await clickIf(page, rowButton(page, 'Ana Cruz', 'Review'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after approving a request loads the list again, once, and keeps Pending, whose count drops: '
+            + 'Ana Cruz has moved to Approved',
+          approved === 'Request approved.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests/301/approve', 'GET /document-requests?status=all'])
+            && said(v.pressed) === said(['Pending 2']) && said(v.rows) === said(['Dino Tan', 'Jun Abad'])
+            && v.strip === 'Pending 2 · Approved 3 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 12',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), v }));
+
+        // Encode walk-in, left without filing: the list is not loaded again.
+        await clickIf(page, tabNamed(page, 'Approved'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Encode walk-in, then Back to list without filing, keeps Approved and does not load the list again',
+          panel === 'Encode walk-in request' && said(v.pressed) === said(['Approved 3'])
+            && listCalls(net.calls.slice(sent)).length === 0,
+          said({ panel, v, calls: net.calls.slice(sent).map((c) => `${c.method} ${c.url}`) }));
+
+        // Filing one: the list loads again, once, and the tab stays. The
+        // resident picker searches 300ms after the last keystroke.
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        if (page.query('.pending-card input')) await page.fill('.pending-card input', 'Lim');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await page.settle();
+        await clickIf(page, page.query('.picker-option'));
+        const typeSelect = page.query('select[name="document_type_id"]');
+        if (typeSelect) {
+          typeSelect.value = '7';
+          typeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+        const purpose = page.query('textarea[name="purpose"]');
+        if (purpose) {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Scholarship');
+          purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        }
+        await page.settle();
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        const filed = text(page.query('.alert.success'));
+        const posted = net.calls.slice(sent).find((c) => c.method === 'POST');
+        check('Secretary: filing a walk-in loads the list again, once, and keeps Approved; the new request is counted under Pending',
+          filed === 'Request recorded for Rosa Lim.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests', 'GET /document-requests?status=all'])
+            && /"resident_id":912/.test(String(posted?.body)) && said(v.pressed) === said(['Approved 3'])
+            && v.strip === 'Pending 3 · Approved 3 · Ready for release 1 · Claimed 5 · Rejected 1 · Cancelled 0 · All 13',
+          said({ filed, calls: listCalls(net.calls.slice(sent)), body: posted?.body ?? null, v }));
+      }
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. The strip on a narrow phone, as the Secretary. Where the seven tabs
+    // do not fit, the strip scrolls inside itself and fades the edge that has
+    // tabs past it (data-fade: "start", "end" or "start end", absent while
+    // they fit); a tab chosen, or focused, while part of it is out of view is
+    // brought fully into view, clear of the fade, by moving the strip and
+    // never the page. jsdom lays nothing out, so the strip is laid out by
+    // hand: 300px holding 746px of tabs, 96, 112, 166, 98, 102, 110 and 62
+    // wide. Drawing the fade is index.css's, and the layout harness's to see.
+    {
+      const FADE = 24; // the width of the faded edge in index.css
+      const WIDTHS = [96, 112, 166, 98, 102, 110, 62];
+      const MAX = WIDTHS.reduce((a, b) => a + b, 0) - 300; // 446, the strip's furthest scroll
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState(), false));
+      const page = await globalThis.mountInteractive(root(), '/secretary/requests');
+      await page.settle();
+      const strip = () => page.query('.pay-tabs');
+      const fade = () => strip()?.getAttribute('data-fade') ?? null;
+      const pressed = () => page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text);
+      // The strip's client and scroll widths, a scrollLeft held within them as
+      // a browser holds it, and each tab's box from where it sits.
+      const layOut = (clientWidth, widths = WIDTHS) => {
+        const s = strip();
+        if (!s) return;
+        const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0));
+        const scrollWidth = Math.max(widths.reduce((a, b) => a + b, 0), clientWidth);
+        let left = 0;
+        const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+        Object.defineProperty(s, 'clientWidth', { configurable: true, get: () => clientWidth });
+        Object.defineProperty(s, 'scrollWidth', { configurable: true, get: () => scrollWidth });
+        Object.defineProperty(s, 'scrollLeft', {
+          configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, scrollWidth - clientWidth)); },
+        });
+        s.getBoundingClientRect = () => rect(0, clientWidth);
+        [...s.querySelectorAll('.pay-tab')].forEach((b, i) => {
+          b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + widths[i] - left);
+        });
+      };
+      // The strip moved by hand, and the scroll event a browser then sends.
+      const scrollStripTo = async (x) => {
+        if (!strip()) return;
+        strip().scrollLeft = x;
+        strip().dispatchEvent(new dom.window.Event('scroll'));
+        await page.settle();
+      };
+      const tabBox = (label) => {
+        const b = tabNamed(page, label)?.getBoundingClientRect();
+        return b ? { left: b.left, right: b.right } : null;
+      };
+
+      const fitting = fade();
+      layOut(300);
+      dom.window.dispatchEvent(new dom.window.Event('resize'));
+      await page.settle();
+      check('narrow phone: the tabs mark no edge while they fit, and "end" once the strip is narrower than they are (here on a resize)',
+        !!strip() && fitting === null && fade() === 'end', said({ fitting, narrow: fade() }));
+      const marks = [];
+      for (const x of [200, MAX, 0]) {
+        await scrollStripTo(x);
+        marks.push(fade());
+      }
+      check('  scrolling the strip moves the mark: "start end" partway, "start" at its end, "end" back at the start',
+        said(marks) === said(['start end', 'start', 'end']), said(marks));
+
+      const scrollsBefore = scrolled.length;
+      await clickIf(page, tabNamed(page, 'Ready for release'));
+      const ready = { at: strip()?.scrollLeft ?? null, box: tabBox('Ready for release'), fade: fade(), pressed: pressed() };
+      check('  choosing a tab partly out of view scrolls the strip until all of it shows, clear of the faded edges: '
+          + 'Ready for release, and the page itself does not scroll',
+        ready.at > 0 && !!ready.box && ready.box.left >= FADE && ready.box.right <= 300 - FADE && ready.fade === 'start end'
+          && said(ready.pressed) === said(['Ready for release 1']) && scrolled.length === scrollsBefore,
+        said({ ready, pageScrolls: scrolled.length - scrollsBefore }));
+      await clickIf(page, tabNamed(page, 'All'));
+      const last = { at: strip()?.scrollLeft ?? null, box: tabBox('All'), fade: fade() };
+      await clickIf(page, tabNamed(page, 'Pending'));
+      const first = { at: strip()?.scrollLeft ?? null, box: tabBox('Pending'), fade: fade() };
+      check('  All, the last, scrolls it to its end, where nothing is past it and that edge is not faded; Pending, the '
+          + 'first, back to its start',
+        last.at === MAX && !!last.box && last.box.right <= 300 && last.fade === 'start'
+          && first.at === 0 && first.box?.left === 0 && first.fade === 'end' && scrolled.length === scrollsBefore,
+        said({ last, first }));
+      // A browser scrolls a focused element into view only when none of it
+      // shows (measured in Chrome 155, section S).
+      tabNamed(page, 'Ready for release')?.focus();
+      await page.settle();
+      const focused = { at: strip()?.scrollLeft ?? null, box: tabBox('Ready for release'), pressed: pressed() };
+      check('  a tab that takes keyboard focus while partly out of view is brought fully into view too, without being chosen',
+        page.active() === tabNamed(page, 'Ready for release') && focused.at > 0 && !!focused.box && focused.box.left >= FADE
+          && focused.box.right <= 300 - FADE && said(focused.pressed) === said(['Pending 3']), said(focused));
+      layOut(800);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      const widened = fade();
+      layOut(300);
+      await clickIf(page, tabNamed(page, 'Pending'));
+      check('  the mark follows the strip after any render, not only a scroll or a resize: widened to fit, a tab press drops '
+          + 'it; narrowed again, the next press brings "end" back',
+        widened === null && fade() === 'end', said({ widened, narrowed: fade() }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section W sent GETs, and two POSTs, the Secretary\'s approve and walk-in, both answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (previousTZW === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZW;
+  }
+
+  // =========================================================================
+  // X. Document requests: the search box
+  // =========================================================================
+  // The Document requests list gains the Payments page's search box, lifted
+  // into components/ListToolbar.jsx: the same look, name pattern, Clear (x)
+  // button and Escape, and no browser autocomplete. It has a row of its own,
+  // under the row that holds the heading and Refresh and over the status
+  // tabs, and like the tabs it is drawn only once the list has loaded. It
+  // filters the list already loaded, as you type, with no request, using
+  // utils/chargeSearch.js's normalise, searchTerms and matchesTerms as they
+  // are, over what utils/requestList.js says a row shows of who and what: the
+  // requester's name, the resident's @account where the row shows one, and
+  // the document type, and since section Z the request number under them.
+  // Never the purpose, the rejection reason, an email, a status word or a
+  // walk-in's filer; and for Staff, whose rows show no account, no account
+  // at all, although their payload still carries the filer's username. The search runs over the whole list
+  // and the tabs split what matches: their counts follow it, the chosen tab
+  // stays, and while a search is on the heading reads "N of M <tab> requests
+  // match". It lives through Refresh, Try again and Back from a request, and
+  // is kept nowhere in the browser. The helpers are checked case by case,
+  // then the real page for the Secretary, Staff and the Punong Barangay
+  // against ten stubbed requests. Every request is answered by the fetch
+  // stub; the only write, the Secretary's approve, goes to it too.
+  console.log('\n--- Document requests: the search box ---');
+  {
+    const previousTZX = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const R = globalThis.requestList || {};
+    const CS = globalThis.chargeSearch || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // Ten requests in the list's real shape (SECRETARY_LIST_FIELDS in
+    // routes/documentRequests.js; Staff's drops what STAFF_LIST_FIELDS
+    // withholds, the resident's account and the requester's email, and keeps
+    // the requester's username). The purposes, the rejection reason and the
+    // emails read like real ones, so a search that reached them would find
+    // something. 405 and 410 are walk-ins filed by secretary1; 405's resident
+    // has no online account. No request is cancelled.
+    //   id, status, [first, middle, last, suffix], document type,
+    //   the resident's account (null: none), the filer, purpose, rejection reason
+    const SEARCH_LIST = [
+      [401, 'pending', ['Juan', 'Miguel', 'Dela Cruz', null], 'Barangay Clearance', 'jmdc_1990', 'jmdc_1990',
+        'Employment requirement', null],
+      [402, 'pending', ['Maria', 'Elena', 'Santos', null], 'Certificate of Residency', 'msantos_88', 'msantos_88',
+        'Scholarship application', null],
+      [403, 'approved', ['Niño', null, 'Peñaflor', null], 'Certificate of Indigency', 'ninop', 'ninop', 'Medical assistance', null],
+      [404, 'approved', ['Pedro', null, 'Dela Cruz', 'Jr.'], 'Barangay Clearance', 'pdc_2001', 'pdc_2001', 'Bank account opening', null],
+      [405, 'ready_for_release', ['Rosa', null, 'Lim', null], 'Business Clearance', null, 'secretary1', 'Sari-sari store permit', null],
+      [406, 'claimed', ['Ana', null, 'Cruz', null], 'Barangay ID', 'anacruz', 'anacruz', 'Valid ID for SSS', null],
+      [407, 'rejected', ['Gil', null, 'Wong', null], 'First-time jobseeker', 'gwong', 'gwong', 'First job application',
+        'Incomplete requirements: no birth certificate'],
+      [408, 'claimed', ['Lito', null, 'Ramos', null], 'Certificate of Residency', 'lramos', 'lramos', 'School enrollment', null],
+      [409, 'pending', ['Kim', null, 'Bello', null], 'Barangay Clearance', 'kbello', 'kbello', 'Police clearance requirement', null],
+      [410, 'approved', ['Elsa', null, 'Uy', null], 'Certificate of Residency', 'elsa_uy', 'secretary1', 'Travel abroad', null],
+    ];
+    const asRequest = ([id, status, [first, middle, last, suffix], documentType, account, filer, purpose, rejection], staff) => ({
+      request_id: id, purpose, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: rejection, processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: middle, last_name: last, suffix,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: filer === 'secretary1' ? 1 : 700 + id, username: filer,
+        ...(staff ? {} : { email: `${filer}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 900 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    const SECRETARY_LIST = SEARCH_LIST.map((row) => asRequest(row, false));
+    const STAFF_LIST = SEARCH_LIST.map((row) => asRequest(row, true));
+    const IDS = SEARCH_LIST.map((row) => row[0]);
+
+    // a. utils/chargeSearch.js's three, as the page uses them, unchanged.
+    const normalised = ['Peñaflor', 'NIÑO', 'Dela Cruz'].map((s) => attempt(() => CS.normalise(s)));
+    check('chargeSearch.normalise, as it is: lower case with the accents taken off: "Peñaflor" → "penaflor", "NIÑO" → "nino", '
+        + '"Dela Cruz" → "dela cruz"',
+      said(normalised) === said(['penaflor', 'nino', 'dela cruz']), said(normalised));
+    const termsOf = ['  JUAN   dela  ', '', '   '].map((s) => attempt(() => CS.searchTerms(s)));
+    check('  searchTerms: the words, normalised, extra spaces dropped: "  JUAN   dela  " → ["juan","dela"]; a blank search, '
+        + 'or one of spaces only, has no words',
+      said(termsOf) === said([['juan', 'dela'], [], []]), said(termsOf));
+    const hits = [
+      ['juan dela cruz', ['cruz', 'juan']], ['juan dela cruz', ['juan', 'santos']], ['juan dela cruz', ['cru']], ['juan dela cruz', []],
+    ].map(([t, terms]) => attempt(() => CS.matchesTerms(t, terms)));
+    check('  matchesTerms: every word must be in the text, in any order, and one missing word fails it; a word matches '
+        + 'part of a word ("cru" finds "cruz"); no words match everything',
+      said(hits) === said([true, false, true, true]), said(hits));
+
+    // b. utils/requestList.js: what a request's search reads, and the words
+    // around a search.
+    const parts = (r) => attempt(() => R.searchParts(r));
+    let got = parts(SECRETARY_LIST[0]);
+    check('searchParts, a Secretary or Punong Barangay row: the name as the row shows it, the @account the row shows under '
+        + 'it, the request number under that (section Z), and the document type: "Juan Miguel Dela Cruz", "@jmdc_1990", '
+        + '"#401", "Barangay Clearance"',
+      said(got) === said(['Juan Miguel Dela Cruz', '@jmdc_1990', '#401', 'Barangay Clearance']), said(got));
+    got = parts(STAFF_LIST[0]);
+    check('  a Staff row shows no account, so its text has none, although the request still carries the filer\'s username, '
+        + '"jmdc_1990", which is the resident\'s own account here; it has the number, "#401"',
+      said(got) === said(['Juan Miguel Dela Cruz', '#401', 'Barangay Clearance']) && STAFF_LIST[0].requester.username === 'jmdc_1990',
+      said(got));
+    got = [SECRETARY_LIST[4], SECRETARY_LIST[9], SECRETARY_LIST[3]].map(parts);
+    check('  a walk-in reads its resident, never its filer: Rosa Lim, with no online account, has no handle and no '
+        + '"secretary1"; Elsa Uy has her own "@elsa_uy"; and a suffix reads as the row shows it, "Pedro Dela Cruz, Jr."',
+      said(got) === said([['Rosa Lim', '#405', 'Business Clearance'], ['Elsa Uy', '@elsa_uy', '#410', 'Certificate of Residency'],
+        ['Pedro Dela Cruz, Jr.', '@pdc_2001', '#404', 'Barangay Clearance']]), said(got));
+    got = parts({ ...SECRETARY_LIST[0], resident_records: null, requester: { user_id: 9, username: 'filer_9' } });
+    check('  a request with no resident name reads what its row shows in its place, the filer\'s "@filer_9", and its number',
+      said(got) === said(['@filer_9', '#401', 'Barangay Clearance']), said(got));
+    // Nothing else a request carries reaches its text. (The request number
+    // was on this list until section Z put it in the row and the search.)
+    const leaks = [...SECRETARY_LIST, ...STAFF_LIST].flatMap((r) => {
+      const all = attempt(() => R.searchParts(r).join('\n'));
+      if (typeof all !== 'string' || all.startsWith('threw')) return [`${r.request_id}: ${all}`];
+      return [r.purpose, r.rejection_reason, r.requester.email, r.status, 'online']
+        .filter(Boolean).filter((s) => all.toLowerCase().includes(s.toLowerCase())).map((s) => `${r.request_id}: ${s}`);
+    });
+    check('  no request\'s text holds its purpose, rejection reason, email, status or the "No online account" note, in either '
+        + 'projection', leaks.length === 0, said(leaks));
+    const matchedIds = (list, query) => attempt(() => R.matchingRequests(list, query).map((r) => r.request_id));
+    got = {
+      blank: matchedIds(SECRETARY_LIST, ''), spaces: matchedIds(SECRETARY_LIST, '   '), nino: matchedIds(SECRETARY_LIST, 'NIÑO'),
+      words: matchedIds(SECRETARY_LIST, 'clearance  DELA'), secretary: matchedIds(SECRETARY_LIST, 'msantos'),
+      staff: matchedIds(STAFF_LIST, 'msantos'),
+    };
+    check('matchingRequests: a blank search, or spaces only, keeps all ten in the order sent; "NIÑO" finds 403; "clearance  DELA" '
+        + '401 and 404; "msantos" finds 402 on the Secretary\'s list and nothing on Staff\'s',
+      said(got) === said({ blank: IDS, spaces: IDS, nino: [403], words: [401, 404], secretary: [402], staff: [] }), said(got));
+    const HEADS = [
+      ['pending', 1, 3, '1 of 3 pending requests matches'], ['pending', 2, 3, '2 of 3 pending requests match'],
+      ['pending', 0, 3, '0 of 3 pending requests match'], ['ready_for_release', 0, 1, '0 of 1 ready for release request match'],
+      ['cancelled', 0, 0, '0 of 0 cancelled requests match'], ['all', 12, 77, '12 of 77 requests match'],
+      ['all', 1, 1, '1 of 1 request matches'], ['all', 1234, 2345, '1,234 of 2,345 requests match'],
+    ];
+    const heads = HEADS.map(([tab, n, m]) => attempt(() => R.searchHeading(tab, n, m)));
+    check('searchHeading, the Payments totals line\'s words for the tab: "1 of 3 pending requests matches", "2 of 3 pending '
+        + 'requests match", "0 of 1 ready for release request match", "12 of 77 requests match" on All, "1,234 of 2,345"',
+      said(heads) === said(HEADS.map((h) => h[3])), said(heads));
+    const NONE = [
+      ['pending', 'zzz', 'No pending requests match "zzz"'], ['all', 'zzz', 'No requests match "zzz"'],
+      ['ready_for_release', '  Dela   CRUZ ', 'No ready for release requests match "Dela CRUZ"'],
+    ];
+    const nones = NONE.map(([tab, q]) => attempt(() => R.noMatchText(tab, q)));
+    check('noMatchText names the tab, as the empty text without a search does, and quotes the search as typed, spaces '
+        + 'tidied: \'No pending requests match "zzz"\', on All \'No requests match "zzz"\'',
+      said(nones) === said(NONE.map((n) => n[2])), said(nones));
+    const holders = [SECRETARY_LIST, STAFF_LIST, []].map((list) => attempt(() => R.searchPlaceholder(list)));
+    check('searchPlaceholder promises an account only where the rows carry one: "Search name, account or document" for '
+        + 'the Secretary\'s list, "Search name or document" for Staff\'s and for an empty list',
+      said(holders) === said(['Search name, account or document', 'Search name or document', 'Search name or document']),
+      said(holders));
+
+    // c. The real page, for the three roles.
+    const makeState = () => ({ rows: SEARCH_LIST.map((row) => [...row]) });
+    const listAnswer = (state, staff) => ({ requests: state.rows.map((row) => asRequest(row, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(\/approve)?$/);
+      if (one) {
+        const row = state.rows.find((x) => x[0] === Number(one[1]));
+        if (!row) return undefined;
+        if (method === 'POST' && one[2]) row[1] = 'approved';
+        const request = { ...asRequest(row, staff), processed_by: null };
+        return one[2] ? { request, message: 'Request approved.' } : { request };
+      }
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const xButton = (page) => page.query('button[aria-label="Clear search"]');
+    // Typed the way a keystroke types (the native setter and an input event);
+    // with no box on screen, nothing is typed.
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const emptyClear = (page) => (page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search') ?? null : null);
+    // What the list says, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      search: box(page)?.value ?? null,
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      dimmed: tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty')).map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      empty: text(page.query('.empty p')),
+      clearSearch: !!emptyClear(page),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, rowName, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    const noteOf = (page, rowName) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? (text(tr.querySelector('.small-note')) ?? '(no note)') : null;
+    };
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    const STRIP10 = 'Pending 3 · Approved 3 · Ready for release 1 · Claimed 2 · Rejected 1 · Cancelled 0 · All 10';
+    const PENDING3 = ['Juan Miguel Dela Cruz', 'Maria Elena Santos', 'Kim Bello'];
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the tabs, the search box is not drawn while the list loads or after a load fails: no box under `
+          + '"Loading requests…", none beside the error, and Try again brings it back with the tabs',
+        !opening.box && !opening.strip && opening.loading && !failedOpen.box && !failedOpen.strip
+          && failedOpen.error === 'Could not load the requests: Network down' && !!box(page) && !!page.query('.pay-tabs'),
+        said({ opening, failedOpen, after: { box: !!box(page), strip: !!page.query('.pay-tabs') } }));
+
+      const input = box(page);
+      const wrapper = input?.closest('[role="search"]') ?? null;
+      const icon = wrapper?.querySelector('svg') ?? null;
+      const headRow = page.query('.doc-requests-head');
+      const toolbar = input?.closest('.list-head') ?? null;
+      const PLACEHOLDER = staff ? 'Search name or document' : 'Search name, account or document';
+      check(`${name}: the box is the Payments one: type="search" in a role="search" wrapper, named "Search requests", reading `
+          + `"${PLACEHOLDER}", no browser autocomplete or spellcheck, its icon hidden from screen readers, empty, no Clear (x)`,
+        input?.type === 'search' && !!wrapper && input.getAttribute('aria-label') === 'Search requests'
+          && input.getAttribute('placeholder') === PLACEHOLDER && input.getAttribute('autocomplete') === 'off'
+          && input.getAttribute('spellcheck') === 'false' && icon?.getAttribute('aria-hidden') === 'true'
+          && input.value === '' && !xButton(page),
+        said({ type: input?.type ?? null, label: input?.getAttribute('aria-label') ?? null,
+          placeholder: input?.getAttribute('placeholder') ?? null, autocomplete: input?.getAttribute('autocomplete') ?? null,
+          spellcheck: input?.getAttribute('spellcheck') ?? null, icon: icon?.getAttribute('aria-hidden') ?? null, x: !!xButton(page) }));
+      check(`${name}: it has a row of its own, under the row with the heading and Refresh and over the tabs, and is no form`,
+        !!toolbar && !!headRow && toolbar !== headRow && follows(headRow, toolbar) && follows(toolbar, page.query('.pay-tabs'))
+          && !input.closest('form'),
+        said({ toolbar: toolbar?.className ?? null, head: headRow?.className ?? null }));
+      // The heading says how many match, as the Payments totals line does,
+      // and like it is a polite live region, so a screen reader hears the
+      // count change as the search is typed.
+      const liveHeading = headRow?.querySelector('h2');
+      check(`${name}: the heading is a polite live region, as the Payments totals line is, so the count is heard as you type`,
+        liveHeading?.getAttribute('aria-live') === 'polite', said({ ariaLive: liveHeading?.getAttribute('aria-live') ?? null }));
+      let v = look(page);
+      check(`${name}: with nothing typed the list reads as it did: Pending, "3 pending requests", its three rows, every count`,
+        said(v.pressed) === said(['Pending 3']) && v.heading === '3 pending requests' && said(v.rows) === said(PENDING3)
+          && v.strip === STRIP10, said(v));
+
+      // Typing, a keystroke at a time.
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      let sent = net.calls.length;
+      const perKey = [];
+      for (const s of ['c', 'cr', 'cru', 'cruz']) {
+        await type(page, s);
+        perKey.push(net.calls.length - sent);
+      }
+      v = look(page);
+      check(`${name}: each keystroke filters at once and sends nothing: "c", "cr", "cru", "cruz", no request after any`,
+        net.calls.length === sent && perKey.every((n) => n === 0) && v.search === 'cruz', said({ perKey, search: v.search }));
+      check(`${name}: on Pending, "cruz" leaves Juan Miguel Dela Cruz; Pending stays chosen, and the heading reads "1 of 3 `
+          + 'pending requests matches"',
+        said(v.rows) === said(['Juan Miguel Dela Cruz']) && said(v.pressed) === said(['Pending 1'])
+          && v.heading === '1 of 3 pending requests matches', said(v));
+      check(`${name}: the counts follow the search, "Pending 1 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · `
+          + 'Cancelled 0 · All 3", and the tabs left with none are dimmed, still buttons',
+        v.strip === 'Pending 1 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 3'
+          && said(v.dimmed) === said(['Ready for release 0', 'Rejected 0', 'Cancelled 0'])
+          && tabsOf(page).length === 7 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
+
+      // The tabs split what matches.
+      sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      const onAll = look(page);
+      await clickIf(page, tabNamed(page, 'Ready for release'));
+      const onReady = look(page);
+      check(`${name}: a tab press splits what matches and sends nothing: All shows the three Cruz rows under "3 of 10 requests match"`,
+        said(onAll.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.', 'Ana Cruz'])
+          && onAll.heading === '3 of 10 requests match' && said(onAll.pressed) === said(['All 3']), said(onAll));
+      check(`${name}: Ready for release, where none match: "0 of 1 ready for release request match", and in place of the rows `
+          + '\'No ready for release requests match "cruz"\' with a Clear search button',
+        onReady.heading === '0 of 1 ready for release request match' && onReady.empty === 'No ready for release requests match "cruz"'
+          && onReady.clearSearch && onReady.rows.length === 0 && !page.query('table.data-table')
+          && said(onReady.pressed) === said(['Ready for release 0']) && net.calls.length === sent, said(onReady));
+      await clickIf(page, emptyClear(page));
+      v = look(page);
+      check(`${name}: that Clear search empties the box, leaves focus in it and keeps Ready for release: its row, under the `
+          + 'heading it had before, "1 ready for release request", and every count back',
+        v.search === '' && !!box(page) && page.active() === box(page) && said(v.pressed) === said(['Ready for release 1'])
+          && said(v.rows) === said(['Rosa Lim']) && v.heading === '1 ready for release request' && v.strip === STRIP10
+          && net.calls.length === sent, said(v));
+
+      // An empty tab: its own text with no search, the search's with one.
+      await clickIf(page, tabNamed(page, 'Cancelled'));
+      const noSearch = look(page);
+      await type(page, 'zzz');
+      const zzz = look(page);
+      check(`${name}: an empty tab with no search keeps its text, "0 cancelled requests" and "No cancelled requests.", with no `
+          + 'Clear search',
+        noSearch.heading === '0 cancelled requests' && noSearch.empty === 'No cancelled requests.' && !noSearch.clearSearch,
+        said(noSearch));
+      check(`${name}: with "zzz", matching nothing: "0 of 0 cancelled requests match", 'No cancelled requests match "zzz"' `
+          + 'with Clear search, and all seven tabs dimmed',
+        zzz.heading === '0 of 0 cancelled requests match' && zzz.empty === 'No cancelled requests match "zzz"' && zzz.clearSearch
+          && zzz.dimmed.length === 7 && said(zzz.pressed) === said(['Cancelled 0']), said(zzz));
+
+      // What a search finds, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const rowsFor = async (q) => {
+        await type(page, q);
+        return look(page).rows;
+      };
+      sent = net.calls.length;
+      const found = {
+        name: await rowsFor('juan'), middle: await rowsFor('elena'), document: await rowsFor('indigency'),
+        documents: await rowsFor('residency'), cased: await rowsFor('  JUAN   dela  '), upper: await rowsFor('BARANGAY id'),
+        words: await rowsFor('cruz clearance'), reversed: await rowsFor('clearance pedro'), apart: await rowsFor('juan santos'),
+        accents: await rowsFor('nino penaflor'), accented: await rowsFor('NIÑO'),
+      };
+      check(`${name}: by the name the row shows, middle name and all: "juan" finds Juan Miguel Dela Cruz, "elena" Maria Elena Santos`,
+        said(found.name) === said(['Juan Miguel Dela Cruz']) && said(found.middle) === said(['Maria Elena Santos']), said(found));
+      check(`${name}: by document type: "indigency" finds Niño Peñaflor, "residency" the three Certificates of Residency, in `
+          + 'the order sent',
+        said(found.document) === said(['Niño Peñaflor'])
+          && said(found.documents) === said(['Maria Elena Santos', 'Lito Ramos', 'Elsa Uy']), said(found));
+      check(`${name}: case and extra spaces do not matter: "  JUAN   dela  " finds Juan Miguel Dela Cruz, "BARANGAY id" Ana Cruz`,
+        said(found.cased) === said(['Juan Miguel Dela Cruz']) && said(found.upper) === said(['Ana Cruz']), said(found));
+      check(`${name}: several words must all match the same request, in any order, across its name and document: "cruz `
+          + 'clearance" finds the two Dela Cruz clearances, "clearance pedro" Pedro alone, "juan santos" nothing',
+        said(found.words) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.'])
+          && said(found.reversed) === said(['Pedro Dela Cruz, Jr.']) && Array.isArray(found.apart) && found.apart.length === 0,
+        said(found));
+      check(`${name}: accents do not matter: "nino penaflor" and "NIÑO" find Niño Peñaflor`,
+        said(found.accents) === said(['Niño Peñaflor']) && said(found.accented) === said(['Niño Peñaflor']), said(found));
+
+      // The account: found exactly where the row shows it.
+      await type(page, '');
+      const notes = { maria: noteOf(page, 'Maria Elena Santos'), rosa: noteOf(page, 'Rosa Lim'), elsa: noteOf(page, 'Elsa Uy') };
+      const accounts = { msantos: await rowsFor('msantos'), handle: await rowsFor('@elsa_uy'), self: await rowsFor('jmdc_1990') };
+      if (staff) {
+        check('Staff: the rows show no account note, and an account the row does not show is never found: "msantos", '
+            + '"@elsa_uy" and "jmdc_1990" find nothing, though Staff\'s payload still carries the filers\' usernames',
+          said(notes) === said({ maria: '(no note)', rosa: '(no note)', elsa: '(no note)' })
+            && Object.values(accounts).every((rows) => rows.length === 0)
+            && said(STAFF_LIST.filter((r) => ['msantos_88', 'jmdc_1990'].includes(r.requester.username)).map((r) => r.request_id))
+              === said([401, 402]),
+          said({ notes, accounts }));
+      } else {
+        check(`${name}: the rows show the resident's account under the name ("@msantos_88", "@elsa_uy"; Rosa Lim "No online `
+            + 'account"), and a search finds it there: "msantos" Maria Elena Santos, "@elsa_uy" Elsa Uy (a walk-in, her own '
+            + 'account), "jmdc_1990" Juan Miguel Dela Cruz',
+          said(notes) === said({ maria: '@msantos_88', rosa: 'No online account', elsa: '@elsa_uy' })
+            && said(accounts) === said({ msantos: ['Maria Elena Santos'], handle: ['Elsa Uy'], self: ['Juan Miguel Dela Cruz'] }),
+          said({ notes, accounts }));
+      }
+
+      // What a search never reaches. (A request number, "401", was on this
+      // list until section Z put the number in the row and the search.)
+      const NEVER = ['scholarship', 'employment', 'bank account', 'incomplete', 'birth certificate', 'example.invalid',
+        'pending', 'rejected', 'secretary1', 'online'];
+      const leaked = [];
+      for (const q of NEVER) {
+        const rows = await rowsFor(q);
+        if (rows.length > 0) leaked.push({ q, rows });
+      }
+      check(`${name}: never matched: a purpose ("scholarship", "employment", "bank account"), the rejection reason `
+          + '("incomplete", "birth certificate"), an email ("example.invalid"), a status ("pending", "rejected"), a walk-in\'s '
+          + 'filer ("secretary1"), the "No online account" note ("online")',
+        leaked.length === 0 && !!box(page), said(leaked));
+      // With no box on screen nothing was typed, so "no request" would say nothing.
+      check(`${name}: and none of those ${Object.keys(found).length + 3 + NEVER.length} searches sent a request`,
+        !!box(page) && net.calls.length === sent, `${net.calls.length - sent} request(s), box ${box(page) ? 'present' : 'absent'}`);
+
+      // Escape and the Clear (x) button.
+      await clickIf(page, tabNamed(page, 'Pending'));
+      await type(page, 'juan');
+      const x = xButton(page);
+      box(page)?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape in the box empties it, keeps focus in it, and brings Pending's three rows back`,
+        !!x && v.search === '' && page.active() === box(page) && said(v.rows) === said(PENDING3)
+          && v.heading === '3 pending requests', said(v));
+      await type(page, 'juan');
+      const x2 = xButton(page);
+      await clickIf(page, x2);
+      v = look(page);
+      check(`${name}: the Clear (x) button, there while the box has text, does the same: a type="button" named "Clear `
+          + 'search"; pressed, the box is empty, focus is in it and the button is gone',
+        !!x2 && x2.type === 'button' && x2.getAttribute('aria-label') === 'Clear search' && v.search === ''
+          && page.active() === box(page) && !xButton(page) && said(v.rows) === said(PENDING3), said(v));
+      await type(page, 'juan');
+      tabNamed(page, 'Pending')?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape clears only while the box has focus: pressed on a tab, the box keeps "juan" and its row`,
+        page.active() === tabNamed(page, 'Pending') && v.search === 'juan' && said(v.rows) === said(['Juan Miguel Dela Cruz']),
+        said(v));
+
+      // Back from a request's detail.
+      await clickIf(page, tabNamed(page, 'All'));
+      await type(page, 'dela');
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Pedro Dela Cruz, Jr.', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      const focusAfterBack = page.active()?.tagName ?? null;
+      check(`${name}: Back from a request's detail keeps the search and the tab: "dela" in the box, All chosen, the two Dela `
+          + 'Cruz rows under "2 of 10 requests match"; only the detail was requested',
+        opened === 'Request #404' && v.search === 'dela' && said(v.pressed) === said(['All 2'])
+          && said(v.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.']) && v.heading === '2 of 10 requests match'
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/404']),
+        said({ opened, v, calls: listCalls(net.calls.slice(sent)), focusAfterBack }));
+
+      // Refresh, then a reload that fails, then Try again.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, and keeps the search: no box and no tabs while it is out, then "dela" `
+          + 'still in the box, All chosen, "2 of 10 requests match"',
+        said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests?status=all']) && !reloading.box
+          && !reloading.strip && reloading.loading && v.search === 'dela' && said(v.pressed) === said(['All 2'])
+          && v.heading === '2 of 10 requests match' && said(v.rows) === said(['Juan Miguel Dela Cruz', 'Pedro Dela Cruz, Jr.']),
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails takes the box away with the tabs, and Try again brings it back with "dela" in it`,
+        !failedReload.box && !failedReload.strip && failedReload.error === 'Could not load the requests: Internal server error'
+          && v.search === 'dela' && said(v.pressed) === said(['All 2']) && v.heading === '2 of 10 requests match',
+        said({ failedReload, v }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, and the search and the
+        // tab stay. The approve goes to the stub.
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await type(page, 'maria');
+        await clickIf(page, rowButton(page, 'Maria Elena Santos', 'Review'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after approving loads the list again, once, and keeps the search and the tab: "maria" on '
+            + 'Pending, where she no longer is: "0 of 2 pending requests match", \'No pending requests match "maria"\', '
+            + 'and Approved 1 in the strip',
+          approved === 'Request approved.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /document-requests/402/approve', 'GET /document-requests?status=all'])
+            && v.search === 'maria' && said(v.pressed) === said(['Pending 0']) && v.heading === '0 of 2 pending requests match'
+            && v.empty === 'No pending requests match "maria"'
+            && v.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 1',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), v }));
+      }
+
+      // Nothing kept in the browser; a new visit starts empty. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the search is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, and a new visit opens on Pending with an empty box',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0 && v.search === ''
+          && said(v.pressed) === said(['Pending 3']) && v.heading === '3 pending requests',
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section X sent GETs, and one POST, the Secretary\'s approve, answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZX === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZX;
+  }
+
+  // =========================================================================
+  // Y. Document requests: the pager
+  // =========================================================================
+  // The list drew every request of a tab on one page: 77 on All, a very long
+  // page on a phone. It gains the Payments pager, lifted into
+  // components/ListPager.jsx with its classes, markup and behaviour: a nav
+  // named "Pagination" under the rows; "Showing 1 to 25 of 77 results", its
+  // figures in bold, in a polite live region; Rows per page (10, 25, 50 or
+  // 100, 25 to start); then Previous, the page numbers, each a button named
+  // "Page N" with the current one marked aria-current="page" and a "…" as
+  // text where pages are left out, and Next; "Page 1 of 4" for a phone. Like
+  // Payments' it shows from 11 matches. It pages the list already loaded,
+  // with no request, and only the rows drawn are one page: the heading and
+  // the tab counts still count every match, and the search still runs over
+  // the whole list. A tab, a search or a new Rows per page goes back to page
+  // 1, and Rows per page stays as chosen until a new visit. Refresh, Try
+  // again and Back from a request keep the page; a list that shrank under it
+  // lands on its last page, never an empty one past the end, and stays there.
+  // utils/paging.js is sections O's and P's, unchanged, and nothing was added
+  // to utils/requestList.js, so there is no new helper to check on its own.
+  // The real page for the Secretary, Staff and the Punong Barangay, against
+  // 77 stubbed requests in the order and with the statuses of the live list
+  // on 13 Oct 2026 (6 pending, 50 approved, 4 ready for release, 5 claimed, 5
+  // rejected, 7 cancelled), each named by its place in All, "Res 001" to "Res
+  // 077". Every request is answered by the fetch stub; the only writes, the
+  // Secretary's approve and mark ready for release, go to it too.
+  console.log('\n--- Document requests: the pager ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The live list's statuses, newest first, a letter each: P pending, A
+    // approved, R ready for release, C claimed, J rejected, X cancelled.
+    const SEQ = 'RPPXAPPPRXAJCAXAPACAAAAAAAAAAAAACRAAAAAAAAXAAAAAAAAAAAAAAACCAAAAAAAJAXXAXJJRJ';
+    const LETTER = { P: 'pending', A: 'approved', R: 'ready_for_release', C: 'claimed', J: 'rejected', X: 'cancelled' };
+    // The document type turns with the place in All, so "clearance" finds
+    // every third request, from Res 001.
+    const TYPES = ['Certificate of Indigency', 'Barangay Clearance', 'Certificate of Residency'];
+    const num = (n) => String(n).padStart(3, '0');
+    const nameOf = (n) => `Res ${num(n)}`;
+    // Request n in the list's real shape (as in sections V to X: Staff's has
+    // no resident account and no requester email). A billed request's charge
+    // is paid, so the Secretary can mark an approved one ready for release.
+    const asRequest = (n, status, staff) => ({
+      request_id: 1000 + n, purpose: `Purpose ${n}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 600 + (n % 3), name: TYPES[n % 3], fee: '20.00' },
+      resident_records: { resident_id: 3000 + n, first_name: 'Res', middle_name: null, last_name: num(n), suffix: null,
+        ...(staff ? {} : { account: { username: `res_${num(n)}` } }) },
+      requester: { user_id: 4000 + n, username: `res_${num(n)}`, ...(staff ? {} : { email: `res_${num(n)}@example.invalid` }) },
+      charges: ['approved', 'ready_for_release', 'claimed'].includes(status)
+        ? { charge_id: 5000 + n, amount: '20.00', status: 'PAID', declared_method: null, declared_reference: null }
+        : null,
+    });
+    // The requests the stub holds, which the approve, the mark ready for
+    // release and another session's changes alter as the server would.
+    const makeState = (seq = SEQ) => ({ list: [...seq].map((c, i) => ({ n: i + 1, status: LETTER[c] })) });
+    const listAnswer = (state, staff) => ({ requests: state.list.map((r) => asRequest(r.n, r.status, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)(?:\/(approve|ready-for-release))?$/);
+      if (one) {
+        const r = state.list.find((x) => 1000 + x.n === Number(one[1]));
+        if (!r) return undefined;
+        if (method === 'POST' && one[2] === 'approve') r.status = 'approved';
+        if (method === 'POST' && one[2] === 'ready-for-release') r.status = 'ready_for_release';
+        const request = { ...asRequest(r.n, r.status, staff), processed_by: null };
+        if (!one[2]) return { request };
+        return { request, message: one[2] === 'approve' ? 'Request approved.' : 'Request marked ready for release.' };
+      }
+      return undefined;
+    };
+    const names = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => nameOf(from + i));
+    const where = (state, status) => state.list.filter((r) => r.status === status).map((r) => r.n);
+    const STRIP77 = 'Pending 6 · Approved 50 · Ready for release 4 · Claimed 5 · Rejected 5 · Cancelled 7 · All 77';
+    // Worked out by hand from SEQ: "clearance" is every third request from Res 001.
+    const STRIP_CLEARANCE = 'Pending 1 · Approved 15 · Ready for release 3 · Claimed 2 · Rejected 0 · Cancelled 5 · All 26';
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const pagerOf = (page) => page.query('nav.pay-pager');
+    const sizeSelect = (page) => page.query('.pay-pager select');
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const stepButton = (page, label) => (pagerOf(page) ? buttonNamed(pagerOf(page), label) ?? null : null);
+    const listHeading = (page) => page.query('.doc-requests-head h2');
+    const rowOf = (page, rowName) =>
+      page.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === rowName) ?? null;
+    const rowButton = (page, rowName, label) => {
+      const tr = rowOf(page, rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // What the list and its pager say, read the way a person would.
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      pager: !!pagerOf(page),
+      showing: text(page.query('.pay-pager-count')),
+      bold: page.queryAll('.pay-pager-count strong').map(text),
+      numbers: page.queryAll('.pay-pager-numbers li').map(text).join(' '),
+      current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+      short: text(page.query('.pay-pager-short')),
+      size: sizeSelect(page)?.value ?? null,
+      search: box(page)?.value ?? null,
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+      loading: root().textContent.includes('Loading requests…'),
+    });
+    // The pager is on page n of m, showing `from` to `to` of `of`: the count
+    // line, the one number marked aria-current="page" and the phone's "Page n
+    // of m" must all say so.
+    const onPage = (v, n, m, from, to, of) => v.showing === `Showing ${from} to ${to} of ${of} results`
+      && said(v.current) === said([String(n)]) && v.short === `Page ${n} of ${m}`;
+    const brief = (v) => ({ showing: v.showing, current: v.current, short: v.short, numbers: v.numbers, size: v.size,
+      rows: v.rows.length ? [v.rows.length, v.rows[0], v.rows.at(-1)] : [] });
+    // Focus first, as a press does in a browser: a dispatched click in jsdom
+    // moves no focus, and some checks are about where focus ends up.
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    const setRows = async (page, value) => {
+      const select = sizeSelect(page);
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    // jsdom has no scrollIntoView; this one records what asked to be shown.
+    const scrolled = [];
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review', walkIn: true },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false },
+        staff: true, opener: 'View', walkIn: false },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false },
+        staff: false, opener: 'View', walkIn: false },
+    ];
+    for (const { name, route, token, user, staff, opener, walkIn } of ROLES) {
+      let state = makeState();
+      const APPROVED = where(state, 'approved');
+      const APPROVED_CLEARANCE = APPROVED.filter((n) => n % 3 === 1);
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      let v = look(page);
+      check(`${name}: it opens on Pending, whose 6 requests fit one page, and at 10 matches or fewer there is no pager: no `
+          + 'Pagination nav, no Rows per page, no Previous or Next',
+        said(v.pressed) === said(['Pending 6']) && v.rows.length === 6 && v.strip === STRIP77 && !v.pager && v.size === null
+          && !buttonNamed(root(), 'Previous') && !buttonNamed(root(), 'Next'),
+        said({ pressed: v.pressed, rows: v.rows.length, pager: v.pager, size: v.size }));
+
+      // All: 77 requests, four pages of 25. From here to the search for "070"
+      // nothing may send a request.
+      const sentBeforePaging = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: All, 77 requests at 25 a page: "Showing 1 to 25 of 77 results", pages "1 2 3 4" with 1 the current one, `
+          + '"Page 1 of 4" for a phone, and only the first 25 rows, "Res 001" to "Res 025", under "77 requests"',
+        v.heading === '77 requests' && onPage(v, 1, 4, 1, 25, 77) && v.numbers === '1 2 3 4' && said(v.rows) === said(names(1, 25)),
+        said({ heading: v.heading, ...brief(v) }));
+      const nav = pagerOf(page);
+      const countLine = page.query('.pay-pager-count');
+      check(`${name}: the pager is a nav named "Pagination" right under the rows' table, as on Payments; its count line is a `
+          + 'polite live region with its three figures in bold: "1", "25", "77"',
+        nav?.getAttribute('aria-label') === 'Pagination' && !!nav.previousElementSibling?.classList.contains('table-wrap')
+          && countLine?.getAttribute('aria-live') === 'polite' && said(v.bold) === said(['1', '25', '77']),
+        said({ label: nav?.getAttribute('aria-label') ?? null, after: nav?.previousElementSibling?.className ?? null,
+          live: countLine?.getAttribute('aria-live') ?? null, bold: v.bold }));
+      const select = sizeSelect(page);
+      const sizeLabel = nav?.querySelector('label') ?? null;
+      const options = select ? [...select.options].map((o) => o.textContent) : null;
+      check(`${name}: Rows per page is a select labelled "Rows per page", offering 10, 25, 50 and 100, with 25 chosen`,
+        !!select && sizeLabel?.textContent === 'Rows per page' && !!select.id && sizeLabel.htmlFor === select.id
+          && select.labels?.[0] === sizeLabel && said(options) === said(['10', '25', '50', '100']) && select.value === '25',
+        said({ label: sizeLabel?.textContent ?? null, for: sizeLabel?.htmlFor ?? null, id: select?.id ?? null, options,
+          value: select?.value ?? null }));
+      const numberButtons = page.queryAll('.pay-pager-numbers button')
+        .map((b) => `${b.getAttribute('type')}:${b.getAttribute('aria-label')}:${b.getAttribute('aria-current')}`);
+      const previous = stepButton(page, 'Previous');
+      const next = stepButton(page, 'Next');
+      check(`${name}: each number is a type="button" named "Page N", only the current one marked aria-current="page"; Previous `
+          + 'and Next are buttons whose arrows are hidden from screen readers, Previous aria-disabled on page 1, never disabled',
+        said(numberButtons) === said(['button:Page 1:page', 'button:Page 2:null', 'button:Page 3:null', 'button:Page 4:null'])
+          && previous?.type === 'button' && next?.type === 'button' && previous.getAttribute('aria-disabled') === 'true'
+          && next.getAttribute('aria-disabled') !== 'true' && !previous.disabled && !next.disabled
+          && [previous, next].every((b) => b.querySelector('svg')?.getAttribute('aria-hidden') === 'true'),
+        said({ numberButtons, previous: previous?.getAttribute('aria-disabled') ?? null, next: next?.getAttribute('aria-disabled') ?? null }));
+
+      scrolled.length = 0;
+      await press(page, next);
+      v = look(page);
+      check(`${name}: Next: page 2, "Res 026" to "Res 050", "Showing 26 to 50 of 77 results"; the list heading is brought into `
+          + 'view (block "nearest"), and focus stays on Next',
+        onPage(v, 2, 4, 26, 50, 77) && said(v.rows) === said(names(26, 50)) && scrolled.length === 1
+          && scrolled[0].el === listHeading(page) && scrolled[0].options?.block === 'nearest' && !!next && page.active() === next,
+        said({ ...brief(v), scrolls: scrolled.length, onto: scrolled[0]?.el?.tagName ?? null,
+          focus: page.active()?.textContent ?? null }));
+      await press(page, numberButton(page, 4));
+      v = look(page);
+      const nextAtEnd = stepButton(page, 'Next');
+      check(`${name}: "Page 4", the last: exactly the last two rows, "Res 076" and "Res 077", "Showing 76 to 77 of 77 results", `
+          + 'and Next unavailable',
+        onPage(v, 4, 4, 76, 77, 77) && said(v.rows) === said(['Res 076', 'Res 077'])
+          && nextAtEnd?.getAttribute('aria-disabled') === 'true', said(brief(v)));
+      scrolled.length = 0;
+      await press(page, nextAtEnd);
+      v = look(page);
+      check(`  ${name}: pressing the unavailable Next does nothing: no scroll, still page 4, and focus stays on it, aria-disabled `
+          + 'and never disabled',
+        onPage(v, 4, 4, 76, 77, 77) && scrolled.length === 0 && !!nextAtEnd && page.active() === nextAtEnd && !nextAtEnd.disabled,
+        said({ ...brief(v), scrolls: scrolled.length, focusOnNext: !!nextAtEnd && page.active() === nextAtEnd }));
+      scrolled.length = 0;
+      await press(page, numberButton(page, 4));
+      check(`  ${name}: nor does pressing the current page: no scroll, still page 4`,
+        onPage(look(page), 4, 4, 76, 77, 77) && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+      await press(page, stepButton(page, 'Previous'));
+      v = look(page);
+      check(`${name}: Previous from page 4: page 3, "Res 051" to "Res 075", "Showing 51 to 75 of 77 results"`,
+        onPage(v, 3, 4, 51, 75, 77) && said(v.rows) === said(names(51, 75)), said(brief(v)));
+      const perPage = [];
+      for (const n of [1, 2, 3, 4]) {
+        await press(page, numberButton(page, n));
+        const x = look(page);
+        perPage.push({ page: x.current, heading: x.heading, strip: x.strip, rows: x.rows.length });
+      }
+      check(`${name}: the heading and the tab counts are the whole list's on every page: "77 requests" and "${STRIP77}" on `
+          + 'pages 1 to 4, which draw 25, 25, 25 and 2 rows',
+        perPage.every((p) => p.heading === '77 requests' && p.strip === STRIP77)
+          && said(perPage.map((p) => [p.page, p.rows])) === said([[['1'], 25], [['2'], 25], [['3'], 25], [['4'], 2]]),
+        said(perPage.map((p) => ({ page: p.page, heading: p.heading, rows: p.rows, strip: p.strip === STRIP77 ? 'same' : p.strip }))));
+      await press(page, numberButton(page, 1));
+      const previousAtStart = stepButton(page, 'Previous');
+      scrolled.length = 0;
+      await press(page, previousAtStart);
+      v = look(page);
+      check(`${name}: on page 1, Previous is unavailable the same way: pressing it does nothing and focus stays on it; Next is `
+          + 'available',
+        onPage(v, 1, 4, 1, 25, 77) && scrolled.length === 0 && !!previousAtStart && page.active() === previousAtStart
+          && previousAtStart.getAttribute('aria-disabled') === 'true' && !previousAtStart.disabled
+          && stepButton(page, 'Next')?.getAttribute('aria-disabled') !== 'true',
+        said({ ...brief(v), scrolls: scrolled.length }));
+
+      // Rows per page.
+      await press(page, numberButton(page, 3));
+      scrolled.length = 0;
+      await setRows(page, 10);
+      v = look(page);
+      check(`${name}: Rows per page 10, from page 3: back to page 1, "Res 001" to "Res 010", "Showing 1 to 10 of 77 results", `
+          + 'pages "1 2 3 4 5 … 8", and the list heading brought into view, as for a page change',
+        v.size === '10' && onPage(v, 1, 8, 1, 10, 77) && v.numbers === '1 2 3 4 5 … 8' && said(v.rows) === said(names(1, 10))
+          && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+        said({ ...brief(v), scrolls: scrolled.length }));
+      const gaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+      check(`  ${name}: the "…" is plain text: not a button, and nothing in it can take focus`,
+        gaps.length === 1 && gaps.every((li) => !li.matches('[tabindex]') && !li.querySelector('button, a, input, select, [tabindex]')),
+        gaps.map((li) => li.outerHTML).join(' ') || 'no "…" drawn');
+      // Eight pages: pages 1 to 4 draw "1 2 3 4 5 … 8", the last four "1 …"
+      // and the last five (utils/paging.js), so 8 pages have no middle shape.
+      await press(page, numberButton(page, 5));
+      v = look(page);
+      check(`${name}: "Page 5" of 8, one of the last four: "1 … 4 5 6 7 8", "Res 041" to "Res 050", "Showing 41 to 50 of 77 `
+          + 'results", and focus stays on the button for page 5',
+        onPage(v, 5, 8, 41, 50, 77) && v.numbers === '1 … 4 5 6 7 8' && said(v.rows) === said(names(41, 50))
+          && page.active()?.getAttribute('aria-label') === 'Page 5',
+        said({ ...brief(v), focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+      await press(page, numberButton(page, 8));
+      v = look(page);
+      check(`${name}: "Page 8" of 8: "1 … 4 5 6 7 8", "Res 071" to "Res 077", "Showing 71 to 77 of 77 results"`,
+        onPage(v, 8, 8, 71, 77, 77) && v.numbers === '1 … 4 5 6 7 8' && said(v.rows) === said(names(71, 77)), said(brief(v)));
+      await press(page, numberButton(page, 4));
+      v = look(page);
+      check(`${name}: "Page 4" of 8, among the first four: "1 2 3 4 5 … 8", "Showing 31 to 40 of 77 results"`,
+        onPage(v, 4, 8, 31, 40, 77) && v.numbers === '1 2 3 4 5 … 8' && said(v.rows) === said(names(31, 40)), said(brief(v)));
+      await setRows(page, 50);
+      const at50 = look(page);
+      await press(page, numberButton(page, 2));
+      const at50second = look(page);
+      await setRows(page, 100);
+      const at100 = look(page);
+      check(`${name}: Rows per page 50: "Showing 1 to 50 of 77 results", pages "1 2", and page 2 "Res 051" to "Res 077"; 100: all `
+          + '77 on one page, "Showing 1 to 77 of 77 results", a single "1", Previous and Next both unavailable',
+        at50.size === '50' && onPage(at50, 1, 2, 1, 50, 77) && at50.numbers === '1 2' && said(at50.rows) === said(names(1, 50))
+          && onPage(at50second, 2, 2, 51, 77, 77) && said(at50second.rows) === said(names(51, 77))
+          && at100.size === '100' && onPage(at100, 1, 1, 1, 77, 77) && at100.numbers === '1' && at100.rows.length === 77
+          && stepButton(page, 'Previous')?.getAttribute('aria-disabled') === 'true'
+          && stepButton(page, 'Next')?.getAttribute('aria-disabled') === 'true',
+        said({ at50: brief(at50), at50second: brief(at50second), at100: brief(at100) }));
+
+      // A tab, a search, and Rows per page kept through both.
+      await setRows(page, 10);
+      await press(page, numberButton(page, 3));
+      const allThird = look(page);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: a tab change goes back to page 1 and keeps Rows per page: page 3 of All at 10 a page, then Approved, `
+          + '"Showing 1 to 10 of 50 results", pages "1 2 3 4 5", its first ten rows, under "50 approved requests"',
+        onPage(allThird, 3, 8, 21, 30, 77) && v.size === '10' && onPage(v, 1, 5, 1, 10, 50) && v.numbers === '1 2 3 4 5'
+          && said(v.rows) === said(APPROVED.slice(0, 10).map(nameOf)) && v.heading === '50 approved requests',
+        said({ before: brief(allThird), after: brief(v), heading: v.heading }));
+      await press(page, numberButton(page, 3));
+      const approvedThird = look(page);
+      await type(page, 'clearance');
+      const searched = look(page);
+      check(`${name}: a search goes back to page 1 and keeps Rows per page: page 3 of Approved, then "clearance", `
+          + '"Showing 1 to 10 of 15 results", the first ten approved clearances, under "15 of 50 approved requests match"',
+        onPage(approvedThird, 3, 5, 21, 30, 50) && searched.size === '10' && onPage(searched, 1, 2, 1, 10, 15)
+          && said(searched.rows) === said(APPROVED_CLEARANCE.slice(0, 10).map(nameOf))
+          && searched.heading === '15 of 50 approved requests match',
+        said({ before: brief(approvedThird), after: brief(searched), heading: searched.heading }));
+      await press(page, numberButton(page, 2));
+      v = look(page);
+      check(`  ${name}: its page 2 holds the other five, and the heading and the counts stay those of every match: "15 of 50 `
+          + `approved requests match" and "${STRIP_CLEARANCE}" on both pages`,
+        onPage(v, 2, 2, 11, 15, 15) && said(v.rows) === said(APPROVED_CLEARANCE.slice(10).map(nameOf))
+          && searched.strip === STRIP_CLEARANCE && v.strip === STRIP_CLEARANCE && v.heading === searched.heading,
+        said({ ...brief(v), heading: v.heading, strip: v.strip }));
+      await clickIf(page, page.query('button[aria-label="Clear search"]'));
+      v = look(page);
+      check(`${name}: the Clear (x) button is a search change too: from page 2 of the clearances back to page 1 of Approved's `
+          + '50, still at 10 a page',
+        v.search === '' && v.size === '10' && onPage(v, 1, 5, 1, 10, 50) && v.strip === STRIP77, said(brief(v)));
+      await setRows(page, 25);
+      await clickIf(page, tabNamed(page, 'All'));
+      await press(page, numberButton(page, 3));
+      const allThird25 = look(page);
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: from page 3 of All at 25 a page, Approved opens on its page 1, "Showing 1 to 25 of 50 results", not its last`,
+        onPage(allThird25, 3, 4, 51, 75, 77) && onPage(v, 1, 2, 1, 25, 50)
+          && said(v.rows) === said(APPROVED.slice(0, 25).map(nameOf)),
+        said({ before: brief(allThird25), after: brief(v) }));
+
+      // The search runs over the whole list before paging.
+      await clickIf(page, tabNamed(page, 'All'));
+      const allFirst = look(page);
+      await type(page, '070');
+      v = look(page);
+      check(`${name}: the search runs over the whole list, not the page shown: Res 070 is on page 3, not among page 1's rows, `
+          + 'and "070" finds it: one match, "1 of 77 requests matches", and no pager',
+        onPage(allFirst, 1, 4, 1, 25, 77) && !allFirst.rows.includes('Res 070') && said(v.rows) === said(['Res 070'])
+          && v.heading === '1 of 77 requests matches' && !v.pager,
+        said({ first: brief(allFirst), searched: { rows: v.rows, heading: v.heading, pager: v.pager } }));
+      await type(page, '');
+      check(`${name}: none of those page, Rows per page, tab and search changes sent a request`,
+        !!pagerOf(page) && net.calls.length === sentBeforePaging,
+        `${net.calls.length - sentBeforePaging} request(s): ${said(listCalls(net.calls.slice(sentBeforePaging)))}`);
+
+      // Refresh, a reload that fails, Try again, and Back from a request.
+      await setRows(page, 50);
+      await press(page, numberButton(page, 2));
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { pager: !!pagerOf(page), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, with no pager while it is out, and keeps the page and Rows per page: `
+          + 'page 2 at 50, "Showing 51 to 77 of 77 results", "Res 051" to "Res 077"',
+        net.calls.length === sent + 1 && !reloading.pager && reloading.loading && v.size === '50'
+          && onPage(v, 2, 2, 51, 77, 77) && said(v.rows) === said(names(51, 77)),
+        said({ requests: net.calls.length - sent, reloading, after: brief(v) }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failed = look(page);
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails shows no pager beside the error, and Try again brings it back on the same page: page 2 `
+          + 'at 50',
+        !failed.pager && failed.error === 'Could not load the requests: Internal server error' && failed.rows.length === 0
+          && v.size === '50' && onPage(v, 2, 2, 51, 77, 77),
+        said({ failed: { pager: failed.pager, error: failed.error, rows: failed.rows.length }, after: brief(v) }));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Res 060', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail, with nothing done there, keeps the page: Res 060's, page 2 at 50; only the `
+          + 'detail was requested',
+        opened === 'Request #1060' && v.size === '50' && onPage(v, 2, 2, 51, 77, 77)
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1060']),
+        said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+
+      if (walkIn) {
+        // Back after approving: the list loads again, and the page stays
+        // where it still exists.
+        await setRows(page, 10);
+        await press(page, numberButton(page, 2));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Res 017', 'Review'));
+        await clickIf(page, buttonNamed(root(), 'Approve request'));
+        const approved = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        const badge = text(rowOf(page, 'Res 017')?.querySelector('.badge'));
+        check('Secretary: Back after approving a request loads the list again, once, and keeps the page where it still exists: '
+            + 'page 2 of All at 10, "Showing 11 to 20 of 77 results", with Res 017 now Approved',
+          approved === 'Request approved.' && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1017',
+            'POST /document-requests/1017/approve', 'GET /document-requests?status=all'])
+            && v.size === '10' && onPage(v, 2, 8, 11, 20, 77) && said(v.rows) === said(names(11, 20)) && badge === 'Approved',
+          said({ approved, calls: listCalls(net.calls.slice(sent)), after: brief(v), badge }));
+
+        // Back after the last page's only request has left the tab: the page
+        // before, now the last, and never an empty page past the end.
+        await setRows(page, 25);
+        await clickIf(page, tabNamed(page, 'Approved'));
+        await press(page, numberButton(page, 3));
+        const third = look(page);
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Res 072', 'Review'));
+        await clickIf(page, buttonNamed(root(), 'Mark ready for release'));
+        const marked = text(page.query('.pending-card .alert.success'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back after the only request on the last page has left the tab lands on the page before it, now the '
+            + 'last: Approved\'s page 3 held Res 072 alone, "Showing 51 to 51 of 51 results"; marked ready for release, the list '
+            + 'reloads and shows page 2, "Showing 26 to 50 of 50 results", never an empty page 3',
+          onPage(third, 3, 3, 51, 51, 51) && said(third.rows) === said(['Res 072']) && marked === 'Request marked ready for release.'
+            && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/1072',
+              'POST /document-requests/1072/ready-for-release', 'GET /document-requests?status=all'])
+            && onPage(v, 2, 2, 26, 50, 50) && v.rows.length === 25 && v.heading === '50 approved requests',
+          said({ third: brief(third), marked, calls: listCalls(net.calls.slice(sent)), after: brief(v) }));
+      }
+
+      // Nothing kept in the browser; a new visit starts at 25 a page, page 1.
+      // The second mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, no cookie; and a new visit starts again at 25 a page, on page 1',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '' && v.size === '25' && onPage(v, 1, 4, 1, 25, 77),
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen, session: dom.window.sessionStorage.length,
+          cookie: dom.window.document.cookie, after: brief(v) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // A Refresh that shrinks the tab under the page, then one that grows it.
+      state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await press(page, numberButton(page, 2));
+      const second = look(page);
+      const firstTwentyFive = APPROVED.slice(0, 25).map(nameOf);
+      for (const n of APPROVED.slice(25)) state.list.find((r) => r.n === n).status = 'ready_for_release';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const shrunk = look(page);
+      for (const r of state.list) if (r.status === 'pending') r.status = 'approved';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const grown = look(page);
+      check(`${name}: a Refresh that shrinks the tab under the page lands on its last page, never an empty one past the end, and `
+          + 'stays there when the tab grows again: on page 2 of Approved\'s 50, another session marks 25 ready for release, '
+          + 'and Refresh shows page 1, "Showing 1 to 25 of 25 results"; then the six pending are approved, and Refresh still '
+          + 'shows page 1, "Showing 1 to 25 of 31 results"',
+        onPage(second, 2, 2, 26, 50, 50) && onPage(shrunk, 1, 1, 1, 25, 25) && said(shrunk.rows) === said(firstTwentyFive)
+          && onPage(grown, 1, 2, 1, 25, 31) && grown.rows.length === 25,
+        said({ second: brief(second), shrunk: brief(shrunk), grown: brief(grown) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // 10 matches or fewer: no pager. 11: the pager, on one page.
+      resetNet(200, answerFor(makeState('P'.repeat(10)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const ten = look(page);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState('P'.repeat(11)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const eleven = look(page);
+      const elevenSteps = [stepButton(page, 'Previous'), stepButton(page, 'Next')].map((b) => b?.getAttribute('aria-disabled') ?? null);
+      check(`${name}: the pager shows from 11 matches, as on Payments: 10 pending requests, no pager at all, not even Rows per `
+          + 'page; 11, the pager, "Showing 1 to 11 of 11 results", a single "1", Rows per page 25, Previous and Next unavailable',
+        ten.rows.length === 10 && !ten.pager && ten.size === null
+          && eleven.rows.length === 11 && onPage(eleven, 1, 1, 1, 11, 11) && eleven.numbers === '1' && eleven.size === '25'
+          && said(elevenSteps) === said(['true', 'true']),
+        said({ ten: { rows: ten.rows.length, pager: ten.pager, size: ten.size }, eleven: { ...brief(eleven), steps: elevenSteps } }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // The middle shape needs more than 8 pages: 95 pending requests at 10 a
+      // page make 10, and page 5 is neither among the first four nor the last.
+      resetNet(200, answerFor(makeState('P'.repeat(95)), staff));
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await setRows(page, 10);
+      const shapes = [look(page)];
+      await press(page, numberButton(page, 5));
+      shapes.push(look(page));
+      const middleGaps = page.queryAll('.pay-pager-numbers li').filter((li) => li.textContent === '…');
+      await press(page, numberButton(page, 10));
+      shapes.push(look(page));
+      check(`${name}: above 7 pages there are always 7 slots: 95 requests at 10 a page, "1 2 3 4 5 … 10" on page 1, `
+          + '"1 … 4 5 6 … 10" on page 5 (Res 041 to Res 050), with both "…" plain text, and "1 … 6 7 8 9 10" on page 10 '
+          + '(Res 091 to Res 095)',
+        onPage(shapes[0], 1, 10, 1, 10, 95) && shapes[0].numbers === '1 2 3 4 5 … 10'
+          && onPage(shapes[1], 5, 10, 41, 50, 95) && shapes[1].numbers === '1 … 4 5 6 … 10'
+          && said(shapes[1].rows) === said(names(41, 50))
+          && middleGaps.length === 2 && middleGaps.every((li) => !li.querySelector('button, a, input, select, [tabindex]'))
+          && onPage(shapes[2], 10, 10, 91, 95, 95) && shapes[2].numbers === '1 … 6 7 8 9 10'
+          && said(shapes[2].rows) === said(names(91, 95)),
+        said(shapes.map(brief)));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section Y sent GETs, and two POSTs, the Secretary\'s approve and mark ready for release, both answered by the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+  }
+
+  // =========================================================================
+  // Z. Document requests: the payment marker and the request number
+  // =========================================================================
+  // Every row of the Document requests list now says where the request
+  // stands with its fee, and which request it is. The marker sits under the
+  // status badge, in the Status cell: "Paid" (a PAID charge above PHP 0),
+  // "No fee" (a PAID charge of PHP 0, through isNoFeeCharge as My requests
+  // and the request detail use it), "Unpaid" (an UNPAID charge, whatever was
+  // declared), "Void" (a VOID charge: no route voids a document charge, but
+  // the column allows one) and "Not billed" (no charge: pending, rejected and
+  // cancelled requests, and two approved before approval billed). The number
+  // is a line of its own under the requester, after the account note, as the
+  // detail names the request: "#91". Neither is a new column, and neither is
+  // a <strong>, so a row's first <strong> is still the name that section T
+  // and the others find it by. The search reads the number, "91" or "#91",
+  // part of it matching as on Payments ("9" finds 9, 19 and 91; "#9" 9 and
+  // 91), and never the marker's words. On a phone each has a card label of
+  // its own, which index.css prints from its data-label; jsdom applies no
+  // @media rule with a width in it, so the 640px rules are read from
+  // index.css itself. utils/requestList.js is checked case by case, then the
+  // real page for the three roles against thirteen stubbed requests, then 77
+  // shaped like the live list on 13 Oct 2026, then index.css. Every request
+  // is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Document requests: the payment marker and the request number ---');
+  {
+    const previousTZZ = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const fs = require('fs');
+    const R = globalThis.requestList || {};
+    const CS = globalThis.chargeSearch || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // a. The helpers on their own.
+    const numbers = [91, 6, 1234].map((id) => attempt(() => R.requestNumber({ request_id: id })));
+    check('requestNumber: the number as the request detail names it, "#91", "#6", and "#1234" with no thousands separator',
+      said(numbers) === said(['#91', '#6', '#1234']), said(numbers));
+    // The marker for a request whose charges embed is `charges`, as
+    // "label (colour class)". The class is the charge's own CHARGE_META one,
+    // the detail's Paid, Unpaid and Void badges', or "gray".
+    const markerOf = (charges) => attempt(() => {
+      const m = R.paymentMarker({ request_id: 1, status: 'approved', ...(charges === undefined ? {} : { charges }) });
+      return m ? `${m.label} (${m.className})` : m;
+    });
+    const MARKER_CASES = [
+      ['no charge yet, null, absent or an empty list, is "Not billed"', [null, undefined, []], 'Not billed (gray)'],
+      ['a PAID charge above PHP 0, as a number, as a string, or inside a list, is "Paid", green as the detail\'s Paid badge',
+        [{ status: 'PAID', amount: 50 }, { status: 'PAID', amount: '200.00' }, [{ status: 'PAID', amount: '20.00' }]],
+        'Paid (status-claimed)'],
+      ['a PAID charge of PHP 0, 0, "0.00" or "0", is "No fee", never "Paid"',
+        [{ status: 'PAID', amount: 0 }, { status: 'PAID', amount: '0.00' }, { status: 'PAID', amount: '0' }], 'No fee (gray)'],
+      ['a PAID charge with no amount, a null one or a blank one is "Paid", never "No fee" (Number() reads them as 0; '
+        + 'isZeroFee does not)', [{ status: 'PAID' }, { status: 'PAID', amount: null }, { status: 'PAID', amount: '' }],
+      'Paid (status-claimed)'],
+      ['an UNPAID charge is "Unpaid", amber, whatever its amount, PHP 0 included, and whatever the resident declared',
+        [{ status: 'UNPAID', amount: '50.00' }, { status: 'UNPAID', amount: 0 },
+          { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' }], 'Unpaid (status-pending)'],
+      ['a VOID charge is "Void", never "Unpaid", "Paid" or "No fee", PHP 0 included',
+        [{ status: 'VOID', amount: '50.00' }, { status: 'VOID', amount: '0.00' }], 'Void (status-cancelled)'],
+      ['a charge status outside the three is shown as it is, never blank and never "Unpaid"',
+        [{ status: 'REFUNDED', amount: '50.00' }], 'REFUNDED (gray)'],
+    ];
+    for (const [what, inputs, want] of MARKER_CASES) {
+      const got = inputs.map(markerOf);
+      check(`paymentMarker: ${what}`, got.every((g) => g === want), said(got));
+    }
+
+    // The number in a search, against the Payments search's own rule for its
+    // charge number (utils/chargeSearch.js, "#" and the number, matched as
+    // part of the text). The names and the document hold no digit.
+    const IDS_N = [91, 90, 19, 11, 9, 29, 6, 191];
+    const numbered = IDS_N.map((id) => ({ request_id: id, status: 'approved', document_types: { name: 'Barangay Clearance' },
+      resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null },
+      charges: null }));
+    const QUERIES = ['91', '#91', '9', '#9', '#1', '191', '  #91 '];
+    const requestIds = (q) => attempt(() => R.matchingRequests(numbered, q).map((r) => r.request_id));
+    const chargeIds = (q) => attempt(() => IDS_N.filter((id) => CS.matchesTerms(
+      CS.chargeSearchText({ charge_id: id }, { name: 'Ana Cruz', forText: 'Barangay Clearance' }), CS.searchTerms(q))));
+    const byNumber = Object.fromEntries(QUERIES.map((q) => [q, requestIds(q)]));
+    check('matchingRequests reads the number: "91" finds 91 and 191, "#91" only 91; part of a number matches: "9" finds 91, '
+        + '90, 19, 9, 29 and 191, "#9" 91, 90 and 9, "#1" 19, 11 and 191; "191" only 191',
+      said(byNumber) === said({ 91: [91, 191], '#91': [91], 9: [91, 90, 19, 9, 29, 191], '#9': [91, 90, 9],
+        '#1': [19, 11, 191], 191: [191], '  #91 ': [91] }), said(byNumber));
+    const unlikePayments = QUERIES.filter((q) => said(requestIds(q)) !== said(chargeIds(q)));
+    check('  the Payments search\'s rule for its charge number, exactly: each of those searches finds the requests whose '
+        + 'numbers are the numbers of the charges it finds on Payments',
+      unlikePayments.length === 0, said(QUERIES.map((q) => ({ q, requests: requestIds(q), charges: chargeIds(q) }))));
+    // One request in each state; no name or document holds a marker's word.
+    const STATES = [
+      [1, 'approved', { status: 'PAID', amount: '50.00' }], [2, 'approved', { status: 'PAID', amount: '0.00' }],
+      [3, 'approved', { status: 'UNPAID', amount: '50.00' }], [4, 'approved', { status: 'VOID', amount: '50.00' }],
+      [5, 'pending', null],
+    ].map(([id, status, charge]) => ({ request_id: id, status, document_types: { name: 'Barangay Clearance' },
+      resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null },
+      charges: charge && { charge_id: 900 + id, ...charge } }));
+    const WORDS = ['paid', 'unpaid', 'no fee', 'fee', 'not billed', 'billed', 'void'];
+    const byWord = Object.fromEntries(WORDS.map((w) => [w, attempt(() => R.matchingRequests(STATES, w).map((r) => r.request_id))]));
+    const markersHeld = STATES.map((r) => attempt(() => R.paymentMarker(r).label));
+    check('the marker\'s words are never searched: "paid", "unpaid", "no fee", "fee", "not billed", "billed" and "void" find '
+        + 'nothing, in a list holding a request in each state',
+      said(markersHeld) === said(['Paid', 'No fee', 'Unpaid', 'Void', 'Not billed'])
+        && Object.values(byWord).every((ids) => Array.isArray(ids) && ids.length === 0), said({ markersHeld, byWord }));
+
+    // b. The real page. Thirteen requests in the list's real shape (as in
+    // sections V to Y: Staff's carries no resident account and no requester
+    // email), newest first, at least one in every payment state. A charge
+    // arrives as one object, as the live list sends it (the embed is
+    // one-to-one: charges.document_request_id is UNIQUE). 19 is a walk-in
+    // filed by secretary1 for a resident with no online account, and its
+    // resident has declared paying onsite, which pays nothing. 55's resident
+    // is fevilla2006: an account Staff's rows never show, though their
+    // payload still carries it as the filer's username.
+    //   id, status, first, last, document type, charge, account, the marker
+    const MARKED = [
+      [91, 'ready_for_release', 'Liza', 'Bantilan', 'First-time Jobseeker Certificate', { status: 'PAID', amount: '0.00' },
+        'liza_b', 'No fee'],
+      [90, 'pending', 'Ana', 'Cruz', 'Barangay Clearance', null, 'ana_cruz', 'Not billed'],
+      [84, 'approved', 'Ben', 'Reyes', 'Certificate of Residency', { status: 'VOID', amount: '50.00' }, 'ben_reyes', 'Void'],
+      [82, 'approved', 'Carla', 'Santos', 'Business Clearance', { status: 'UNPAID', amount: '0.00' }, 'carla_s', 'Unpaid'],
+      [71, 'cancelled', 'Dino', 'Tan', 'Barangay Clearance', null, 'dino_tan', 'Not billed'],
+      [70, 'rejected', 'Elsa', 'Uy', 'Barangay ID', null, 'elsa_uy', 'Not billed'],
+      [55, 'approved', 'Fe', 'Villa', 'Barangay Clearance', { status: 'PAID', amount: '20.00' }, 'fevilla2006', 'Paid'],
+      [29, 'claimed', 'Gil', 'Wong', 'Certificate of Residency', { status: 'PAID', amount: 200 }, 'gil_wong', 'Paid'],
+      [19, 'approved', 'Hana', 'Yap', 'Certificate of Indigency', { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' },
+        null, 'Unpaid'],
+      [11, 'approved', 'Ivy', 'Zamora', 'Certificate of Indigency', { status: 'PAID', amount: 0 }, 'ivy_z', 'No fee'],
+      [9, 'approved', 'Jun', 'Abad', 'Barangay Clearance', null, 'jun_abad', 'Not billed'],
+      [6, 'approved', 'Kim', 'Bello', 'Certificate of Residency', null, 'kim_bello', 'Not billed'],
+      [1, 'claimed', 'Lito', 'Gomez', 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, 'lito_g', 'Paid'],
+    ];
+    const asRequest = ([id, status, first, last, documentType, charge, account], staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: '2026-10-08T02:00:00+00:00',
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: 500 + id, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: account ? 700 + id : 1, username: account ?? 'secretary1',
+        ...(staff ? {} : { email: `${account ?? 'secretary1'}@example.invalid` }) },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, ...charge },
+    });
+    const nameOf = (row) => `${row[2]} ${row[3]}`;
+    const wantRow = (row) => `${nameOf(row)} | #${row[0]} | ${row[7]}`;
+    const TAB_STATUS = { Pending: 'pending', Approved: 'approved', 'Ready for release': 'ready_for_release',
+      Claimed: 'claimed', Rejected: 'rejected', Cancelled: 'cancelled', All: null };
+    const STRIP13 = 'Pending 1 · Approved 7 · Ready for release 1 · Claimed 2 · Rejected 1 · Cancelled 1 · All 13';
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const rowsOf = (page) => page.queryAll('table.data-table tbody tr');
+    const numberOf = (tr) => tr.querySelectorAll('.doc-requests-number');
+    const markerEls = (tr) => tr.querySelectorAll('.doc-requests-pay');
+    // Each row as a person reads its name, number and marker.
+    const readRow = (tr) => `${text(tr.querySelector('strong'))} | ${text(numberOf(tr)[0]) ?? '(no number)'} | `
+      + `${text(markerEls(tr)[0]) ?? '(no marker)'}`;
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: rowsOf(page).map(readRow),
+      showing: text(page.query('.pay-pager-count')),
+    });
+    // jsdom has no scrollIntoView, and the pager calls it on a Rows per page
+    // change (part c); this one only records it.
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView() {};
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, staff: true },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, staff: false },
+    ];
+    for (const { name, route, token, user, staff } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+        ? { requests: MARKED.map((row) => asRequest(row, staff)) } : undefined));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      let v = look(page);
+      check(`${name}: on open, Pending: the request not yet decided shows "Not billed" under its badge and "#90" under the `
+          + 'name; heading, counts and the one request sent as before the marker',
+        v.heading === '1 pending request' && v.strip === STRIP13 && said(v.rows) === said(['Ana Cruz | #90 | Not billed'])
+          && net.calls.length === 1 && /\/document-requests\?status=all$/.test(net.calls[0].url),
+        said({ v, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+
+      const sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: on All every row shows its number and its marker: No fee, Not billed, Void, Unpaid, Paid, each where `
+          + 'its charge says so',
+        said(v.rows) === said(MARKED.map(wantRow)), said(v.rows));
+      const rowById = (id) => rowsOf(page).find((tr) => text(numberOf(tr)[0]) === `#${id}`) ?? null;
+      const markerById = (id) => text(rowById(id) && markerEls(rowById(id))[0]);
+      check(`${name}: each of the four states, and Void, on a row of its own: 55 "Paid", 11 "No fee", 19 "Unpaid", 90 "Not `
+          + 'billed", 84 "Void"',
+        markerById(55) === 'Paid' && markerById(11) === 'No fee' && markerById(19) === 'Unpaid'
+          && markerById(90) === 'Not billed' && markerById(84) === 'Void',
+        said([55, 11, 19, 90, 84].map((id) => [id, markerById(id)])));
+      check(`${name}: a PAID PHP 0.00 charge reads "No fee", never "Paid": 91 (amount "0.00") and 11 (amount 0)`,
+        markerById(91) === 'No fee' && markerById(11) === 'No fee', said([markerById(91), markerById(11)]));
+      check(`${name}: an approved request with an UNPAID charge reads "Unpaid": 19 (its resident declared paying onsite) and `
+          + '82 (PHP 0.00, never "No fee")',
+        markerById(19) === 'Unpaid' && markerById(82) === 'Unpaid', said([markerById(19), markerById(82)]));
+      check(`${name}: requests with no charge read "Not billed": pending 90, rejected 70, cancelled 71, and 9 and 6, approved `
+          + 'with no charge',
+        [90, 70, 71, 9, 6].every((id) => markerById(id) === 'Not billed'), said([90, 70, 71, 9, 6].map(markerById)));
+      check(`${name}: All, 13 requests: heading "13 requests", every count, and the pager's "Showing 1 to 13 of 13 results", `
+          + 'as before the marker; no request sent by the tab',
+        v.heading === '13 requests' && v.strip === STRIP13 && v.showing === 'Showing 1 to 13 of 13 results'
+          && net.calls.length === sent, said({ heading: v.heading, strip: v.strip, showing: v.showing, sent: net.calls.length - sent }));
+
+      // Where the two sit in the row.
+      const heads = page.queryAll('table.data-table thead th').map(text);
+      const shapes = rowsOf(page).map((tr) => {
+        const cells = [...tr.children];
+        const num = numberOf(tr);
+        const mark = markerEls(tr);
+        const strongs = [...tr.querySelectorAll('strong')];
+        const note = cells[0]?.querySelector('.small-note') ?? null;
+        return {
+          cells: cells.length,
+          firstStrong: text(strongs[0]),
+          oneEach: num.length === 1 && mark.length === 1,
+          numberCell: num[0]?.closest('td') === cells[0],
+          markerCell: mark[0]?.closest('td') === cells[3],
+          // after the name, and after the account note where the row has one
+          numberAfter: !!num[0] && !!(strongs[0]?.compareDocumentPosition(num[0]) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)
+            && (!note || !!(note.compareDocumentPosition(num[0]) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)),
+          markerAfterBadge: !!mark[0] && !!(cells[3]?.querySelector('.badge')?.compareDocumentPosition(mark[0])
+            & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
+          noStrong: !num[0]?.closest('strong') && !num[0]?.querySelector('strong') && !mark[0]?.closest('strong')
+            && !mark[0]?.querySelector('strong'),
+          labels: `${num[0]?.getAttribute('data-label')}/${mark[0]?.getAttribute('data-label')}`,
+          tone: mark[0] ? [...mark[0].classList].filter((c) => c !== 'doc-requests-pay').sort().join(' ') : null,
+          note: text(note),
+        };
+      });
+      const TONES = { Paid: 'charge-word status-claimed', Unpaid: 'charge-word status-pending', Void: 'charge-word status-cancelled',
+        'No fee': 'charge-word gray', 'Not billed': 'charge-word gray' };
+      check(`${name}: no new column: the same six headers, and six cells in every row`,
+        said(heads) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', '']) && shapes.every((s) => s.cells === 6),
+        said({ heads, cells: shapes.map((s) => s.cells) }));
+      check(`${name}: the number is in the Requester cell, after the name${staff ? '' : ' and the account note'}, and the marker `
+          + 'in the Status cell, after the badge; one of each per row, neither a <strong>, so the row\'s first <strong> is '
+          + 'still the name (section T finds rows by it)',
+        shapes.every((s, i) => s.oneEach && s.numberCell && s.markerCell && s.numberAfter && s.markerAfterBadge && s.noStrong
+          && s.firstStrong === nameOf(MARKED[i])), said(shapes));
+      check(`${name}: on a phone card they are labelled "Request" and "Payment" (data-label), and the marker takes the charge `
+          + 'colours of .charge-word: Paid green, Unpaid amber, Void, No fee and Not billed slate',
+        shapes.every((s, i) => s.labels === 'Request/Payment' && s.tone === TONES[MARKED[i][7]]),
+        said(shapes.map((s) => [s.labels, s.tone])));
+      if (staff) {
+        const tableText = text(page.query('table.data-table'));
+        check('Staff: the rows show no account note, and no filer\'s username anywhere ("fevilla2006", "secretary1")',
+          shapes.every((s) => s.note === null) && !tableText.includes('fevilla2006') && !tableText.includes('secretary1'),
+          said({ notes: shapes.map((s) => s.note), fevilla: tableText.includes('fevilla2006') }));
+      }
+
+      // Every tab: each row's number and marker, and nothing sent.
+      const sentTabs = net.calls.length;
+      const wrongTabs = [];
+      for (const [label, status] of Object.entries(TAB_STATUS)) {
+        await clickIf(page, tabNamed(page, label));
+        const want = MARKED.filter((row) => status === null || row[1] === status).map(wantRow);
+        const got = look(page).rows;
+        if (said(got) !== said(want)) wrongTabs.push({ tab: label, got, want });
+      }
+      check(`${name}: on every one of the seven tabs, every row shows its own number and marker, and pressing them sends nothing`,
+        wrongTabs.length === 0 && net.calls.length === sentTabs, said({ wrongTabs, sent: net.calls.length - sentTabs }));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      v = look(page);
+      check(`${name}: Approved keeps its heading and counts, "7 approved requests", and at 7 matches no pager`,
+        v.heading === '7 approved requests' && v.strip === STRIP13 && v.showing === null, said(v));
+
+      // The search, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const sentSearch = net.calls.length;
+      const found = async (q) => {
+        await type(page, q);
+        return rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      };
+      const hits = {
+        n91: await found('91'), hash91: await found('#91'), n9: await found('9'), hash9: await found('#9'),
+        hash1: await found('#1'), withWord: await found('91 jobseeker'), wrongWord: await found('91 clearance'),
+      };
+      check(`${name}: a search finds a request by its number: "91" and "#91" find #91 alone`,
+        said(hits.n91) === said(['#91']) && said(hits.hash91) === said(['#91']), said(hits));
+      check(`${name}: part of a number matches, as on Payments: "9" finds #91, #90, #29, #19 and #9; "#9" #91, #90 and #9; `
+          + '"#1" #19, #11 and #1',
+        said(hits.n9) === said(['#91', '#90', '#29', '#19', '#9']) && said(hits.hash9) === said(['#91', '#90', '#9'])
+          && said(hits.hash1) === said(['#19', '#11', '#1']), said(hits));
+      check(`${name}: the number is one more word of the search: "91 jobseeker" finds #91, "91 clearance" nothing`,
+        said(hits.withWord) === said(['#91']) && Array.isArray(hits.wrongWord) && hits.wrongWord.length === 0, said(hits));
+      await type(page, '9');
+      v = look(page);
+      check(`${name}: with "9", the heading and the counts follow the search as they do for a name: "5 of 13 requests match", `
+          + '"Pending 1 · Approved 2 · Ready for release 1 · Claimed 1 · Rejected 0 · Cancelled 0 · All 5"',
+        v.heading === '5 of 13 requests match'
+          && v.strip === 'Pending 1 · Approved 2 · Ready for release 1 · Claimed 1 · Rejected 0 · Cancelled 0 · All 5',
+        said({ heading: v.heading, strip: v.strip }));
+      const wordHits = {};
+      for (const q of WORDS) wordHits[q] = await found(q);
+      check(`${name}: the marker's words find nothing: "paid", "unpaid", "no fee", "fee", "not billed", "billed", "void"`,
+        Object.values(wordHits).every((rows) => rows.length === 0) && !!box(page), said(wordHits));
+      const username = await found('2006');
+      check(staff
+        ? 'Staff: "2006", in the username of 55\'s filer, finds nothing: the search never reads a username Staff\'s rows do not show'
+        : `${name}: "2006" finds #55, whose row shows "@fevilla2006" under the name`,
+      said(username) === said(staff ? [] : ['#55']), said(username));
+      await type(page, '');
+      check(`${name}: none of those searches sent a request`, !!box(page) && net.calls.length === sentSearch,
+        `${net.calls.length - sentSearch} request(s)`);
+
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. 77 requests in the order of the live list on 13 Oct 2026 (D1's
+    // read-only capture), with its statuses (section Y's SEQ), its payment
+    // states and its request numbers. PAY77 is each one's state: F No fee, P
+    // Paid, U Unpaid, N Not billed. Named by their place in letters, so no
+    // name holds a digit. The counts, written by hand from the capture, are
+    // the 13 Oct note's for Approved: Paid 41, No fee 1, Unpaid 6, Not
+    // billed 2.
+    const SEQ77 = 'RPPXAPPPRXAJCAXAPACAAAAAAAAAAAAACRAAAAAAAAXAAAAAAAAAAAAAAACCAAAAAAAJAXXAXJJRJ';
+    const PAY77 = 'FNNNUNNNPNPNPPNUNUPPPPPPPPPPPPPPPPPPPPPPPPNPPPPPPUUPPPUPPPPPPPPPPPFNNNNNNNNPN';
+    const IDS77 = [91, 90, 84, 83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 62, 61, 60, 59, 58, 57, 56, 55, 54,
+      53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22,
+      20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+    const LETTER = { P: 'pending', A: 'approved', R: 'ready_for_release', C: 'claimed', J: 'rejected', X: 'cancelled' };
+    const CHARGE = { F: { status: 'PAID', amount: '0.00' }, P: { status: 'PAID', amount: '50.00' },
+      U: { status: 'UNPAID', amount: '50.00' }, N: null };
+    const letters = (n) => (n > 26 ? letters(Math.floor((n - 1) / 26)) : '') + String.fromCharCode(65 + ((n - 1) % 26));
+    const LIVE = IDS77.map((id, i) => [id, LETTER[SEQ77[i]], 'Res', letters(i + 1), 'Barangay Clearance', CHARGE[PAY77[i]],
+      `res_${letters(i + 1).toLowerCase()}`]);
+    const WANT77 = {
+      Pending: { 'Not billed': 6 }, Approved: { Paid: 41, 'No fee': 1, Unpaid: 6, 'Not billed': 2 },
+      'Ready for release': { Paid: 3, 'No fee': 1 }, Claimed: { Paid: 5 }, Rejected: { 'Not billed': 5 },
+      Cancelled: { 'Not billed': 7 }, All: { Paid: 49, 'No fee': 2, Unpaid: 6, 'Not billed': 20 },
+    };
+    const tally = (labels) => labels.reduce((m, l) => ({ ...m, [l]: (m[l] || 0) + 1 }), {});
+    const sameTally = (a, b) => said(Object.keys(a).sort().map((k) => [k, a[k]])) === said(Object.keys(b).sort().map((k) => [k, b[k]]));
+    for (const { name, route, token, user, staff } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+        ? { requests: LIVE.map((row) => asRequest(row, staff)) } : undefined));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      const sizeSelect = page.query('.pay-pager select');
+      if (sizeSelect) {
+        sizeSelect.value = '100';
+        sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+      const counted = {};
+      for (const label of Object.keys(WANT77)) {
+        await clickIf(page, tabNamed(page, label));
+        counted[label] = tally(rowsOf(page).map((tr) => text(markerEls(tr)[0]) ?? '(no marker)'));
+      }
+      const off = Object.keys(WANT77).filter((label) => !sameTally(counted[label], WANT77[label]));
+      check(`${name}: over the 77 live-shaped requests, at 100 a page, the markers count as the capture does: Approved Paid 41, `
+          + 'No fee 1, Unpaid 6, Not billed 2; All Paid 49, No fee 2, Unpaid 6, Not billed 20; and every other tab',
+        off.length === 0, said({ off: off.map((label) => ({ label, got: counted[label], want: WANT77[label] })) }));
+      await clickIf(page, tabNamed(page, 'All'));
+      const allNumbers = rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      check(`${name}: All shows every number in the order sent, #91 first and #1 last, under "77 requests" and "Showing 1 to `
+          + '77 of 77 results"',
+        said(allNumbers) === said(IDS77.map((id) => `#${id}`)) && look(page).heading === '77 requests'
+          && look(page).showing === 'Showing 1 to 77 of 77 results', said({ first: allNumbers.slice(0, 3), n: allNumbers.length }));
+      await type(page, '#91');
+      const one = look(page).rows;
+      await type(page, '9');
+      const nines = rowsOf(page).map((tr) => text(numberOf(tr)[0]));
+      check(`${name}: "#91" finds the one request 91, ready for release with no fee; "9" the ten numbers holding a 9`,
+        said(one) === said(['Res A | #91 | No fee'])
+          && said(nines) === said(['#91', '#90', '#79', '#69', '#59', '#49', '#39', '#29', '#19', '#9']), said({ one, nines }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. The phone card. jsdom applies no @media rule with a width in it, so
+    // index.css is read here as a browser of a given width would apply it:
+    // comments stripped first (a comment may hold braces and selectors), then
+    // each rule kept with the @media conditions around it. A block applies
+    // when each width condition in it holds; a print, reduced-motion or other
+    // feature block does not. Selectors are tried on the real row's elements
+    // with matches(); a rule for ::before is tried on the element it belongs
+    // to.
+    const cssRules = () => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      const open = [];
+      let from = 0;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim();
+          open.push(head.startsWith('@') ? { at: head } : { selector: head.replace(/\s+/g, ' '), body: i + 1 });
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          if (block && block.selector !== undefined) {
+            const decls = {};
+            for (const d of src.slice(block.body, i).split(';')) {
+              const k = d.indexOf(':');
+              if (k > 0) decls[d.slice(0, k).trim().toLowerCase()] = d.slice(k + 1).trim().replace(/\s+/g, ' ');
+            }
+            rules.push({ selector: block.selector, decls, media: open.filter((b) => b.at).map((b) => b.at) });
+          }
+          from = i + 1;
+        } else if (ch === ';' && !open.some((b) => b.selector !== undefined)) {
+          from = i + 1;
+        }
+      }
+      return { rules, balanced: open.length === 0 };
+    };
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // Every value `prop` is given for `el` (or its ::before) by the rules a
+    // browser `width` wide applies, as "selector => value".
+    const declared = (css, width, el, prop, before = false) => css.rules
+      .filter((r) => prop in r.decls && appliesAt(r.media, width))
+      .filter((r) => r.selector.split(',').some((s) => {
+        const m = s.trim().match(/^(.*?)::?before$/);
+        return before ? !!m && tryMatch(el, m[1])
+          : !/(::[\w-]+|:(before|after|first-line|first-letter))$/.test(s.trim()) && tryMatch(el, s.trim());
+      }))
+      .map((r) => `${r.selector} => ${r.decls[prop]}`);
+    // What would hide `el` at `width`: on it, or on anything between it and
+    // the table, a display of none, a visibility of hidden, an opacity or font
+    // size of 0, or a clip.
+    const hiders = (css, width, el) => {
+      const found = [];
+      for (let node = el; node; node = node.parentElement) {
+        for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+          ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+          for (const d of declared(css, width, node, prop)) if (bad.test(d.split(' => ')[1])) found.push(d);
+        }
+        if (node.tagName === 'TABLE') break;
+      }
+      return found;
+    };
+    seedSession(VALID);
+    resetNet(200, (url, method) => (method === 'GET' && /\/document-requests\?/.test(url)
+      ? { requests: MARKED.map((row) => asRequest(row, false)) } : undefined));
+    const cardPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await cardPage.settle();
+    await clickIf(cardPage, tabNamed(cardPage, 'All'));
+    const css = cssRules();
+    const docCell = cardPage.query('table.data-table tbody td[data-label="Document"]');
+    check('index.css reads as a browser applies it: every brace closed, and a cell\'s card label ("Document") printed from '
+        + 'its data-label at 390px and not at 1280px, so what follows is measured right',
+      css.balanced && css.rules.length > 500 && !!docCell
+        && said(declared(css, 390, docCell, 'content', true).map((d) => d.split(' => ')[1])) === said(['attr(data-label)'])
+        && declared(css, 1280, docCell, 'content', true).length === 0,
+      said({ balanced: css.balanced, rules: css.rules.length, at390: docCell && declared(css, 390, docCell, 'content', true) }));
+    const parts = cardPage.queryAll('table.data-table tbody .doc-requests-number, table.data-table tbody .doc-requests-pay');
+    const at = (width) => parts.map((el) => ({
+      el: `${el.className} "${text(el)}"`,
+      hidden: hiders(css, width, el),
+      label: declared(css, width, el, 'content', true).map((d) => d.split(' => ')[1]),
+      labelHidden: declared(css, width, el, 'display', true).filter((d) => /=> none/.test(d)),
+    }));
+    const phone = at(390);
+    const fromAttr = (p) => p.label.length > 0 && p.label.every((v) => v === 'attr(data-label)');
+    check('on a phone (390px) nothing hides the number or the marker, in any row, and each card prints its label from '
+        + 'data-label ("Request", "Payment"), never hidden',
+      parts.length === MARKED.length * 2 && phone.every((p) => p.hidden.length === 0 && fromAttr(p) && p.labelHidden.length === 0),
+      said(phone.filter((p) => p.hidden.length || !fromAttr(p) || p.labelHidden.length).slice(0, 4)));
+    const wide = at(1280);
+    check('  above 640px (1280) nothing hides them either, and no label is printed: the data-label is inert there',
+      parts.length === MARKED.length * 2 && wide.every((p) => p.hidden.length === 0 && p.label.length === 0),
+      said(wide.filter((p) => p.hidden.length || p.label.length).slice(0, 4)));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await cardPage.unmount();
+
+    check('section Z sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (previousTZZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZZ;
+  }
+
+  // =========================================================================
+  // AA. Document requests: the filters row
+  // =========================================================================
+  // The Document requests list gains the Payments page's second row, lifted
+  // into components/ListFilters.jsx with its classes (.pay-filters,
+  // .pay-filter, .pay-filter-range, .pay-filters-clear, .pay-filters-hint)
+  // and behaviour: native selects, each with its visible label; "Choose
+  // dates" bringing From and To; a hint, a polite status, while From is after
+  // To, which then matches nothing and is never swapped; and a quiet "Clear
+  // filters" while a filter is on, which moves focus to the first select. It
+  // sits where Payments' sits, under the search row and over the tabs, and
+  // like them it is drawn only once the list has loaded. Three controls:
+  // Document, "Any document" and the types the loaded rows hold, sorted by
+  // name with case ignored, matched by the whole name; Payment, "Any
+  // payment", Paid, Unpaid, No fee and Not billed, and Void only when a
+  // loaded row is void, each the marker's own word and matched through
+  // paymentMarker, so a filter and a row cannot disagree; and Submitted,
+  // Payments' presets from utils/chargeFilters.js as they are, over the
+  // Manila day of the request's requested_at. The list shown is tab AND
+  // search AND filters: the tab counts, the heading ("3 of 8 approved
+  // requests match") and the pager follow the search and the filters, and
+  // every filter change goes back to page 1. A filter sends no request, lives
+  // through Refresh, Try again, a tab, a search and Back from a request, and
+  // is kept nowhere in the browser; a choice the reloaded list no longer
+  // offers goes back to Any. Where a filter leaves a tab empty the text names
+  // the tab in Payments' words, "No pending requests match your search or
+  // filters.", with Payments' "Clear search and filters", which keeps the
+  // tab as Payments keeps its status; a search alone keeps its own text and
+  // Clear search. "Today" is fixed at 12 Oct 2026, 12:00 in Manila, by the
+  // helpers' one clock; the machine is on Los Angeles time, and the day
+  // checks run again on UTC and on Tokyo time: 7:47 AM on 12 Oct in Manila
+  // (request 91, live) is 11 Oct in the first two, and 11:48 PM on 21 Sep is
+  // 22 Sep in Tokyo, so every Manila day has to be the code's own doing.
+  // utils/requestList.js is checked case by case; then the real page for the
+  // three roles against sixteen stubbed requests; then 40, for the pager and
+  // page 1; then index.css on a phone, read from the file as in section Z.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Document requests: the filters row ---');
+  {
+    const previousTZAA = process.env.TZ;
+    const HOME_ZONE = 'America/Los_Angeles';
+    process.env.TZ = HOME_ZONE;
+    const fs = require('fs');
+    const R = globalThis.requestList || {};
+    const F = globalThis.chargeFilters || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    setNow('2026-10-12T04:00:00Z'); // 12:00 on 12 Oct in Manila, 21:00 on 11 Oct in Los Angeles
+    // Three clocks for the machine: on the first two a Manila morning is the
+    // day before, on the third a Manila night is the day after.
+    const ZONES = ['UTC', 'America/Los_Angeles', 'Asia/Tokyo'];
+    const inZone = (zone, f) => {
+      process.env.TZ = zone;
+      try { return f(); } finally { process.env.TZ = HOME_ZONE; }
+    };
+
+    // a. The helpers on their own.
+    const typed = (name) => ({ request_id: 1, status: 'approved',
+      document_types: name === undefined ? null : { document_type_id: 1, name } });
+    const docOptions = (requests) => attempt(() => R.documentOptions(requests).map((o) => `${o.value}=${o.label}`).join(' | '));
+    let got = docOptions(['First-time jobseeker', 'Barangay Clearance', 'efef21', 'Certificate of Indigency', 'Barangay Clearance',
+      'Business Clearance', 'Barangay Clearance for Business'].map(typed).concat([typed(undefined)]));
+    check('documentOptions: "Any document" first, its value empty, then each type the rows hold, once, sorted by name with case '
+        + 'ignored ("efef21" between "Certificate of Indigency" and "First-time jobseeker"), each valued by its name; a row with no '
+        + 'type adds none',
+      got === '=Any document | Barangay Clearance=Barangay Clearance | Barangay Clearance for Business=Barangay Clearance for '
+        + 'Business | Business Clearance=Business Clearance | Certificate of Indigency=Certificate of Indigency | efef21=efef21 | '
+        + 'First-time jobseeker=First-time jobseeker', said(got));
+    got = [docOptions([]), docOptions([typed('any')])];
+    check('  an empty list offers "Any document" alone; a type named "any" is offered as itself, never taken for Any, whose value '
+        + 'is empty (a type always has a name, and "any" is the value of Payments\' Any choices)',
+      said(got) === said(['=Any document', '=Any document | any=any']), said(got));
+    const md = (name, choice) => attempt(() => R.matchesDocument(typed(name), choice));
+    const ANY_DOC = R.ANY_DOCUMENT;
+    got = {
+      any: [md('Barangay Clearance', ANY_DOC), md(undefined, ANY_DOC), md('any', ANY_DOC)],
+      exact: md('Barangay Clearance', 'Barangay Clearance'),
+      longer: md('Barangay Clearance for Business', 'Barangay Clearance'),
+      shorter: md('Barangay Clearance', 'Barangay Clearance for Business'),
+      cased: md('barangay clearance', 'Barangay Clearance'),
+      part: md('Barangay Clearance', 'Clearance'),
+      none: md(undefined, 'Barangay Clearance'),
+      anyName: [md('any', 'any'), md('Barangay Clearance', 'any')],
+    };
+    check('matchesDocument: Any takes every request, one with no type too; a type takes only requests of exactly that name: not '
+        + '"Barangay Clearance for Business" for "Barangay Clearance", nor the reverse, nor another case, nor part of a name; the '
+        + 'type named "any" takes only its own',
+      said(got) === said({ any: [true, true, true], exact: true, longer: false, shorter: false, cased: false, part: false,
+        none: false, anyName: [true, false] }), said(got));
+
+    const charged = (charges) => ({ request_id: 1, status: 'approved', charges });
+    const payOptions = (requests) => attempt(() => R.paymentOptions(requests).map((o) => `${o.value}=${o.label}`).join(' | '));
+    const FIVE = `${F.ANY}=Any payment | Paid=Paid | Unpaid=Unpaid | No fee=No fee | Not billed=Not billed`;
+    const NO_VOID = [charged({ status: 'PAID', amount: '50.00' }), charged({ status: 'UNPAID', amount: '50.00' }), charged(null)];
+    got = [payOptions(NO_VOID), payOptions([]), payOptions([charged({ status: 'REFUNDED', amount: '5.00' })])];
+    check('paymentOptions: "Any payment" (Payments\' Any value), then Paid, Unpaid, No fee and Not billed, each valued by its own '
+        + 'word, whatever the rows hold (those three, none, or a status outside the vocabulary): never Void where no row is void',
+      said(got) === said([FIVE, FIVE, FIVE]), said(got));
+    got = [payOptions([...NO_VOID, charged({ status: 'VOID', amount: '50.00' })]), payOptions([charged({ status: 'VOID', amount: '0.00' })])];
+    check('  and Void last, only when a row\'s marker says Void (a VOID charge, PHP 0 included)',
+      said(got) === said([`${FIVE} | Void=Void`, `${FIVE} | Void=Void`]), said(got));
+    const offered = attempt(() => R.paymentOptions([charged({ status: 'VOID', amount: '1.00' })]).slice(1).map((o) => o.value));
+    const spoken = attempt(() => [{ status: 'PAID', amount: 5 }, { status: 'UNPAID', amount: 5 }, { status: 'PAID', amount: 0 }, null,
+      { status: 'VOID', amount: 5 }].map((c) => R.paymentMarker(charged(c)).label));
+    check('  each choice is the marker\'s own word: the five values are what paymentMarker says for a paid, an unpaid, a no-fee, an '
+        + 'unbilled and a void request', said(offered) === said(spoken)
+        && said(spoken) === said(['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void']), said({ offered, spoken }));
+    // Every state, the marker's edge cases among them, with the one choice
+    // each must match (or none), written by hand; the marker must agree.
+    const P_CASES = [
+      ['a PAID charge above PHP 0', { status: 'PAID', amount: '50.00' }, 'Paid'],
+      ['a PAID charge of PHP 0.00', { status: 'PAID', amount: '0.00' }, 'No fee'],
+      ['a PAID charge of 0, a number', { status: 'PAID', amount: 0 }, 'No fee'],
+      ['a PAID charge with a null amount, never 0', { status: 'PAID', amount: null }, 'Paid'],
+      ['an UNPAID charge', { status: 'UNPAID', amount: '50.00' }, 'Unpaid'],
+      ['an UNPAID charge of PHP 0.00, never No fee', { status: 'UNPAID', amount: '0.00' }, 'Unpaid'],
+      ['an UNPAID charge declared paid onsite', { status: 'UNPAID', amount: '50.00', declared_method: 'onsite' }, 'Unpaid'],
+      ['no charge', null, 'Not billed'],
+      ['a charge inside a list', [{ status: 'PAID', amount: '20.00' }], 'Paid'],
+      ['a VOID charge', { status: 'VOID', amount: '50.00' }, 'Void'],
+      ['a status outside the vocabulary', { status: 'REFUNDED', amount: '5.00' }, ''],
+    ];
+    const CHOICES = ['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void'];
+    const wrongP = P_CASES.flatMap(([what, c, want]) => {
+      const r = charged(c);
+      const hits = CHOICES.filter((choice) => attempt(() => R.matchesPayment(r, choice)) === true).join(',');
+      const any = attempt(() => R.matchesPayment(r, F.ANY));
+      const marker = attempt(() => R.paymentMarker(r).label);
+      return hits === want && any === true && (want === '' || marker === want) ? []
+        : [`${what}: ${hits || '(none)'}, Any ${any}, marker ${marker}, want ${want || '(none)'}`];
+    });
+    check('matchesPayment: each request matches Any payment and the one choice its marker shows, never another: PHP 0 paid is No '
+        + 'fee, never Paid; PHP 0 unpaid is Unpaid, never No fee; a null amount is Paid; no charge is Not billed; a status outside the '
+        + 'vocabulary only Any', wrongP.length === 0, wrongP.length ? said(wrongP) : `${P_CASES.length} cases`);
+
+    const submitted = (iso) => ({ request_id: 1, status: 'pending', requested_at: iso });
+    //   what, submitted at, From, To (From undefined: no range), whether it is in
+    const S_CASES = [
+      ['7:47 AM on 12 Oct in Manila (23:47Z on 11 Oct, request 91 live) is 12 Oct', '2026-10-11T23:47:01.208336+00:00',
+        '2026-10-12', '2026-10-12', true],
+      ['  and not 11 Oct', '2026-10-11T23:47:01.208336+00:00', '2026-10-11', '2026-10-11', false],
+      ['11:48 PM on 21 Sep in Manila (15:48Z) is 21 Sep', '2026-09-21T15:48:00Z', '2026-09-21', '2026-09-21', true],
+      ['  and not 22 Sep', '2026-09-21T15:48:00Z', '2026-09-22', '2026-09-22', false],
+      ['  To 21 Sep alone takes it: the end day is in', '2026-09-21T15:48:00Z', null, '2026-09-21', true],
+      ['  From 22 Sep alone does not', '2026-09-21T15:48:00Z', '2026-09-22', null, false],
+      ['00:00 on 6 Oct in Manila (16:00Z on 5 Oct) is in 6 Oct to 12 Oct', '2026-10-05T16:00:00Z', '2026-10-06', '2026-10-12', true],
+      ['23:59 on 5 Oct in Manila is not', '2026-10-05T15:59:00Z', '2026-10-06', '2026-10-12', false],
+      ['From after To (12 Oct to 1 Oct) takes nothing, not 5 Oct', '2026-10-05T04:00:00Z', '2026-10-12', '2026-10-01', false],
+      ['no range takes every request', '2026-10-05T04:00:00Z', undefined, undefined, true],
+      ['  one with no submitted time too', null, undefined, undefined, true],
+      ['a range never takes a request with no submitted time', null, '2026-10-01', null, false],
+      ['  nor one whose time does not parse', 'not a date', null, '2026-10-12', false],
+    ];
+    const wrongS = ZONES.flatMap((zone) => inZone(zone, () => S_CASES.map(([what, iso, from, to, want]) => {
+      const res = attempt(() => R.matchesSubmitted(submitted(iso), from === undefined ? null : { from, to }));
+      return res === want ? null : `${zone}: ${what.trim()} -> ${res}`;
+    }).filter(Boolean)));
+    check('matchesSubmitted counts Manila days, both ends in, on UTC, Los Angeles and Tokyo time alike: 7:47 AM on 12 Oct in Manila '
+        + 'is 12 Oct (11 Oct in UTC and Los Angeles), 11:48 PM on 21 Sep is 21 Sep (22 Sep in Tokyo) and To 21 Sep takes it; From '
+        + 'after To takes nothing; no range takes everything; a range never takes a request with no time',
+      wrongS.length === 0, wrongS.length ? said(wrongS) : `${S_CASES.length} cases on ${ZONES.length} zones`);
+    //   chargeFilters' choice, submitted at, whether it is in, with today 12 Oct in Manila
+    const PRESETS = [
+      ['today', '2026-10-11T16:00:00Z', true], ['today', '2026-10-11T15:59:59Z', false],
+      ['week', '2026-10-05T16:00:00Z', true], ['week', '2026-10-05T15:59:00Z', false],
+      ['month', '2026-09-30T16:00:00Z', true], ['month', '2026-09-30T15:59:00Z', false],
+    ];
+    const wrongPresets = ZONES.flatMap((zone) => inZone(zone, () => PRESETS.map(([choice, iso, want]) => {
+      const res = attempt(() => R.matchesSubmitted(submitted(iso), F.dateRange(choice, '', '', F.manilaToday())));
+      return res === want ? null : `${zone}: ${choice} ${iso} -> ${res}`;
+    }).filter(Boolean)));
+    check('  with chargeFilters\' dateRange and manilaToday as they are, on each zone: Today takes 00:00 on 12 Oct in Manila and not '
+        + '23:59:59 on 11 Oct; Last 7 days 00:00 on 6 Oct and not 23:59 on 5 Oct; This month 00:00 on 1 Oct and not 23:59 on 30 Sep',
+      wrongPresets.length === 0, said(wrongPresets));
+    const NOMATCH = [['pending', 'No pending requests match your search or filters.'],
+      ['all', 'No requests match your search or filters.'],
+      ['ready_for_release', 'No ready for release requests match your search or filters.']];
+    got = NOMATCH.map(([tab]) => attempt(() => R.filtersNoMatchText(tab)));
+    check('filtersNoMatchText names the tab, as every empty text of this list does, in Payments\' words: "No pending requests match '
+        + 'your search or filters.", on All "No requests match your search or filters."',
+      said(got) === said(NOMATCH.map((n) => n[1])), said(got));
+
+    // b. The real page. Sixteen requests in the list's real shape (as in
+    // sections V to Z: Staff's carries no resident account and no requester
+    // email), newest first, every payment state among them, of five document
+    // types (one name inside a longer one, one in lower case, both as in the
+    // live list), submitted a minute either side of Manila's midnight.
+    //   id, status, [first, last], document type, charge, submitted at (UTC), the resident's account
+    const FILTER_LIST = [
+      [91, 'ready_for_release', ['Liza', 'Bantilan'], 'First-time jobseeker', { status: 'PAID', amount: '0.00' },
+        '2026-10-11T23:47:01.208336+00:00', 'liza_b'],
+      [90, 'pending', ['Ana', 'Cruz'], 'Barangay Clearance', null, '2026-10-11T16:00:00+00:00', 'ana_cruz'],
+      [89, 'pending', ['Ben', 'Reyes'], 'Barangay Clearance for Business', null, '2026-10-11T15:59:59+00:00', 'ben_reyes'],
+      [88, 'approved', ['Carla', 'Santos'], 'Barangay Clearance', { status: 'UNPAID', amount: '50.00' },
+        '2026-10-09T02:00:00+00:00', 'carla_s'],
+      [87, 'approved', ['Dino', 'Tan'], 'Certificate of Indigency', { status: 'PAID', amount: 0 }, '2026-10-05T16:00:00+00:00', 'dino_tan'],
+      [86, 'approved', ['Elsa', 'Uy'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-10-05T15:59:00+00:00', 'elsa_uy'],
+      [85, 'claimed', ['Fe', 'Villa'], 'Barangay Clearance for Business', { status: 'PAID', amount: '75.00' },
+        '2026-09-30T16:00:00+00:00', 'fevilla'],
+      [84, 'approved', ['Gil', 'Wong'], 'efef21', { status: 'UNPAID', amount: '0.00' }, '2026-09-30T15:59:00+00:00', 'gil_wong'],
+      [83, 'rejected', ['Hana', 'Yap'], 'Barangay Clearance', null, '2026-09-21T16:10:00+00:00', 'hana_yap'],
+      [82, 'approved', ['Ivy', 'Zamora'], 'Certificate of Indigency', { status: 'PAID', amount: '20.00' },
+        '2026-09-21T15:48:00+00:00', 'ivy_z'],
+      [81, 'cancelled', ['Jun', 'Abad'], 'Barangay Clearance', null, '2026-09-21T02:00:00+00:00', 'jun_abad'],
+      [80, 'approved', ['Kim', 'Bello'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-09-18T03:00:00+00:00', 'kim_bello'],
+      [79, 'claimed', ['Lito', 'Gomez'], 'Certificate of Indigency', { status: 'PAID', amount: 20 }, '2026-08-19T03:00:00+00:00', 'lito_g'],
+      [9, 'approved', ['Mario', 'Dagohoy'], 'Barangay Clearance', null, '2026-07-07T03:00:00+00:00', 'mario_d'],
+      [6, 'approved', ['Nora', 'Escabas'], 'Barangay Clearance for Business', null, '2026-07-07T02:00:00+00:00', null],
+      [1, 'claimed', ['Oscar', 'Fuentes'], 'Barangay Clearance', { status: 'PAID', amount: '50.00' }, '2026-07-06T05:00:00+00:00', 'oscar_f'],
+    ];
+    const TYPE_IDS = { 'Barangay Clearance': 1, 'Certificate of Indigency': 3, efef21: 6, 'First-time jobseeker': 7,
+      'Barangay Clearance for Business': 8, 'Barangay ID': 9 };
+    const asRequest = ([id, status, [first, last], documentType, charge, requestedAt, account], staff) => ({
+      request_id: id, purpose: `Purpose ${id}`, status, requested_at: requestedAt,
+      claimed_at: status === 'claimed' ? '2026-10-10T03:00:00+00:00' : null,
+      rejection_reason: status === 'rejected' ? 'Incomplete requirements' : null,
+      processed_at: status === 'pending' ? null : '2026-10-09T02:00:00+00:00',
+      document_types: { document_type_id: TYPE_IDS[documentType] ?? 6, name: documentType, fee: '20.00' },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        ...(staff ? {} : { account: account ? { username: account } : null }) },
+      requester: { user_id: account ? 700 + id : 1, username: account ?? 'secretary1',
+        ...(staff ? {} : { email: `${account ?? 'secretary1'}@example.invalid` }) },
+      charges: charge && { charge_id: 900 + id, declared_method: null, declared_reference: null, ...charge },
+    });
+    const makeState = (rows = FILTER_LIST) => ({ rows: rows.map((row) => [...row]) });
+    const listAnswer = (state, staff) => ({ requests: state.rows.map((row) => asRequest(row, staff)) });
+    const answerFor = (state, staff) => (url, method) => {
+      if (method === 'GET' && /\/document-requests\?/.test(url)) return listAnswer(state, staff);
+      const one = url.match(/\/document-requests\/(\d+)$/);
+      if (method === 'GET' && one) {
+        const row = state.rows.find((x) => x[0] === Number(one[1]));
+        return row ? { request: { ...asRequest(row, staff), processed_by: null } } : undefined;
+      }
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search requests"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    // A control found by its visible label, as a person finds it.
+    const labelled = (page, label) => {
+      const found = page.queryAll('label').find((l) => l.textContent === label);
+      return found ? found.control ?? null : null;
+    };
+    const docSelect = (page) => labelled(page, 'Document');
+    const paySelect = (page) => labelled(page, 'Payment');
+    const dateSelect = (page) => labelled(page, 'Submitted');
+    const fromInput = (page) => labelled(page, 'From');
+    const toInput = (page) => labelled(page, 'To');
+    const filtersRow = (page) => docSelect(page)?.closest('.pay-filters') ?? null;
+    const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+    const optionsOf = (select) => (select ? [...select.options].map((o) => o.textContent).join(' | ') : null);
+    // Choose the option a select shows as `label`, the way a person does.
+    const pick = async (page, select, label) => {
+      const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+      if (option) {
+        select.value = option.value;
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const pickDoc = (page, label) => pick(page, docSelect(page), label);
+    const pickPay = (page, label) => pick(page, paySelect(page), label);
+    const pickDate = (page, label) => pick(page, dateSelect(page), label);
+    // A date typed into From or To: the native setter and an input event.
+    const typeDate = async (page, input, value) => {
+      if (input) {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    const HINT = 'The start date is after the end date.';
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    // Clear filters is offered when its button can be pressed. Since section
+    // AB the button keeps its place in the row while no filter is on,
+    // disabled and aria-hidden, so being in the page is not being offered.
+    const clearOffered = (b) => !!b && !b.disabled && b.getAttribute('aria-hidden') !== 'true';
+    // What the list and its filters say, read the way a person would.
+    const look = (page) => {
+      const empty = page.query('.empty');
+      return {
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        markers: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('.doc-requests-pay'))),
+        empty: text(page.query('.empty p')),
+        emptyButtons: empty ? [...empty.querySelectorAll('button')].map(text) : [],
+        document: chosen(docSelect(page)),
+        payment: chosen(paySelect(page)),
+        date: chosen(dateSelect(page)),
+        from: fromInput(page)?.value ?? null,
+        to: toInput(page)?.value ?? null,
+        clear: clearOffered(buttonNamed(root(), 'Clear filters')),
+        hint: page.queryAll('[role="status"]').some((el) => el.textContent === HINT),
+        search: box(page)?.value ?? null,
+        showing: text(page.query('.pay-pager-count')),
+        current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the requests')) ?? null,
+        loading: root().textContent.includes('Loading requests…'),
+      };
+    };
+    // The three filters as one line: "Barangay Clearance / Paid / Choose dates 2026-08-01..2026-09-21".
+    const filtersOf = (v) => `${v.document} / ${v.payment} / ${v.date}${v.from !== null ? ` ${v.from}..${v.to}` : ''}`;
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/document-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, rowName, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === rowName);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // Focus first, as a press does in a browser (section Y).
+    const press = async (page, el) => {
+      if (!el) return;
+      el.focus();
+      await page.click(el);
+    };
+    const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+    const setRows = async (page, value) => {
+      const select = page.query('.pay-pager select');
+      if (select) {
+        select.value = String(value);
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }
+      await page.settle();
+    };
+    // jsdom has no scrollIntoView, and the pager calls it on a page change.
+    const proto = dom.window.HTMLElement.prototype;
+    const previousScroll = proto.scrollIntoView;
+    proto.scrollIntoView = function scrollIntoView() {};
+    const methodsSent = [];
+
+    const STRIP16 = 'Pending 2 · Approved 8 · Ready for release 1 · Claimed 3 · Rejected 1 · Cancelled 1 · All 16';
+    const ALL16 = FILTER_LIST.map(([, , [first, last]]) => `${first} ${last}`);
+    const DOCS = 'Any document | Barangay Clearance | Barangay Clearance for Business | Certificate of Indigency | efef21 | '
+      + 'First-time jobseeker';
+    const PAYS = 'Any payment | Paid | Unpaid | No fee | Not billed';
+    const DATES = 'Any date | Today | Last 7 days | This month | Choose dates';
+    // What each choice shows on All, worked out by hand from FILTER_LIST, in
+    // the order sent.
+    const BY_DOC = {
+      'Barangay Clearance': ['Ana Cruz', 'Carla Santos', 'Elsa Uy', 'Hana Yap', 'Jun Abad', 'Kim Bello', 'Mario Dagohoy', 'Oscar Fuentes'],
+      'Barangay Clearance for Business': ['Ben Reyes', 'Fe Villa', 'Nora Escabas'],
+      'Certificate of Indigency': ['Dino Tan', 'Ivy Zamora', 'Lito Gomez'],
+      efef21: ['Gil Wong'],
+      'First-time jobseeker': ['Liza Bantilan'],
+    };
+    const BY_PAY = {
+      Paid: { rows: ['Elsa Uy', 'Fe Villa', 'Ivy Zamora', 'Kim Bello', 'Lito Gomez', 'Oscar Fuentes'],
+        strip: 'Pending 0 · Approved 3 · Ready for release 0 · Claimed 3 · Rejected 0 · Cancelled 0 · All 6' },
+      Unpaid: { rows: ['Carla Santos', 'Gil Wong'],
+        strip: 'Pending 0 · Approved 2 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2' },
+      'No fee': { rows: ['Liza Bantilan', 'Dino Tan'],
+        strip: 'Pending 0 · Approved 1 · Ready for release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2' },
+      'Not billed': { rows: ['Ana Cruz', 'Ben Reyes', 'Hana Yap', 'Jun Abad', 'Mario Dagohoy', 'Nora Escabas'],
+        strip: 'Pending 2 · Approved 2 · Ready for release 0 · Claimed 0 · Rejected 1 · Cancelled 1 · All 6' },
+    };
+    const BY_DATE = {
+      Today: ['Liza Bantilan', 'Ana Cruz'],
+      'Last 7 days': ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan'],
+      'This month': ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa'],
+      sep21: ['Ivy Zamora', 'Jun Abad'],
+      fromSep22: ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong', 'Hana Yap'],
+      toSep21: ['Ivy Zamora', 'Jun Abad', 'Kim Bello', 'Lito Gomez', 'Mario Dagohoy', 'Nora Escabas', 'Oscar Fuentes'],
+    };
+    const PRESET_KEYS = ['Today', 'Last 7 days', 'This month'];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/requests', token: VALID, user: USER, staff: false, opener: 'Review' },
+      { name: 'Staff', route: '/staff/requests', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, staff: true, opener: 'View' },
+      { name: 'Punong Barangay', route: '/punong-barangay/requests',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, staff: false,
+        opener: 'View' },
+    ];
+    for (const { name, route, token, user, staff, opener } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = { row: !!docSelect(page), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { row: !!docSelect(page), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the search and the tabs, the filters row is not drawn while the list loads or after a load fails: no `
+          + 'Document select under "Loading requests…", none beside the error; Try again brings the row back',
+        !opening.row && opening.loading && !failedOpen.row && failedOpen.error === 'Could not load the requests: Network down'
+          && !!docSelect(page) && !!paySelect(page) && !!dateSelect(page),
+        said({ opening, failedOpen, after: !!docSelect(page) }));
+
+      // Where it sits, what it holds, and how it opens.
+      const row = filtersRow(page);
+      const searchRow = box(page)?.closest('.list-head') ?? null;
+      check(`${name}: the row sits where Payments' second row does, under the search row and over the tabs, and is not part of a `
+          + '.list-head and holds no heading, so the list heading is still the heading row\'s',
+        !!row && !!searchRow && follows(searchRow, row) && !searchRow.contains(row) && follows(row, page.query('.pay-tabs'))
+          && !row.closest('.list-head') && !row.querySelector('h1, h2, h3, h4, h5, h6')
+          && text(page.query('.list-head h2')) === '2 pending requests',
+        said({ row: row?.className ?? null, inHead: !!row?.closest('.list-head') }));
+      const selects = [docSelect(page), paySelect(page), dateSelect(page)];
+      const named = selects.map((s, i) => !!s && s.tagName === 'SELECT' && s.labels?.length === 1
+        && s.labels[0].textContent === ['Document', 'Payment', 'Submitted'][i] && !!s.id && s.labels[0].htmlFor === s.id
+        && !!row && row.contains(s));
+      check(`${name}: three native selects, each named by its own visible label, "Document", "Payment" and "Submitted", in that order `
+          + '(the label for= its select\'s id, the three ids different)',
+        named.every(Boolean) && new Set(selects.map((s) => s?.id)).size === 3 && follows(selects[0], selects[1])
+          && follows(selects[1], selects[2]), said({ named, ids: selects.map((s) => s?.id ?? null) }));
+      let v = look(page);
+      check(`${name}: they open on "Any document", "Any payment" and "Any date", with no From or To, no Clear filters and no hint, `
+          + `and the list as before: Pending, "2 pending requests", "${STRIP16}"`,
+        v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+          && !v.clear && !v.hint && v.heading === '2 pending requests' && v.strip === STRIP16
+          && said(v.rows) === said(['Ana Cruz', 'Ben Reyes']), said(v));
+      check(`${name}: Document offers "Any document" and the five types the loaded rows hold, sorted by name with case ignored: "${DOCS}"`,
+        optionsOf(docSelect(page)) === DOCS, said(optionsOf(docSelect(page))));
+      check(`${name}: Payment offers "${PAYS}", no Void, as no loaded row is void; Submitted offers Payments' "${DATES}"`,
+        optionsOf(paySelect(page)) === PAYS && optionsOf(dateSelect(page)) === DATES,
+        said({ payment: optionsOf(paySelect(page)), date: optionsOf(dateSelect(page)) }));
+      const hintBox = row?.nextElementSibling ?? null;
+      check(`${name}: under the row the hint is in the page, empty, a polite status, so it is heard when its words appear`,
+        !!hintBox && hintBox.getAttribute('role') === 'status' && hintBox.textContent === '' && !!hintBox.id,
+        said({ role: hintBox?.getAttribute('role') ?? null, text: hintBox?.textContent ?? null, id: hintBox?.id ?? null }));
+
+      // Document.
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      const sentBefore = net.calls.length;
+      await pickDoc(page, 'Barangay Clearance');
+      v = look(page);
+      check(`${name}: Document "Barangay Clearance" on Pending: Ana Cruz alone, not Ben Reyes, whose "Barangay Clearance for `
+          + 'Business" holds the name; "1 of 2 pending requests matches"; the counts follow it, "Pending 1 · Approved 4 · Ready for '
+          + 'release 0 · Claimed 1 · Rejected 1 · Cancelled 1 · All 8"; and Clear filters appears',
+        said(v.rows) === said(['Ana Cruz']) && v.heading === '1 of 2 pending requests matches'
+          && v.strip === 'Pending 1 · Approved 4 · Ready for release 0 · Claimed 1 · Rejected 1 · Cancelled 1 · All 8' && v.clear,
+        said(v));
+      await clickIf(page, tabNamed(page, 'All'));
+      const perDoc = {};
+      for (const label of Object.keys(BY_DOC)) {
+        await pickDoc(page, label);
+        perDoc[label] = look(page).rows;
+      }
+      const wrongDocs = Object.keys(BY_DOC).filter((label) => said(perDoc[label]) !== said(BY_DOC[label]));
+      check(`${name}: on All each type shows exactly its own requests, in the order sent: Barangay Clearance 8, Barangay Clearance for `
+          + 'Business 3, Certificate of Indigency 3, efef21 1, First-time jobseeker 1',
+        wrongDocs.length === 0, said(wrongDocs.map((label) => ({ label, got: perDoc[label], want: BY_DOC[label] }))));
+      await pickDoc(page, 'Barangay Clearance');
+      const allBC = look(page).heading;
+      await pickDoc(page, 'Any document');
+      v = look(page);
+      check(`${name}: on All, "8 of 16 requests match" for Barangay Clearance; back on "Any document", all sixteen, "16 requests", `
+          + 'every count as before, and no Clear filters',
+        allBC === '8 of 16 requests match' && said(v.rows) === said(ALL16) && v.heading === '16 requests' && v.strip === STRIP16
+          && !v.clear, said({ allBC, v }));
+
+      // Payment.
+      const perPay = {};
+      for (const label of Object.keys(BY_PAY)) {
+        await pickPay(page, label);
+        const x = look(page);
+        perPay[label] = { rows: x.rows, strip: x.strip, heading: x.heading, markers: [...new Set(x.markers)] };
+      }
+      const wrongPays = Object.keys(BY_PAY).filter((label) => said(perPay[label].rows) !== said(BY_PAY[label].rows)
+        || perPay[label].strip !== BY_PAY[label].strip || perPay[label].heading !== `${BY_PAY[label].rows.length} of 16 requests match`);
+      check(`${name}: on All each Payment choice shows its requests, with the counts and the heading following it: Paid 6 (never the `
+          + 'PHP 0 paid Liza Bantilan or Dino Tan), Unpaid 2 (Gil Wong\'s PHP 0 unpaid charge among them), No fee 2, Not billed 6',
+        wrongPays.length === 0, said(wrongPays.map((label) => ({ label, got: perPay[label], want: BY_PAY[label] }))));
+      check(`${name}: the filter and the row never disagree: every row a choice shows has that word under its badge, and no other`,
+        Object.keys(BY_PAY).every((label) => said(perPay[label].markers) === said([label])),
+        said(Object.fromEntries(Object.keys(BY_PAY).map((label) => [label, perPay[label].markers]))));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await pickPay(page, 'Paid');
+      v = look(page);
+      check(`${name}: a filter and a tab together: Approved with Paid shows Elsa Uy, Ivy Zamora and Kim Bello under "3 of 8 approved `
+          + 'requests match"',
+        said(v.rows) === said(['Elsa Uy', 'Ivy Zamora', 'Kim Bello']) && v.heading === '3 of 8 approved requests match'
+          && said(v.pressed) === said(['Approved 3']), said(v));
+
+      // Submitted, on three clocks.
+      await clickIf(page, tabNamed(page, 'All'));
+      await pickPay(page, 'Any payment');
+      const byZone = {};
+      for (const zone of ZONES) {
+        process.env.TZ = zone;
+        const seen = {};
+        for (const label of PRESET_KEYS) {
+          await pickDate(page, label);
+          seen[label] = look(page).rows;
+        }
+        await pickDate(page, 'Choose dates');
+        await typeDate(page, fromInput(page), '2026-09-21');
+        await typeDate(page, toInput(page), '2026-09-21');
+        seen.sep21 = look(page).rows;
+        await typeDate(page, fromInput(page), '2026-09-22');
+        await typeDate(page, toInput(page), '');
+        seen.fromSep22 = look(page).rows;
+        await typeDate(page, fromInput(page), '');
+        await typeDate(page, toInput(page), '2026-09-21');
+        seen.toSep21 = look(page).rows;
+        await typeDate(page, toInput(page), '');
+        byZone[zone] = seen;
+      }
+      process.env.TZ = HOME_ZONE;
+      const wrongDates = ZONES.flatMap((zone) => Object.keys(BY_DATE)
+        .filter((k) => said(byZone[zone][k]) !== said(BY_DATE[k])).map((k) => ({ zone, k, got: byZone[zone][k] })));
+      check(`${name}: Submitted in Manila days, on UTC, Los Angeles and Tokyo time alike: Today, Liza Bantilan (7:47 AM on 12 Oct in `
+          + 'Manila, 11 Oct in UTC and Los Angeles) and Ana Cruz (00:00); Last 7 days adds Ben Reyes (23:59:59 on 11 Oct), Carla Santos '
+          + 'and Dino Tan (00:00 on 6 Oct), not Elsa Uy (23:59 on 5 Oct); This month adds Elsa Uy and Fe Villa (00:00 on 1 Oct), not '
+          + 'Gil Wong (23:59 on 30 Sep)',
+        wrongDates.filter((w) => PRESET_KEYS.includes(w.k)).length === 0, said(wrongDates.filter((w) => PRESET_KEYS.includes(w.k))));
+      check(`${name}: Choose dates, both ends in, on all three: 21 Sep to 21 Sep takes Ivy Zamora (11:48 PM, which Tokyo calls 22 Sep) `
+          + 'and Jun Abad, not Hana Yap (00:10 on 22 Sep); From 22 Sep alone the nine from Hana Yap up; To 21 Sep alone the seven from '
+          + 'Ivy Zamora down',
+        wrongDates.filter((w) => !PRESET_KEYS.includes(w.k)).length === 0, said(wrongDates.filter((w) => !PRESET_KEYS.includes(w.k))));
+      await pickDate(page, 'Today');
+      v = look(page);
+      check(`${name}: Today on All: "2 of 16 requests match", and the counts follow the date, "Pending 1 · Approved 0 · Ready for `
+          + 'release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2"',
+        v.heading === '2 of 16 requests match'
+          && v.strip === 'Pending 1 · Approved 0 · Ready for release 1 · Claimed 0 · Rejected 0 · Cancelled 0 · All 2', said(v));
+      await pickDate(page, 'Choose dates');
+      const fromBox = fromInput(page);
+      const toBox = toInput(page);
+      v = look(page);
+      check(`${name}: Choose dates brings From and To, date inputs labelled "From" and "To", both described by the hint; with neither `
+          + 'set it restricts nothing ("16 requests") but is a filter on (Clear filters shows)',
+        fromBox?.type === 'date' && toBox?.type === 'date' && !!hintBox?.id && fromBox.getAttribute('aria-describedby') === hintBox.id
+          && toBox.getAttribute('aria-describedby') === hintBox.id && v.heading === '16 requests' && v.rows.length === 16 && v.clear,
+        said({ from: fromBox?.type ?? null, to: toBox?.type ?? null, describedBy: fromBox?.getAttribute('aria-describedby') ?? null,
+          hint: hintBox?.id ?? null, heading: v.heading, clear: v.clear }));
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Paid');
+      await typeDate(page, fromInput(page), '2026-10-12');
+      await typeDate(page, toInput(page), '2026-10-01');
+      v = look(page);
+      check(`${name}: From after To (12 Oct to 1 Oct) is never swapped and takes nothing: the hint "${HINT}", "0 of 16 requests `
+          + 'match", and "No requests match your search or filters." with Clear search and filters',
+        v.hint && v.from === '2026-10-12' && v.to === '2026-10-01' && v.rows.length === 0 && v.heading === '0 of 16 requests match'
+          && v.empty === 'No requests match your search or filters.' && said(v.emptyButtons) === said(['Clear search and filters']),
+        said(v));
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      v = look(page);
+      check(`${name}: Clear filters puts all three back to Any, every one, takes From, To and the hint away, and goes itself; focus `
+          + 'moves to the Document select rather than being dropped; the tab stays: All, "16 requests"',
+        v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+          && !v.hint && !v.clear && !!docSelect(page) && page.active() === docSelect(page) && said(v.pressed) === said(['All 16'])
+          && v.heading === '16 requests', said({ v, focus: page.active()?.tagName ?? null }));
+
+      // A tab, a search and the filters together; then the empty texts.
+      await clickIf(page, tabNamed(page, 'Approved'));
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Paid');
+      const twoFilters = look(page);
+      await type(page, 'kim');
+      const withSearch = look(page);
+      check(`${name}: tab, filters and search together: Approved, Barangay Clearance and Paid, Elsa Uy and Kim Bello, "2 of 8 `
+          + 'approved requests match" ("… Claimed 1 … All 3"); then "kim", Kim Bello alone, "1 of 8 approved requests matches"',
+        said(twoFilters.rows) === said(['Elsa Uy', 'Kim Bello']) && twoFilters.heading === '2 of 8 approved requests match'
+          && twoFilters.strip === 'Pending 0 · Approved 2 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 3'
+          && said(withSearch.rows) === said(['Kim Bello']) && withSearch.heading === '1 of 8 approved requests matches'
+          && withSearch.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 0 · Rejected 0 · Cancelled 0 · All 1',
+        said({ twoFilters, withSearch }));
+      await pickDate(page, 'This month');
+      v = look(page);
+      check(`${name}: with This month as well nothing is left (Kim Bello was submitted on 18 Sep): "0 of 8 approved requests match", `
+          + 'and in place of the rows "No approved requests match your search or filters." with one button, Clear search and filters',
+        v.rows.length === 0 && v.heading === '0 of 8 approved requests match'
+          && v.empty === 'No approved requests match your search or filters.'
+          && said(v.emptyButtons) === said(['Clear search and filters']), said(v));
+      await clickIf(page, page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search and filters') : null);
+      v = look(page);
+      check(`${name}: Clear search and filters empties the search and puts every filter back to Any, keeps the tab (Approved, as `
+          + 'Payments keeps its status), and puts focus in the search box: "8 approved requests", all eight',
+        v.search === '' && v.document === 'Any document' && v.payment === 'Any payment' && v.date === 'Any date' && !v.clear
+          && said(v.pressed) === said(['Approved 8']) && v.heading === '8 approved requests' && v.rows.length === 8
+          && !!box(page) && page.active() === box(page),
+        said({ v, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName ?? null }));
+      await clickIf(page, tabNamed(page, 'Pending'));
+      await pickPay(page, 'Paid');
+      const filterEmpty = look(page);
+      await pickPay(page, 'Any payment');
+      await type(page, 'zzz');
+      const searchEmpty = look(page);
+      await type(page, '');
+      check(`${name}: a filter alone that empties a tab says so in the same words: Pending with Paid, "0 of 2 pending requests `
+          + 'match", "No pending requests match your search or filters." and Clear search and filters',
+        filterEmpty.heading === '0 of 2 pending requests match'
+          && filterEmpty.empty === 'No pending requests match your search or filters.'
+          && said(filterEmpty.emptyButtons) === said(['Clear search and filters']), said(filterEmpty));
+      check(`${name}: a search alone keeps its own text and button, as before: 'No pending requests match "zzz"' with Clear search`,
+        searchEmpty.heading === '0 of 2 pending requests match' && searchEmpty.empty === 'No pending requests match "zzz"'
+          && said(searchEmpty.emptyButtons) === said(['Clear search']), said(searchEmpty));
+      await type(page, 'cruz');
+      await pickDoc(page, 'Barangay Clearance');
+      await pickPay(page, 'Not billed');
+      await pickDate(page, 'Today');
+      const allSet = look(page);
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      v = look(page);
+      check(`${name}: Clear filters clears the filters only: with "cruz" typed and all three set, the search stays, and so does Ana `
+          + 'Cruz under "1 of 2 pending requests matches"; focus on the Document select',
+        said(allSet.rows) === said(['Ana Cruz']) && filtersOf(allSet) === 'Barangay Clearance / Not billed / Today'
+          && v.search === 'cruz' && filtersOf(v) === 'Any document / Any payment / Any date' && said(v.rows) === said(['Ana Cruz'])
+          && v.heading === '1 of 2 pending requests matches' && !!docSelect(page) && page.active() === docSelect(page),
+        said({ allSet: filtersOf(allSet), v }));
+      await type(page, '');
+      check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to the browser's storage, the `
+          + 'session\'s stub or jsdom\'s own',
+        net.calls.length === sentBefore && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && !!docSelect(page),
+        `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, `
+          + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+      // Kept through a tab, a search, Refresh, a failed reload and Back.
+      await clickIf(page, tabNamed(page, 'All'));
+      await pickDoc(page, 'Certificate of Indigency');
+      await pickPay(page, 'Paid');
+      await pickDate(page, 'Choose dates');
+      await typeDate(page, fromInput(page), '2026-08-01');
+      await typeDate(page, toInput(page), '2026-09-21');
+      const SET = 'Certificate of Indigency / Paid / Choose dates 2026-08-01..2026-09-21';
+      v = look(page);
+      check(`${name}: Certificate of Indigency, Paid, 1 Aug to 21 Sep, on All: Ivy Zamora (11:48 PM on 21 Sep) and Lito Gomez, "2 of 16 `
+          + 'requests match"',
+        filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']) && v.heading === '2 of 16 requests match'
+          && v.strip === 'Pending 0 · Approved 1 · Ready for release 0 · Claimed 1 · Rejected 0 · Cancelled 0 · All 2', said(v));
+      await clickIf(page, tabNamed(page, 'Approved'));
+      const onApproved = look(page);
+      await type(page, 'zamora');
+      const searched = look(page);
+      await type(page, '');
+      await clickIf(page, tabNamed(page, 'All'));
+      v = look(page);
+      check(`${name}: kept through a tab and a search: Approved shows Ivy Zamora alone, "1 of 8 approved requests matches"; "zamora" `
+          + 'finds her; the search cleared and All again, the filters are as set, and so are the two rows',
+        filtersOf(onApproved) === SET && said(onApproved.rows) === said(['Ivy Zamora'])
+          && onApproved.heading === '1 of 8 approved requests matches' && filtersOf(searched) === SET
+          && said(searched.rows) === said(['Ivy Zamora']) && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']),
+        said({ onApproved, searched: { filters: filtersOf(searched), rows: searched.rows }, v: filtersOf(v) }));
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { row: !!docSelect(page), loading: look(page).loading };
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list once, with no filters row while it is out, and keeps every filter and its two rows`,
+        said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests?status=all']) && !reloading.row && reloading.loading
+          && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']) && v.heading === '2 of 16 requests match',
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { row: !!docSelect(page), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, staff));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails shows no filters row beside the error, and Try again brings it back as it was`,
+        !failedReload.row && failedReload.error === 'Could not load the requests: Internal server error' && filtersOf(v) === SET
+          && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez']), said({ failedReload, v }));
+      sent = net.calls.length;
+      await clickIf(page, rowButton(page, 'Lito Gomez', opener));
+      const opened = text(page.query('.pending-card h3'));
+      await clickIf(page, buttonNamed(root(), '← Back to list'));
+      v = look(page);
+      check(`${name}: Back from a request's detail keeps every filter and its rows; only the detail was requested`,
+        opened === 'Request #79' && filtersOf(v) === SET && said(v.rows) === said(['Ivy Zamora', 'Lito Gomez'])
+          && said(listCalls(net.calls.slice(sent))) === said(['GET /document-requests/79']),
+        said({ opened, v: filtersOf(v), rows: v.rows, calls: listCalls(net.calls.slice(sent)) }));
+
+      // The choices come from the rows as loaded.
+      await clickIf(page, buttonNamed(root(), 'Clear filters'));
+      state.rows.unshift([92, 'pending', ['Paz', 'Lim'], 'Barangay ID', null, '2026-10-12T01:00:00+00:00', 'paz_lim']);
+      state.rows.find((x) => x[0] === 88)[4] = { status: 'VOID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const DOCS17 = 'Any document | Barangay Clearance | Barangay Clearance for Business | Barangay ID | Certificate of Indigency | '
+        + 'efef21 | First-time jobseeker';
+      check(`${name}: the choices are the loaded rows': after a Refresh that brings a "Barangay ID" request and a void charge, Document `
+          + 'offers Barangay ID in its place by name, and Payment offers Void, last',
+        optionsOf(docSelect(page)) === DOCS17 && optionsOf(paySelect(page)) === `${PAYS} | Void`,
+        said({ documents: optionsOf(docSelect(page)), payments: optionsOf(paySelect(page)) }));
+      await pickPay(page, 'Void');
+      v = look(page);
+      check(`${name}: Void shows Carla Santos alone, whose row says "Void", under "1 of 17 requests matches"`,
+        said(v.rows) === said(['Carla Santos']) && said(v.markers) === said(['Void']) && v.heading === '1 of 17 requests matches',
+        said(v));
+      state.rows.find((x) => x[0] === 88)[4] = { status: 'UNPAID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      v = look(page);
+      check(`${name}: a Refresh that leaves no void row takes Void away, and the choice goes back to "Any payment" with all 17 shown, `
+          + 'never a select reading Void over rows it does not hold',
+        optionsOf(paySelect(page)) === PAYS && v.payment === 'Any payment' && v.rows.length === 17 && v.heading === '17 requests'
+          && !v.clear, said(v));
+      await pickDoc(page, 'efef21');
+      const efef = look(page).rows;
+      state.rows.find((x) => x[0] === 84)[3] = 'Barangay Permit';
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      v = look(page);
+      check(`${name}: so does a Document choice: with efef21 (Gil Wong's) renamed "Barangay Permit" on the server, a Refresh offers the `
+          + 'new name and not the old, and Document reads "Any document" again, all 17 shown',
+        said(efef) === said(['Gil Wong']) && v.document === 'Any document' && v.rows.length === 17
+          && optionsOf(docSelect(page)) === 'Any document | Barangay Clearance | Barangay Clearance for Business | Barangay ID | '
+            + 'Barangay Permit | Certificate of Indigency | First-time jobseeker',
+        said({ efef, v: filtersOf(v), rows: v.rows.length, documents: optionsOf(docSelect(page)) }));
+
+      // A new visit starts again; nothing was kept in the browser. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerFor(makeState(), staff));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window `
+          + 'or not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on Pending, "2 pending requests"',
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === ''
+          && filtersOf(v) === 'Any document / Any payment / Any date' && !v.clear && v.heading === '2 pending requests',
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    // c. The pager counts what the filters leave, and every filter change
+    // goes back to page 1. Forty requests named by their place, "Req 01" to
+    // "Req 40": odd ones Barangay Clearance, even ones Certificate of
+    // Indigency; Paid where the place leaves 1 over 3 (14), Unpaid where it
+    // leaves 2 (13), not billed and pending where it leaves 0 (13); the first
+    // 24 submitted in October (1 to 12 Oct, twice), the rest 1 to 16 Sep.
+    const two = (n) => String(n).padStart(2, '0');
+    const PAGER_LIST = Array.from({ length: 40 }, (_, i) => {
+      const n = i + 1;
+      const charge = n % 3 === 1 ? { status: 'PAID', amount: '50.00' } : n % 3 === 2 ? { status: 'UNPAID', amount: '50.00' } : null;
+      const when = n <= 24 ? `2026-10-${two(1 + ((n - 1) % 12))}T02:00:00+00:00` : `2026-09-${two(n - 24)}T02:00:00+00:00`;
+      return [3000 + n, charge ? 'approved' : 'pending', ['Req', two(n)], n % 2 ? 'Barangay Clearance' : 'Certificate of Indigency',
+        charge, when, `req_${two(n)}`];
+    });
+    //   the change, then what "Showing" said on page 2 before it and must say after it, and the heading after
+    const STEPS = [
+      ['Document "Barangay Clearance"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 20 results', '20 of 40 requests match'],
+      ['Document "Any document"', 'Showing 11 to 20 of 20 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['Payment "Paid"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 requests match'],
+      ['Payment "Any payment"', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['Submitted "This month"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['Submitted "Choose dates", no dates yet', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+      ['From 1 Oct', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['To 12 Oct', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 24 results', '24 of 40 requests match'],
+      ['Clear filters', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 requests'],
+    ];
+    for (const { name, route, token, user, staff } of ROLES) {
+      const state = makeState(PAGER_LIST);
+      seedSession(token, user);
+      resetNet(200, answerFor(state, staff));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      await clickIf(page, tabNamed(page, 'All'));
+      await setRows(page, 10);
+      const sent = net.calls.length;
+      const changes = [
+        () => pickDoc(page, 'Barangay Clearance'), () => pickDoc(page, 'Any document'),
+        () => pickPay(page, 'Paid'), () => pickPay(page, 'Any payment'),
+        () => pickDate(page, 'This month'), () => pickDate(page, 'Choose dates'),
+        () => typeDate(page, fromInput(page), '2026-10-01'), () => typeDate(page, toInput(page), '2026-10-12'),
+        () => clickIf(page, buttonNamed(root(), 'Clear filters')),
+      ];
+      const seen = [];
+      for (let i = 0; i < STEPS.length; i += 1) {
+        await press(page, numberButton(page, 2));
+        const before = look(page).showing;
+        await changes[i]();
+        const after = look(page);
+        seen.push({ change: STEPS[i][0], before, after: after.showing, current: after.current, heading: after.heading });
+      }
+      const wrongSteps = seen.filter((s, i) => s.before !== STEPS[i][1] || s.after !== STEPS[i][2] || s.heading !== STEPS[i][3]
+        || said(s.current) !== said(['1']));
+      check(`${name}: every filter change goes back to page 1, from page 2 at 10 a page, and the pager counts what the filters leave: `
+          + 'Document, Payment, a Submitted preset, Choose dates, From, To and Clear filters, each from "Showing 11 to 20 …" to '
+          + '"Showing 1 to 10 of 20, 40, 14, 40, 24, 40, 24, 24, 40 results", with the heading over the same set',
+        wrongSteps.length === 0, said(wrongSteps.length ? wrongSteps : seen.map((s) => s.after)));
+      // With no filters on screen nothing was changed, so "no request" would say nothing.
+      check(`  ${name}: and none of those changes or page presses sent a request`, !!docSelect(page) && net.calls.length === sent,
+        `${net.calls.length - sent} request(s), filters ${docSelect(page) ? 'present' : 'absent'}`);
+      await pickPay(page, 'Paid');
+      await press(page, numberButton(page, 2));
+      const second = look(page);
+      for (const row of state.rows) if (row[0] - 3000 <= 16 && row[4]?.status === 'PAID') row[4] = { status: 'UNPAID', amount: '50.00' };
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const shrunk = look(page);
+      check(`${name}: kept, and never an empty page past the end: on page 2 of Paid's 14, a Refresh after six were marked unpaid elsewhere `
+          + 'keeps Paid and shows the 8 left on one page, with no pager, never an empty page 2',
+        second.showing === 'Showing 11 to 14 of 14 results' && shrunk.payment === 'Paid' && shrunk.rows.length === 8
+          && shrunk.showing === null && shrunk.heading === '8 of 40 requests match', said({ second: second.showing, shrunk }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. On a phone. jsdom applies no @media rule with a width in it, so
+    // index.css is read as a browser of a given width applies it (section Z's
+    // reading), and the cascade is settled too: of the rules that apply and
+    // set a property, the most specific wins, and of equals the later. Nested
+    // rules are read as a browser reads them: `.dash-side.close section { p {
+    // … } }` is `.dash-side.close section p`, never a bare `p` (eleven blocks
+    // in the file are nested). The row must stack, each field a line of its
+    // own, full width and a finger's 44px tall, and nothing may hide any
+    // field, its label, Clear filters or the hint; above 640px (1280) the row
+    // is as Payments' is.
+    // A selector list split at its top-level commas only.
+    const splitList = (s) => {
+      const out = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim()).filter(Boolean);
+    };
+    const cssRead = (() => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      // Each open block: an @-rule ({ at }), or a style rule with its own
+      // selectors resolved against the rule it is nested in, and its own
+      // declarations, never its nested rules'.
+      const open = [];
+      let from = 0;
+      const own = (block, text) => {
+        const k = text.indexOf(':');
+        if (k > 0) block.decls[text.slice(0, k).trim().toLowerCase()] = text.slice(k + 1).trim().replace(/\s+/g, ' ');
+      };
+      const media = () => open.filter((b) => b.at).map((b) => b.at);
+      const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+          const parent = inRule();
+          if (head.startsWith('@')) {
+            // An @-rule nested in a style rule holds that rule's declarations.
+            const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+            open.push(block);
+            if (parent) rules.push({ ...block, media: media() });
+          } else {
+            const mine = splitList(head);
+            const selectors = parent
+              ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+              : mine;
+            const block = { selectors, decls: {} };
+            open.push(block);
+            rules.push({ ...block, media: media() });
+          }
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          const rest = src.slice(from, i).trim();
+          if (block?.selectors && rest) own(block, rest);
+          from = i + 1;
+        } else if (ch === ';') {
+          const block = open.at(-1);
+          if (block?.selectors) own(block, src.slice(from, i).trim());
+          from = i + 1;
+        }
+      }
+      // A rule's declarations object is its block's, filled as the scan went.
+      rules.forEach((r, i) => { r.order = i; r.selector = r.selectors.join(', '); });
+      return { rules, balanced: open.length === 0 };
+    })();
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    // [ids, classes + attributes + pseudo-classes, types + pseudo-elements];
+    // :not, :is and :has count their most specific argument, :where nothing.
+    const specificity = (selector) => {
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+      s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+        const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+        a += best[0];
+        b += best[1];
+        c += best[2];
+        return ' ';
+      });
+      s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+      s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+      a += (s.match(/#[\w-]+/g) || []).length;
+      b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+      c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+      return [a, b, c];
+    };
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // The value of `prop` a browser `width` wide gives `el`, and the rule it
+    // comes from, or null when no rule sets it.
+    const winning = (width, el, prop) => {
+      let best = null;
+      for (const r of cssRead.rules) {
+        if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+        for (const sel of r.selectors) {
+          if (/::?[\w-]+$/.test(sel) && /::?(before|after|placeholder|first-line|first-letter|-webkit-[\w-]+)$/.test(sel)) continue;
+          if (!tryMatch(el, sel)) continue;
+          const important = /!important$/.test(r.decls[prop]) ? 1 : 0;
+          const rank = [important, ...specificity(sel)];
+          const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+          if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+            best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, ''), selector: sel };
+          }
+        }
+      }
+      return best;
+    };
+    const valueAt = (width, el, prop) => (el ? winning(width, el, prop)?.value ?? null : 'no element');
+    // What would hide `el` at `width`, on it or on anything above it: the
+    // winning display none, visibility hidden, opacity 0, font size 0 or a
+    // clip.
+    const hidersAt = (width, el) => {
+      const found = [];
+      for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+        for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+          ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+          const w = winning(width, node, prop);
+          if (w && bad.test(w.value)) found.push(`${w.selector} => ${prop}: ${w.value}`);
+        }
+      }
+      return found;
+    };
+    seedSession(VALID);
+    resetNet(200, answerFor(makeState(), false));
+    const cardPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await cardPage.settle();
+    await clickIf(cardPage, tabNamed(cardPage, 'All'));
+    await pickDoc(cardPage, 'Barangay Clearance');
+    await pickPay(cardPage, 'Paid');
+    await pickDate(cardPage, 'Choose dates');
+    await typeDate(cardPage, fromInput(cardPage), '2026-10-12');
+    await typeDate(cardPage, toInput(cardPage), '2026-10-01');
+    // On a phone the row is in the Filters panel (section AB), which is not
+    // drawn until its button opens it: opened here, as a person opens it.
+    await clickIf(cardPage, cardPage.queryAll('button').find((b) => /^Filters( \(\d+\))?$/.test(b.textContent)));
+    const rowEl = filtersRow(cardPage);
+    const controls = [docSelect(cardPage), paySelect(cardPage), dateSelect(cardPage), fromInput(cardPage), toInput(cardPage)];
+    const fields = controls.map((c) => c?.closest('.pay-filter') ?? null);
+    const clearButton = buttonNamed(root(), 'Clear filters') ?? null;
+    const hintLine = cardPage.queryAll('[role="status"]').find((el) => el.textContent === HINT) ?? null;
+    const shownAll = [rowEl, ...fields, ...controls, ...controls.map((c) => c?.labels?.[0] ?? null), clearButton, hintLine];
+    const nestedRead = cssRead.rules.some((r) => r.selectors.includes('.dash-side.close section p') && r.decls.opacity === '0')
+      && !cssRead.rules.some((r) => r.selectors.includes('p') && r.decls.opacity === '0');
+    check('index.css reads as a browser applies it, the cascade settled: every brace closed, a nested rule read whole (the collapsed '
+        + 'sidebar\'s ".dash-side.close section p", never a bare "p"); and with every filter set and the dates backwards, the row holds '
+        + 'all five fields, Clear filters and the hint',
+      cssRead.balanced && cssRead.rules.length > 500 && nestedRead && shownAll.every(Boolean),
+      said({ balanced: cssRead.balanced, rules: cssRead.rules.length, nestedRead,
+        missing: shownAll.map((el, i) => (el ? null : i)).filter((i) => i !== null) }));
+    const hidden390 = shownAll.filter(Boolean).flatMap((el) => hidersAt(390, el).map((h) => `${el.tagName} ${h}`));
+    const hidden1280 = shownAll.filter(Boolean).flatMap((el) => hidersAt(1280, el).map((h) => `${el.tagName} ${h}`));
+    check('on a phone (390px), the Filters panel open, nothing hides the row, a field, its label, Clear filters or the hint, and '
+        + 'nothing does at 1280 either',
+      shownAll.every(Boolean) && hidden390.length === 0 && hidden1280.length === 0, said({ hidden390, hidden1280 }));
+    const phone = {
+      row: valueAt(390, rowEl, 'flex-direction'),
+      fields: fields.map((f) => valueAt(390, f, 'flex-direction')),
+      widths: controls.map((c) => valueAt(390, c, 'width')),
+      heights: controls.map((c) => valueAt(390, c, 'height')),
+      clear: valueAt(390, clearButton, 'height'),
+    };
+    check('on a phone (390px) the row stacks: a column, each field its label over its control, every select and date input the full '
+        + 'width and 44px tall, and Clear filters 44px tall: a finger\'s height each',
+      phone.row === 'column' && phone.fields.every((x) => x === 'column') && phone.widths.every((x) => x === '100%')
+        && phone.heights.every((x) => x === '44px') && phone.clear === '44px', said(phone));
+    const wide = {
+      row: valueAt(1280, rowEl, 'flex-direction'),
+      fields: fields.map((f) => valueAt(1280, f, 'flex-direction')),
+      widths: controls.map((c) => valueAt(1280, c, 'width')),
+      heights: controls.map((c) => valueAt(1280, c, 'height')),
+      clear: valueAt(1280, clearButton, 'height'),
+    };
+    check('  above 640px (1280) it is Payments\' row: one line that wraps, each label beside its control, the controls only as wide '
+        + 'as what they hold and 40px tall, Clear filters 40px',
+      wide.row === null && wide.fields.every((x) => x === null) && wide.widths.every((x) => x === 'auto')
+        && wide.heights.every((x) => x === '40px') && wide.clear === '40px', said(wide));
+    methodsSent.push(...net.calls.map((c) => c.method));
+    await cardPage.unmount();
+
+    check('section AA sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    // =========================================================================
+    // AB. Document requests: the Filters button on a phone, and a row that
+    // keeps its height
+    // =========================================================================
+    // On a phone (640px and below) the filters row is a panel behind one
+    // full-width button, "Filters", which counts the filters that are on,
+    // "Filters (2)": a filter counts when it is off its Any choice, and From
+    // and To are Submitted's own, so they count once, with it (filterCount in
+    // utils/requestList.js). The button is a real button with aria-expanded
+    // and aria-controls; the panel, Payments' .pay-filters-panel, opens in
+    // place under it and holds the three selects, From and To, Clear filters
+    // and the hint. It opens and closes by its button, and since section AC
+    // Escape inside it closes it too, as on Payments: a pick, a tab or a
+    // reload never closes it, and focus stays where it is. Its open state
+    // is the page's, so it lives through Refresh, Try again, a tab,
+    // a search and Back from a request, as the filters do, and a new visit
+    // starts closed; nothing is kept in the browser. Like the row, the button
+    // and the panel are not drawn while the list loads or beside a failed
+    // load. Above 640px the button is not drawn and the panel is the row as it
+    // was, open or closed. Clear filters keeps its place in the row while no
+    // filter is on, disabled and aria-hidden (and hidden by index.css), so the
+    // first filter never makes the row taller; on a phone it is not drawn
+    // then. jsdom applies no width media query, so index.css is read as
+    // section AA reads it. It sits inside section AA's block, to use the same
+    // requests, helpers and reader.
+    console.log('\n--- Document requests: the Filters button ---');
+    {
+      const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+      const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+      // The panel the button names, found the way a screen reader finds it.
+      const panelOf = (page) => {
+        const id = filtersButton(page)?.getAttribute('aria-controls');
+        return id ? dom.window.document.getElementById(id) : null;
+      };
+      const slotOf = () => buttonNamed(root(), 'Clear filters') ?? null;
+      const stateOf = (page) => {
+        const b = filtersButton(page);
+        const p = panelOf(page);
+        return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+          open: !!p && p.classList.contains('is-open') };
+      };
+      const isOpen = (s) => s.expanded === 'true' && s.open;
+      const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+      // What is drawn of the three, each found on its own, so a panel or a
+      // slot drawn without the button is still seen.
+      const drawn = (page) => ({ button: !!filtersButton(page), panel: !!page.query('.pay-filters-panel'), slot: !!slotOf() });
+      const none = (d) => !d.button && !d.panel && !d.slot;
+      const toggle = (page) => press(page, filtersButton(page));
+      const sent = [];
+
+      // a. The count on its own.
+      const NOTHING = { document: R.ANY_DOCUMENT, payment: F.ANY, date: F.ANY, from: '', to: '' };
+      //   what, the filters (over NOTHING), the count
+      const COUNTS = [
+        ['nothing on', {}, 0],
+        ['Document', { document: 'Barangay Clearance' }, 1],
+        ['a type named "any", which is not Any', { document: 'any' }, 1],
+        ['Payment', { payment: 'Unpaid' }, 1],
+        ['a Submitted preset', { date: 'today' }, 1],
+        ['Choose dates with no date yet', { date: 'custom' }, 1],
+        ['Choose dates with From', { date: 'custom', from: '2026-09-01' }, 1],
+        ['Choose dates with From and To', { date: 'custom', from: '2026-09-01', to: '2026-09-30' }, 1],
+        ['Document and Payment', { document: 'efef21', payment: 'Paid' }, 2],
+        ['Payment and Choose dates with From and To', { payment: 'No fee', date: 'custom', from: '2026-09-01', to: '2026-09-30' }, 2],
+        ['all three, From and To set', { document: 'Barangay Clearance', payment: 'Not billed', date: 'custom', from: '2026-09-01',
+          to: '2026-09-30' }, 3],
+        ['all three, a preset', { document: 'Barangay Clearance', payment: 'Void', date: 'month' }, 3],
+        ['From and To left over under Any date', { from: '2026-09-01', to: '2026-09-30' }, 0],
+      ];
+      const wrongCounts = COUNTS.map(([what, over, want]) => ({ what, got: attempt(() => R.filterCount({ ...NOTHING, ...over })), want }))
+        .filter((c) => c.got !== c.want);
+      check('filterCount counts each of Document, Payment and Submitted that is off its Any choice, 0 to 3; From and To are '
+          + 'Submitted\'s own, so Choose dates counts once with no date, with From, and with From and To, and the two never count '
+          + 'under Any date; a type named "any" is a choice like any other',
+        wrongCounts.length === 0, wrongCounts.length ? said(wrongCounts) : `${COUNTS.length} cases`);
+
+      // b. The real page, for the three roles, against section AA's sixteen
+      // requests.
+      for (const { name, route, token, user, staff, opener } of ROLES) {
+        const st = makeState();
+        seedSession(token, user);
+        resetNet(200, answerFor(st, staff));
+        let at = holdNext();
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        const whileLoading = { ...drawn(page), loading: look(page).loading };
+        release(at, 500, { error: 'Network down' });
+        await page.settle();
+        const afterFailure = { ...drawn(page), error: look(page).error };
+        at = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        const loaded = drawn(page);
+        check(`${name}: the Filters button, its panel and the Clear filters slot are not drawn while the list loads or beside a failed `
+            + 'load, as the filters row is not; Try again brings all three',
+          none(whileLoading) && whileLoading.loading && none(afterFailure)
+            && afterFailure.error === 'Could not load the requests: Network down' && loaded.button && loaded.panel && loaded.slot,
+          said({ whileLoading, afterFailure, loaded }));
+
+        // The button and the panel it names.
+        const button = filtersButton(page);
+        const panel = panelOf(page);
+        const wrap = button?.closest('.doc-requests-filters') ?? null;
+        const searchRow = box(page)?.closest('.list-head') ?? null;
+        const sameId = panel ? [...dom.window.document.querySelectorAll('[id]')].filter((el) => el.id === panel.id).length : 0;
+        check(`${name}: "Filters" is a real button, type="button", named by its own text, with aria-expanded="false" and `
+            + 'aria-controls naming the panel, whose id no other element has; the button is over the panel and outside it, both in '
+            + 'the filters wrapper between the search row and the tabs',
+          !!button && button.tagName === 'BUTTON' && button.getAttribute('type') === 'button' && button.textContent === 'Filters'
+            && !button.hasAttribute('aria-label') && button.getAttribute('aria-expanded') === 'false' && !!panel
+            && button.getAttribute('aria-controls') === panel.id && sameId === 1 && !panel.contains(button) && follows(button, panel)
+            && !!wrap && wrap.contains(panel) && follows(searchRow, wrap) && follows(wrap, page.query('.pay-tabs')),
+          said({ button: button ? { text: button.textContent, type: button.getAttribute('type'),
+            expanded: button.getAttribute('aria-expanded'), controls: button.getAttribute('aria-controls') } : null,
+          panel: panel?.id ?? null, sameId, wrap: wrap?.className ?? null }));
+        const hint = panel?.querySelector('[role="status"]') ?? null;
+        const held = [docSelect(page), paySelect(page), dateSelect(page), slotOf(), hint];
+        check(`${name}: the panel holds the three selects, the Clear filters slot and the hint, and nothing else of the list: no `
+            + 'heading, no search box, no tab',
+          !!panel && held.every((el) => !!el && panel.contains(el))
+            && !panel.querySelector('h1, h2, h3, h4, h5, h6, input[type="search"], .pay-tabs'),
+          said({ held: held.map((el) => !!el && !!panel && panel.contains(el)) }));
+
+        // Opening and closing.
+        const sentAtOpen = net.calls.length;
+        const writesAtOpen = store.sets;
+        const domWritesAtOpen = domStorage.writes;
+        const s0 = stateOf(page);
+        await toggle(page);
+        const s1 = stateOf(page);
+        const focusAfterOpen = !!filtersButton(page) && page.active() === filtersButton(page);
+        await toggle(page);
+        const s2 = stateOf(page);
+        await toggle(page);
+        const s3 = stateOf(page);
+        check(`${name}: a press opens the panel in place (aria-expanded="true", the panel open) and focus stays on the button; a `
+            + 'second press closes it and a third opens it again, aria-controls naming the same panel throughout',
+          isClosed(s0) && isOpen(s1) && focusAfterOpen && isClosed(s2) && isOpen(s3) && !!panel
+            && filtersButton(page)?.getAttribute('aria-controls') === panel.id,
+          said({ s0, s1, focusAfterOpen, s2, s3 }));
+        // Since section AC, Escape inside the open panel closes it, as on
+        // Payments; a press opens it again for the checks below (only if it
+        // closed, so a page that ignored Escape fails this check alone).
+        docSelect(page)?.focus();
+        if (!!docSelect(page) && page.active() === docSelect(page)) await page.key('Escape');
+        await page.settle();
+        const afterEscape = stateOf(page);
+        const focusAfterEscape = !!filtersButton(page) && page.active() === filtersButton(page);
+        if (!isOpen(afterEscape)) await toggle(page);
+        const reopened = stateOf(page);
+        check(`${name}: Escape inside the open panel closes it and puts focus back on the Filters button, as on Payments; a press `
+            + 'opens it again',
+          isClosed(afterEscape) && focusAfterEscape && isOpen(reopened),
+          said({ afterEscape, focusAfterEscape, reopened, focus: page.active()?.textContent ?? page.active()?.tagName ?? null }));
+
+        // Clear filters with nothing on: its place kept, nothing to press.
+        const idle = slotOf();
+        const lastInRow = docSelect(page)?.closest('.pay-filters')?.lastElementChild ?? null;
+        idle?.focus();
+        const idleFocused = !!idle && page.active() === idle;
+        const sentBeforeIdle = net.calls.length;
+        await clickIf(page, idle);
+        const afterIdlePress = { ...stateOf(page), heading: look(page).heading, calls: net.calls.length - sentBeforeIdle };
+        check(`${name}: with nothing on, Clear filters keeps its place, the row's last control, but disabled and aria-hidden="true": `
+            + 'focus cannot reach it and a press on it does nothing',
+          !!idle && idle === lastInRow && idle.disabled && idle.getAttribute('aria-hidden') === 'true' && !idleFocused
+            && afterIdlePress.label === 'Filters' && afterIdlePress.heading === '2 pending requests' && afterIdlePress.calls === 0,
+          said({ idle: idle ? { disabled: idle.disabled, hidden: idle.getAttribute('aria-hidden'), last: idle === lastInRow } : null,
+            idleFocused, afterIdlePress }));
+
+        // The count, as filters are chosen in the open panel.
+        await clickIf(page, tabNamed(page, 'All'));
+        const steps = [];
+        const note = (what) => {
+          const s = stateOf(page);
+          steps.push({ what, label: s.label, open: isOpen(s) });
+        };
+        note('nothing on');
+        await pickPay(page, 'Unpaid');
+        note('Payment Unpaid');
+        const unpaid = look(page);
+        const live = slotOf();
+        // Read now: by the check, every filter is off again.
+        const liveNow = { offered: clearOffered(live), disabled: live?.disabled ?? null,
+          hidden: live?.getAttribute('aria-hidden') ?? null };
+        live?.focus();
+        const liveFocused = !!live && page.active() === live;
+        await pickDoc(page, 'Barangay Clearance');
+        note('Document Barangay Clearance');
+        const twoOn = look(page);
+        await pickDate(page, 'Today');
+        note('Submitted Today');
+        await pickDate(page, 'Choose dates');
+        note('Choose dates, no date yet');
+        await typeDate(page, fromInput(page), '2026-09-01');
+        note('From 1 Sep');
+        await typeDate(page, toInput(page), '2026-10-12');
+        note('To 12 Oct');
+        const threeOn = look(page);
+        const rangeInPanel = [fromInput(page), toInput(page)].every((el) => !!el && !!panelOf(page) && panelOf(page).contains(el));
+        await pickDoc(page, 'Any document');
+        note('Document back to Any');
+        await pickPay(page, 'Any payment');
+        note('Payment back to Any');
+        const datesOnly = look(page);
+        await pickDate(page, 'Any date');
+        note('Submitted back to Any');
+        const COUNTED = ['Filters', 'Filters (1)', 'Filters (2)', 'Filters (3)', 'Filters (3)', 'Filters (3)', 'Filters (3)',
+          'Filters (2)', 'Filters (1)', 'Filters'];
+        check(`${name}: the button counts the filters that are on as they are chosen in the panel: "Filters", "Filters (1)" with `
+            + 'Payment, "(2)" with Document, "(3)" with Today, still "(3)" for Choose dates with no date, with From, and with From '
+            + 'and To, which are one filter, Submitted; then "(2)", "(1)" for the dates alone, and "Filters"',
+          said(steps.map((s) => s.label)) === said(COUNTED), said(steps.map((s) => `${s.what}: ${s.label}`)));
+        check(`${name}: the panel stays open through every one of those choices: a pick never closes it`,
+          steps.length === COUNTED.length && steps.every((s) => s.open), said(steps.filter((s) => !s.open).map((s) => s.what)));
+        check(`${name}: with a filter on, Clear filters is a normal button again, enabled and not aria-hidden, and it takes focus`,
+          liveNow.offered && liveFocused, said({ liveNow, liveFocused }));
+        const DATED = ['Liza Bantilan', 'Ana Cruz', 'Ben Reyes', 'Carla Santos', 'Dino Tan', 'Elsa Uy', 'Fe Villa', 'Gil Wong',
+          'Hana Yap', 'Ivy Zamora', 'Jun Abad', 'Kim Bello'];
+        check(`${name}: chosen in the panel, they filter as before: Unpaid on All, Carla Santos and Gil Wong, "2 of 16 requests `
+            + 'match", the counts following; with Barangay Clearance, Carla Santos alone; with 1 Sep to 12 Oct as well, still her, '
+            + 'From and To inside the panel; and those dates alone, the twelve submitted from 1 Sep to 12 Oct in Manila days',
+          said(unpaid.rows) === said(BY_PAY.Unpaid.rows) && unpaid.heading === '2 of 16 requests match'
+            && unpaid.strip === BY_PAY.Unpaid.strip && said(twoOn.rows) === said(['Carla Santos'])
+            && twoOn.heading === '1 of 16 requests matches' && said(threeOn.rows) === said(['Carla Santos']) && rangeInPanel
+            && said(datesOnly.rows) === said(DATED) && datesOnly.heading === '12 of 16 requests match',
+          said({ unpaid, twoOn: twoOn.rows, threeOn: threeOn.rows, rangeInPanel, datesOnly: datesOnly.rows }));
+
+        // Section AA's expectations, made in the open panel.
+        const offeredNow = { documents: optionsOf(docSelect(page)), payments: optionsOf(paySelect(page)),
+          dates: optionsOf(dateSelect(page)) };
+        const byPay = {};
+        for (const label of Object.keys(BY_PAY)) {
+          await pickPay(page, label);
+          const x = look(page);
+          byPay[label] = { rows: x.rows, strip: x.strip };
+        }
+        await pickPay(page, 'Any payment');
+        const byDate = {};
+        for (const zone of ZONES) {
+          process.env.TZ = zone;
+          for (const label of PRESET_KEYS) {
+            await pickDate(page, label);
+            byDate[`${zone} ${label}`] = look(page).rows;
+          }
+          await pickDate(page, 'Choose dates');
+          await typeDate(page, fromInput(page), '2026-09-21');
+          await typeDate(page, toInput(page), '2026-09-21');
+          byDate[`${zone} sep21`] = look(page).rows;
+        }
+        process.env.TZ = HOME_ZONE;
+        const stillOpen = stateOf(page);
+        const wrongPayAB = Object.keys(BY_PAY)
+          .filter((k) => said(byPay[k].rows) !== said(BY_PAY[k].rows) || byPay[k].strip !== BY_PAY[k].strip);
+        const wrongDateAB = Object.keys(byDate).filter((k) => said(byDate[k]) !== said(BY_DATE[k.split(' ').slice(1).join(' ')]));
+        check(`${name}: in the panel the choices and what they show are section AA's: Document "${DOCS}", sorted with case ignored; `
+            + `Payment "${PAYS}"; Submitted "${DATES}"; each Payment choice its rows and counts; Today, Last 7 days and This month, `
+            + 'and 21 Sep to 21 Sep, in Manila days on UTC, Los Angeles and Tokyo time; the panel open throughout',
+          offeredNow.documents === DOCS && offeredNow.payments === PAYS && offeredNow.dates === DATES && wrongPayAB.length === 0
+            && wrongDateAB.length === 0 && Object.keys(byDate).length === ZONES.length * 4 && isOpen(stillOpen),
+          said({ offeredNow, wrongPayAB, wrongDateAB: wrongDateAB.map((k) => ({ k, got: byDate[k] })), stillOpen }));
+
+        // The count follows Clear filters and "Clear search and filters".
+        await pickDoc(page, 'Certificate of Indigency');
+        await pickPay(page, 'Paid');
+        await pickDate(page, 'This month');
+        const beforeClear = stateOf(page);
+        await press(page, slotOf());
+        const afterClear = stateOf(page);
+        const clearedSlot = slotOf();
+        check(`${name}: Clear filters, pressed in the open panel, takes "Filters (3)" back to "Filters", leaves the panel open and `
+            + 'puts focus on the Document select; its slot is disabled and aria-hidden again',
+          beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!docSelect(page)
+            && page.active() === docSelect(page) && !!clearedSlot && clearedSlot.disabled
+            && clearedSlot.getAttribute('aria-hidden') === 'true' && filtersOf(look(page)) === 'Any document / Any payment / Any date',
+          said({ beforeClear, afterClear, focus: page.active()?.tagName ?? null,
+            slot: clearedSlot ? [clearedSlot.disabled, clearedSlot.getAttribute('aria-hidden')] : null }));
+        await clickIf(page, tabNamed(page, 'Pending'));
+        await type(page, 'a');
+        await pickPay(page, 'Paid');
+        const emptied = { ...stateOf(page), empty: look(page).empty };
+        const emptyBox = page.query('.empty');
+        await clickIf(page, emptyBox ? buttonNamed(emptyBox, 'Clear search and filters') : null);
+        const bothCleared = look(page);
+        const afterBoth = stateOf(page);
+        check(`${name}: "Clear search and filters" takes the count back too: "Filters (1)" over "No pending requests match your `
+            + 'search or filters.", then "Filters", the search empty, both pending requests back, and the panel as it was, open',
+          emptied.label === 'Filters (1)' && emptied.empty === 'No pending requests match your search or filters.'
+            && afterBoth.label === 'Filters' && isOpen(afterBoth) && bothCleared.search === ''
+            && said(bothCleared.rows) === said(['Ana Cruz', 'Ben Reyes']),
+          said({ emptied, afterBoth, search: bothCleared.search, rows: bothCleared.rows }));
+        check(`${name}: none of those presses, picks, clears or searches sent a request, and none wrote to the browser's storage, `
+            + 'the session\'s stub or jsdom\'s own',
+          net.calls.length === sentAtOpen && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen,
+          `${net.calls.length - sentAtOpen} request(s): ${said(listCalls(net.calls.slice(sentAtOpen)))}, `
+            + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+        // The Payments-style controls keep their names, the panel open or
+        // closed.
+        await clickIf(page, tabNamed(page, 'All'));
+        await pickDate(page, 'Choose dates');
+        const named = () => {
+          const hintEl = panelOf(page)?.querySelector('[role="status"]') ?? null;
+          const strip = page.query('.pay-tabs');
+          return {
+            search: page.query('[role="search"] input[type="search"]')?.getAttribute('aria-label') ?? null,
+            strip: [strip?.getAttribute('role') ?? null, strip?.getAttribute('aria-label') ?? null],
+            pressed: tabsOf(page).length === 7 && tabsOf(page).every((b) => ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+            pager: page.query('nav.pay-pager')?.getAttribute('aria-label') ?? null,
+            selects: [docSelect(page), paySelect(page), dateSelect(page)].map((s) => s?.labels?.[0]?.textContent ?? null),
+            described: [fromInput(page), toInput(page)].map((i) => !!i && !!hintEl && i.getAttribute('aria-describedby') === hintEl.id),
+            hint: hintEl ? hintEl.getAttribute('role') : null,
+          };
+        };
+        const namesOpen = named();
+        await toggle(page);
+        const namesClosed = named();
+        const closedNow = stateOf(page);
+        const NAMES = { search: 'Search requests', strip: ['group', 'Status'], pressed: true, pager: 'Pagination',
+          selects: ['Document', 'Payment', 'Submitted'], described: [true, true], hint: 'status' };
+        check(`${name}: the Payments-style controls keep their names with the panel open and closed: the search box "Search `
+            + 'requests" in a search landmark, the status tabs a group named "Status" of aria-pressed buttons, the pager '
+            + '"Pagination", the three selects named by their labels, From and To described by the hint, a polite status',
+          said(namesOpen) === said(NAMES) && said(namesClosed) === said(NAMES) && isClosed(closedNow),
+          said({ namesOpen, namesClosed, closedNow }));
+        await pickDate(page, 'Any date');
+
+        // Open, it stays open through a tab, a search, Refresh, a failed
+        // reload and Try again, and Back from a request; closed, it stays
+        // closed.
+        await toggle(page);
+        const keptOpen = [];
+        const keep = (list, what) => list.push({ what, ...stateOf(page) });
+        await clickIf(page, tabNamed(page, 'Approved'));
+        keep(keptOpen, 'a tab');
+        await type(page, 'kim');
+        keep(keptOpen, 'a search');
+        await type(page, '');
+        const callsBefore = net.calls.length;
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const duringRefresh = drawn(page);
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptOpen, 'Refresh');
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(at, 500, { error: 'Internal server error' });
+        await page.settle();
+        const besideError = drawn(page);
+        at = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptOpen, 'a failed reload, then Try again');
+        await clickIf(page, rowButton(page, 'Kim Bello', opener));
+        const openedDetail = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        keep(keptOpen, 'Back from a request');
+        const reloadCalls = listCalls(net.calls.slice(callsBefore));
+        check(`${name}: open, the panel stays open through a tab, a search, Refresh, a reload that fails and Try again, and Back `
+            + 'from a request, though the button is not drawn while the list reloads: the open state is the page\'s',
+          keptOpen.length === 5 && keptOpen.every((s) => isOpen(s)) && none(duringRefresh) && none(besideError)
+            && openedDetail === 'Request #80'
+            && said(reloadCalls) === said(['GET /document-requests?status=all', 'GET /document-requests?status=all',
+              'GET /document-requests?status=all', 'GET /document-requests/80']),
+          said({ keptOpen, duringRefresh, besideError, openedDetail, reloadCalls }));
+        await toggle(page);
+        const keptClosed = [];
+        at = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(at, 200, listAnswer(st, staff));
+        await page.settle();
+        net.hold = false;
+        keep(keptClosed, 'Refresh');
+        await clickIf(page, tabNamed(page, 'All'));
+        keep(keptClosed, 'a tab');
+        await type(page, 'zamora');
+        keep(keptClosed, 'a search');
+        await type(page, '');
+        await clickIf(page, rowButton(page, 'Kim Bello', opener));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        keep(keptClosed, 'Back from a request');
+        check(`${name}: closed, it stays closed through Refresh, a tab, a search and Back from a request`,
+          keptClosed.length === 4 && keptClosed.every((s) => isClosed(s)), said(keptClosed));
+
+        // A new visit starts closed; nothing about it was kept. The second
+        // mount does not reseed the session, which would clear storage.
+        await toggle(page);
+        const leftOpen = stateOf(page);
+        sent.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+        resetNet(200, answerFor(makeState(), staff));
+        const again = await globalThis.mountInteractive(root(), route);
+        await again.settle();
+        const fresh = stateOf(again);
+        check(`${name}: a new visit opens with the panel closed and the button reading "Filters", though it was left open; nothing `
+            + 'about it is in the browser: no localStorage or sessionStorage write, through window or not, sessionStorage empty, no cookie',
+          isOpen(leftOpen) && isClosed(fresh) && fresh.label === 'Filters' && store.sets === writesAtOpen
+            && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+          said({ leftOpen, fresh, writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen,
+            session: dom.window.sessionStorage.length }));
+        sent.push(...net.calls.map((c) => c.method));
+        await again.unmount();
+      }
+
+      // c. index.css, read as section AA reads it: the button and the panel
+      // at 640px and below, neither above it, and Clear filters' place.
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState(), false));
+      const cssPage = await globalThis.mountInteractive(root(), '/secretary/requests');
+      await cssPage.settle();
+      const tb = filtersButton(cssPage);
+      const pn = panelOf(cssPage);
+      const idleSlot = slotOf();
+      const PHONE_WIDTHS = [320, 390, 640];
+      const WIDE_WIDTHS = [641, 768, 1045, 1046, 1280, 1920];
+      // Every property a rule that applies at `width` and matches `el` sets,
+      // with the value that wins.
+      const styleOf = (width, el) => {
+        if (!el) return null;
+        const hits = cssRead.rules.filter((r) => appliesAt(r.media, width) && r.selectors.some((s) => tryMatch(el, s)));
+        const props = [...new Set(hits.flatMap((r) => Object.keys(r.decls)))].sort();
+        return Object.fromEntries(props.map((p) => [p, valueAt(width, el, p)]));
+      };
+      // `prop` at rest: no pointer on `el` and no focus in it. jsdom keeps
+      // calling an element :hover once a click was dispatched on it, so
+      // .btn.secondary's hover fill, the open fill's #eff6ff, would stand in
+      // for the open fill's own rule.
+      const AT_REST = /:(hover|active|focus|focus-visible|focus-within)\b/;
+      const restValue = (width, el, prop) => {
+        if (!el) return 'no element';
+        let best = null;
+        for (const r of cssRead.rules) {
+          if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (AT_REST.test(sel) || /::?(before|after|placeholder)$/.test(sel) || !tryMatch(el, sel)) continue;
+            const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specificity(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, '') };
+            }
+          }
+        }
+        return best?.value ?? null;
+      };
+      // The rules that apply at `width` and read the panel or its open state.
+      const panelRules = (width) => (pn ? cssRead.rules.filter((r) => appliesAt(r.media, width)
+        && r.selectors.some((s) => /pay-filters-panel|is-open/.test(s) && tryMatch(pn, s))).map((r) => r.selector) : ['no panel']);
+      const phoneClosed = PHONE_WIDTHS.map((w) => ({ w, button: [valueAt(w, tb, 'display'), valueAt(w, tb, 'width'),
+        valueAt(w, tb, 'height')], fill: restValue(w, tb, 'background'), panel: valueAt(w, pn, 'display'),
+        slot: valueAt(w, idleSlot, 'display') }));
+      const wideClosed = WIDE_WIDTHS.map((w) => ({ w, button: valueAt(w, tb, 'display'), panelRules: panelRules(w),
+        slot: [valueAt(w, idleSlot, 'visibility'), valueAt(w, idleSlot, 'display')] }));
+      const styleClosed = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+      await toggle(cssPage);
+      const phoneOpen = PHONE_WIDTHS.map((w) => ({ w, panel: valueAt(w, pn, 'display'), fill: restValue(w, tb, 'background') }));
+      const wideOpen = WIDE_WIDTHS.map((w) => ({ w, button: valueAt(w, tb, 'display'), panelRules: panelRules(w) }));
+      const styleOpen = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+      const opened = stateOf(cssPage);
+      await pickPay(cssPage, 'Unpaid');
+      const liveSlot = slotOf();
+      const liveRead = [...PHONE_WIDTHS, ...WIDE_WIDTHS].map((w) => ({ w, display: valueAt(w, liveSlot, 'display'),
+        visibility: valueAt(w, liveSlot, 'visibility'), height: valueAt(w, liveSlot, 'height') }));
+      const layered = [390, 1280].flatMap((w) => [tb, pn, liveSlot].map((el) => ({ w, el: el?.className ?? null,
+        z: valueAt(w, el, 'z-index'), position: valueAt(w, el, 'position') })));
+      check('on a phone (320, 390 and 640px) the Filters button is drawn, the full width and a finger\'s 44px tall; closed, the '
+          + 'panel it controls is not drawn; and Clear filters, with nothing on, is not drawn in it',
+        !!tb && !!pn && !!idleSlot && phoneClosed.every((r) => said(r.button) === said(['flex', '100%', '44px']) && r.panel === 'none'
+          && r.slot === 'none'), said(phoneClosed));
+      check('  open, the panel is drawn there (a block: Payments\' card) and the button keeps the open fill, #eff6ff, as Payments\' '
+          + 'Filters button does, white at rest when closed (read with no pointer on it: jsdom leaves a clicked button :hover)',
+        isOpen(opened) && phoneOpen.every((r) => r.panel === 'block' && r.fill === '#eff6ff')
+          && phoneClosed.every((r) => r.fill === '#fff'),
+        said({ opened, phoneOpen, closedFill: phoneClosed.map((r) => r.fill) }));
+      check('above 640px (641, 768, 1045, 1046, 1280 and 1920) the button is not drawn, and no rule there reads the panel or its '
+          + 'open state: the panel is the row as it was, styled the same open or closed',
+        !!pn && [...wideClosed, ...wideOpen].every((r) => r.button === 'none' && r.panelRules.length === 0)
+          && said(styleClosed) === said(styleOpen),
+        said({ wideClosed: wideClosed.map((r) => [r.w, r.button, r.panelRules]), wideOpen: wideOpen.map((r) => [r.w, r.button,
+          r.panelRules]), closed: styleClosed[0], open: styleOpen[0] }));
+      check('  and there, with nothing on, Clear filters keeps its place in the row, hidden: visibility hidden, never display none, '
+          + 'which would give its place up',
+        !!idleSlot && wideClosed.every((r) => r.slot[0] === 'hidden' && r.slot[1] !== 'none'),
+        said(wideClosed.map((r) => [r.w, ...r.slot])));
+      check('with a filter on, nothing hides Clear filters at any width, and on a phone it is a finger\'s 44px tall',
+        !!liveSlot && clearOffered(liveSlot) && liveRead.every((r) => r.display !== 'none' && r.visibility === null)
+          && liveRead.filter((r) => r.w <= 640).every((r) => r.height === '44px'), said(liveRead));
+      check('the button, the panel and Clear filters stay in the page\'s flow: no z-index and no position of their own, at 390 or '
+          + '1280',
+        !!tb && !!pn && !!liveSlot && layered.every((r) => r.z === null && r.position === null), said(layered));
+      const cssText = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const breakpoints = [...new Set([...cssText.matchAll(/@media[^{]*/g)]
+        .flatMap((m) => [...m[0].matchAll(/(\d+)px/g)].map((x) => Number(x[1]))))].sort((a, b) => a - b);
+      check('index.css gains no breakpoint (its @media widths are still 480, 560, 640, 641, 768 and 1045px) and no CSS variable',
+        said(breakpoints) === said([480, 560, 640, 641, 768, 1045]) && !/var\(--/.test(cssText)
+          && !/(^|[;{\s])--[\w-]+\s*:/.test(cssText),
+        said({ breakpoints, variables: (cssText.match(/var\(--[\w-]+|--[\w-]+\s*:/g) || []).slice(0, 3) }));
+      sent.push(...net.calls.map((c) => c.method));
+      await cssPage.unmount();
+
+      check('section AB sent nothing but GETs', sent.length > 0 && sent.every((m) => m === 'GET'),
+        `${sent.length} request(s): ${[...new Set(sent)].join(', ')}`);
+    }
+
+    // =========================================================================
+    // AC. Document requests: columns that keep their places, and Escape on
+    // the Filters panel
+    // =========================================================================
+    // Above 640px the list's table keeps its columns in the same places on
+    // every tab, every page and every search or filter result: it is
+    // .doc-requests-table (this table alone), table-layout: fixed, and every
+    // column but Purpose has a width of its own, Purpose taking the rest and
+    // never less than 96px, because the table is never narrower than the five
+    // widths and 96. What each width must hold was measured in Chrome on the
+    // 77 live requests (D1's capture), with each cell's 32px of padding:
+    //   Requester  the longest name on one line, "Rodrigo Cempron Bautista",
+    //              189.44px: 221.44
+    //   Document   from 1046px, "Certificate of Residency" on one line,
+    //              156.38: 188.38; from 641 to 1045px, below the sidebar, two
+    //              lines ("Certificate of", 84.66: 116.66) and not one
+    //   Status     the "Ready for release" badge, 121.73: 153.73
+    //   Submitted  the date over the time in every row: room for the widest
+    //              date half of any day of 2026, "May 10, 2026," 87.94
+    //              (119.94), and none for the narrowest with its hour, "Jul
+    //              1, 2026, 1:05", 100.08 (132.08), so no hour ends line one;
+    //              text-wrap: balance keeps that break for a narrower font
+    //   actions    the Review button, 75.84, with its 8px margin and the
+    //              cell's 24px of padding: 107.84
+    //   Purpose    96, its floor: the PURPOSE heading (56) and the median
+    //              purpose (61.39) whole
+    // On a phone (640px and below) none of it applies, and no rule in the
+    // 640px block names the table. The protected col-*, .row-actions (its
+    // three exceptions among them), .num, .dash-main and .pending-card rules
+    // are as they were at 85dbba4 (D7), read with git. jsdom applies no width
+    // media query, so index.css is read with section AA's reader; the section
+    // sits inside section AA's block for that and for its requests and
+    // helpers.
+    //
+    // Escape in the open Filters panel closes it and gives focus back to the
+    // Filters button, as Payments' panel does (closeFiltersOnEscape in
+    // PaymentsPage.jsx: a keydown handler on the panel, never the document,
+    // that returns at once while the panel is closed and otherwise stops the
+    // key there). Here the handler is on the filters wrapper, which holds the
+    // button and the panel, so Escape on the button closes it too; Payments'
+    // button sits outside its panel, in the status row, and Escape on it does
+    // nothing. Escape anywhere else, the search box, a tab or nothing
+    // focused, leaves the panel open, as on Payments, where those are outside
+    // the panel too. The count and the filters stay as they were; no request,
+    // nothing kept in the browser.
+    console.log('\n--- Document requests: fixed columns and Escape ---');
+    {
+      const { execFileSync } = require('child_process');
+      const PINNED_REV = '85dbba4';
+      const WIDE = [641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440, 1920];
+      const PHONES = [320, 390, 640];
+      // The measured floors (Chrome, the 77 live requests), padding in.
+      const NEED = { requester: 221.44, documentOneLine: 188.38, documentTwoLines: 116.66, status: 153.73,
+        submittedFrom: 119.94, submittedBelow: 132.08, actions: 107.84 };
+      const PURPOSE_FLOOR = 96;
+      const px = (v) => (typeof v === 'string' && /^\d+(\.\d+)?px$/.test(v) ? Number.parseFloat(v) : null);
+      const sent = [];
+      const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+      const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+      const panelOf = (page) => {
+        const id = filtersButton(page)?.getAttribute('aria-controls');
+        return id ? dom.window.document.getElementById(id) : null;
+      };
+      const stateOf = (page) => {
+        const b = filtersButton(page);
+        const p = panelOf(page);
+        return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+          open: !!p && p.classList.contains('is-open') };
+      };
+      const isOpen = (s) => s.expanded === 'true' && s.open;
+      const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+      const toggle = (page) => press(page, filtersButton(page));
+      // The panel opened or closed by its button only when it is not so
+      // already, so a page that ignores an Escape fails that one check and
+      // not every check after it.
+      const openIt = async (page) => { if (!isOpen(stateOf(page))) await toggle(page); };
+      const closeIt = async (page) => { if (isOpen(stateOf(page))) await toggle(page); };
+      // Escape where focus is, after focusing `el` ('nothing': with nothing
+      // focused): whether the element took focus, and whether the key went on
+      // to the document (Payments' handler stops it when it closes a panel).
+      const escapeFrom = async (page, el) => {
+        if (el === 'nothing') page.active()?.blur?.();
+        else el?.focus();
+        const body = dom.window.document.body;
+        const focused = el === 'nothing' ? page.active() === body : !!el && page.active() === el;
+        let reached = false;
+        const spy = (e) => { if (e.key === 'Escape') reached = true; };
+        dom.window.document.addEventListener('keydown', spy);
+        if (focused) await page.key('Escape');
+        await page.settle();
+        dom.window.document.removeEventListener('keydown', spy);
+        return { focused, reached: focused ? reached : null };
+      };
+
+      for (const { name, route, token, user, staff } of ROLES) {
+        seedSession(token, user);
+        resetNet(200, answerFor(makeState(), staff));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+
+        // a. The table, and index.css's rules for it, read for this role's
+        // own elements.
+        const tbl = page.query('table.data-table');
+        const ths = tbl ? [...tbl.querySelectorAll('thead th')] : [];
+        const submittedCell = tbl?.querySelector('tbody td[data-label="Submitted"]') ?? null;
+        check(`${name}: the list's table is .doc-requests-table, beside data-table and stack-narrow, with its six headers as before`,
+          !!tbl && ['data-table', 'stack-narrow', 'doc-requests-table'].every((c) => tbl.classList.contains(c))
+            && said(ths.map(text)) === said(['Requester', 'Document', 'Purpose', 'Status', 'Submitted', '']) && !!submittedCell,
+          said({ table: tbl?.className ?? null, headers: ths.map(text) }));
+        const [thReq, thDoc, thPur, thSta, thSub, thAct] = ths;
+        const sized = [thReq, thDoc, thSta, thSub, thAct];
+        const wideRead = WIDE.map((w) => ({
+          w,
+          layout: valueAt(w, tbl, 'table-layout'),
+          min: px(valueAt(w, tbl, 'min-width')),
+          widths: sized.map((th) => px(valueAt(w, th, 'width'))),
+          purpose: valueAt(w, thPur, 'width'),
+          wrap: valueAt(w, submittedCell, 'text-wrap'),
+        }));
+        check(`${name}: above 640px (641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440 and 1920) the columns are fixed: table-layout `
+            + 'fixed; Requester, Document, Status, Submitted and the actions column each a width in px; Purpose none, so it takes the '
+            + 'rest; and the table never narrower than those five and Purpose\'s 96px',
+          wideRead.every((r) => r.layout === 'fixed' && r.widths.every((x) => x !== null) && r.purpose === null
+            && r.min === r.widths.reduce((a, b) => a + b, 0) + PURPOSE_FLOOR),
+          said(wideRead.map((r) => [r.w, r.layout, r.widths.join('/'), r.purpose, r.min])));
+        const short = wideRead.flatMap((r) => {
+          const [req, doc, sta, sub, act] = r.widths;
+          const docOk = r.w >= 1046 ? doc >= NEED.documentOneLine : doc >= NEED.documentTwoLines && doc < NEED.documentOneLine;
+          const bad = [req >= NEED.requester ? null : `Requester ${req}`, docOk ? null : `Document ${doc}`,
+            sta >= NEED.status ? null : `Status ${sta}`,
+            sub >= NEED.submittedFrom && sub < NEED.submittedBelow ? null : `Submitted ${sub}`,
+            act >= NEED.actions ? null : `actions ${act}`].filter(Boolean);
+          return bad.length ? [`${r.w}: ${bad.join(', ')}`] : [];
+        });
+        check(`${name}: each width holds what was measured in Chrome on the 77 live requests: Requester the longest name on one line `
+            + '(221.44); Document "Certificate of Residency" on one line from 1046px (188.38) and on two below the sidebar, 641 to '
+            + '1045px (116.66 up to, not reaching, 188.38); Status the "Ready for release" badge (153.73); Submitted the date over the '
+            + 'time in every 2026 row (119.94 up to, not reaching, 132.08); the actions column the Review button (107.84)',
+          short.length === 0, short.length ? said(short) : said(wideRead.map((r) => [r.w, r.widths.join('/')])));
+        check(`${name}:   and the Submitted cells balance their two lines (text-wrap: balance) at every one of those widths`,
+          wideRead.every((r) => r.wrap === 'balance'), said(wideRead.map((r) => [r.w, r.wrap])));
+        const origins = WIDE.flatMap((w) => [[tbl, 'table-layout'], [tbl, 'min-width'], ...sized.map((th) => [th, 'width']),
+          [submittedCell, 'text-wrap']].map(([el, prop]) => {
+          const win = el ? winning(w, el, prop) : null;
+          return { w, prop, el: el?.textContent?.slice(0, 12) ?? null, selector: win?.selector ?? null,
+            media: win ? cssRead.rules[win.order].media : null };
+        }));
+        const stray = origins.filter((o) => !o.selector || !o.selector.startsWith('.doc-requests-table')
+          || !o.media.some((m) => /min-width:\s*641px/.test(m)));
+        check(`${name}: every one of those values comes from a rule of this table's own, .doc-requests-table first in its selector, `
+            + 'inside an @media (min-width: 641px)',
+          origins.length === WIDE.length * 8 && stray.length === 0, said(stray.slice(0, 6)));
+        const phoneRead = PHONES.map((w) => ({ w, layout: valueAt(w, tbl, 'table-layout'), min: valueAt(w, tbl, 'min-width'),
+          widths: ths.map((th) => valueAt(w, th, 'width')), wrap: valueAt(w, submittedCell, 'text-wrap') }));
+        check(`${name}: on a phone (320, 390 and 640px) none of it applies: no table-layout, no min-width, no header width and no `
+            + 'text-wrap reach the table, which is cards as before',
+          ths.length === 6 && phoneRead.every((r) => r.layout === null && r.min === null && r.widths.every((x) => x === null)
+            && r.wrap === null), said(phoneRead));
+
+        // b. Escape. The page opens on Pending, the panel closed.
+        const sentAtB = net.calls.length;
+        const writesAtB = store.sets;
+        const domWritesAtB = domStorage.writes;
+        const onButton = () => !!filtersButton(page) && page.active() === filtersButton(page);
+        const headingAtB = look(page).heading;
+        const k1 = await escapeFrom(page, filtersButton(page));
+        const closedEscape = { ...stateOf(page), onButton: onButton(), heading: look(page).heading, ...k1 };
+        check(`${name}: with the panel closed, Escape does nothing: on the Filters button the panel stays closed, focus stays on the `
+            + 'button, the list is as it was, and the key goes on unstopped, as Payments\' handler lets it while its panel is closed',
+          isClosed(closedEscape) && closedEscape.onButton && closedEscape.heading === headingAtB && k1.focused
+            && k1.reached === true, said(closedEscape));
+        await openIt(page);
+        const openedB = isOpen(stateOf(page));
+        const k2 = await escapeFrom(page, docSelect(page));
+        const fromSelect = { openedB, ...stateOf(page), onButton: onButton(), ...k2 };
+        check(`${name}: open, Escape from the Document select closes the panel and puts focus back on the Filters button, and the key `
+            + 'goes no further, as on Payments',
+          openedB && isClosed(fromSelect) && fromSelect.onButton && k2.focused && k2.reached === false, said(fromSelect));
+        await openIt(page);
+        const k3 = await escapeFrom(page, filtersButton(page));
+        const fromButton = { ...stateOf(page), onButton: onButton(), ...k3 };
+        check(`${name}: open, Escape on the Filters button itself closes the panel and leaves focus on the button (Payments' button `
+            + 'sits outside its panel, where Escape does nothing; here the handler is on the wrapper round both)',
+          isClosed(fromButton) && fromButton.onButton && k3.focused && k3.reached === false, said(fromButton));
+        await pickDate(page, 'Choose dates');
+        const inner = [];
+        for (const [what, find] of [['From', () => fromInput(page)], ['To', () => toInput(page)],
+          ['Clear filters', () => buttonNamed(root(), 'Clear filters')]]) {
+          await openIt(page);
+          const wasOpen = isOpen(stateOf(page));
+          const k = await escapeFrom(page, find());
+          inner.push({ what, wasOpen, ...stateOf(page), onButton: onButton(), ...k });
+        }
+        await pickDate(page, 'Any date');
+        check(`${name}: open, with Choose dates on, Escape from From, from To and from Clear filters closes it each time and puts `
+            + 'focus back on the Filters button',
+          inner.length === 3 && inner.every((x) => x.wasOpen && isClosed(x) && x.onButton && x.focused && x.reached === false),
+          said(inner));
+        await openIt(page);
+        const elsewhere = [];
+        let k = await escapeFrom(page, box(page));
+        elsewhere.push({ what: 'the empty search box', ...stateOf(page), stays: page.active() === box(page), ...k });
+        await type(page, 'ana');
+        k = await escapeFrom(page, box(page));
+        elsewhere.push({ what: 'the search box holding "ana"', ...stateOf(page), stays: page.active() === box(page),
+          search: box(page)?.value ?? null, ...k });
+        const allTab = tabNamed(page, 'All');
+        k = await escapeFrom(page, allTab);
+        elsewhere.push({ what: 'the All tab', ...stateOf(page), stays: page.active() === allTab, ...k });
+        k = await escapeFrom(page, 'nothing');
+        elsewhere.push({ what: 'nothing focused', ...stateOf(page), stays: page.active() === dom.window.document.body, ...k });
+        check(`${name}: open, Escape anywhere else leaves it open, as on Payments, where these are outside the panel too: from the `
+            + 'search box (empty, or holding "ana", which the box\'s own Escape clears), from a tab, and with nothing focused; focus '
+            + 'stays where it was',
+          elsewhere.length === 4 && elsewhere.every((x) => isOpen(x) && x.stays && x.focused) && elsewhere[1].search === '',
+          said(elsewhere));
+        await closeIt(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        await pickDoc(page, 'Barangay Clearance');
+        await pickPay(page, 'Unpaid');
+        await openIt(page);
+        const kept0 = { ...look(page), ...stateOf(page) };
+        const k5 = await escapeFrom(page, paySelect(page));
+        const kept1 = { ...look(page), ...stateOf(page), onButton: onButton(), ...k5 };
+        check(`${name}: Escape leaves the count and the filters as they were: with Document and Payment on, "Filters (2)", Escape `
+            + 'from the Payment select closes the panel, the button still "Filters (2)", the selects still Barangay Clearance and '
+            + 'Unpaid, the list still Carla Santos alone under "1 of 16 requests matches", the tab counts as before',
+          isOpen(kept0) && kept0.label === 'Filters (2)' && isClosed(kept1) && kept1.label === 'Filters (2)' && kept1.onButton
+            && kept1.document === 'Barangay Clearance' && kept1.payment === 'Unpaid' && kept1.date === 'Any date'
+            && said(kept1.rows) === said(['Carla Santos']) && kept1.heading === '1 of 16 requests matches'
+            && kept1.strip === kept0.strip && kept1.search === kept0.search,
+          said({ before: { label: kept0.label, heading: kept0.heading, rows: kept0.rows },
+            after: { label: kept1.label, heading: kept1.heading, rows: kept1.rows, document: kept1.document,
+              payment: kept1.payment, strip: kept1.strip === kept0.strip } }));
+        check(`${name}: none of those Escapes, presses or picks sent a request or wrote to the browser: no localStorage or `
+            + 'sessionStorage write, through window or not, sessionStorage empty, no cookie',
+          net.calls.length === sentAtB && store.sets === writesAtB && domStorage.writes === domWritesAtB
+            && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+          `${net.calls.length - sentAtB} request(s): ${said(listCalls(net.calls.slice(sentAtB)))}, `
+            + `${store.sets - writesAtB} stub write(s), ${domStorage.writes - domWritesAtB} jsdom write(s)`);
+        sent.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // c. index.css as a whole, the source, and another page's table.
+      const tableRules = cssRead.rules.filter((r) => r.selectors.some((s) => s.includes('.doc-requests-table')));
+      const inPhoneBlock = cssRead.rules.filter((r) => r.media.some((m) => /max-width:\s*640px/.test(m))
+        && r.selectors.some((s) => s.includes('doc-requests-table')));
+      check('index.css: every rule that names .doc-requests-table is this table\'s, each of its selectors starting with it, and '
+          + 'sits inside an @media (min-width: 641px); none is in the 640px block',
+        tableRules.length > 0 && inPhoneBlock.length === 0 && tableRules.every((r) => r.media.some((m) => /min-width:\s*641px/.test(m))
+          && r.selectors.every((s) => s.startsWith('.doc-requests-table'))),
+        said({ rules: tableRules.map((r) => `${r.media.join(' ')} { ${r.selector} }`), inPhoneBlock: inPhoneBlock.map((r) => r.selector) }));
+      // Every style rule of a stylesheet, comments gone and line endings and
+      // spaces tidied: the @-rules round it, its selector, its declarations.
+      const rulesOf = (src) => {
+        const css = src.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
+        const out = [];
+        const open = [];
+        let from = 0;
+        for (let i = 0; i < css.length; i += 1) {
+          const ch = css[i];
+          if (ch === '{') {
+            open.push({ head: css.slice(from, i).trim().replace(/\s+/g, ' '), decls: [] });
+            from = i + 1;
+          } else if (ch === ';' || ch === '}') {
+            const decl = css.slice(from, i).trim().replace(/\s+/g, ' ');
+            if (decl && open.length) open.at(-1).decls.push(decl);
+            from = i + 1;
+            const block = ch === '}' ? open.pop() : null;
+            if (block && !block.head.startsWith('@')) {
+              out.push({ at: open.filter((b) => b.head.startsWith('@')).map((b) => b.head), selector: block.head,
+                decls: block.decls });
+            }
+          }
+        }
+        return out;
+      };
+      const PROTECTED = /\.col-[\w-]+|row-actions|\.num\b|\.dash-main\b|\.pending-card\b/;
+      const protectedIn = (src) => rulesOf(src).filter((r) => PROTECTED.test(r.selector));
+      let pinnedCss = null;
+      try {
+        pinnedCss = execFileSync('git', ['show', `${PINNED_REV}:frontend/src/index.css`],
+          { cwd: path.join(HERE, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch {
+        pinnedCss = null;
+      }
+      const nowRules = protectedIn(fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8'));
+      const thenRules = pinnedCss === null ? null : protectedIn(pinnedCss);
+      let firstDiff = -1;
+      for (let i = 0; thenRules && i < Math.max(nowRules.length, thenRules.length); i += 1) {
+        if (said(nowRules[i]) !== said(thenRules[i])) { firstDiff = i; break; }
+      }
+      check(`the col-*, .row-actions (its three exceptions among them), .num, .dash-main and .pending-card rules are as they were `
+          + `at ${PINNED_REV} (D7, read with git): the same rules in the same order, under the same @media, with the same declarations`,
+        !!thenRules && thenRules.length > 20 && firstDiff === -1,
+        thenRules === null ? `git could not read ${PINNED_REV}:frontend/src/index.css`
+          : firstDiff === -1 ? `${nowRules.length} rules, the same`
+            : said({ at: firstDiff, now: nowRules[firstDiff] ?? null, then: thenRules[firstDiff] ?? null,
+              counts: [nowRules.length, thenRules.length] }));
+      const srcRoot = path.join(HERE, '..', 'src');
+      const sourceFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory()
+        ? sourceFiles(path.join(dir, d.name)) : /\.jsx?$/.test(d.name) ? [path.join(dir, d.name)] : []));
+      const codeOf = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      const carriers = sourceFiles(srcRoot).flatMap((f) => {
+        const n = (codeOf(fs.readFileSync(f, 'utf8')).match(/doc-requests-table/g) || []).length;
+        return n ? [`${path.relative(srcRoot, f).replace(/\\/g, '/')}: ${n}`] : [];
+      });
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(200, (url, method) => (method === 'GET' && url.includes('/document-requests/mine')
+        ? { requests: FILTER_LIST.slice(0, 4).map((row) => asRequest(row, false)) } : undefined));
+      const minePage = await globalThis.mountInteractive(root(), '/resident');
+      await minePage.settle();
+      const mineTable = minePage.query('table.data-table');
+      const mineClass = mineTable?.className ?? null;
+      sent.push(...net.calls.map((c) => c.method));
+      await minePage.unmount();
+      check('.doc-requests-table is this table\'s alone: the source names it once, in SecretaryRequestsPage.jsx, and the '
+          + 'resident\'s My requests table, which shares .data-table and .row-actions with it, does not carry it',
+        said(carriers) === said(['pages/SecretaryRequestsPage.jsx: 1']) && !!mineTable
+          && !mineTable.classList.contains('doc-requests-table'),
+        said({ carriers, mineClass }));
+
+      check('section AC sent nothing but GETs', sent.length > 0 && sent.every((m) => m === 'GET'),
+        `${sent.length} request(s): ${[...new Set(sent)].join(', ')}`);
+    }
+
+    if (previousScroll === undefined) delete proto.scrollIntoView;
+    else proto.scrollIntoView = previousScroll;
+    if (F.clock && realNow) F.clock.now = realNow;
+    if (previousTZAA === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAA;
+  }
+
+  // =========================================================================
+  // AD. Rental bookings: a failed load is an error, never an empty list
+  // =========================================================================
+  // One component (RentalBookingsPage) is the Rental bookings list on three
+  // routes: the Secretary's /secretary/rentals, and the homes of Staff
+  // (/staff) and the Punong Barangay (/punong-barangay). It had the defect
+  // section V fixed on Document requests: a load that failed stored an empty
+  // list beside the error, so the page said "0 bookings" and "No confirmed /
+  // upcoming bookings." under the server's bare message while it knew
+  // nothing, which reads as nothing booked; it had no Try again; and Refresh
+  // left the old rows on screen while it was out, so an older answer that
+  // arrived late could replace a newer one. A failed load must say so, with
+  // Try again, and show no rows, no count and no empty text; every load
+  // starts from the loading state; an older answer is dropped. A 401 ends the
+  // session once, in authFetch, and the route guard sends the person to the
+  // login screen: the list never says "0 bookings" there either. The same
+  // checks run for the three roles. Each role's list here holds only the
+  // bookings the page opens on (two upcoming for the Secretary and the Punong
+  // Barangay, two overdue for Staff), so these checks read the same whatever
+  // the page shows first; which rows a tab shows is the tabs' own checks'.
+  // Every request is answered by the fetch stub, and only GETs are sent.
+  console.log('\n--- Rental bookings: a failed load is an error, never an empty list ---');
+  {
+    const previousTZAD = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The page's words with a space between neighbouring elements' text, so
+    // that \b finds the edge between "Refresh" and "0 bookings".
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // The list's own URL: GET /rental-requests, with or without ?status=.
+    const isList = (call) => call?.method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(call.url);
+    // A booking in the list's real shape (MANAGE_FIELDS in
+    // routes/rentalRequests.js, one projection for every role), with the
+    // derived_status the server adds.
+    const booking = (id, first, last, item, type, derived, day) => ({
+      request_id: id, quantity_requested: 1,
+      start_datetime: `2026-${day}T01:00:00+00:00`, end_datetime: `2026-${day}T05:00:00+00:00`,
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null,
+      resident_id: 800 + id, outside_borrower_name: null, outside_borrower_contact: null,
+      rental_items: { item_id: 600 + id, name: item, type, fee: '25.00', quantity_total: 10, quantity_available: 10 },
+      resident_records: { resident_id: 800 + id, first_name: first, middle_name: null, last_name: last, suffix: null,
+        account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: `res_${id}@example.invalid`,
+        profiles: { first_name: first, middle_name: null, last_name: last, suffix: null } },
+      returned_by: null,
+      charges: { charge_id: 950 + id, amount: '25.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+      derived_status: derived,
+    });
+    // Two upcoming bookings (confirmed, their end still ahead), and two
+    // overdue ones (confirmed, their end passed, physical items not back).
+    const UPCOMING_TWO = () => [booking(401, 'Ana', 'Cruz', 'Sound System', 'equipment', 'confirmed', '10-21'),
+      booking(402, 'Ben', 'Reyes', 'Covered Court', 'facility', 'confirmed', '10-20')];
+    const OVERDUE_TWO = () => [booking(403, 'Carla', 'Santos', 'Plastic Chairs', 'furniture', 'overdue', '10-02'),
+      booking(404, 'Dino', 'Tan', 'Tent (10x10)', 'equipment', 'overdue', '09-30')];
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    // What the list area says, read the way a person would.
+    const listView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+        tryAgain: !!tryAgainButton(page),
+        rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        // "0 bookings", or "0 upcoming bookings" with a tab named.
+        zero: /\b0 [a-z ]*bookings?\b/.test(all),
+        // "No upcoming bookings.", or the select's "No confirmed / upcoming
+        // bookings." and "No overdue (awaiting return) bookings.".
+        empty: /\bNo [a-z /()]*bookings\./.test(all),
+        loading: all.includes('Loading bookings…'),
+      };
+    };
+    // The error with Try again, and nothing that could read as "nothing
+    // booked": no rows, no count, no empty text.
+    const errorOnly = (v) => !!v.error && v.tryAgain && v.heading === 'Bookings' && v.rows.length === 0
+      && !v.zero && !v.empty && !v.loading;
+    const loadingOnly = (v) => v.loading && !v.error && !v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && !v.zero && !v.empty;
+    // Two rows under a heading that counts them ("2 bookings", "2 upcoming
+    // bookings"): the heading's words are the tabs' checks'.
+    const twoShown = (v, names) => said(v.rows) === said(names) && /^2 ([a-z]+ )?bookings$/.test(v.heading || '')
+      && !v.error && !v.tryAgain && !v.loading;
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, rows: UPCOMING_TWO },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, rows: OVERDUE_TWO },
+      { name: 'Punong Barangay', route: '/punong-barangay',
+        token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, rows: UPCOMING_TWO },
+    ];
+    for (const { name, route, token, user, rows } of ROLES) {
+      const names = rows().map((b) => `${b.resident_records.first_name} ${b.resident_records.last_name}`);
+      // a. A successful load reads as it always has: one request, the rows.
+      seedSession(token, user);
+      resetNet(200, (url) => (/\/rental-requests\?/.test(url) ? { requests: rows() } : undefined));
+      let page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const shown = listView(page);
+      check(`${name}: a successful load shows its two rows (${names.join(', ')}) under a heading that counts them, from one `
+          + 'GET of the bookings list, with no error',
+        twoShown(shown, names) && net.calls.length === 1 && isList(net.calls[0]),
+        said({ shown, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // b. The first open fails: the loading state while it is out, then the
+      // error, with Try again, and nothing else.
+      seedSession(token, user);
+      resetNet(200);
+      let at = holdNext();
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const opening = listView(page);
+      const firstCall = net.calls[0];
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failed = listView(page);
+      check(`${name}: the first open shows "Loading bookings…" while the list is out, and when it fails, `
+          + '"Could not load the bookings: Network down" with a Try again button',
+        loadingOnly(opening) && isList(firstCall)
+          && failed.error === 'Could not load the bookings: Network down' && failed.tryAgain,
+        `${said(opening)} then ${said(failed)}`);
+      check(`  ${name}: and no rows, no "0 bookings", no "No … bookings.": it cannot read as nothing booked`,
+        errorOnly(failed), said(failed));
+
+      // c. Try again repeats the same load; its rows replace the error.
+      at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      const retrying = listView(page);
+      const retryCall = net.calls[sent];
+      release(at, 200, { requests: rows() });
+      await page.settle();
+      const retried = listView(page);
+      check(`${name}: Try again loads the list again, once, shows the loading state, not the error, while it is out, then `
+          + 'the two rows',
+        net.calls.length === sent + 1 && isList(retryCall) && retryCall.url === firstCall?.url && loadingOnly(retrying)
+          && twoShown(retried, names),
+        `${retryCall?.url ?? 'no request'} ${said(retrying)} then ${said(retried)}`);
+
+      // d. Refresh over loaded rows, failing: the loading state, then the
+      // error, and never the old rows or their count.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const refreshing = listView(page);
+      const refreshCall = net.calls[sent];
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const refreshFailed = listView(page);
+      check(`${name}: Refresh shows the loading state, not the old rows, while it is out, and when it fails, "Could not load `
+          + 'the bookings: Internal server error", never the old rows or their count',
+        isList(refreshCall) && loadingOnly(refreshing)
+          && refreshFailed.error === 'Could not load the bookings: Internal server error' && errorOnly(refreshFailed),
+        `${refreshCall?.url ?? 'no request'} ${said(refreshing)} then ${said(refreshFailed)}`);
+
+      // e. Two loads out at once, Try again and then Refresh before it has
+      // answered, the older answer last: it is dropped.
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: rows() });
+      await page.settle();
+      release(at, 200, { requests: rows().slice(0, 1) });
+      await page.settle();
+      const raced = listView(page);
+      check(`${name}: an older answer that arrives last cannot replace the newer list: both rows stay`,
+        isList(net.calls.at(-2)) && isList(net.calls.at(-1)) && twoShown(raced, names), said(raced));
+
+      // f. The same, Refresh pressed twice, with the older load failing last.
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at + 1, 200, { requests: rows() });
+      await page.settle();
+      release(at, 500, { error: 'boom' });
+      await page.settle();
+      const racedFail = listView(page);
+      check(`  ${name}: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list`,
+        twoShown(racedFail, names), said(racedFail));
+
+      // g. No bookings, loaded successfully, is a real empty state.
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 200, { requests: [] });
+      await page.settle();
+      net.hold = false;
+      const none = listView(page);
+      check(`${name}: a successful load of no bookings still counts 0 and says "No … bookings.", with no error`,
+        /^0 ([a-z]+ )?bookings$/.test(none.heading || '') && none.empty && !none.error && !none.tryAgain && !none.loading
+          && none.rows.length === 0,
+        said(none));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // h. Why it failed, when the server could not be reached: Document
+      // requests' wording.
+      seedSession(token, user);
+      resetNet(200);
+      net.fail = true;
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const unreachable = listView(page);
+      check(`${name}: a server that cannot be reached gets the plain fallback, "Could not load the bookings: the server did `
+          + 'not respond", never "Failed to fetch"',
+        unreachable.error === 'Could not load the bookings: the server did not respond' && errorOnly(unreachable)
+          && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(unreachable));
+      net.fail = false;
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, { requests: rows() });
+      await page.settle();
+      net.hold = false;
+      check(`  ${name}: and Try again recovers once the server answers`, twoShown(listView(page), names), said(listView(page)));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // i. An error answer with no message in it.
+      seedSession(token, user);
+      resetNet(502);
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const bare = listView(page);
+      check(`  ${name}: so does an error answer with no message in it, never "Request failed (502)"`,
+        bare.error === 'Could not load the bookings: the server did not respond' && errorOnly(bare)
+          && !/Request failed/.test(root().textContent), said(bare));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+
+      // j. A 401: the session ends once and the login screen takes the page's
+      // place, as on every page (authFetch, section C); never "0 bookings".
+      seedSession(token, user);
+      resetNet(401);
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const ended = listView(page);
+      check(`${name}: a 401 on the list ends the session once and shows the login screen, with no "0 bookings", no `
+          + '"No … bookings." and no list error',
+        store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+          && !ended.zero && !ended.empty && !ended.error && ended.rows.length === 0 && isList(net.calls[0]),
+        `${store.removes} teardown(s) ${said(ended)}`);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+    check('section AD\'s failed loads sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+
+    if (previousTZAD === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAD;
+  }
+
+  // =========================================================================
+  // AD (continued). Rental bookings: status tabs with counts
+  // =========================================================================
+  // The list had one status select: "Confirmed / upcoming" for the Secretary
+  // and the Punong Barangay, "Overdue (awaiting return)" for Staff, and six
+  // more, each sending a new GET /rental-requests?status=…. Its first choice
+  // was the STORED status, so it also listed every past confirmed booking,
+  // whose badge reads Overdue or Completed: on the live data (14 Oct 2026),
+  // 15 bookings under "upcoming", none of them upcoming. It now loads every
+  // booking once, GET ?status=all, and six tabs split that list in the
+  // browser with no request: Upcoming, Overdue, Completed, Returned,
+  // Cancelled and All, each with its count over the whole list. A tab holds
+  // the bookings whose DERIVED status (the server's derived_status, which the
+  // badge reads) is its own: Upcoming a confirmed booking whose end is still
+  // ahead, Returned all three return outcomes. The heading names the tab ("3
+  // overdue bookings", "11 bookings" on All), and a tab with nothing in it
+  // says so ("No upcoming bookings."). Staff open on Overdue, the Secretary
+  // and the Punong Barangay on Upcoming, even while it is empty. Every row
+  // keeps its columns, badges and actions; an action that reloads the list
+  // keeps the tab, and a booking whose status it changed shows under its new
+  // tab. The strip is ListTabs, as on Document requests. utils/rentalList.js
+  // is checked case by case, then the real page for the three roles against
+  // eleven stubbed bookings, one or more for every derived status, then a
+  // list with an empty tab, then the strip on a narrow phone. Every request
+  // is answered by the fetch stub; the only writes, the Secretary's cancel
+  // and edit and Staff's return, go to the stub too.
+  console.log('\n--- Rental bookings: status tabs with counts ---');
+  {
+    const previousTZAD2 = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const L = globalThis.rentalList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const KEYS = ['upcoming', 'overdue', 'completed', 'returned', 'cancelled', 'all'];
+    // Counts compared key by key, whatever order they were built in, and
+    // with no key besides the six.
+    const sameCounts = (got, want) => !!got && typeof got === 'object'
+      && said(Object.keys(got).sort()) === said([...KEYS].sort()) && KEYS.every((k) => got[k] === want[k]);
+    const counts = (upcoming, overdue, completed, returned, cancelled, all) =>
+      ({ upcoming, overdue, completed, returned, cancelled, all });
+
+    // a. The helpers on their own.
+    const order = attempt(() => L.RENTAL_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
+    check('rental tabs: Upcoming, Overdue, Completed, Returned, Cancelled, All, in that order',
+      order === 'upcoming:Upcoming | overdue:Overdue | completed:Completed | returned:Returned | cancelled:Cancelled | all:All',
+      said(order));
+    const bk = (id, status, derived) => ({ request_id: id, status, ...(derived === undefined ? {} : { derived_status: derived }) });
+    // Every kind of booking, and the tabs it must be in: its derived status
+    // decides, as the badge reads it, falling back to the stored status as
+    // the badge does; a status outside the seven is in All only.
+    const KINDS = [
+      ['confirmed, its end still ahead', bk(1, 'confirmed', 'confirmed'), 'upcoming all'],
+      ['confirmed, a physical item past its end (derived overdue)', bk(2, 'confirmed', 'overdue'), 'overdue all'],
+      ['confirmed, a facility past its end (derived completed)', bk(3, 'confirmed', 'completed'), 'completed all'],
+      ['returned', bk(4, 'returned', 'returned'), 'returned all'],
+      ['returned late', bk(5, 'returned_late', 'returned_late'), 'returned all'],
+      ['returned with an issue', bk(6, 'returned_with_issue', 'returned_with_issue'), 'returned all'],
+      ['cancelled', bk(7, 'cancelled', 'cancelled'), 'cancelled all'],
+      ['confirmed with no derived_status', bk(8, 'confirmed'), 'upcoming all'],
+      ['a status outside the seven', bk(9, 'archived', 'archived'), 'all'],
+    ];
+    const tabsHolding = (b) => KEYS.filter((tab) => attempt(() => L.inTab(b, tab)) === true).join(' ');
+    const wrongKinds = KINDS.filter(([, b, want]) => tabsHolding(b) !== want);
+    check('inTab: each booking is in the tab of its derived status and in All, and nowhere else: a past confirmed booking is '
+        + 'Overdue or Completed, never Upcoming; the three return outcomes are all Returned; an unknown status is in All only',
+      wrongKinds.length === 0, said(wrongKinds.map(([name, b]) => ({ name, in: tabsHolding(b) }))));
+    let got = attempt(() => L.tabCounts(KINDS.map((k) => k[1])));
+    check('rental tab counts over the whole list given: 2 upcoming, 1 overdue, 1 completed, 3 returned, 1 cancelled, 9 in all',
+      sameCounts(got, counts(2, 1, 1, 3, 1, 9)), said(got));
+    got = attempt(() => L.tabCounts([]));
+    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0)), said(got));
+    const HEADS = [['upcoming', 0, '0 upcoming bookings'], ['upcoming', 1, '1 upcoming booking'],
+      ['overdue', 7, '7 overdue bookings'], ['overdue', 1, '1 overdue booking'], ['completed', 8, '8 completed bookings'],
+      ['returned', 7, '7 returned bookings'], ['cancelled', 6, '6 cancelled bookings'], ['all', 28, '28 bookings'],
+      ['all', 1, '1 booking'], ['all', 1234, '1,234 bookings']];
+    const heads = HEADS.map(([tab, n]) => attempt(() => L.tabHeading(tab, n)));
+    check('the heading for a tab: "0 upcoming bookings", "1 upcoming booking", "7 overdue bookings", "1 overdue booking", '
+        + '"8 completed bookings", "7 returned bookings", "6 cancelled bookings", and on All "28 bookings", "1 booking", "1,234 bookings"',
+      said(heads) === said(HEADS.map((h) => h[2])), said(heads));
+    const EMPTIES = ['No upcoming bookings.', 'No overdue bookings.', 'No completed bookings.', 'No returned bookings.',
+      'No cancelled bookings.', 'No bookings.'];
+    const empties = KEYS.map((tab) => attempt(() => L.emptyText(tab)));
+    check('the empty text names the tab: "No upcoming bookings." … "No cancelled bookings.", and "No bookings." on All',
+      said(empties) === said(EMPTIES), said(empties));
+    const opening = [true, false, undefined].map((canReturn) => attempt(() => L.openingTab(canReturn)));
+    check('the opening tab: Overdue for Staff (canReturn), Upcoming for the others',
+      said(opening) === said(['overdue', 'upcoming', 'upcoming']), said(opening));
+
+    // b. The real page. Eleven bookings in the list's real shape, newest
+    // first as the server sends them, one or more for every derived status: a
+    // past confirmed booking is Overdue (504 a guest's, 505 a resident's with
+    // no online account) or Completed, and the returns carry who took them
+    // back and a note. Each starts a day before the one above it (startOf), so
+    // the order sent is also the one order the page keeps since section AE's
+    // pager: newest start first, and the booking number only among bookings
+    // that start together. (They all started at one moment until then, which
+    // that order turns round.)
+    const STAFF_BY = { user_id: 3, username: 'staff1', profiles: { first_name: 'Sam', last_name: 'Tabuena' } };
+    const ITEMS = {
+      sound: ['Sound System', 'equipment'], court: ['Covered Court', 'facility'], chairs: ['Plastic Chairs', 'furniture'],
+      tent: ['Tent (10x10)', 'equipment'], tables: ['Folding Tables', 'furniture'], hall: ['Barangay Hall', 'facility'],
+    };
+    const ELEVEN = [
+      { id: 501, who: ['Ana', 'Cruz'], item: 'sound', qty: 1, status: 'confirmed', derived: 'confirmed' },
+      { id: 502, who: ['Ben', 'Reyes'], item: 'court', qty: 1, status: 'confirmed', derived: 'confirmed' },
+      { id: 503, who: ['Carla', 'Santos'], item: 'chairs', qty: 20, status: 'confirmed', derived: 'overdue' },
+      { id: 504, guest: ['Maria Lourdes Villanueva-Santos', '09171234567'], item: 'tent', qty: 2, status: 'confirmed', derived: 'overdue' },
+      { id: 505, who: ['Dino', 'Tan'], noAccount: true, item: 'tables', qty: 5, status: 'confirmed', derived: 'overdue' },
+      { id: 506, who: ['Elsa', 'Uy'], item: 'hall', qty: 1, status: 'confirmed', derived: 'completed' },
+      { id: 507, who: ['Fe', 'Villa'], item: 'court', qty: 1, status: 'confirmed', derived: 'completed' },
+      { id: 508, who: ['Gil', 'Wong'], item: 'sound', qty: 1, status: 'returned', derived: 'returned' },
+      { id: 509, who: ['Hana', 'Yap'], item: 'chairs', qty: 30, status: 'returned_late', derived: 'returned_late', note: 'Returned a day late' },
+      { id: 510, who: ['Ivy', 'Zamora'], item: 'tent', qty: 1, status: 'returned_with_issue', derived: 'returned_with_issue', note: 'One pole bent' },
+      { id: 511, who: ['Jun', 'Abad'], item: 'hall', qty: 1, status: 'cancelled', derived: 'cancelled', noCharge: true },
+    ];
+    const RETURNED = ['returned', 'returned_late', 'returned_with_issue'];
+    // 501 starts at 9:00 AM on 20 Oct in Manila, 502 a day earlier, and so on;
+    // each ends four hours after it starts.
+    const startOf = (id) => new Date(Date.UTC(2026, 9, 20 - (id - 501), 1)).toISOString().replace('.000Z', '+00:00');
+    const endOf = (id) => new Date(Date.UTC(2026, 9, 20 - (id - 501), 5)).toISOString().replace('.000Z', '+00:00');
+    const toBooking = (r) => {
+      const [itemName, type] = ITEMS[r.item];
+      const person = r.who && { resident_id: 800 + r.id, first_name: r.who[0], middle_name: null, last_name: r.who[1], suffix: null,
+        account: r.noAccount ? null : { username: `res_${r.id}` } };
+      return {
+        request_id: r.id, quantity_requested: r.qty,
+        start_datetime: startOf(r.id), end_datetime: endOf(r.id),
+        purpose: `Purpose ${r.id}`, status: r.status, return_note: r.note ?? null,
+        returned_at: RETURNED.includes(r.status) ? '2026-10-05T09:30:00+00:00' : null,
+        resident_id: person ? person.resident_id : null,
+        outside_borrower_name: r.guest ? r.guest[0] : null, outside_borrower_contact: r.guest ? r.guest[1] : null,
+        rental_items: { item_id: 600 + r.id, name: itemName, type, fee: '25.00', quantity_total: 50, quantity_available: 50 },
+        resident_records: person || null,
+        requester: { user_id: 700 + r.id, username: r.guest ? 'secretary1' : `res_${r.id}`, email: null, profiles: null },
+        returned_by: RETURNED.includes(r.status) ? STAFF_BY : null,
+        charges: r.noCharge ? null : { charge_id: 950 + r.id, amount: '25.00', status: r.status === 'cancelled' ? 'VOID' : 'UNPAID',
+          declared_method: null, declared_reference: null, declared_at: null },
+        derived_status: r.derived,
+        // Since step B2 the route says whether the booking has not started
+        // (stored confirmed, start ahead): here, the upcoming ones.
+        not_started: r.status === 'confirmed' && r.derived === 'confirmed',
+      };
+    };
+    const nameOf = (r) => (r.guest ? r.guest[0] : `${r.who[0]} ${r.who[1]}`);
+    // What each tab must show, written by hand: its rows, in the order sent,
+    // and its heading.
+    const WANT = {
+      Upcoming: { rows: ['Ana Cruz', 'Ben Reyes'], heading: '2 upcoming bookings' },
+      Overdue: { rows: ['Carla Santos', 'Maria Lourdes Villanueva-Santos', 'Dino Tan'], heading: '3 overdue bookings' },
+      Completed: { rows: ['Elsa Uy', 'Fe Villa'], heading: '2 completed bookings' },
+      Returned: { rows: ['Gil Wong', 'Hana Yap', 'Ivy Zamora'], heading: '3 returned bookings' },
+      Cancelled: { rows: ['Jun Abad'], heading: '1 cancelled booking' },
+      All: { rows: ELEVEN.map(nameOf), heading: '11 bookings' },
+    };
+    const STRIP = 'Upcoming 2 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 11';
+    // Each row on All as a person reads it, as the page drew it before the
+    // tabs: the name and the line under it, the item, schedule, quantity,
+    // purpose and status cells, and the actions cell's buttons. The schedule
+    // is in the zone the bundle loaded in, as the page shows it:
+    // constants/rentals.js builds its schedule formatters once, then, so the
+    // TZ this section sets never reaches them ("Oct 20, 2026, 9:00 AM – 1:00
+    // PM" for 501 on a machine in Manila). The return time is formatDate's,
+    // which reads the zone on every call: UTC here.
+    const words = (s) => s.replace(/\s+/g, ' ');
+    const day = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
+    const hour = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
+    const scheduleOf = (id) => words(`${day.format(new Date(startOf(id)))}, ${hour.format(new Date(startOf(id)))} – `
+      + `${hour.format(new Date(endOf(id)))}`);
+    // Since section AG the returned-by note names the return ("Returned by
+    // @staff1 on …", where it read "by @staff1 on …" under the payment
+    // marker, as if staff1 had marked the payment) and comes before a return
+    // note, so a phone card's "Return" label heads both.
+    const BY = 'Returned by @staff1 on Oct 5, 2026, 9:30 AM';
+    const STATUS_CELL = {
+      501: 'Confirmed', 502: 'Confirmed', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
+      508: `Returned ${BY}`, 509: `Returned late ${BY} Note: Returned a day late`,
+      510: `Returned with issue ${BY} Note: One pole bent`, 511: 'Cancelled',
+    };
+    const NOTE = (r) => (r.guest ? `Guest · ${r.guest[1]}` : r.noAccount ? 'No online account' : `@res_${r.id}`);
+    // Since step B2 the Secretary's Edit and Cancel are on bookings that have
+    // not started only, never an Overdue or Completed one (section AM).
+    const ACTIONS = {
+      Secretary: (r) => (r.status === 'confirmed' && r.derived === 'confirmed' ? 'Edit + Cancel' : '(none)'),
+      Staff: (r) => (r.status === 'confirmed' && ['equipment', 'furniture'].includes(ITEMS[r.item][1]) ? 'Mark returned' : '(none)'),
+      'Punong Barangay': null,
+    };
+    const wantRows = (role) => ELEVEN.map((r) => [nameOf(r), NOTE(r), ITEMS[r.item][0], scheduleOf(r.id), String(r.qty), `Purpose ${r.id}`,
+      STATUS_CELL[r.id], ...(ACTIONS[role] ? [ACTIONS[role](r)] : [])].join(' | '));
+    // A cell's words: each element in it read whole (the badge, the note,
+    // "Returned by @staff1 on …"), a space between them; a cell of text alone,
+    // its text.
+    // Since section AF the Status cell also holds the payment marker
+    // (.doc-requests-pay), which is that section's to check: it is left out
+    // here, so these rows still read as the page drew them before.
+    const cellWords = (cell) => (!cell ? null : cell.children.length
+      ? [...cell.children].filter((el) => !el.classList.contains('doc-requests-pay')).map(text).join(' ') : text(cell));
+    const rowsRead = (page) => page.queryAll('table.data-table tbody tr').map((tr) => {
+      const cells = [...tr.children];
+      const actions = cells[6] ? [[...cells[6].querySelectorAll('button')].map((b) => b.textContent).join(' + ') || '(none)'] : [];
+      return [text(cells[0]?.querySelector('strong')), text(cells[0]?.querySelector('.small-note')) ?? '(no note)',
+        ...cells.slice(1, 6).map(cellWords), ...actions].join(' | ');
+    });
+    const headersRead = (page) => page.queryAll('table.data-table thead th').map(text);
+    // The bookings the stub holds, which Refresh and the actions change as the
+    // server would; the list answer is built from them, and filtered by
+    // ?status= as routes/rentalRequests.js filters it.
+    const makeState = (list = ELEVEN) => ({ list: list.map((r) => ({ ...r })) });
+    const listAnswer = (state, status) => {
+      const rows = state.list.map(toBooking);
+      if (!status || status === 'all') return { requests: rows };
+      if (status === 'overdue' || status === 'completed') return { requests: rows.filter((r) => r.derived_status === status) };
+      // A status the route does not know is a 400 there; the stub answers an
+      // empty list rather than crash a page that asks for one.
+      return { requests: rows.filter((r) => r.status === status) };
+    };
+    const answerFor = (state) => (url, method) => {
+      const list = url.match(/\/rental-requests(?:\?status=([a-z_]+))?$/);
+      if (method === 'GET' && list) return listAnswer(state, list[1]);
+      const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+      if (method === 'POST' && act) {
+        const r = state.list.find((x) => x.id === Number(act[1]));
+        if (!r) return undefined;
+        if (act[2] === 'cancel') {
+          r.status = 'cancelled';
+          r.derived = 'cancelled';
+          return { message: `Booking #${r.id} cancelled.` };
+        }
+        r.status = 'returned';
+        r.derived = 'returned';
+        return { message: `Return recorded for booking #${r.id}.` };
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated.' };
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      rows: page.queryAll('table.data-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+      table: !!page.query('table.data-table'),
+      empty: text(page.query('.empty')),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+      loading: root().textContent.includes('Loading bookings…'),
+      selects: page.queryAll('select').length,
+    });
+    // The requests a step sent to /rental-requests, as "GET /rental-requests?status=all".
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/rental-requests'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const rowButton = (page, name, label) => {
+      const tr = page.queryAll('table.data-table tbody tr').find((row) => text(row.querySelector('strong')) === name);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    // The select's words, none of which may come back: its first choice's
+    // label was wrong, and every choice sent a request.
+    const OLD_WORDS = ['Confirmed / upcoming', 'Overdue (awaiting return)', 'Completed (facilities)', 'All bookings'];
+    // jsdom has no window.confirm; Cancel asks it first. It answers yes here.
+    const previousConfirm = dom.window.confirm;
+    const asked = [];
+    dom.window.confirm = (message) => { asked.push(message); return true; };
+    const methodsSent = [];
+
+    const ROLES = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
+      { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, opening: 'Upcoming' },
+    ];
+    for (const { name, route, token, user, opening } of ROLES) {
+      const state = makeState();
+      seedSession(token, user);
+      resetNet(200, answerFor(state));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      let v = look(page);
+      const group = page.query('.pay-tabs');
+      const buttons = tabsOf(page);
+      check(`${name}: six tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
+        v.strip === STRIP && group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status'
+          && buttons.length === 6 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+        said({ strip: v.strip, role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null,
+          pressed: buttons.map((b) => b.getAttribute('aria-pressed')) }));
+      check(`${name}: it opens on ${opening}: ${opening} alone pressed, "${WANT[opening].heading}", and its rows in the order sent`,
+        said(v.pressed) === said([`${opening} ${WANT[opening].rows.length}`]) && v.heading === WANT[opening].heading
+          && said(v.rows) === said(WANT[opening].rows), said(v));
+      check(`${name}: exactly one request on open, GET /rental-requests?status=all`,
+        net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /rental-requests?status=all']),
+        said(net.calls.map((c) => `${c.method} ${c.url}`)));
+      // Since section AF the list has a filters row of three selects, Item,
+      // Payment and Starts, each with its visible label; the status select
+      // must still be gone, so no other select, and no option outside them.
+      const filterSelects = page.queryAll('select').filter((s) => s.closest('.pay-filters'));
+      check(`${name}: the status select is gone: the only selects on the list are the filters row's three, labelled Item, Payment `
+          + `and Starts, no option is outside them, and none of its words is anywhere (${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
+        v.selects === 3 && filterSelects.length === 3
+          && said(filterSelects.map((s) => s.labels?.[0]?.textContent ?? null)) === said(['Item', 'Payment', 'Starts'])
+          && page.queryAll('option').every((o) => !!o.closest('.pay-filters')) && !OLD_WORDS.some((w) => page.html().includes(w)),
+        said({ selects: page.queryAll('select').map((s) => s.labels?.[0]?.textContent ?? s.className),
+          outside: page.queryAll('option').filter((o) => !o.closest('.pay-filters')).length,
+          words: OLD_WORDS.filter((w) => page.html().includes(w)) }));
+
+      // Every tab in turn, as a person presses them.
+      const sentBefore = net.calls.length;
+      const seen = {};
+      const missing = [];
+      for (const label of Object.keys(WANT)) {
+        const tab = tabNamed(page, label);
+        if (!tab) missing.push(label);
+        await clickIf(page, tab);
+        seen[label] = look(page);
+      }
+      check(`${name}: pressing each of the six tabs in turn sends no request`,
+        missing.length === 0 && net.calls.length === sentBefore,
+        said({ missing, sent: net.calls.slice(sentBefore).map((c) => `${c.method} ${c.url}`) }));
+      const wrongTabs = Object.keys(WANT).filter((label) => label !== 'All').filter((label) => {
+        const s = seen[label];
+        return !(said(s.rows) === said(WANT[label].rows) && s.heading === WANT[label].heading
+          && s.pressed.length === 1 && s.pressed[0].startsWith(`${label} `));
+      });
+      check(`${name}: each status tab shows only its own bookings, in the order sent, under its own heading, and is the one pressed`,
+        wrongTabs.length === 0, said(wrongTabs.map((label) => ({ tab: label, ...seen[label] }))));
+      check(`${name}: a booking stored as confirmed is under the tab its derived status names: Carla Santos (overdue) and `
+          + 'Elsa Uy (completed) are never under Upcoming',
+        !!seen.Upcoming && !seen.Upcoming.rows.includes('Carla Santos') && !seen.Upcoming.rows.includes('Elsa Uy')
+          && seen.Overdue?.rows.includes('Carla Santos') && seen.Completed?.rows.includes('Elsa Uy'),
+        said({ upcoming: seen.Upcoming?.rows, overdue: seen.Overdue?.rows, completed: seen.Completed?.rows }));
+      check(`${name}: All shows every booking, all eleven in the order sent, cancelled and returned included, under "11 bookings"`,
+        said(seen.All?.rows) === said(WANT.All.rows) && seen.All.heading === WANT.All.heading
+          && said(seen.All.pressed) === said(['All 11']), said(seen.All));
+      const strips = [...new Set(Object.values(seen).map((s) => s.strip))];
+      check(`${name}: the counts are the whole list's, and read the same on every tab`, said(strips) === said([STRIP]), said(strips));
+      const wantHeaders = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(ACTIONS[name] ? [''] : [])];
+      check(`${name}: every row keeps its columns, badges, notes and actions (${ACTIONS[name] ? 'Edit and Cancel on the Secretary\'s '
+          + 'upcoming bookings, Mark returned on Staff\'s confirmed equipment and furniture' : 'none for the Punong Barangay, and '
+          + 'no actions column'}): the ${wantHeaders.length} headers and all eleven rows on All`,
+        said(headersRead(page)) === said(wantHeaders) && said(rowsRead(page)) === said(wantRows(name)),
+        said({ headers: headersRead(page), rows: rowsRead(page) }));
+
+      // Refresh on Completed, after a third completed booking has arrived.
+      // The answer is held, so the page can be read while it is out.
+      await clickIf(page, tabNamed(page, 'Completed'));
+      state.list.push({ id: 512, who: ['Kim', 'Bello'], item: 'hall', qty: 1, status: 'confirmed', derived: 'completed' });
+      const STRIP12 = 'Upcoming 2 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 1 · All 12';
+      let at = holdNext();
+      let sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = look(page);
+      const refreshCall = net.calls[sent];
+      release(at, 200, listAnswer(state, 'all'));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, GET ?status=all, with no tabs while it is out, and keeps Completed: `
+          + '"3 completed bookings" with the new count',
+        net.calls.length === sent + 1 && said(listCalls([refreshCall].filter(Boolean))) === said(['GET /rental-requests?status=all'])
+          && reloading.strip === '' && reloading.loading
+          && said(v.pressed) === said(['Completed 3']) && v.heading === '3 completed bookings'
+          && said(v.rows) === said([...WANT.Completed.rows, 'Kim Bello']) && v.strip === STRIP12,
+        said({ reloading, v }));
+
+      // A reload that fails: no tabs and no select; then Try again.
+      const hadTabs = tabsOf(page).length === 6;
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      v = look(page);
+      check(`${name}: a load that fails takes the tabs away: the error and Try again under the heading "Bookings", with no `
+          + 'strip, no select, no rows and no empty text',
+        hadTabs && !page.query('.pay-tabs') && v.heading === 'Bookings' && v.error === 'Could not load the bookings: Network down'
+          && !!tryAgainButton(page) && v.selects === 0 && v.rows.length === 0 && !v.table && v.empty === null,
+        said({ hadTabs, v }));
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswer(state, 'all'));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`  ${name}: Try again loads it once, GET ?status=all, and brings the tabs back, still on Completed`,
+        said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all'])
+          && said(v.pressed) === said(['Completed 3']) && v.strip === STRIP12 && v.heading === '3 completed bookings' && !v.error,
+        said(v));
+
+      if (name === 'Secretary') {
+        // Cancel an upcoming booking: the cancel goes to the stub, the list
+        // loads again, once, and the tab stays; the booking is now under
+        // Cancelled.
+        await clickIf(page, tabNamed(page, 'Upcoming'));
+        sent = net.calls.length;
+        // Since step B2 the cancel goes through the reason panel, not
+        // window.confirm (section AM).
+        await clickIf(page, rowButton(page, 'Ana Cruz', 'Cancel'));
+        await cancelWithReason(page);
+        await page.settle();
+        v = look(page);
+        const flash = text(page.query('.alert.success'));
+        check('Secretary: Cancel on an upcoming booking, with a reason, posts the cancel, loads the list again, once, keeps '
+            + 'Upcoming, and the booking leaves it: "1 upcoming booking", Cancelled 2',
+          asked.length === 0 && flash === 'Booking #501 cancelled.'
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/501/cancel', 'GET /rental-requests?status=all'])
+            && said(v.pressed) === said(['Upcoming 1']) && v.heading === '1 upcoming booking' && said(v.rows) === said(['Ben Reyes'])
+            && v.strip === 'Upcoming 1 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 2 · All 12',
+          said({ asked: asked.length, flash, calls: listCalls(net.calls.slice(sent)), v }));
+        await clickIf(page, tabNamed(page, 'Cancelled'));
+        v = look(page);
+        check('  Secretary: and it is under Cancelled now, with its Cancelled badge and no actions',
+          said(v.rows) === said(['Ana Cruz', 'Jun Abad'])
+            && rowsRead(page)[0] === ['Ana Cruz', '@res_501', 'Sound System', scheduleOf(501), '1', 'Purpose 501', 'Cancelled',
+              '(none)'].join(' | '),
+          said({ v, row: rowsRead(page)[0] }));
+
+        // Edit: Back without saving loads nothing; saving loads the list
+        // again, once, and keeps the tab. On an upcoming booking: since step
+        // B2 an Overdue one has no Edit.
+        await clickIf(page, tabNamed(page, 'Upcoming'));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Ben Reyes', 'Edit'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        const backCalls = listCalls(net.calls.slice(sent));
+        await clickIf(page, rowButton(page, 'Ben Reyes', 'Edit'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        check('Secretary: Edit, then Back to list, loads nothing; Edit and Save changes sends the PUT and loads the list again, '
+            + 'once, and keeps Upcoming',
+          panel === 'Edit booking #502' && backCalls.length === 0
+            && said(listCalls(net.calls.slice(sent))) === said(['PUT /rental-requests/502', 'GET /rental-requests?status=all'])
+            && said(v.pressed) === said(['Upcoming 1']) && text(page.query('.alert.success')) === 'Booking updated.',
+          said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), v }));
+
+        // Encode walk-in, left without filing: the list is not loaded again.
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const walkIn = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Encode walk-in, then Back to list without filing, keeps Overdue and does not load the list again',
+          walkIn === 'Encode walk-in booking' && said(v.pressed) === said(['Overdue 3'])
+            && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ walkIn, v, calls: net.calls.slice(sent).map((c) => `${c.method} ${c.url}`) }));
+      }
+
+      if (name === 'Staff') {
+        // Mark returned on an overdue booking: Back first, which loads
+        // nothing; then the return goes to the stub, the list loads again,
+        // once, the tab stays, and the booking is under Returned.
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Mark returned'));
+        const panel = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        const backCalls = listCalls(net.calls.slice(sent));
+        await clickIf(page, rowButton(page, 'Carla Santos', 'Mark returned'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        const posted = net.calls.slice(sent).find((c) => c.method === 'POST');
+        check('Staff: Mark returned, then Back to list, loads nothing; Record return posts the return, loads the list again, '
+            + 'once, keeps Overdue, and the booking leaves it: "2 overdue bookings", Returned 4',
+          panel === 'Mark returned — booking #503' && backCalls.length === 0
+            && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/503/return', 'GET /rental-requests?status=all'])
+            && /"outcome":"returned"/.test(String(posted?.body))
+            && said(v.pressed) === said(['Overdue 2']) && v.heading === '2 overdue bookings'
+            && said(v.rows) === said(['Maria Lourdes Villanueva-Santos', 'Dino Tan'])
+            && v.strip === 'Upcoming 2 · Overdue 2 · Completed 3 · Returned 4 · Cancelled 1 · All 12',
+          said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), body: posted?.body ?? null, v }));
+        await clickIf(page, tabNamed(page, 'Returned'));
+        v = look(page);
+        check('  Staff: and it is under Returned now, with its Returned badge and no Mark returned',
+          said(v.rows) === said(['Carla Santos', 'Gil Wong', 'Hana Yap', 'Ivy Zamora'])
+            && rowsRead(page)[0] === ['Carla Santos', '@res_503', 'Plastic Chairs', scheduleOf(503), '20', 'Purpose 503',
+              `Returned ${BY}`, '(none)'].join(' | '),
+          said({ v, row: rowsRead(page)[0] }));
+      }
+
+      if (name === 'Punong Barangay') {
+        // Read-only on every tab.
+        const withButtons = [];
+        for (const label of Object.keys(WANT)) {
+          await clickIf(page, tabNamed(page, label));
+          if (page.queryAll('table.data-table tbody button').length > 0) withButtons.push(label);
+        }
+        check('Punong Barangay: no row on any tab has a button, and there is no Encode walk-in',
+          withButtons.length === 0 && !buttonNamed(root(), 'Encode walk-in'), said(withButtons));
+      }
+
+      check(`${name}: nothing about the tabs is kept in the browser: no localStorage or sessionStorage write, through window or `
+          + 'not, sessionStorage empty, no cookie',
+        store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '',
+        `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s), `
+          + `sessionStorage ${dom.window.sessionStorage.length}`);
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // c. A tab with nothing in it. As on the live data (14 Oct 2026), no
+    // booking is upcoming: the Secretary and the Punong Barangay still open
+    // on Upcoming, dimmed, and the page says so; and a list with no bookings
+    // at all, for Staff, who open on Overdue.
+    const NONE_UPCOMING = ELEVEN.filter((r) => r.derived !== 'confirmed');
+    for (const { name, route, token, user, opening } of ROLES) {
+      seedSession(token, user);
+      resetNet(200, answerFor(makeState(name === 'Staff' ? [] : NONE_UPCOMING)));
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const v = look(page);
+      const dimmed = tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty'));
+      if (name === 'Staff') {
+        check('Staff, with no bookings at all: every tab shows 0 and is dimmed, still a button; Overdue, pressed, says '
+            + '"0 overdue bookings" and "No overdue bookings.", with no table',
+          v.strip === 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 0' && dimmed.length === 6
+            && dimmed.every((b) => b.disabled === false) && said(v.pressed) === said(['Overdue 0'])
+            && v.heading === '0 overdue bookings' && v.empty === 'No overdue bookings.' && !v.table,
+          said({ v, dimmed: dimmed.map(text) }));
+        await clickIf(page, tabNamed(page, 'All'));
+        const all = look(page);
+        check('  Staff: and All says "0 bookings" and "No bookings."',
+          all.heading === '0 bookings' && all.empty === 'No bookings.' && !all.table, said(all));
+      } else {
+        check(`${name}, with no upcoming booking (as on the live data): it still opens on ${opening}, "Upcoming 0", the one tab `
+            + 'dimmed, still a button, pressed; "0 upcoming bookings" and "No upcoming bookings.", with no table',
+          v.strip === 'Upcoming 0 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 9'
+            && said(dimmed.map(text)) === said(['Upcoming 0']) && dimmed[0].disabled === false
+            && said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 upcoming bookings'
+            && v.empty === 'No upcoming bookings.' && !v.table,
+          said({ v, dimmed: dimmed.map(text) }));
+      }
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. The strip on a narrow phone, as the Secretary: it is ListTabs, so
+    // where the six tabs do not fit it scrolls inside itself, fades the edge
+    // that has tabs past it, and brings a chosen tab fully into view by moving
+    // the strip, never the page (section W checks the strip in full). jsdom
+    // lays nothing out, so the strip is laid out by hand: 300px holding 588px
+    // of tabs.
+    {
+      const FADE = 24;
+      const WIDTHS = [118, 106, 124, 108, 120, 62];
+      const MAX = WIDTHS.reduce((a, b) => a + b, 0) - 300;
+      const scrolled = [];
+      const proto = dom.window.HTMLElement.prototype;
+      const previousScroll = proto.scrollIntoView;
+      proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+      seedSession(VALID);
+      resetNet(200, answerFor(makeState()));
+      const page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await page.settle();
+      const strip = () => page.query('.pay-tabs');
+      const lefts = WIDTHS.map((_, i) => WIDTHS.slice(0, i).reduce((a, b) => a + b, 0));
+      let left = 0;
+      const s = strip();
+      if (s) {
+        const rect = (l, r) => ({ left: l, right: r, top: 0, bottom: 40, width: r - l, height: 40, x: l, y: 0 });
+        Object.defineProperty(s, 'clientWidth', { configurable: true, get: () => 300 });
+        Object.defineProperty(s, 'scrollWidth', { configurable: true, get: () => 300 + MAX });
+        Object.defineProperty(s, 'scrollLeft', {
+          configurable: true, get: () => left, set: (x) => { left = Math.max(0, Math.min(Number(x) || 0, MAX)); },
+        });
+        s.getBoundingClientRect = () => rect(0, 300);
+        [...s.querySelectorAll('.pay-tab')].forEach((b, i) => {
+          b.getBoundingClientRect = () => rect(lefts[i] - left, lefts[i] + WIDTHS[i] - left);
+        });
+      }
+      dom.window.dispatchEvent(new dom.window.Event('resize'));
+      await page.settle();
+      const narrow = strip()?.getAttribute('data-fade') ?? null;
+      await clickIf(page, tabNamed(page, 'All'));
+      const box = tabNamed(page, 'All')?.getBoundingClientRect();
+      const end = { at: left, left: box?.left ?? null, right: box?.right ?? null, fade: strip()?.getAttribute('data-fade') ?? null };
+      await clickIf(page, tabNamed(page, 'Upcoming'));
+      const first = { at: left, fade: strip()?.getAttribute('data-fade') ?? null };
+      check('narrow phone: the rental tabs scroll inside their strip: "end" faded while they overflow it; All, chosen, scrolls '
+          + 'the strip to its end, in full view; Upcoming back to its start; the page itself never scrolls',
+        !!s && narrow === 'end' && end.at === MAX && end.right !== null && end.right <= 300 && end.left >= FADE
+          && end.fade === 'start' && first.at === 0 && first.fade === 'end' && scrolled.length === 0,
+        said({ narrow, end, first, pageScrolls: scrolled.length }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      if (previousScroll === undefined) delete proto.scrollIntoView;
+      else proto.scrollIntoView = previousScroll;
+    }
+
+    const writes = methodsSent.filter((m) => m !== 'GET');
+    check('section AD\'s tabs sent GETs, and three writes, the Secretary\'s cancel and edit and Staff\'s return, all answered by '
+        + 'the fetch stub',
+      methodsSent.length > 0 && said(writes) === said(['POST', 'PUT', 'POST']),
+      `${methodsSent.length} request(s): ${said(writes)}`);
+
+    dom.window.confirm = previousConfirm;
+    if (previousTZAD2 === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAD2;
+  }
+
+  // =========================================================================
+  // AE. Rental bookings: the search box
+  // =========================================================================
+  // The Rental bookings list (RentalBookingsPage: the Secretary's
+  // /secretary/rentals and the homes of Staff and the Punong Barangay) gains
+  // the search box section X checks on Document requests:
+  // components/ListToolbar.jsx as it is, in a row of its own under the row
+  // that holds the heading and Refresh and over the status tabs, drawn only
+  // once the list has loaded. It filters the list already loaded, as you
+  // type, with no request, through utils/chargeSearch.js's normalise,
+  // searchTerms and matchesTerms as they are, over what utils/rentalList.js
+  // says a row shows of who and what: the name the Booked for column shows (a
+  // resident's, or a guest's), the @account under it where the row shows
+  // one, and the item. The route sends ONE projection to all three roles
+  // (MANAGE_FIELDS in routes/rentalRequests.js), so all three receive the
+  // borrower's account, and all three rows show it and find it. NEVER the
+  // purpose, a guest's contact number (which the row shows, "Guest · 09…"),
+  // an email, a status word, the words "Guest" and "No online account", the
+  // filer, the returner or a return note. The search runs over the whole list
+  // and the tabs split what matches: their counts follow it, a tab left with
+  // none is dimmed, the chosen tab stays, and while a search is on the heading
+  // reads "N of M <tab> bookings match". It lives through Refresh, Try again,
+  // Back from a panel and the reload after an action, and is kept nowhere in
+  // the browser. The helpers are checked case by case, then the real page for
+  // the three roles against 28 stubbed bookings. Every request is answered by
+  // the fetch stub; the only writes, the Secretary's cancel and Staff's
+  // return, go to it too.
+  console.log('\n--- Rental bookings: the search box ---');
+  {
+    const previousTZAE = process.env.TZ;
+    process.env.TZ = 'UTC';
+    const L = globalThis.rentalList || {};
+    // A missing export or a throw becomes a value the check prints.
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+
+    // 28 bookings in the list's real shape (MANAGE_FIELDS, the same for the
+    // three roles), with the derived_status the server adds. Their statuses
+    // are the live list's on 14 Oct 2026: 7 overdue, 8 completed, none
+    // upcoming, 7 returned (4 returned, 2 late, 1 with an issue) and 6
+    // cancelled. Newest start first, as the server sends them; 10 to 13 start
+    // at the same moment and are sent 13, 12, 11, 10. A resident with an
+    // account files their own booking (the requester is that account), except
+    // 4, a walk-in the Secretary filed for Teresita, who has one; Rodrigo and
+    // Mario have no online account, and their bookings and the guests' were
+    // filed by the Secretary. The purposes, contact numbers, emails, return
+    // notes, the filer and the returner read like real ones, so a search that
+    // reached them would find something.
+    const RES = {
+      juan: [101, 'Juan', 'Santos', 'Dela Cruz', 'jdelacruz'],
+      rodrigo: [102, 'Rodrigo', 'Cempron', 'Bautista', null],
+      elena: [103, 'Maria Elena', 'Villamor', 'Santos', 'mevsantos'],
+      liza: [104, 'Liza', null, 'Bantilan', 'liza_b'],
+      mario: [105, 'Mario', 'Uy', 'Dagohoy', null],
+      tess: [106, 'Teresita', 'Lim', 'Ocampo', 'tess_ocampo'],
+      nino: [107, 'Niño', 'Salazar', 'Peñaflor', 'nino_p'],
+    };
+    const GUESTS = {
+      lourdes: ['Maria Lourdes Villanueva-Santos', '09171234567'],
+      ramon: ['Ramon Tagalog', '+639281112233'],
+      danilo: ['Danilo Escabas', '639190001122'],
+    };
+    // Who each row names, written out by hand, as the Booked for column shows it.
+    const SHOWN_AS = {
+      juan: 'Juan Santos Dela Cruz', rodrigo: 'Rodrigo Cempron Bautista', elena: 'Maria Elena Villamor Santos',
+      liza: 'Liza Bantilan', mario: 'Mario Uy Dagohoy', tess: 'Teresita Lim Ocampo', nino: 'Niño Salazar Peñaflor',
+      lourdes: 'Maria Lourdes Villanueva-Santos', ramon: 'Ramon Tagalog', danilo: 'Danilo Escabas',
+    };
+    const ITEM_AE = {
+      court: [1, 'Covered Court', 'facility'], hall: [2, 'Barangay Hall', 'facility'], sound: [3, 'Sound System', 'equipment'],
+      chairs: [4, 'Plastic Chairs', 'furniture'], tent: [5, 'Tent (10x10)', 'equipment'],
+      tables: [6, 'Folding Tables', 'furniture'], costume: [7, 'Sinulog Costume Set', 'equipment'],
+    };
+    //   id, item, who, Manila day, start and end hour, quantity, purpose,
+    //   stored status, derived status, and 'walk-in' when the Secretary filed
+    //   it for a resident who has an account
+    const ROWS_AE = [
+      [1, 'court', 'juan', '2026-10-11', 13, 17, 1, 'Youth council basketball league opening', 'confirmed', 'completed'],
+      [2, 'chairs', 'elena', '2026-10-10', 8, 17, 60, 'Birthday party', 'confirmed', 'overdue'],
+      [3, 'sound', 'lourdes', '2026-10-09', 14, 22, 1, 'Wedding reception program', 'confirmed', 'overdue'],
+      [4, 'hall', 'tess', '2026-10-08', 9, 12, 1, 'Senior citizens association monthly meeting', 'confirmed', 'completed',
+        'walk-in'],
+      [5, 'tent', 'mario', '2026-10-07', 6, 18, 2, 'Wake', 'confirmed', 'overdue'],
+      [6, 'tables', 'liza', '2026-10-05', 7, 16, 8, 'Purok 3 fiesta lunch', 'returned', 'returned'],
+      [7, 'court', 'rodrigo', '2026-10-04', 15, 19, 1, 'Zumba for the women\'s group', 'confirmed', 'completed'],
+      [8, 'costume', 'ramon', '2026-10-03', 8, 20, 3, 'School cultural presentation', 'confirmed', 'overdue'],
+      [9, 'court', 'nino', '2026-10-02', 13, 17, 1, 'Bible study', 'cancelled', 'cancelled'],
+      [13, 'tent', 'liza', '2026-09-26', 8, 17, 1, 'Medical mission registration area', 'cancelled', 'cancelled'],
+      [12, 'sound', 'tess', '2026-09-26', 8, 17, 1, 'Purok 5 talent show', 'returned', 'returned'],
+      [11, 'court', 'elena', '2026-09-26', 8, 12, 1, 'Barangay clean-up drive assembly', 'confirmed', 'completed'],
+      [10, 'chairs', 'juan', '2026-09-26', 8, 17, 40, 'Family reunion', 'returned_late', 'returned_late'],
+      [14, 'hall', 'mario', '2026-09-20', 14, 18, 1, 'Christening', 'confirmed', 'completed'],
+      [15, 'tables', 'rodrigo', '2026-09-19', 6, 15, 10, 'Fiesta', 'returned_with_issue', 'returned_with_issue'],
+      [16, 'chairs', 'nino', '2026-09-14', 7, 12, 25, 'Prayer meeting', 'confirmed', 'overdue'],
+      [17, 'court', 'danilo', '2026-09-13', 16, 20, 1, 'Inter-barangay volleyball friendly', 'cancelled', 'cancelled'],
+      [18, 'sound', 'juan', '2026-09-06', 18, 22, 1, 'Birthday', 'returned', 'returned'],
+      [19, 'hall', 'liza', '2026-09-05', 8, 17, 1, 'Livelihood training on soap making', 'confirmed', 'completed'],
+      [20, 'tent', 'elena', '2026-08-30', 6, 18, 1, 'Graduation party', 'confirmed', 'overdue'],
+      [21, 'costume', 'tess', '2026-08-23', 8, 18, 2, 'Sinulog sa Ubujan street dancing', 'returned_late', 'returned_late'],
+      [22, 'court', 'mario', '2026-08-16', 7, 11, 1, 'Liga practice', 'cancelled', 'cancelled'],
+      [23, 'chairs', 'rodrigo', '2026-08-09', 9, 15, 30, 'Despedida', 'returned', 'returned'],
+      [24, 'hall', 'nino', '2026-08-02', 13, 17, 1, 'Homeowners association election', 'confirmed', 'completed'],
+      [25, 'tables', 'juan', '2026-07-26', 7, 16, 6, 'Fiesta', 'confirmed', 'overdue'],
+      [26, 'court', 'liza', '2026-07-19', 15, 19, 1, 'Basketball', 'cancelled', 'cancelled'],
+      [27, 'hall', 'elena', '2026-07-12', 8, 12, 1, 'Seminar', 'confirmed', 'completed'],
+      [28, 'tables', 'tess', '2026-07-05', 18, 22, 4, 'Anniversary', 'cancelled', 'cancelled'],
+    ];
+    const RETURNS_AE = ['returned', 'returned_late', 'returned_with_issue'];
+    const NOTES_AE = { 10: 'Returned a day after the agreed time', 15: 'Two tables returned with broken legs' };
+    const FILER = { user_id: 1, username: 'secretary1', email: 'secretary1@example.invalid',
+      profiles: { first_name: 'Ana', middle_name: null, last_name: 'Secretario', suffix: null } };
+    const RETURNER = { user_id: 3, username: 'staff1', profiles: { first_name: 'Sam', last_name: 'Tabuena' } };
+    const manilaIso = (day, hour) => new Date(`${day}T${String(hour).padStart(2, '0')}:00:00+08:00`).toISOString()
+      .replace('.000Z', '+00:00');
+    const asBooking = ([id, itemKey, who, day, from, to, qty, purpose, status, derived, filed]) => {
+      const [itemId, itemName, type] = ITEM_AE[itemKey];
+      const r = RES[who];
+      const guest = GUESTS[who];
+      const person = r && { resident_id: r[0], first_name: r[1], middle_name: r[2], last_name: r[3], suffix: null,
+        account: r[4] ? { username: r[4] } : null };
+      const own = r && r[4] && filed !== 'walk-in';
+      return {
+        request_id: id, quantity_requested: qty, start_datetime: manilaIso(day, from), end_datetime: manilaIso(day, to),
+        purpose, status, return_note: NOTES_AE[id] ?? null,
+        returned_at: RETURNS_AE.includes(status) ? manilaIso(day, to + 1) : null,
+        resident_id: person ? person.resident_id : null,
+        outside_borrower_name: guest ? guest[0] : null, outside_borrower_contact: guest ? guest[1] : null,
+        rental_items: { item_id: itemId, name: itemName, type, fee: '25.00', quantity_total: 100, quantity_available: 100 },
+        resident_records: person || null,
+        requester: own ? { user_id: 700 + r[0], username: r[4], email: `${r[4]}@example.invalid`,
+          profiles: { first_name: r[1], middle_name: r[2], last_name: r[3], suffix: null } } : FILER,
+        returned_by: RETURNS_AE.includes(status) ? RETURNER : null,
+        charges: { charge_id: 900 + id, amount: '25.00', status: status === 'cancelled' ? 'VOID' : 'PAID',
+          declared_method: null, declared_reference: null, declared_at: null },
+        derived_status: derived,
+        // A STAND-IN, not the rule. Since step B2 the Secretary's Edit and
+        // Cancel follow the route's not_started, which is false on every
+        // booking here (none is upcoming); these checks are about the search,
+        // the tabs, the pager and the filters living through an action, so
+        // every stored-confirmed booking is marked not started, as the buttons
+        // followed the stored status when they were written. Which bookings
+        // really get the buttons is sections AD's and AM's.
+        not_started: status === 'confirmed',
+      };
+    };
+    const LIST_AE = ROWS_AE.map(asBooking);
+    const SENT = ROWS_AE.map((r) => r[0]);
+    // A row as the tests name it: who it is for and the item, "Liza Bantilan ·
+    // Covered Court", which is one row in the 28.
+    const rowKey = (id) => {
+      const r = ROWS_AE.find((x) => x[0] === id);
+      return `${SHOWN_AS[r[2]]} · ${ITEM_AE[r[1]][1]}`;
+    };
+    const keysOf = (ids) => ids.map(rowKey);
+    // What each tab holds, in the order sent, written out by hand.
+    const TAB_IDS = {
+      Upcoming: [], Overdue: [2, 3, 5, 8, 16, 20, 25], Completed: [1, 4, 7, 11, 14, 19, 24, 27],
+      Returned: [6, 12, 10, 15, 18, 21, 23], Cancelled: [9, 13, 17, 22, 26, 28], All: SENT,
+    };
+    const STRIP28 = 'Upcoming 0 · Overdue 7 · Completed 8 · Returned 7 · Cancelled 6 · All 28';
+    // "santos": Juan Santos Dela Cruz, Maria Elena Villamor Santos and Maria
+    // Lourdes Villanueva-Santos.
+    const SANTOS = [1, 2, 3, 11, 10, 18, 20, 25, 27];
+    const STRIP_SANTOS = 'Upcoming 0 · Overdue 4 · Completed 3 · Returned 2 · Cancelled 0 · All 9';
+
+    // a. utils/rentalList.js: who a row is for, its account, and what a
+    // booking's search reads.
+    const one = (id) => LIST_AE.find((b) => b.request_id === id);
+    // A resident record as a projection that withholds the account would send
+    // it: no account key at all.
+    const withoutAccount = (record) => {
+      const copy = { ...record };
+      delete copy.account;
+      return copy;
+    };
+    let got = [one(2), one(7), one(3)].map((b) => attempt(() => L.bookedForName(b)));
+    check('bookedForName, the name in the Booked for column: a resident\'s first, middle and last name, "Maria Elena Villamor '
+        + 'Santos" and "Rodrigo Cempron Bautista"; a guest\'s name as typed, "Maria Lourdes Villanueva-Santos"',
+      said(got) === said(['Maria Elena Villamor Santos', 'Rodrigo Cempron Bautista', 'Maria Lourdes Villanueva-Santos']), said(got));
+    const bare = { ...one(2), resident_records: null, outside_borrower_name: null };
+    got = [
+      { ...one(2), resident_records: { ...one(2).resident_records, suffix: 'Jr.' } },
+      bare,
+      { ...bare, requester: { ...bare.requester, profiles: null } },
+      { ...bare, requester: null },
+    ].map((b) => attempt(() => L.bookedForName(b)));
+    check('  a suffix after a comma, "Maria Elena Villamor Santos, Jr."; a row with no borrower (none on the live list) '
+        + 'falls back to the requester\'s name, then "@username"; with nothing to name, null, never "—" or "@undefined"',
+      said(got) === said(['Maria Elena Villamor Santos, Jr.', 'Maria Elena Villamor Santos', '@mevsantos', null]), said(got));
+    got = [one(2), one(3), one(7)].map((b) => attempt(() => L.isGuest(b)));
+    check('isGuest: a booking with a guest\'s name is a guest\'s; a resident\'s, with or without an account, is not',
+      said(got) === said([false, true, false]), said(got));
+    got = [one(2).resident_records, one(7).resident_records, { ...one(2).resident_records, account: undefined },
+      withoutAccount(one(2).resident_records), null]
+      .map((rec) => attempt(() => L.accountHandle(rec)));
+    check('accountHandle, the line under a resident\'s name: "@mevsantos"; none for a resident with no online account '
+        + '(the row says so in words), for a record that carries no account key, and for no record',
+      said(got) === said(['@mevsantos', null, null, null, null]), said(got));
+    const parts = (b) => attempt(() => L.searchParts(b));
+    got = [one(2), one(7), one(3), one(4)].map(parts);
+    // Since section AF the row shows the booking number under the name, and
+    // the search reads it there.
+    check('searchParts, what a booking\'s search reads: the name as the row shows it, the @account the row shows under it, '
+        + 'the booking number under them, and the item: "Maria Elena Villamor Santos", "@mevsantos", "#2", "Plastic Chairs"; '
+        + 'Rodrigo, with no account, his name, number and item only; a guest, the name, number and item, never the contact '
+        + 'number; a walk-in, the resident\'s own account, never the filer\'s',
+      said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', '#2', 'Plastic Chairs'],
+        ['Rodrigo Cempron Bautista', '#7', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', '#3', 'Sound System'],
+        ['Teresita Lim Ocampo', '@tess_ocampo', '#4', 'Barangay Hall']]), said(got));
+    const withheld = { ...one(2), resident_records: withoutAccount(one(2).resident_records) };
+    got = parts(withheld);
+    check('  a resident record that carries no account key shows no handle and reads none, although the requester is that '
+        + 'same account ("mevsantos" filed it): the search never reads the requester',
+      said(got) === said(['Maria Elena Villamor Santos', '#2', 'Plastic Chairs']) && withheld.requester.username === 'mevsantos',
+      said(got));
+    const leaks = LIST_AE.flatMap((b) => {
+      const all = attempt(() => L.searchParts(b).join('\n'));
+      if (typeof all !== 'string' || all.startsWith('threw')) return [`${b.request_id}: ${all}`];
+      return [b.purpose, b.outside_borrower_contact, b.requester?.email, b.status, b.derived_status, b.return_note,
+        'Guest', 'online', 'secretary1', 'Secretario', 'staff1', 'Tabuena']
+        .filter(Boolean).filter((s) => all.toLowerCase().includes(s.toLowerCase())).map((s) => `${b.request_id}: ${s}`);
+    });
+    check('  no booking\'s text holds its purpose, a contact number, an email, a status, a return note, "Guest", the "No '
+        + 'online account" note, the filer or the returner', leaks.length === 0, said(leaks));
+    const matched = (query) => attempt(() => L.matchingBookings(LIST_AE, query).map((b) => b.request_id));
+    got = { blank: matched(''), spaces: matched('   '), nino: matched('NIÑO'), words: matched('chairs  SANTOS'),
+      account: matched('mevsantos'), contact: matched('0917'), purpose: matched('birthday') };
+    check('matchingBookings: a blank search, or spaces only, keeps all 28 in the order sent; "NIÑO" finds 9, 16 and 24; '
+        + '"chairs  SANTOS" 2 and 10; "mevsantos" 2, 11, 20 and 27; a contact number\'s "0917" and a purpose\'s "birthday" '
+        + 'nothing',
+      said(got) === said({ blank: SENT, spaces: SENT, nino: [9, 16, 24], words: [2, 10], account: [2, 11, 20, 27],
+        contact: [], purpose: [] }), said(got));
+    const HEADS = [
+      ['overdue', 4, 7, '4 of 7 overdue bookings match'], ['overdue', 1, 7, '1 of 7 overdue bookings matches'],
+      ['overdue', 0, 1, '0 of 1 overdue booking match'], ['overdue', 1, 1, '1 of 1 overdue booking matches'],
+      ['upcoming', 0, 0, '0 of 0 upcoming bookings match'], ['all', 12, 28, '12 of 28 bookings match'],
+      ['all', 1, 28, '1 of 28 bookings matches'], ['all', 1234, 2345, '1,234 of 2,345 bookings match'],
+    ];
+    const heads = HEADS.map(([tab, n, m]) => attempt(() => L.searchHeading(tab, n, m)));
+    check('searchHeading, Document requests\' words for the tab: "4 of 7 overdue bookings match", "1 of 7 overdue bookings '
+        + 'matches", "0 of 1 overdue booking match", "0 of 0 upcoming bookings match", "12 of 28 bookings match" on All, '
+        + '"1,234 of 2,345"',
+      said(heads) === said(HEADS.map((h) => h[3])), said(heads));
+    const NONE = [['overdue', 'zzz', 'No overdue bookings match "zzz"'], ['all', 'zzz', 'No bookings match "zzz"'],
+      ['returned', '  Dela   CRUZ ', 'No returned bookings match "Dela CRUZ"']];
+    const nones = NONE.map(([tab, q]) => attempt(() => L.noMatchText(tab, q)));
+    check('noMatchText names the tab, as the empty text without a search does, and quotes the search as typed, spaces '
+        + 'tidied: \'No overdue bookings match "zzz"\', on All \'No bookings match "zzz"\'',
+      said(nones) === said(NONE.map((n) => n[2])), said(nones));
+    const noKeys = LIST_AE.map((b) => (b.resident_records ? { ...b, resident_records: withoutAccount(b.resident_records) } : b));
+    const holders = [LIST_AE, noKeys, LIST_AE.filter((b) => b.outside_borrower_name), []]
+      .map((list) => attempt(() => L.searchPlaceholder(list)));
+    check('searchPlaceholder promises an account only where the rows carry one: "Search name, account or item" for the list '
+        + 'every role receives; "Search name or item" for one whose records carry no account, for guests only, and for none',
+      said(holders) === said(['Search name, account or item', 'Search name or item', 'Search name or item',
+        'Search name or item']), said(holders));
+
+    // b. The real page, for the three roles.
+    const makeStateAE = () => ({ rows: ROWS_AE.map((r) => [...r]) });
+    const listAnswerAE = (state) => ({ requests: state.rows.map(asBooking) });
+    const answerForAE = (state) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerAE(state);
+      const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+      if (method === 'POST' && act) {
+        const r = state.rows.find((x) => x[0] === Number(act[1]));
+        if (!r) return undefined;
+        r[8] = act[2] === 'cancel' ? 'cancelled' : 'returned';
+        r[9] = r[8];
+        return { message: act[2] === 'cancel' ? `Booking #${r[0]} cancelled.` : `Return recorded for booking #${r[0]}.` };
+      }
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const SEARCH_BOX = 'input[aria-label="Search bookings"]';
+    const box = (page) => page.query(SEARCH_BOX);
+    const xButton = (page) => page.query('button[aria-label="Clear search"]');
+    // Typed the way a keystroke types (the native setter and an input event);
+    // with no box on screen, nothing is typed.
+    const type = async (page, value) => { if (box(page)) await page.fill(SEARCH_BOX, value); };
+    const tabsOf = (page) => page.queryAll('.pay-tabs button');
+    const tabNamed = (page, label) => tabsOf(page).find((b) => b.textContent.startsWith(`${label} `));
+    const emptyClear = (page) => (page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search') ?? null : null);
+    const rowsOf = (page) => page.queryAll('table.data-table tbody tr')
+      .map((tr) => `${text(tr.querySelector('strong'))} · ${text(tr.children[1])}`);
+    const rowOf = (page, key) => page.queryAll('table.data-table tbody tr')
+      .find((tr) => `${text(tr.querySelector('strong'))} · ${text(tr.children[1])}` === key) ?? null;
+    const rowButton = (page, key, label) => {
+      const tr = rowOf(page, key);
+      return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+    };
+    const noteOf = (page, key) => {
+      const tr = rowOf(page, key);
+      return tr ? (text(tr.querySelector('.small-note')) ?? '(no note)') : null;
+    };
+    const look = (page) => ({
+      heading: text(page.query('.list-head h2')),
+      search: box(page)?.value ?? null,
+      strip: tabsOf(page).map(text).join(' · '),
+      pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      dimmed: tabsOf(page).filter((b) => b.classList.contains('pay-tab-empty')).map(text),
+      rows: rowsOf(page),
+      empty: text(page.query('.empty p')),
+      clearSearch: !!emptyClear(page),
+      error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+      loading: root().textContent.includes('Loading bookings…'),
+    });
+    const listCalls = (calls) => calls.filter((c) => c.url.includes('/rental-'))
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const follows = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    // jsdom has no window.confirm; Cancel asks it first. It answers yes here.
+    const previousConfirm = dom.window.confirm;
+    dom.window.confirm = () => true;
+    const methodsSent = [];
+    // Writes to jsdom's own Storage are counted by `domStorage` (top of the
+    // file), beside the stub's.
+
+    const ROLES_AE = [
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
+      { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, opening: 'Upcoming' },
+    ];
+    for (const { name, route, token, user, opening } of ROLES_AE) {
+      const state = makeStateAE();
+      seedSession(token, user);
+      resetNet(200, answerForAE(state));
+      // The first open, held, then failing; then Try again.
+      let at = holdNext();
+      const page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      const firstOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 500, { error: 'Network down' });
+      await page.settle();
+      const failedOpen = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      check(`${name}: like the tabs, the search box is not drawn while the list loads or after a load fails: no box under `
+          + '"Loading bookings…", none beside the error, and Try again brings it back with the tabs',
+        !firstOpen.box && !firstOpen.strip && firstOpen.loading && !failedOpen.box && !failedOpen.strip
+          && failedOpen.error === 'Could not load the bookings: Network down' && !!box(page) && !!page.query('.pay-tabs'),
+        said({ firstOpen, failedOpen, after: { box: !!box(page), strip: !!page.query('.pay-tabs') } }));
+
+      const input = box(page);
+      const wrapper = input?.closest('[role="search"]') ?? null;
+      const icon = wrapper?.querySelector('svg') ?? null;
+      const headRow = page.query('.list-head h2')?.closest('.list-head') ?? null;
+      const toolbar = input?.closest('.list-head') ?? null;
+      check(`${name}: the box is the one Payments and Document requests have: type="search" in a role="search" wrapper, `
+          + 'named "Search bookings", reading "Search name, account or item", no browser autocomplete or spellcheck, its '
+          + 'icon hidden from screen readers, empty, no Clear (x)',
+        input?.type === 'search' && !!wrapper && input.getAttribute('aria-label') === 'Search bookings'
+          && input.getAttribute('placeholder') === 'Search name, account or item' && input.getAttribute('autocomplete') === 'off'
+          && input.getAttribute('spellcheck') === 'false' && icon?.getAttribute('aria-hidden') === 'true'
+          && input.value === '' && !xButton(page),
+        said({ type: input?.type ?? null, label: input?.getAttribute('aria-label') ?? null,
+          placeholder: input?.getAttribute('placeholder') ?? null, autocomplete: input?.getAttribute('autocomplete') ?? null,
+          spellcheck: input?.getAttribute('spellcheck') ?? null, icon: icon?.getAttribute('aria-hidden') ?? null, x: !!xButton(page) }));
+      check(`${name}: it has a row of its own, under the row with the heading and Refresh and over the tabs, and is no form`,
+        !!toolbar && !!headRow && toolbar !== headRow && follows(headRow, toolbar) && follows(toolbar, page.query('.pay-tabs'))
+          && !input.closest('form') && !!buttonNamed(headRow, 'Refresh') && !buttonNamed(toolbar, 'Refresh'),
+        said({ toolbar: toolbar?.className ?? null, head: headRow?.className ?? null }));
+      check(`${name}: the heading is a polite live region, as on Document requests, so the count is heard as you type`,
+        headRow?.querySelector('h2')?.getAttribute('aria-live') === 'polite',
+        said({ ariaLive: headRow?.querySelector('h2')?.getAttribute('aria-live') ?? null }));
+      let v = look(page);
+      const openingReads = opening === 'Overdue'
+        ? v.heading === '7 overdue bookings' && said(v.rows) === said(keysOf(TAB_IDS.Overdue))
+        : v.heading === '0 upcoming bookings' && v.empty === 'No upcoming bookings.' && v.rows.length === 0 && !v.clearSearch;
+      check(`${name}: with nothing typed the list reads as it did: ${opening} chosen, `
+          + `${opening === 'Overdue' ? '"7 overdue bookings" and its seven rows' : '"0 upcoming bookings" and "No upcoming bookings."'}, `
+          + 'every count over the 28',
+        openingReads && said(v.pressed) === said([`${opening} ${TAB_IDS[opening].length}`]) && v.strip === STRIP28, said(v));
+
+      // Typing, a keystroke at a time.
+      const writesAtOpen = store.sets;
+      const domWritesAtOpen = domStorage.writes;
+      let sent = net.calls.length;
+      const perKey = [];
+      for (const s of ['s', 'sa', 'san', 'sant', 'santo', 'santos']) {
+        await type(page, s);
+        perKey.push(net.calls.length - sent);
+      }
+      v = look(page);
+      check(`${name}: each keystroke filters at once and sends nothing: "s" to "santos", no request after any`,
+        net.calls.length === sent && perKey.every((n) => n === 0) && v.search === 'santos', said({ perKey, search: v.search }));
+      if (opening === 'Overdue') {
+        check(`${name}: on Overdue, "santos" leaves its four Santos rows; Overdue stays chosen, and the heading reads "4 of 7 `
+            + 'overdue bookings match"',
+          said(v.rows) === said(keysOf([2, 3, 20, 25])) && said(v.pressed) === said(['Overdue 4'])
+            && v.heading === '4 of 7 overdue bookings match', said(v));
+      } else {
+        check(`${name}: on Upcoming, which holds none, "santos" keeps Upcoming chosen: "0 of 0 upcoming bookings match", and `
+            + 'in place of the rows \'No upcoming bookings match "santos"\' with a Clear search button',
+          said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 of 0 upcoming bookings match'
+            && v.empty === 'No upcoming bookings match "santos"' && v.clearSearch && v.rows.length === 0, said(v));
+      }
+      check(`${name}: the counts follow the search, "${STRIP_SANTOS}", and the tabs left with none are dimmed, still buttons`,
+        v.strip === STRIP_SANTOS && said(v.dimmed) === said(['Upcoming 0', 'Cancelled 0'])
+          && tabsOf(page).length === 6 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
+
+      // The tabs split what matches.
+      sent = net.calls.length;
+      await clickIf(page, tabNamed(page, 'All'));
+      const onAll = look(page);
+      await clickIf(page, tabNamed(page, 'Cancelled'));
+      const onCancelled = look(page);
+      check(`${name}: a tab press splits what matches and sends nothing: All shows the nine Santos rows, in the order sent, `
+          + 'under "9 of 28 bookings match"',
+        said(onAll.rows) === said(keysOf(SANTOS)) && onAll.heading === '9 of 28 bookings match'
+          && said(onAll.pressed) === said(['All 9']), said(onAll));
+      check(`${name}: Cancelled, where none match: "0 of 6 cancelled bookings match", and in place of the rows 'No cancelled `
+          + 'bookings match "santos"\' with a Clear search button',
+        onCancelled.heading === '0 of 6 cancelled bookings match' && onCancelled.empty === 'No cancelled bookings match "santos"'
+          && onCancelled.clearSearch && onCancelled.rows.length === 0 && !page.query('table.data-table')
+          && said(onCancelled.pressed) === said(['Cancelled 0']) && net.calls.length === sent, said(onCancelled));
+      await clickIf(page, emptyClear(page));
+      v = look(page);
+      check(`${name}: that Clear search empties the box, leaves focus in it and keeps Cancelled: its six rows, under the `
+          + 'heading it had before, "6 cancelled bookings", and every count back',
+        v.search === '' && !!box(page) && page.active() === box(page) && said(v.pressed) === said(['Cancelled 6'])
+          && said(v.rows) === said(keysOf(TAB_IDS.Cancelled)) && v.heading === '6 cancelled bookings' && v.strip === STRIP28
+          && net.calls.length === sent, said(v));
+
+      // An empty tab: its own text with no search, the search's with one.
+      await clickIf(page, tabNamed(page, 'Upcoming'));
+      const noSearch = look(page);
+      await type(page, 'zzz');
+      const zzz = look(page);
+      check(`${name}: an empty tab with no search keeps its text, "0 upcoming bookings" and "No upcoming bookings.", with no `
+          + 'Clear search',
+        noSearch.heading === '0 upcoming bookings' && noSearch.empty === 'No upcoming bookings.' && !noSearch.clearSearch,
+        said(noSearch));
+      check(`${name}: with "zzz", matching nothing: "0 of 0 upcoming bookings match", 'No upcoming bookings match "zzz"' `
+          + 'with Clear search, and all six tabs dimmed',
+        zzz.heading === '0 of 0 upcoming bookings match' && zzz.empty === 'No upcoming bookings match "zzz"' && zzz.clearSearch
+          && zzz.dimmed.length === 6 && said(zzz.pressed) === said(['Upcoming 0']), said(zzz));
+
+      // What a search finds, on All.
+      await clickIf(page, tabNamed(page, 'All'));
+      const rowsFor = async (q) => {
+        await type(page, q);
+        return look(page).rows;
+      };
+      sent = net.calls.length;
+      const found = {
+        name: await rowsFor('rodrigo'), middle: await rowsFor('cempron'), first: await rowsFor('elena'),
+        guest: await rowsFor('lourdes'), guests: await rowsFor('tagalog'), cased: await rowsFor('  RODRIGO   bautista '),
+        accents: await rowsFor('nino'), accented: await rowsFor('PEÑAFLOR'),
+        item: await rowsFor('chairs'), items: await rowsFor('COVERED court'), hall: await rowsFor('barangay'),
+        words: await rowsFor('santos chairs'), reversed: await rowsFor('chairs santos'), apart: await rowsFor('juan tent'),
+        later: await rowsFor('elena hall'),
+      };
+      check(`${name}: by the name the row shows, first, middle or last: "rodrigo" and "cempron" find Rodrigo Cempron Bautista's `
+          + 'three bookings, "elena" Maria Elena Villamor Santos\'s four, in the order sent',
+        said(found.name) === said(keysOf([7, 15, 23])) && said(found.middle) === said(keysOf([7, 15, 23]))
+          && said(found.first) === said(keysOf([2, 11, 20, 27])), said(found));
+      check(`${name}: by a guest's name as typed: "lourdes" finds Maria Lourdes Villanueva-Santos, "tagalog" Ramon Tagalog`,
+        said(found.guest) === said(keysOf([3])) && said(found.guests) === said(keysOf([8])), said(found));
+      check(`${name}: by the item: "chairs" finds the four Plastic Chairs bookings, "COVERED court" the seven Covered Court `
+          + 'ones, and "barangay" the five Barangay Hall ones, never 11 or 17, whose purposes say "Barangay"',
+        said(found.item) === said(keysOf([2, 10, 16, 23])) && said(found.items) === said(keysOf([1, 7, 9, 11, 17, 22, 26]))
+          && said(found.hall) === said(keysOf([4, 14, 19, 24, 27])), said(found));
+      check(`${name}: case, accents and extra spaces do not matter: "  RODRIGO   bautista " finds Rodrigo's three, "nino" and `
+          + '"PEÑAFLOR" Niño Salazar Peñaflor\'s three',
+        said(found.cased) === said(keysOf([7, 15, 23])) && said(found.accents) === said(keysOf([9, 16, 24]))
+          && said(found.accented) === said(keysOf([9, 16, 24])), said(found));
+      check(`${name}: several words must all match the same booking, in any order, across its name and item: "santos chairs" `
+          + 'and "chairs santos" find Maria Elena\'s and Juan\'s chairs, "juan tent" nothing',
+        said(found.words) === said(keysOf([2, 10])) && said(found.reversed) === said(keysOf([2, 10]))
+          && Array.isArray(found.apart) && found.apart.length === 0, said(found));
+      check(`${name}: "elena hall" finds Maria Elena Villamor Santos's Barangay Hall booking, 27, the 27th row on All`,
+        said(found.later) === said(keysOf([27])) && SENT.indexOf(27) === 26, said(found.later));
+
+      // The account: found exactly where the row shows it. The route sends
+      // the same projection to the three roles, so each one's rows show it.
+      await type(page, '');
+      const notes = {
+        elena: noteOf(page, rowKey(2)), rodrigo: noteOf(page, rowKey(7)), tess: noteOf(page, rowKey(4)),
+        guest: noteOf(page, rowKey(3)),
+      };
+      const accounts = {
+        mevsantos: await rowsFor('mevsantos'), handle: await rowsFor('@liza_b'), walkIn: await rowsFor('tess_ocampo'),
+        self: await rowsFor('jdelacruz'),
+      };
+      check(`${name}: the rows show the resident's account under the name ("@mevsantos"; "@tess_ocampo" on a walk-in the `
+          + 'Secretary filed; Rodrigo "No online account"; a guest "Guest · 09171234567"), and a search finds it there: '
+          + '"mevsantos", "@liza_b", "tess_ocampo" and "jdelacruz" each find that resident\'s bookings',
+        said(notes) === said({ elena: '@mevsantos', rodrigo: 'No online account', tess: '@tess_ocampo',
+          guest: 'Guest · 09171234567' })
+          && said(accounts) === said({ mevsantos: keysOf([2, 11, 20, 27]), handle: keysOf([6, 13, 19, 26]),
+            walkIn: keysOf([4, 12, 21, 28]), self: keysOf([1, 10, 18, 25]) }),
+        said({ notes, accounts }));
+
+      // What a search never reaches. The booking number was here ("27") until
+      // section AF put it in the row, where the search reads it.
+      const NEVER = ['birthday', 'reception', 'fiesta', 'wake', 'seminar', '09171234567', '0917', '+639281112233',
+        '9281112233', '639190001122', 'example.invalid', 'overdue', 'completed', 'returned', 'cancelled', 'confirmed',
+        'upcoming', 'guest', 'online', 'account', 'secretary1', 'secretario', 'staff1', 'tabuena', 'broken', 'agreed', 'oct',
+        '2026', '60'];
+      const leaked = [];
+      for (const q of NEVER) {
+        const rows = await rowsFor(q);
+        if (rows.length > 0) leaked.push({ q, rows: rows.length });
+      }
+      check(`${name}: never matched: a purpose ("birthday", "reception", "fiesta", "wake", "seminar"), a guest's contact `
+          + 'number, whole or in part ("09171234567", "0917", "+639281112233", "9281112233", "639190001122"), an email '
+          + '("example.invalid"), a status word, "guest", "online", "account", the filer ("secretary1", "secretario"), the '
+          + 'returner ("staff1", "tabuena"), a return note ("broken", "agreed"), the schedule ("oct", "2026") or a quantity '
+          + '("60")',
+        leaked.length === 0 && !!box(page), said(leaked));
+      // With no box on screen nothing was typed, so "no request" would say nothing.
+      check(`${name}: and none of those ${Object.keys(found).length + 5 + NEVER.length} searches sent a request`,
+        !!box(page) && net.calls.length === sent, `${net.calls.length - sent} request(s), box ${box(page) ? 'present' : 'absent'}`);
+
+      // Escape and the Clear (x) button.
+      await clickIf(page, tabNamed(page, 'Overdue'));
+      await type(page, 'elena');
+      const x = xButton(page);
+      box(page)?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape in the box empties it, keeps focus in it, and brings Overdue's seven rows back`,
+        !!x && v.search === '' && page.active() === box(page) && said(v.rows) === said(keysOf(TAB_IDS.Overdue))
+          && v.heading === '7 overdue bookings', said(v));
+      await type(page, 'elena');
+      const x2 = xButton(page);
+      await clickIf(page, x2);
+      v = look(page);
+      check(`${name}: the Clear (x) button, there while the box has text, does the same: a type="button" named "Clear `
+          + 'search"; pressed, the box is empty, focus is in it and the button is gone',
+        !!x2 && x2.type === 'button' && x2.getAttribute('aria-label') === 'Clear search' && v.search === ''
+          && page.active() === box(page) && !xButton(page) && said(v.rows) === said(keysOf(TAB_IDS.Overdue)), said(v));
+      await type(page, 'elena');
+      tabNamed(page, 'Overdue')?.focus();
+      await page.key('Escape');
+      v = look(page);
+      check(`${name}: Escape clears only while the box has focus: pressed on a tab, the box keeps "elena" and its two rows`,
+        page.active() === tabNamed(page, 'Overdue') && v.search === 'elena' && said(v.rows) === said(keysOf([2, 20])), said(v));
+
+      // Back from a panel: the Secretary's Edit and Encode walk-in, Staff's
+      // Mark returned. The Punong Barangay has none.
+      await type(page, 'santos');
+      const SANTOS_OVERDUE = keysOf([2, 3, 20, 25]);
+      const kept = (s) => s.search === 'santos' && said(s.pressed) === said(['Overdue 4'])
+        && said(s.rows) === said(SANTOS_OVERDUE) && s.heading === '4 of 7 overdue bookings match';
+      if (name === 'Secretary') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Edit'));
+        const opened = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Secretary: Back from Edit, with nothing saved, keeps the search and the tab: "santos" in the box, Overdue '
+            + 'chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested',
+          opened === 'Edit booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+        sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+        const walkIn = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('  Secretary: and so does Back from Encode walk-in, which asked only for the rental items',
+          walkIn === 'Encode walk-in booking' && kept(v)
+            && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-items']),
+          said({ walkIn, v, calls: listCalls(net.calls.slice(sent)) }));
+      }
+      if (name === 'Staff') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Mark returned'));
+        const opened = text(page.query('.pending-card h3'));
+        await clickIf(page, buttonNamed(root(), '← Back to list'));
+        v = look(page);
+        check('Staff: Back from Mark returned, with nothing recorded, keeps the search and the tab: "santos" in the box, '
+            + 'Overdue chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested',
+          opened === 'Mark returned — booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said([]),
+          said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
+      }
+
+      // Refresh, then a reload that fails, then Try again.
+      at = holdNext();
+      sent = net.calls.length;
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      const reloading = { box: !!box(page), strip: !!page.query('.pay-tabs'), loading: look(page).loading };
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: Refresh loads the list again, once, and keeps the search: no box and no tabs while it is out, then `
+          + '"santos" still in the box, Overdue chosen, "4 of 7 overdue bookings match"',
+        said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all']) && !reloading.box
+          && !reloading.strip && reloading.loading && kept(v),
+        said({ reloading, v }));
+      at = holdNext();
+      await clickIf(page, buttonNamed(root(), 'Refresh'));
+      release(at, 500, { error: 'Internal server error' });
+      await page.settle();
+      const failedReload = { box: !!box(page), strip: !!page.query('.pay-tabs'), error: look(page).error };
+      at = holdNext();
+      await clickIf(page, tryAgainButton(page));
+      release(at, 200, listAnswerAE(state));
+      await page.settle();
+      net.hold = false;
+      v = look(page);
+      check(`${name}: a reload that fails takes the box away with the tabs, and Try again brings it back with "santos" in it`,
+        !failedReload.box && !failedReload.strip && failedReload.error === 'Could not load the bookings: Internal server error'
+          && kept(v), said({ failedReload, v }));
+
+      // The reload after an action keeps the search and the tab.
+      if (name === 'Secretary') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Cancel'));
+        await cancelWithReason(page);
+        await page.settle();
+        v = look(page);
+        check('Secretary: Cancel posts the cancel, loads the list again, once, and keeps the search and the tab: "santos" on '
+            + 'Overdue, which booking 2 has left: "3 of 6 overdue bookings match", and Cancelled 1 in the strip',
+          said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/cancel', 'GET /rental-requests?status=all'])
+            && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
+            && v.heading === '3 of 6 overdue bookings match'
+            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 2 · Cancelled 1 · All 9',
+          said({ calls: listCalls(net.calls.slice(sent)), v }));
+      }
+      if (name === 'Staff') {
+        sent = net.calls.length;
+        await clickIf(page, rowButton(page, rowKey(2), 'Mark returned'));
+        if (page.query('.pending-card form')) await page.submit();
+        await page.settle();
+        v = look(page);
+        check('Staff: Record return posts the return, loads the list again, once, and keeps the search and the tab: "santos" '
+            + 'on Overdue, which booking 2 has left: "3 of 6 overdue bookings match", and Returned 3 in the strip',
+          said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/return', 'GET /rental-requests?status=all'])
+            && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
+            && v.heading === '3 of 6 overdue bookings match'
+            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 0 · All 9',
+          said({ calls: listCalls(net.calls.slice(sent)), v }));
+      }
+
+      // Nothing kept in the browser; a new visit starts empty. The second
+      // mount does not reseed the session, which would clear storage.
+      const writesAfter = store.sets;
+      const domWritesAfter = domStorage.writes;
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+      resetNet(200, answerForAE(makeStateAE()));
+      const again = await globalThis.mountInteractive(root(), route);
+      await again.settle();
+      v = look(again);
+      check(`${name}: nothing about the search is kept in the browser: no localStorage or sessionStorage write, through `
+          + `window or not, sessionStorage empty, no cookie, and a new visit opens on ${opening} with an empty box`,
+        writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+          && dom.window.document.cookie === '' && v.search === ''
+          && said(v.pressed) === said([`${opening} ${TAB_IDS[opening].length}`]) && v.strip === STRIP28,
+        said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+          session: dom.window.sessionStorage.length, v }));
+      methodsSent.push(...net.calls.map((c) => c.method));
+      await again.unmount();
+    }
+
+    const writesAE = methodsSent.filter((m) => m !== 'GET');
+    check('section AE\'s search sent GETs, and two POSTs, the Secretary\'s cancel and Staff\'s return, answered by the fetch stub',
+      methodsSent.length > 0 && said(writesAE) === said(['POST', 'POST']),
+      `${methodsSent.length} request(s): ${said(writesAE)}`);
+
+    // =======================================================================
+    // AE (continued). Rental bookings: the pager, and one order
+    // =======================================================================
+    // The list drew every booking of a tab on one page: all 28 on All. It
+    // gains the pager section Y checks on Document requests,
+    // components/ListPager.jsx and utils/paging.js as they are: a nav named
+    // "Pagination" under the rows, from 11 matches, "Showing 1 to 25 of 28
+    // results", Rows per page 10, 25, 50 or 100 (25 to start), then Previous,
+    // the page numbers and Next. It pages the list already loaded, with no
+    // request, and only the rows drawn are one page: the heading and the tab
+    // counts still count every match, and the search still runs over the
+    // whole list. A tab, a search or a new Rows per page goes back to page 1,
+    // and Rows per page stays as chosen until a new visit. Refresh, Try again,
+    // Back from a panel and the reload after an action keep the page; a tab
+    // that shrank under it lands on its last page, never an empty one past the
+    // end, and stays there. The route orders the bookings by their start
+    // alone, so bookings that start together can come back in another order on
+    // every load, and a page could repeat a row or leave one out. The page
+    // keeps ONE order (orderBookings in utils/rentalList.js): newest start
+    // first and, among bookings that start together, the higher booking number
+    // first. It is checked case by case, then on the page against the 28
+    // bookings with 10 to 13 sent in a new order on every load, and a second
+    // list, 26 overdue and 4 completed, whose Overdue tab has two pages. Then
+    // the heading's scroll margin, read from index.css. Every request is
+    // answered by the fetch stub; the only writes, the Secretary's cancels and
+    // Staff's returns, go to it too.
+    console.log('\n--- Rental bookings: the pager, and one order ---');
+    {
+      const fs = require('fs');
+      const ids = (list) => (Array.isArray(list) ? list.map((b) => b.request_id) : list);
+      const ordered = (list) => attempt(() => ids(L.orderBookings(list)));
+      const TIES = [10, 11, 12, 13];
+      // A shuffle that is the same on every run, so a failure is too.
+      const seededShuffle = (list, seed) => {
+        const out = [...list];
+        let s = seed;
+        for (let i = out.length - 1; i > 0; i -= 1) {
+          s = (s * 1103515245 + 12345) % 2147483648;
+          const j = s % (i + 1);
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+      };
+      // The 28 with the four that start together (10 to 13) put back in
+      // their place in the order given.
+      const withTies = (list, order) => {
+        const at = list.findIndex((b) => TIES.includes(b.request_id));
+        const rest = list.filter((b) => !TIES.includes(b.request_id));
+        const group = order.map((id) => list.find((b) => b.request_id === id)).filter(Boolean);
+        return [...rest.slice(0, at), ...group, ...rest.slice(at)];
+      };
+
+      // a. orderBookings on its own.
+      const SHUFFLES = {
+        reversed: [...LIST_AE].reverse(),
+        rotated: [...LIST_AE.slice(11), ...LIST_AE.slice(0, 11)],
+        interleaved: [...LIST_AE.filter((_, i) => i % 2 === 0), ...LIST_AE.filter((_, i) => i % 2 === 1)],
+        tiesAscending: withTies(LIST_AE, [10, 11, 12, 13]),
+        seeded: seededShuffle(LIST_AE, 7),
+      };
+      const fromShuffles = Object.fromEntries(Object.entries(SHUFFLES).map(([k, list]) => [k, ordered(list)]));
+      check('orderBookings: the 28 sent in five other orders (reversed, rotated, interleaved, 10 to 13 in ascending order, a '
+          + 'seeded shuffle) come back in one order, the order sent: newest start first, and 13, 12, 11, 10 for the four that '
+          + 'start at 8:00 AM on 26 Sep',
+        Object.values(fromShuffles).every((got) => said(got) === said(SENT)), said(fromShuffles));
+      const given = SHUFFLES.seeded;
+      const before = ids(given);
+      ordered(given);
+      check('  it never changes the list it is given', said(ids(given)) === said(before) && given.length === 28, said(ids(given)));
+      const at = (id, start) => ({ request_id: id, start_datetime: start });
+      let got = ordered([at(5, '2026-09-26T00:00:00+00:00'), at(1, '2026-09-27T00:00:00+00:00'),
+        at(7, '2026-09-26T08:00:00+08:00'), at(6, '2026-09-26T00:00:00.000Z')]);
+      check('  one moment written three ways is one start: 26 Sep 8:00 AM in Manila as "+00:00", "+08:00" and "Z" sorts by '
+          + 'number, 7, 6, 5, after the later start, 1',
+        said(got) === said([1, 7, 6, 5]), said(got));
+      got = ordered([at(8, 'not a date'), at(2, '2026-09-26T00:00:00+00:00'), at(9, null), at(3, '2026-09-25T00:00:00+00:00')]);
+      check('  a start that cannot be read goes after every other, and those by number: 2, 3, then 9, 8; an empty list stays '
+          + 'empty',
+        said(got) === said([2, 3, 9, 8]) && said(ordered([])) === said([]), said(got));
+
+      // b. The real page, for the three roles. The stub sends the four that
+      // start together in a new order on every load, none of them the page's.
+      const TIE_ORDERS = [[10, 11, 12, 13], [12, 10, 13, 11], [11, 13, 10, 12], [13, 11, 12, 10]];
+      const makePagerState = (list, arrange = (l) => l) => ({ list: list.map((b) => ({ ...b })), loads: 0, arrange });
+      const tiesShuffled = (list, n) => withTies(list, TIE_ORDERS[n % TIE_ORDERS.length]);
+      const listAnswerP = (state) => {
+        const n = state.loads;
+        state.loads += 1;
+        return { requests: state.arrange(state.list, n).map((b) => ({ ...b })) };
+      };
+      const answerForP = (state) => (url, method) => {
+        if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerP(state);
+        const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+        if (method === 'POST' && act) {
+          const b = state.list.find((x) => x.request_id === Number(act[1]));
+          if (!b) return undefined;
+          b.status = act[2] === 'cancel' ? 'cancelled' : 'returned';
+          b.derived_status = b.status;
+          b.not_started = false;
+          return { message: act[2] === 'cancel' ? `Booking #${b.request_id} cancelled.`
+            : `Return recorded for booking #${b.request_id}.` };
+        }
+        if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+        return undefined;
+      };
+      // Thirty more, each its own resident, "Borrower 01" to "Borrower 30", a
+      // day apart, newest first: 1 to 26 overdue Plastic Chairs, 27 to 30
+      // completed Barangay Hall bookings. More overdue ones (31 on) start
+      // earlier still.
+      const manyBooking = (n) => {
+        const tag = String(n).padStart(2, '0');
+        const chairs = n <= 26 || n > 30;
+        const start = new Date(Date.UTC(2026, 9, 12 - n));
+        const iso = (d) => d.toISOString().replace('.000Z', '+00:00');
+        return {
+          request_id: 2000 + n, quantity_requested: 1, start_datetime: iso(start),
+          end_datetime: iso(new Date(start.getTime() + 9 * 3600e3)),
+          purpose: `Purpose ${tag}`, status: 'confirmed', return_note: null, returned_at: null,
+          resident_id: 3000 + n, outside_borrower_name: null, outside_borrower_contact: null,
+          rental_items: chairs
+            ? { item_id: 4, name: 'Plastic Chairs', type: 'furniture', fee: '5.00', quantity_total: 100, quantity_available: 100 }
+            : { item_id: 2, name: 'Barangay Hall', type: 'facility', fee: '500.00', quantity_total: 1, quantity_available: 1 },
+          resident_records: { resident_id: 3000 + n, first_name: 'Borrower', middle_name: null, last_name: tag, suffix: null,
+            account: { username: `borrower_${tag}` } },
+          requester: { user_id: 4000 + n, username: `borrower_${tag}`, email: `borrower_${tag}@example.invalid`,
+            profiles: { first_name: 'Borrower', middle_name: null, last_name: tag, suffix: null } },
+          returned_by: null,
+          charges: { charge_id: 5000 + n, amount: '5.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+            declared_at: null },
+          derived_status: chairs ? 'overdue' : 'completed',
+          // The same stand-in as asBooking's: buttons for the pager's checks.
+          not_started: true,
+        };
+      };
+      const MANY = Array.from({ length: 30 }, (_, i) => manyBooking(i + 1));
+      const manyKeys = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => {
+        const n = from + i;
+        return `Borrower ${String(n).padStart(2, '0')} · ${n <= 26 || n > 30 ? 'Plastic Chairs' : 'Barangay Hall'}`;
+      });
+      const pagerOf = (page) => page.query('nav.pay-pager');
+      const sizeSelect = (page) => page.query('.pay-pager select');
+      const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+      const stepButton = (page, label) => (pagerOf(page) ? buttonNamed(pagerOf(page), label) ?? null : null);
+      const listHeading = (page) => page.query('.rental-bookings-head h2');
+      // What the list and its pager say, read the way a person would.
+      const lookP = (page) => ({
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: rowsOf(page),
+        pager: !!pagerOf(page),
+        showing: text(page.query('.pay-pager-count')),
+        bold: page.queryAll('.pay-pager-count strong').map(text),
+        numbers: page.queryAll('.pay-pager-numbers li').map(text).join(' '),
+        current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+        short: text(page.query('.pay-pager-short')),
+        size: sizeSelect(page)?.value ?? null,
+        search: box(page)?.value ?? null,
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+        loading: root().textContent.includes('Loading bookings…'),
+      });
+      // The pager is on page n of m, showing `from` to `to` of `of`: the count
+      // line, the one number marked aria-current="page" and the phone's "Page n
+      // of m" must all say so.
+      const onPage = (v, n, m, from, to, of) => v.showing === `Showing ${from} to ${to} of ${of} results`
+        && said(v.current) === said([String(n)]) && v.short === `Page ${n} of ${m}`;
+      const brief = (v) => ({ showing: v.showing, current: v.current, short: v.short, numbers: v.numbers, size: v.size,
+        rows: v.rows.length ? [v.rows.length, v.rows[0], v.rows.at(-1)] : [] });
+      // Focus first, as a press does in a browser: a dispatched click in jsdom
+      // moves no focus, and some checks are about where focus ends up.
+      const press = async (page, el) => {
+        if (!el) return;
+        el.focus();
+        await page.click(el);
+      };
+      const setRows = async (page, value) => {
+        const select = sizeSelect(page);
+        if (select) {
+          select.value = String(value);
+          select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+      };
+      const badgeOf = (page, key) => text(rowOf(page, key)?.querySelector('.badge'));
+      // jsdom has no scrollIntoView; this one records what asked to be shown.
+      const scrolled = [];
+      const proto = dom.window.HTMLElement.prototype;
+      const previousScroll = proto.scrollIntoView;
+      proto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+      const sentP = [];
+
+      for (const { name, route, token, user, opening } of ROLES_AE) {
+        let state = makePagerState(LIST_AE, tiesShuffled);
+        seedSession(token, user);
+        resetNet(200, answerForP(state));
+        let page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        const writesAtOpen = store.sets;
+        const domWritesAtOpen = domStorage.writes;
+        let v = lookP(page);
+        const openCount = TAB_IDS[opening].length;
+        check(`${name}: it opens on ${opening}, whose ${openCount} bookings fit one page, and at 10 matches or fewer there is `
+            + 'no pager: no Pagination nav, no Rows per page, no Previous or Next',
+          said(v.pressed) === said([`${opening} ${openCount}`]) && v.rows.length === openCount && !v.pager && v.size === null
+            && !buttonNamed(root(), 'Previous') && !buttonNamed(root(), 'Next'),
+          said({ pressed: v.pressed, rows: v.rows.length, pager: v.pager, size: v.size }));
+
+        // All: 28 bookings, two pages of 25. From here to the search for
+        // "elena hall" nothing may send a request.
+        const sentBeforePaging = net.calls.length;
+        await clickIf(page, tabNamed(page, 'Completed'));
+        const completed = lookP(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`${name}: Completed's eight fit one page, with no pager; All, 28 bookings at 25 a page: "Showing 1 to 25 of 28 `
+            + 'results", pages "1 2" with 1 the current one, "Page 1 of 2" for a phone, and only the first 25 rows, in the '
+            + 'one order, under "28 bookings"',
+          !completed.pager && completed.rows.length === 8 && v.heading === '28 bookings' && onPage(v, 1, 2, 1, 25, 28)
+            && v.numbers === '1 2' && said(v.rows) === said(keysOf(SENT.slice(0, 25))),
+          said({ completed: { pager: completed.pager, rows: completed.rows.length }, heading: v.heading, ...brief(v) }));
+        const nav = pagerOf(page);
+        const countLine = page.query('.pay-pager-count');
+        check(`${name}: the pager is a nav named "Pagination" right under the rows' table, as on Document requests; its count `
+            + 'line is a polite live region with its three figures in bold: "1", "25", "28"',
+          nav?.getAttribute('aria-label') === 'Pagination' && !!nav.previousElementSibling?.classList.contains('table-wrap')
+            && countLine?.getAttribute('aria-live') === 'polite' && said(v.bold) === said(['1', '25', '28']),
+          said({ label: nav?.getAttribute('aria-label') ?? null, after: nav?.previousElementSibling?.className ?? null,
+            live: countLine?.getAttribute('aria-live') ?? null, bold: v.bold }));
+        const select = sizeSelect(page);
+        const sizeLabel = nav?.querySelector('label') ?? null;
+        const options = select ? [...select.options].map((o) => o.textContent) : null;
+        check(`${name}: Rows per page is a select labelled "Rows per page", offering 10, 25, 50 and 100, with 25 chosen`,
+          !!select && sizeLabel?.textContent === 'Rows per page' && !!select.id && sizeLabel.htmlFor === select.id
+            && said(options) === said(['10', '25', '50', '100']) && select.value === '25',
+          said({ label: sizeLabel?.textContent ?? null, options, value: select?.value ?? null }));
+        const previous = stepButton(page, 'Previous');
+        const next = stepButton(page, 'Next');
+        check(`${name}: on page 1, Previous is aria-disabled, never disabled, and Next is available`,
+          previous?.getAttribute('aria-disabled') === 'true' && !previous.disabled
+            && next?.getAttribute('aria-disabled') !== 'true' && !next?.disabled,
+          said({ previous: previous?.getAttribute('aria-disabled') ?? null, next: next?.getAttribute('aria-disabled') ?? null }));
+
+        scrolled.length = 0;
+        await press(page, next);
+        v = lookP(page);
+        check(`${name}: Next: page 2 shows the last three, Liza Bantilan's Covered Court, Maria Elena Villamor Santos's Barangay `
+            + 'Hall and Teresita Lim Ocampo\'s Folding Tables, "Showing 26 to 28 of 28 results"; the list heading is brought '
+            + 'into view (block "nearest"), and focus stays on Next',
+          onPage(v, 2, 2, 26, 28, 28) && said(v.rows) === said(keysOf([26, 27, 28])) && scrolled.length === 1
+            && !!listHeading(page) && scrolled[0].el === listHeading(page) && scrolled[0].options?.block === 'nearest'
+            && !!next && page.active() === next,
+          said({ ...brief(v), scrolls: scrolled.length, onto: scrolled[0]?.el?.className ?? scrolled[0]?.el?.tagName ?? null,
+            heading: !!listHeading(page), focus: page.active()?.textContent ?? null }));
+        const nextAtEnd = stepButton(page, 'Next');
+        scrolled.length = 0;
+        await press(page, nextAtEnd);
+        v = lookP(page);
+        check(`  ${name}: on the last page Next is aria-disabled, never disabled; pressing it does nothing: no scroll, still page `
+            + '2, and focus stays on it',
+          nextAtEnd?.getAttribute('aria-disabled') === 'true' && !nextAtEnd.disabled && onPage(v, 2, 2, 26, 28, 28)
+            && scrolled.length === 0 && page.active() === nextAtEnd,
+          said({ ...brief(v), scrolls: scrolled.length, next: nextAtEnd?.getAttribute('aria-disabled') ?? null }));
+        scrolled.length = 0;
+        await press(page, numberButton(page, 2));
+        check(`  ${name}: nor does pressing the current page: no scroll, still page 2`,
+          onPage(lookP(page), 2, 2, 26, 28, 28) && scrolled.length === 0, `${scrolled.length} scroll(s)`);
+        const perPage = [];
+        for (const n of [1, 2]) {
+          await press(page, numberButton(page, n));
+          const x = lookP(page);
+          perPage.push({ page: x.current, heading: x.heading, strip: x.strip, rows: x.rows.length });
+        }
+        check(`${name}: the heading and the tab counts are the whole list's on every page: "28 bookings" and "${STRIP28}" on `
+            + 'pages 1 and 2, which draw 25 and 3 rows',
+          perPage.every((p) => p.heading === '28 bookings' && p.strip === STRIP28)
+            && said(perPage.map((p) => [p.page, p.rows])) === said([[['1'], 25], [['2'], 3]]),
+          said(perPage));
+        await press(page, numberButton(page, 1));
+        const previousAtStart = stepButton(page, 'Previous');
+        scrolled.length = 0;
+        await press(page, previousAtStart);
+        v = lookP(page);
+        check(`${name}: on page 1 pressing the unavailable Previous does nothing: no scroll, still page 1, focus stays on it`,
+          onPage(v, 1, 2, 1, 25, 28) && scrolled.length === 0 && !!previousAtStart && page.active() === previousAtStart,
+          said({ ...brief(v), scrolls: scrolled.length }));
+
+        // Rows per page.
+        await press(page, numberButton(page, 2));
+        scrolled.length = 0;
+        await setRows(page, 10);
+        v = lookP(page);
+        check(`${name}: Rows per page 10, from page 2: back to page 1, its first ten rows, "Showing 1 to 10 of 28 results", `
+            + 'pages "1 2 3", and the list heading brought into view, as for a page change',
+          v.size === '10' && onPage(v, 1, 3, 1, 10, 28) && v.numbers === '1 2 3' && said(v.rows) === said(keysOf(SENT.slice(0, 10)))
+            && scrolled.length === 1 && scrolled[0].el === listHeading(page),
+          said({ ...brief(v), scrolls: scrolled.length }));
+        const tens = [];
+        for (const n of [1, 2, 3]) {
+          await press(page, numberButton(page, n));
+          const x = lookP(page);
+          tens.push({ ok: onPage(x, n, 3, (n - 1) * 10 + 1, Math.min(n * 10, 28), 28)
+            && said(x.rows) === said(keysOf(SENT.slice((n - 1) * 10, n * 10))) && x.heading === '28 bookings' && x.strip === STRIP28,
+          ...brief(x) });
+        }
+        check(`${name}: at 10 a page, pages 1, 2 and 3 hold rows 1 to 10, 11 to 20 and 21 to 28, "Showing 21 to 28 of 28 `
+            + 'results" on the last, under "28 bookings" and the same counts on all three',
+          tens.every((t) => t.ok), said(tens));
+        await setRows(page, 50);
+        const at50 = lookP(page);
+        await setRows(page, 100);
+        const at100 = lookP(page);
+        check(`${name}: Rows per page 50, and 100: all 28 on one page, "Showing 1 to 28 of 28 results", a single "1", Previous `
+            + 'and Next both unavailable',
+          at50.size === '50' && onPage(at50, 1, 1, 1, 28, 28) && at50.numbers === '1' && at50.rows.length === 28
+            && at100.size === '100' && onPage(at100, 1, 1, 1, 28, 28) && at100.rows.length === 28
+            && stepButton(page, 'Previous')?.getAttribute('aria-disabled') === 'true'
+            && stepButton(page, 'Next')?.getAttribute('aria-disabled') === 'true',
+          said({ at50: brief(at50), at100: brief(at100) }));
+
+        // A search and a new Rows per page go back to page 1, and Rows per
+        // page stays through a search. "a" is in every booking's text, so all
+        // 28 still match and page 3 still exists: only the reset can move it.
+        await setRows(page, 10);
+        await press(page, numberButton(page, 3));
+        const third = lookP(page);
+        await type(page, 'a');
+        const searched = lookP(page);
+        check(`${name}: a search goes back to page 1 and keeps Rows per page: page 3 at 10 a page, then "a", which all 28 `
+            + 'match: "Showing 1 to 10 of 28 results" under "28 of 28 bookings match"',
+          onPage(third, 3, 3, 21, 28, 28) && searched.size === '10' && onPage(searched, 1, 3, 1, 10, 28)
+            && searched.heading === '28 of 28 bookings match' && said(searched.rows) === said(keysOf(SENT.slice(0, 10))),
+          said({ before: brief(third), after: brief(searched), heading: searched.heading }));
+        await press(page, numberButton(page, 2));
+        await clickIf(page, page.query('button[aria-label="Clear search"]'));
+        v = lookP(page);
+        check(`  ${name}: the Clear (x) button is a search change too: from page 2 back to page 1, still at 10 a page`,
+          v.search === '' && v.size === '10' && onPage(v, 1, 3, 1, 10, 28), said(brief(v)));
+        await press(page, numberButton(page, 2));
+        const second10 = lookP(page);
+        await setRows(page, 25);
+        v = lookP(page);
+        check(`${name}: a new Rows per page goes back to page 1: page 2 at 10, then 25, "Showing 1 to 25 of 28 results", `
+            + 'though a page 2 exists at 25 too',
+          onPage(second10, 2, 3, 11, 20, 28) && v.size === '25' && onPage(v, 1, 2, 1, 25, 28), said({ before: brief(second10),
+            after: brief(v) }));
+
+        // The search runs over the whole list before paging.
+        const allFirst = lookP(page);
+        await type(page, 'elena hall');
+        v = lookP(page);
+        check(`${name}: the search runs over the whole list, not the page shown: Maria Elena Villamor Santos's Barangay Hall `
+            + 'booking is on page 2, not among page 1\'s rows, and "elena hall" finds it: one match, "1 of 28 bookings matches", '
+            + 'and no pager',
+          onPage(allFirst, 1, 2, 1, 25, 28) && !allFirst.rows.includes(rowKey(27)) && said(v.rows) === said(keysOf([27]))
+            && v.heading === '1 of 28 bookings matches' && !v.pager,
+          said({ first: brief(allFirst), searched: { rows: v.rows, heading: v.heading, pager: v.pager } }));
+        await type(page, '');
+        check(`${name}: none of those page, Rows per page, tab and search changes sent a request`,
+          !!pagerOf(page) && net.calls.length === sentBeforePaging,
+          `${net.calls.length - sentBeforePaging} request(s): ${said(listCalls(net.calls.slice(sentBeforePaging)))}`);
+
+        // One order, whatever order the four that start together arrive in.
+        await setRows(page, 10);
+        const pagesNow = async () => {
+          const out = [];
+          for (const n of [1, 2, 3]) {
+            await press(page, numberButton(page, n));
+            out.push(lookP(page).rows);
+          }
+          return out;
+        };
+        const firstLoad = await pagesNow();
+        const loadsBefore = state.loads;
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const secondLoad = await pagesNow();
+        const all28 = secondLoad.flat();
+        check(`${name}: bookings that start together keep one order on every load: at 10 a page, page 1 ends with 13 and page 2 `
+            + 'starts 12, 11, 10, before and after a Refresh that sent the four in another order; the three pages hold all 28 '
+            + 'once each',
+          said(firstLoad) === said([keysOf(SENT.slice(0, 10)), keysOf(SENT.slice(10, 20)), keysOf(SENT.slice(20))])
+            && said(secondLoad) === said(firstLoad) && state.loads === loadsBefore + 1
+            && all28.length === 28 && new Set(all28).size === 28,
+          said({ firstLoad: firstLoad.map((p) => [p[0], p.at(-1)]), secondLoad: secondLoad.map((p) => [p[0], p.at(-1)]),
+            loads: state.loads - loadsBefore, distinct: new Set(all28).size }));
+        await setRows(page, 25);
+
+        // Refresh, a reload that fails, Try again, and Back from a panel.
+        await press(page, numberButton(page, 2));
+        let held = holdNext();
+        let sent = net.calls.length;
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const reloading = { pager: !!pagerOf(page), loading: lookP(page).loading };
+        release(held, 200, listAnswerP(state));
+        await page.settle();
+        net.hold = false;
+        v = lookP(page);
+        check(`${name}: Refresh loads the list again, once, with no pager while it is out, and keeps the page: page 2, `
+            + '"Showing 26 to 28 of 28 results", the same three rows',
+          net.calls.length === sent + 1 && !reloading.pager && reloading.loading && onPage(v, 2, 2, 26, 28, 28)
+            && said(v.rows) === said(keysOf([26, 27, 28])),
+          said({ requests: net.calls.length - sent, reloading, after: brief(v) }));
+        held = holdNext();
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        release(held, 500, { error: 'Internal server error' });
+        await page.settle();
+        const failed = lookP(page);
+        held = holdNext();
+        await clickIf(page, tryAgainButton(page));
+        release(held, 200, listAnswerP(state));
+        await page.settle();
+        net.hold = false;
+        v = lookP(page);
+        check(`${name}: a reload that fails shows no pager beside the error, and Try again brings it back on the same page: page 2`,
+          !failed.pager && failed.error === 'Could not load the bookings: Internal server error' && failed.rows.length === 0
+            && onPage(v, 2, 2, 26, 28, 28), said({ failed: { pager: failed.pager, error: failed.error }, after: brief(v) }));
+        if (name === 'Secretary') {
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(27), 'Edit'));
+          const opened = text(page.query('.pending-card h3'));
+          await clickIf(page, buttonNamed(root(), '← Back to list'));
+          v = lookP(page);
+          check('Secretary: Back from Edit on page 2, with nothing saved, keeps the page; nothing was requested',
+            opened === 'Edit booking #27' && onPage(v, 2, 2, 26, 28, 28) && said(listCalls(net.calls.slice(sent))) === said([]),
+            said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+          // The reload after an action keeps the page where it still exists.
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(27), 'Cancel'));
+          await cancelWithReason(page);
+          await page.settle();
+          v = lookP(page);
+          check('Secretary: Cancel on page 2 posts the cancel, loads the list again, once, and keeps the page, which still '
+              + 'exists on All: page 2, with 27 now Cancelled',
+            said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/27/cancel', 'GET /rental-requests?status=all'])
+              && onPage(v, 2, 2, 26, 28, 28) && said(v.rows) === said(keysOf([26, 27, 28])) && badgeOf(page, rowKey(27)) === 'Cancelled',
+            said({ calls: listCalls(net.calls.slice(sent)), after: brief(v), badge: badgeOf(page, rowKey(27)) }));
+        }
+        if (name === 'Staff') {
+          await setRows(page, 10);
+          await press(page, numberButton(page, 2));
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(16), 'Mark returned'));
+          const opened = text(page.query('.pending-card h3'));
+          await clickIf(page, buttonNamed(root(), '← Back to list'));
+          v = lookP(page);
+          check('Staff: Back from Mark returned on page 2 (10 a page), with nothing recorded, keeps the page; nothing was requested',
+            opened === 'Mark returned — booking #16' && onPage(v, 2, 3, 11, 20, 28)
+              && said(listCalls(net.calls.slice(sent))) === said([]),
+            said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
+          sent = net.calls.length;
+          await clickIf(page, rowButton(page, rowKey(16), 'Mark returned'));
+          if (page.query('.pending-card form')) await page.submit();
+          await page.settle();
+          v = lookP(page);
+          check('Staff: Record return on page 2 posts the return, loads the list again, once, and keeps the page, which still '
+              + 'exists on All: page 2 at 10, with 16 now Returned',
+            said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/16/return', 'GET /rental-requests?status=all'])
+              && onPage(v, 2, 3, 11, 20, 28) && said(v.rows) === said(keysOf(SENT.slice(10, 20)))
+              && badgeOf(page, rowKey(16)) === 'Returned',
+            said({ calls: listCalls(net.calls.slice(sent)), after: brief(v), badge: badgeOf(page, rowKey(16)) }));
+        }
+
+        // Nothing kept in the browser; a new visit starts at 25 a page, page 1.
+        // The second mount does not reseed the session, which would clear storage.
+        const writesAfter = store.sets;
+        const domWritesAfter = domStorage.writes;
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+        resetNet(200, answerForP(makePagerState(LIST_AE, tiesShuffled)));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`${name}: nothing about the pager is kept in the browser: no localStorage or sessionStorage write, through `
+            + 'window or not, sessionStorage empty, no cookie; and a new visit starts again at 25 a page, on page 1',
+          writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+            && dom.window.document.cookie === '' && v.size === '25' && onPage(v, 1, 2, 1, 25, 28),
+          said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+            session: dom.window.sessionStorage.length, after: brief(v) }));
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+
+        // A tab with two pages: 26 overdue and 4 completed.
+        state = makePagerState(MANY);
+        resetNet(200, answerForP(state));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        await press(page, numberButton(page, 2));
+        const allSecond = lookP(page);
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        v = lookP(page);
+        check(`${name}: a tab change goes back to page 1, even where the new tab has a page 2: page 2 of All's 30, then `
+            + 'Overdue, whose 26 open on page 1, "Showing 1 to 25 of 26 results"',
+          onPage(allSecond, 2, 2, 26, 30, 30) && onPage(v, 1, 2, 1, 25, 26) && said(v.rows) === said(manyKeys(1, 25)),
+          said({ before: brief(allSecond), after: brief(v) }));
+        await setRows(page, 10);
+        await press(page, numberButton(page, 3));
+        const overdueThird = lookP(page);
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookP(page);
+        check(`  ${name}: and Rows per page stays through it: page 3 of Overdue at 10 a page, then All, "Showing 1 to 10 of 30 `
+            + 'results"',
+          onPage(overdueThird, 3, 3, 21, 26, 26) && v.size === '10' && onPage(v, 1, 3, 1, 10, 30)
+            && said(v.rows) === said(manyKeys(1, 10)),
+          said({ before: brief(overdueThird), after: brief(v) }));
+        if (name !== 'Punong Barangay') {
+          // The reload after an action lands on the last page when the one it
+          // was on is gone, never on an empty page past the end.
+          await setRows(page, 25);
+          await clickIf(page, tabNamed(page, 'Overdue'));
+          await press(page, numberButton(page, 2));
+          const lone = lookP(page);
+          sent = net.calls.length;
+          const label = name === 'Secretary' ? 'Cancel' : 'Mark returned';
+          await clickIf(page, rowButton(page, manyKeys(26, 26)[0], label));
+          if (name === 'Staff' && page.query('.pending-card form')) await page.submit();
+          if (name === 'Secretary') await cancelWithReason(page);
+          await page.settle();
+          v = lookP(page);
+          const action = name === 'Secretary' ? 'cancel' : 'return';
+          check(`${name}: when an action empties the last page, the reload lands on the page before, now the last: Overdue's `
+              + `page 2 held Borrower 26 alone; ${action === 'cancel' ? 'cancelled' : 'marked returned'}, the list reloads and `
+              + 'shows page 1, "Showing 1 to 25 of 25 results", never an empty page 2',
+            onPage(lone, 2, 2, 26, 26, 26) && said(lone.rows) === said(manyKeys(26, 26))
+              && said(listCalls(net.calls.slice(sent))) === said([`POST /rental-requests/2026/${action}`,
+                'GET /rental-requests?status=all'])
+              && onPage(v, 1, 1, 1, 25, 25) && v.rows.length === 25 && v.heading === '25 overdue bookings',
+            said({ lone: brief(lone), calls: listCalls(net.calls.slice(sent)), after: brief(v) }));
+        }
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+
+        // A Refresh that shrinks the tab under the page, then one that grows it.
+        state = makePagerState(MANY);
+        resetNet(200, answerForP(state));
+        page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'Overdue'));
+        await press(page, numberButton(page, 2));
+        const second = lookP(page);
+        for (const b of state.list.filter((x) => [2024, 2025].includes(x.request_id))) {
+          b.status = 'returned';
+          b.derived_status = 'returned';
+        }
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const shrunk = lookP(page);
+        state.list.push(...[31, 32, 33].map(manyBooking));
+        await clickIf(page, buttonNamed(root(), 'Refresh'));
+        const grown = lookP(page);
+        check(`${name}: a Refresh that shrinks the tab under the page lands on its last page, never an empty one past the end, `
+            + 'and stays there when the tab grows again: on page 2 of Overdue\'s 26, another session records two returns, and '
+            + 'Refresh shows page 1, "Showing 1 to 24 of 24 results"; then three more bookings are overdue, and Refresh still '
+            + 'shows page 1, "Showing 1 to 25 of 27 results"',
+          onPage(second, 2, 2, 26, 26, 26) && onPage(shrunk, 1, 1, 1, 24, 24) && shrunk.rows.length === 24
+            && onPage(grown, 1, 2, 1, 25, 27) && grown.rows.length === 25,
+          said({ second: brief(second), shrunk: brief(shrunk), grown: brief(grown) }));
+        sentP.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      const writesP = sentP.filter((m) => m !== 'GET');
+      check('section AE\'s pager sent GETs, and four POSTs, the Secretary\'s two cancels and Staff\'s two returns, all answered '
+          + 'by the fetch stub',
+        sentP.length > 0 && said(writesP) === said(['POST', 'POST', 'POST', 'POST']),
+        `${sentP.length} request(s): ${said(writesP)}`);
+
+      // c. The heading's scroll margin. A page change brings the heading into
+      // view (ListPager), and at 1045px and below the sticky header (109.6px
+      // at most) would cover it without one: 126px there, as the Payments and
+      // Document requests headings have, and 16px above. jsdom applies no width
+      // media query, so this reads index.css itself, comments stripped, nested
+      // rules resolved (section AA's reader), and tries each rule's selectors
+      // on the page's own heading.
+      const splitList = (s) => {
+        const out = [];
+        let depth = 0;
+        let cur = '';
+        for (const ch of s) {
+          if (ch === '(') depth += 1;
+          if (ch === ')') depth -= 1;
+          if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+        }
+        out.push(cur);
+        return out.map((x) => x.trim()).filter(Boolean);
+      };
+      const cssRead = (() => {
+        const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rules = [];
+        const open = [];
+        let from = 0;
+        const own = (block, decl) => {
+          const k = decl.indexOf(':');
+          if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+        };
+        const media = () => open.filter((b) => b.at).map((b) => b.at);
+        const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+        for (let i = 0; i < src.length; i += 1) {
+          const ch = src[i];
+          if (ch === '{') {
+            const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+            const parent = inRule();
+            if (head.startsWith('@')) {
+              const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+              open.push(block);
+              if (parent) rules.push({ ...block, media: media() });
+            } else {
+              const mine = splitList(head);
+              const selectors = parent
+                ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+                : mine;
+              const block = { selectors, decls: {} };
+              open.push(block);
+              rules.push({ ...block, media: media() });
+            }
+            from = i + 1;
+          } else if (ch === '}') {
+            const block = open.pop();
+            const rest = src.slice(from, i).trim();
+            if (block?.selectors && rest) own(block, rest);
+            from = i + 1;
+          } else if (ch === ';') {
+            const block = open.at(-1);
+            if (block?.selectors) own(block, src.slice(from, i).trim());
+            from = i + 1;
+          }
+        }
+        rules.forEach((r, i) => { r.order = i; });
+        return { rules, balanced: open.length === 0 };
+      })();
+      const appliesAt = (media, width) => media.every((atRule) => {
+        if (!atRule.startsWith('@media')) return !/^@(keyframes|font-face)/.test(atRule);
+        return atRule.slice(6).split(',').some((query) => {
+          if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+          const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          return max.every((x) => width <= x) && min.every((x) => width >= x);
+        });
+      });
+      const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+      const specificity = (selector) => {
+        let a = 0;
+        let b = 0;
+        let c = 0;
+        let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+        s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+          const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+          a += best[0];
+          b += best[1];
+          c += best[2];
+          return ' ';
+        });
+        s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+        s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+        a += (s.match(/#[\w-]+/g) || []).length;
+        b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+        c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+        return [a, b, c];
+      };
+      const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+      // The value of `prop` a browser `width` wide gives `el`, and the rule it
+      // comes from, or null when no rule sets it. Hover, focus and active
+      // rules are skipped: this reads the element at rest.
+      const winning = (width, el, prop) => {
+        let best = null;
+        for (const r of cssRead.rules) {
+          if (!(prop in r.decls) || !appliesAt(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+            if (!tryMatch(el, sel)) continue;
+            const important = /!important$/.test(r.decls[prop]) ? 1 : 0;
+            const rank = [important, ...specificity(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, ''), selector: sel };
+            }
+          }
+        }
+        return best;
+      };
+      const valueAt = (width, el, prop) => (el ? winning(width, el, prop)?.value ?? null : 'no element');
+      seedSession(VALID);
+      resetNet(200, answerForP(makePagerState(LIST_AE)));
+      const cssPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await cssPage.settle();
+      const heading = listHeading(cssPage);
+      const MARGIN_WIDTHS = [320, 390, 640, 641, 768, 1045, 1046, 1280, 1920];
+      const margins = Object.fromEntries(MARGIN_WIDTHS.map((w) => [w, valueAt(w, heading, 'scroll-margin-top')]));
+      check('the list heading, the one a page change scrolls to, is the heading row\'s h2, .rental-bookings-head h2, and '
+          + 'index.css gives it a scroll margin of 126px at 1045px and below, under the sticky header, and 16px above, as on '
+          + 'Document requests',
+        cssRead.balanced && !!heading && heading === cssPage.query('.list-head h2')
+          && MARGIN_WIDTHS.every((w) => margins[w] === (w <= 1045 ? '126px' : '16px')),
+        said({ balanced: cssRead.balanced, heading: !!heading, margins }));
+      await cssPage.unmount();
+
+      // d. The heading row on a phone. The heading names the tab and, while a
+      // search is on, how many match ("12 of 28 bookings match"), so its
+      // length changes with every tab and keystroke. Where it sometimes fitted
+      // beside Refresh and Encode walk-in (the Secretary's phone, 342 to
+      // 420px), pressing a tab moved the strip and the list by 32px. At 640px
+      // and below the heading now has a line of its own, as on Document
+      // requests (.doc-requests-head h2), so the row is one height on every
+      // tab, with or without a search, for every role; above 640px the row is
+      // as it was. Read from index.css, as in c.
+      console.log('\n--- Rental bookings: the heading row on a phone ---');
+      const FLEX_WIDTHS = [320, 342, 360, 390, 420, 480, 560, 640, 641, 768, 1045, 1046, 1280, 1920];
+      for (const { name, route, token, user } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerForP(makePagerState(LIST_AE)));
+        const p = await globalThis.mountInteractive(root(), route);
+        await p.settle();
+        const h2 = p.query('.list-head h2');
+        const row = h2?.parentElement ?? null;
+        const toolbarRow = box(p)?.closest('.list-head') ?? null;
+        const read = (prop) => Object.fromEntries(FLEX_WIDTHS.map((w) => [w, valueAt(w, h2, prop)]));
+        const basis = read('flex-basis');
+        const flex = read('flex');
+        const wrap = Object.fromEntries(FLEX_WIDTHS.map((w) => [w, valueAt(w, row, 'flex-wrap')]));
+        check(`${name}: the heading row is .list-head.rental-bookings-head, the heading then Refresh${name === 'Secretary'
+          ? ' and Encode walk-in' : ''}; the search row under it is not; and index.css gives the heading a line of its own `
+            + 'at 640px and below (flex-basis 100%, in a row that wraps) and no flex-basis above, so the row is one height on '
+            + 'every tab',
+          !!row && row.classList.contains('list-head') && row.classList.contains('rental-bookings-head')
+            && row.firstElementChild === h2 && !!buttonNamed(row, 'Refresh')
+            && !!buttonNamed(row, 'Encode walk-in') === (name === 'Secretary')
+            && !!toolbarRow && toolbarRow !== row && !toolbarRow.classList.contains('rental-bookings-head')
+            && FLEX_WIDTHS.every((w) => basis[w] === (w <= 640 ? '100%' : null) && flex[w] === null
+              && (w > 640 || wrap[w] === 'wrap')),
+          said({ row: row?.className ?? null, toolbar: toolbarRow?.className ?? null, basis, flex, wrap }));
+        await p.unmount();
+      }
+
+      if (previousScroll === undefined) delete proto.scrollIntoView;
+      else proto.scrollIntoView = previousScroll;
+    }
+
+    // =======================================================================
+    // AF. Rental bookings: the payment marker and the booking number
+    // =======================================================================
+    // Every row of the Rental bookings list now says where the booking stands
+    // with its fee, and which booking it is, as section Z checks on Document
+    // requests. The marker is that list's own function, paymentMarker in
+    // utils/requestList.js, imported as it is (utils/rentalList.js hands it
+    // on): it reads only the charge the row carries (the list's projection,
+    // MANAGE_FIELDS, embeds one per booking, an object since
+    // charges.rental_request_id is UNIQUE), never the booking's status and
+    // never the item's fee, which is what the item costs today. "Paid" (a PAID
+    // charge above PHP 0), "No fee" (a PAID charge of PHP 0, which a free
+    // item's booking is given), "Unpaid" (an UNPAID charge, PHP 0 included),
+    // "Void" (a VOID charge: cancelling a booking voids its unpaid charge, as
+    // it did five live bookings') and "Not billed" (no charge at all: only a
+    // booking cancelled before rentals were billed, as live booking 9 was). It
+    // is a line under the status badge, before a return note. The number is
+    // "#12", as the Edit and Mark returned panels name a booking, a line of its
+    // own under the Booked for name and its note. Neither is a new column, and
+    // neither is a <strong>, so a row's first <strong> is still the name that
+    // sections AD and AE find it by. The search reads the number, "12" or
+    // "#12", part of it matching as on Payments and Document requests ("1"
+    // finds every number holding a 1, "#1" those that start with one), and
+    // never the marker's words. On a phone each has a card label of its own
+    // from its data-label, which index.css prints with the Document requests
+    // number's and marker's rules, reused by name; jsdom applies no width media
+    // query, so index.css is read from the file. utils/rentalList.js is checked
+    // case by case, then the real page for the three roles against thirteen
+    // stubbed bookings, every state among them, then section AE's 28 with the
+    // charges the live list carries, then index.css. Every request is answered
+    // by the fetch stub, and only GETs are sent.
+    console.log('\n--- Rental bookings: the payment marker and the booking number ---');
+    {
+      const R = globalThis.requestList || {};
+      const CS = globalThis.chargeSearch || {};
+      const fs = require('fs');
+
+      // a. The helpers on their own.
+      const numbers = [12, 9, 1234].map((id) => attempt(() => L.bookingNumber({ request_id: id })));
+      check('bookingNumber: the number as the Edit and Mark returned panels name a booking, "#12", "#9", and "#1234" with no '
+          + 'thousands separator', said(numbers) === said(['#12', '#9', '#1234']), said(numbers));
+      check('paymentMarker is Document requests\' own function, imported as it is: utils/rentalList.js hands on '
+          + 'utils/requestList.js\'s, so a booking and a request whose charges are alike read the same words',
+        typeof L.paymentMarker === 'function' && L.paymentMarker === R.paymentMarker,
+        said({ rental: typeof L.paymentMarker, same: L.paymentMarker === R.paymentMarker }));
+      // A booking of the list's shape (section AE's booking 2) with the
+      // charges embed given (undefined: no charges key at all), and fields
+      // over it, as "label (colour class)".
+      const bookingWith = (charges, over = {}) => {
+        const b = { ...one(2), ...over };
+        if (charges === undefined) delete b.charges;
+        else b.charges = charges;
+        return b;
+      };
+      const markerOf = (charges, over) => attempt(() => {
+        const m = L.paymentMarker(bookingWith(charges, over));
+        return m ? `${m.label} (${m.className})` : m;
+      });
+      const MARKER_CASES = [
+        ['no charge, null, absent or an empty list, is "Not billed"', [null, undefined, []], 'Not billed (gray)'],
+        ['a PAID charge above PHP 0, as a number, as a string, or inside a list, is "Paid", green',
+          [{ status: 'PAID', amount: 500 }, { status: 'PAID', amount: '300.00' }, [{ status: 'PAID', amount: '25.00' }]],
+          'Paid (status-claimed)'],
+        ['a PAID charge of PHP 0, 0, "0.00" or "0", is "No fee", never "Paid"',
+          [{ status: 'PAID', amount: 0 }, { status: 'PAID', amount: '0.00' }, { status: 'PAID', amount: '0' }], 'No fee (gray)'],
+        ['a PAID charge with no amount, a null one or a blank one is "Paid", never "No fee"',
+          [{ status: 'PAID' }, { status: 'PAID', amount: null }, { status: 'PAID', amount: '' }], 'Paid (status-claimed)'],
+        ['an UNPAID charge is "Unpaid", amber, PHP 0 included, and whatever the borrower declared',
+          [{ status: 'UNPAID', amount: 300 }, { status: 'UNPAID', amount: '0.00' },
+            { status: 'UNPAID', amount: '25.00', declared_method: 'onsite' }], 'Unpaid (status-pending)'],
+        ['a VOID charge, which cancelling leaves of an unpaid one, is "Void", never "Unpaid", "Paid" or "No fee", PHP 0 included',
+          [{ status: 'VOID', amount: '500.00' }, { status: 'VOID', amount: 0 }], 'Void (status-cancelled)'],
+        ['a charge status outside the three is shown as it is, never blank and never "Unpaid"',
+          [{ status: 'REFUNDED', amount: '5.00' }], 'REFUNDED (gray)'],
+      ];
+      for (const [what, inputs, want] of MARKER_CASES) {
+        const got = inputs.map((c) => markerOf(c));
+        check(`rental paymentMarker: ${what}`, got.every((g) => g === want), said(got));
+      }
+      const itemNow = (fee) => ({ rental_items: { ...one(2).rental_items, fee } });
+      const SOURCE_CASES = [
+        ['no charge, on a booking whose item is free today (fee "0.00"), is "Not billed", never "No fee": the item\'s fee is '
+          + 'what it costs now, not what the booking was billed', null, itemNow('0.00'), 'Not billed (gray)'],
+        ['a PAID PHP 0 charge on a booking whose item costs PHP 300.00 today is "No fee"', { status: 'PAID', amount: '0.00' },
+          itemNow('300.00'), 'No fee (gray)'],
+        ['a cancelled booking whose charge was paid first is "Paid": cancelling leaves a PAID charge alone',
+          { status: 'PAID', amount: '300.00' }, { status: 'cancelled', derived_status: 'cancelled' }, 'Paid (status-claimed)'],
+        ['a returned booking still unpaid is "Unpaid": the booking\'s status is never read', { status: 'UNPAID', amount: '25.00' },
+          { status: 'returned', derived_status: 'returned' }, 'Unpaid (status-pending)'],
+      ];
+      const wrongSources = SOURCE_CASES.map(([what, c, over, want]) => ({ what, got: markerOf(c, over), want }))
+        .filter((x) => x.got !== x.want);
+      check('rental paymentMarker reads the charge alone: never the item\'s fee today, never the booking\'s status (a free item\'s '
+          + 'booking with no charge, a PHP 0 charge on an item that costs PHP 300 now, a cancelled booking paid first, a returned '
+          + 'one still unpaid)', wrongSources.length === 0, wrongSources.length ? said(wrongSources) : `${SOURCE_CASES.length} cases`);
+      got = [one(2), one(7), one(3), one(4)].map(parts);
+      check('searchParts reads the booking number under the name and the account, before the item: "Maria Elena Villamor '
+          + 'Santos", "@mevsantos", "#2", "Plastic Chairs"; for Rodrigo, with no account, and for a guest, after the name',
+        said(got) === said([['Maria Elena Villamor Santos', '@mevsantos', '#2', 'Plastic Chairs'],
+          ['Rodrigo Cempron Bautista', '#7', 'Covered Court'], ['Maria Lourdes Villanueva-Santos', '#3', 'Sound System'],
+          ['Teresita Lim Ocampo', '@tess_ocampo', '#4', 'Barangay Hall']]), said(got));
+      // The number in a search, against the Payments search's own rule for its
+      // charge number (utils/chargeSearch.js, "#" and the number, matched as
+      // part of the text), which Document requests follows (section Z). The
+      // name, the account and the item hold no digit.
+      const IDS_N = [112, 61, 21, 19, 12, 11, 10, 9, 1, 121];
+      const numbered = IDS_N.map((id) => ({ ...bookingWith(null), request_id: id,
+        resident_records: { resident_id: 800 + id, first_name: 'Ana', middle_name: null, last_name: 'Cruz', suffix: null,
+          account: { username: 'ana_cruz' } },
+        rental_items: { ...one(2).rental_items, name: 'Covered Court' } }));
+      const QUERIES = ['12', '#12', '1', '#1', '21', '121', '  #12 '];
+      const bookingIds = (q) => attempt(() => L.matchingBookings(numbered, q).map((b) => b.request_id));
+      const chargeIds = (q) => attempt(() => IDS_N.filter((id) => CS.matchesTerms(
+        CS.chargeSearchText({ charge_id: id }, { name: 'Ana Cruz', forText: 'Covered Court' }), CS.searchTerms(q))));
+      const byNumber = Object.fromEntries(QUERIES.map((q) => [q, bookingIds(q)]));
+      check('matchingBookings reads the number: "12" finds 112, 12 and 121, "#12" 12 and 121; part of a number matches: "1" finds '
+          + 'every number holding a 1 (all but 9), "#1" those that start with one (112, 19, 12, 11, 10, 1, 121); "21" 21 and 121, '
+          + '"121" 121 alone',
+        said(byNumber) === said({ 12: [112, 12, 121], '#12': [12, 121], 1: [112, 61, 21, 19, 12, 11, 10, 1, 121],
+          '#1': [112, 19, 12, 11, 10, 1, 121], 21: [21, 121], 121: [121], '  #12 ': [12, 121] }), said(byNumber));
+      const unlikePayments = QUERIES.filter((q) => said(bookingIds(q)) !== said(chargeIds(q)));
+      check('  the Payments search\'s rule for its charge number, exactly, as on Document requests: each of those searches finds '
+          + 'the bookings whose numbers are the numbers of the charges it finds on Payments',
+        unlikePayments.length === 0, said(QUERIES.map((q) => ({ q, bookings: bookingIds(q), charges: chargeIds(q) }))));
+      // One booking in each state; no name or item holds a marker's word.
+      const STATES = [[1, { status: 'PAID', amount: '300.00' }], [2, { status: 'PAID', amount: '0.00' }],
+        [3, { status: 'UNPAID', amount: '300.00' }], [4, { status: 'VOID', amount: '300.00' }], [5, null]]
+        .map(([id, charge]) => ({ ...numbered[0], request_id: id, charges: charge && { charge_id: 900 + id, ...charge } }));
+      const WORDS = ['paid', 'unpaid', 'no fee', 'fee', 'not billed', 'billed', 'void'];
+      const byWord = Object.fromEntries(WORDS.map((w) => [w, attempt(() => L.matchingBookings(STATES, w).map((b) => b.request_id))]));
+      const markersHeld = STATES.map((b) => attempt(() => L.paymentMarker(b).label));
+      check('the marker\'s words are never searched: "paid", "unpaid", "no fee", "fee", "not billed", "billed" and "void" find '
+          + 'nothing, in a list holding a booking in each state',
+        said(markersHeld) === said(['Paid', 'No fee', 'Unpaid', 'Void', 'Not billed'])
+          && Object.values(byWord).every((list) => Array.isArray(list) && list.length === 0), said({ markersHeld, byWord }));
+
+      // b. The real page. Thirteen bookings of the list's shape (section AE's
+      // asBooking), newest start first, every payment state among them; the
+      // charge arrives as one object, as the live list sends it. 61's item
+      // costs PHP 25.00 today and its charge PHP 0.00 (No fee); 19's charge is
+      // an unpaid PHP 0.00 (Unpaid); 12's borrower declared paying onsite,
+      // which pays nothing; 9 has no charge, as live booking 9; 8 was cancelled
+      // unpaid, its charge voided; 1 was paid, then cancelled; 7 was returned
+      // late with a note, still unpaid. The names, accounts and items hold no
+      // digit and no marker word.
+      //   id, item, who, Manila day, start and end hour, quantity, purpose, stored status, derived status
+      const ROWS_AF = [
+        [112, 'court', 'juan', '2026-10-20', 8, 12, 1, 'Purok 1 general assembly', 'confirmed', 'confirmed'],
+        [61, 'chairs', 'elena', '2026-10-19', 13, 18, 40, 'Birthday party', 'confirmed', 'confirmed'],
+        [21, 'sound', 'lourdes', '2026-10-18', 14, 22, 1, 'Wedding reception program', 'confirmed', 'confirmed'],
+        [19, 'costume', 'mario', '2026-10-10', 8, 20, 2, 'School cultural presentation', 'confirmed', 'overdue'],
+        [12, 'tables', 'liza', '2026-10-09', 7, 16, 8, 'Purok 3 fiesta lunch', 'confirmed', 'overdue'],
+        [11, 'hall', 'tess', '2026-10-08', 9, 12, 1, 'Senior citizens association meeting', 'confirmed', 'completed'],
+        [10, 'court', 'rodrigo', '2026-10-07', 15, 19, 1, 'Zumba for the women\'s group', 'confirmed', 'completed'],
+        [9, 'hall', 'nino', '2026-10-02', 13, 17, 1, 'Bible study', 'cancelled', 'cancelled'],
+        [8, 'costume', 'ramon', '2026-10-01', 8, 20, 3, 'Street dancing', 'cancelled', 'cancelled'],
+        [7, 'chairs', 'juan', '2026-09-26', 8, 17, 40, 'Family reunion', 'returned_late', 'returned_late'],
+        [6, 'tables', 'elena', '2026-09-20', 7, 16, 3, 'Fiesta', 'returned', 'returned'],
+        [2, 'sound', 'liza', '2026-09-12', 18, 22, 1, 'Birthday', 'returned_with_issue', 'returned_with_issue'],
+        [1, 'court', 'tess', '2026-09-05', 15, 19, 1, 'Liga practice', 'cancelled', 'cancelled'],
+      ];
+      const CHARGE_AF = {
+        112: { status: 'UNPAID', amount: 300 }, 61: { status: 'PAID', amount: '0.00' }, 21: { status: 'PAID', amount: 300 },
+        19: { status: 'UNPAID', amount: '0.00' },
+        12: { status: 'UNPAID', amount: '200.00', declared_method: 'onsite', declared_at: '2026-10-09T03:00:00+00:00' },
+        11: { status: 'PAID', amount: 0 }, 10: { status: 'PAID', amount: 500 }, 9: null, 8: { status: 'VOID', amount: '450.00' },
+        7: { status: 'UNPAID', amount: '1000.00' }, 6: { status: 'PAID', amount: '75.00' }, 2: { status: 'PAID', amount: null },
+        1: { status: 'PAID', amount: '300.00' },
+      };
+      // The marker each must show, written by hand.
+      const MARKER_AF = { 112: 'Unpaid', 61: 'No fee', 21: 'Paid', 19: 'Unpaid', 12: 'Unpaid', 11: 'No fee', 10: 'Paid',
+        9: 'Not billed', 8: 'Void', 7: 'Unpaid', 6: 'Paid', 2: 'Paid', 1: 'Paid' };
+      const NOTE_AF = { 7: 'Returned a day after the agreed time' };
+      const asBookingAF = (row) => {
+        const b = asBooking(row);
+        const charge = CHARGE_AF[row[0]];
+        return { ...b, return_note: NOTE_AF[row[0]] ?? null,
+          charges: charge === null ? null
+            : { charge_id: 900 + row[0], declared_method: null, declared_reference: null, declared_at: null, ...charge } };
+      };
+      const LIST13 = ROWS_AF.map(asBookingAF);
+      const answerAF = (list) => (url, method) => (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)
+        ? { requests: list.map((b) => ({ ...b })) } : undefined);
+      const nameAF = (id) => SHOWN_AS[ROWS_AF.find((r) => r[0] === id)[2]];
+      const wantRowAF = (id) => `${nameAF(id)} | #${id} | ${MARKER_AF[id]}`;
+      const TAB_AF = { Upcoming: [112, 61, 21], Overdue: [19, 12], Completed: [11, 10], Returned: [7, 6, 2],
+        Cancelled: [9, 8, 1], All: ROWS_AF.map((r) => r[0]) };
+      const STRIP13 = 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 3 · Cancelled 3 · All 13';
+      const bodyRows = (page) => page.queryAll('table.data-table tbody tr');
+      const numberEls = (tr) => tr.querySelectorAll('.doc-requests-number');
+      const markerEls = (tr) => tr.querySelectorAll('.doc-requests-pay');
+      // Each row as a person reads its name, its number and its marker.
+      const readRowAF = (tr) => `${text(tr.querySelector('strong'))} | ${text(numberEls(tr)[0]) ?? '(no number)'} | `
+        + `${text(markerEls(tr)[0]) ?? '(no marker)'}`;
+      const lookAF = (page) => ({
+        heading: text(page.query('.list-head h2')),
+        strip: tabsOf(page).map(text).join(' · '),
+        pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+        rows: bodyRows(page).map(readRowAF),
+        showing: text(page.query('.pay-pager-count')),
+      });
+      const after = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+      const TONES = { Paid: 'charge-word status-claimed', Unpaid: 'charge-word status-pending', Void: 'charge-word status-cancelled',
+        'No fee': 'charge-word gray', 'Not billed': 'charge-word gray' };
+      // The actions each role's rows had before the marker: the Secretary's
+      // Edit and Cancel on every booking stored as confirmed (since step B2,
+      // where not_started says so: asBooking's stand-in), Staff's Mark
+      // returned on stored-confirmed equipment and furniture, and none, with
+      // no actions column, for the Punong Barangay.
+      const CONFIRMED_AF = [112, 61, 21, 19, 12, 11, 10];
+      const RETURNABLE_AF = [61, 21, 19, 12];
+      const ACTIONS_AF = {
+        Secretary: (id) => (CONFIRMED_AF.includes(id) ? 'Edit + Cancel' : '(none)'),
+        Staff: (id) => (RETURNABLE_AF.includes(id) ? 'Mark returned' : '(none)'),
+      };
+      // jsdom has no scrollIntoView, and the pager calls it on a Rows per page
+      // change (part c); this one does nothing.
+      const protoAF = dom.window.HTMLElement.prototype;
+      const previousScrollAF = protoAF.scrollIntoView;
+      protoAF.scrollIntoView = function scrollIntoView() {};
+      const sentAF = [];
+
+      for (const { name, route, token, user, opening } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerAF(LIST13));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        let v = lookAF(page);
+        const openIds = TAB_AF[opening];
+        check(`${name}: on open, ${opening}: each row shows its number under the name and its marker under the badge `
+            + `(${openIds.map(wantRowAF).join('; ')}); the heading, the counts and the one request as before the marker`,
+          said(v.rows) === said(openIds.map(wantRowAF)) && v.heading === `${openIds.length} ${opening.toLowerCase()} bookings`
+            && v.strip === STRIP13 && net.calls.length === 1 && /\/rental-requests\?status=all$/.test(net.calls[0].url),
+          said({ v, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+
+        const sentAtAll = net.calls.length;
+        await clickIf(page, tabNamed(page, 'All'));
+        v = lookAF(page);
+        check(`${name}: on All every row shows its number and its marker, each where its charge says so: Unpaid, No fee, Paid, `
+            + 'Not billed and Void',
+          said(v.rows) === said(TAB_AF.All.map(wantRowAF)), said(v.rows));
+        const rowById = (id) => bodyRows(page).find((tr) => text(numberEls(tr)[0]) === `#${id}`) ?? null;
+        const markerById = (id) => text(rowById(id) && markerEls(rowById(id))[0]);
+        check(`${name}: each state on a row of its own: 21 "Paid", 61 "No fee", 112 "Unpaid", 9 "Not billed", 8 "Void"`,
+          markerById(21) === 'Paid' && markerById(61) === 'No fee' && markerById(112) === 'Unpaid'
+            && markerById(9) === 'Not billed' && markerById(8) === 'Void',
+          said([21, 61, 112, 9, 8].map((id) => [id, markerById(id)])));
+        check(`${name}: a PAID PHP 0.00 charge reads "No fee", never "Paid": 61 (amount "0.00", its item PHP 25.00 today) and 11 `
+            + '(amount 0)', markerById(61) === 'No fee' && markerById(11) === 'No fee', said([markerById(61), markerById(11)]));
+        check(`${name}: an UNPAID charge reads "Unpaid": 19 (PHP 0.00, never "No fee"), 12 (its borrower declared paying onsite) `
+            + 'and 7 (returned late, still unpaid)',
+          [19, 12, 7].every((id) => markerById(id) === 'Unpaid'), said([19, 12, 7].map(markerById)));
+        check(`${name}: only the booking with no charge reads "Not billed" (9, as live booking 9); the cancelled booking whose `
+            + 'unpaid charge was voided reads "Void" (8), and the one paid before it was cancelled "Paid" (1)',
+          markerById(9) === 'Not billed' && markerById(8) === 'Void' && markerById(1) === 'Paid'
+            && v.rows.filter((r) => r.endsWith('| Not billed')).length === 1, said([9, 8, 1].map(markerById)));
+        check(`${name}: All, 13 bookings: heading "13 bookings", every count, and the pager's "Showing 1 to 13 of 13 results", as `
+            + 'before the marker; no request sent by the tab',
+          v.heading === '13 bookings' && v.strip === STRIP13 && v.showing === 'Showing 1 to 13 of 13 results'
+            && net.calls.length === sentAtAll, said({ heading: v.heading, strip: v.strip, showing: v.showing }));
+
+        // Where the two sit in the row, and what the row keeps.
+        const withActions = name !== 'Punong Barangay';
+        const heads = page.queryAll('table.data-table thead th').map(text);
+        const wantHeads = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(withActions ? [''] : [])];
+        const shapes = bodyRows(page).map((tr) => {
+          const cells = [...tr.children];
+          const num = numberEls(tr);
+          const mark = markerEls(tr);
+          const strongs = [...tr.querySelectorAll('strong')];
+          const note = cells[0]?.querySelector('.small-note') ?? null;
+          const badge = cells[5]?.querySelector('.badge') ?? null;
+          return {
+            cells: cells.length,
+            firstStrong: text(strongs[0]),
+            oneEach: num.length === 1 && mark.length === 1,
+            numberCell: num[0]?.closest('td') === cells[0],
+            markerCell: mark[0]?.closest('td') === cells[5],
+            // after the name and the line under it
+            numberAfter: after(strongs[0], num[0]) && !!note && after(note, num[0]),
+            // the next line after the badge, before a return note
+            markerNext: !!badge && !!mark[0] && badge.nextElementSibling === mark[0],
+            noStrong: !!num[0] && !!mark[0] && !num[0].closest('strong') && !num[0].querySelector('strong')
+              && !mark[0].closest('strong') && !mark[0].querySelector('strong'),
+            labels: `${num[0]?.getAttribute('data-label')}/${mark[0]?.getAttribute('data-label')}`,
+            tone: mark[0] ? [...mark[0].classList].filter((c) => c !== 'doc-requests-pay').sort().join(' ') : null,
+            actions: withActions ? [...(cells[6]?.querySelectorAll('button') || [])].map((b) => b.textContent).join(' + ')
+              || '(none)' : null,
+          };
+        });
+        check(`${name}: no new column: the same ${wantHeads.length} headers, and ${wantHeads.length} cells in every row`,
+          said(heads) === said(wantHeads) && shapes.every((s) => s.cells === wantHeads.length),
+          said({ heads, cells: shapes.map((s) => s.cells) }));
+        check(`${name}: the number is in the Booked for cell, after the name and the line under it, and the marker in the Status `
+            + 'cell, the next line after the badge (before 7\'s return note); one of each per row, neither a <strong>, so the '
+            + 'row\'s first <strong> is still the name',
+          shapes.length === 13 && shapes.every((s, i) => s.oneEach && s.numberCell && s.markerCell && s.numberAfter
+            && s.markerNext && s.noStrong && s.firstStrong === nameAF(TAB_AF.All[i])), said(shapes));
+        check(`${name}: on a phone card they are labelled "Booking" and "Payment" (data-label), and the marker takes the charge `
+            + 'colours of .charge-word: Paid green, Unpaid amber, Void, No fee and Not billed slate',
+          shapes.length === 13 && shapes.every((s, i) => s.labels === 'Booking/Payment'
+            && s.tone === TONES[MARKER_AF[TAB_AF.All[i]]]), said(shapes.map((s) => [s.labels, s.tone])));
+        check(withActions
+          ? `${name}: the actions are as before the marker: ${name === 'Secretary' ? 'Edit and Cancel on every booking stored as '
+            + 'confirmed' : 'Mark returned on stored-confirmed equipment and furniture'}, none on the others`
+          : 'Punong Barangay: no actions column and no button in any row, as before the marker',
+        withActions ? said(shapes.map((s) => s.actions)) === said(TAB_AF.All.map(ACTIONS_AF[name]))
+          : page.queryAll('table.data-table tbody button').length === 0 && shapes.every((s) => s.actions === null),
+        said(shapes.map((s) => s.actions)));
+
+        // Every tab: each row's number and marker, and nothing sent.
+        const sentTabs = net.calls.length;
+        const wrongTabs = [];
+        for (const [label, ids] of Object.entries(TAB_AF)) {
+          await clickIf(page, tabNamed(page, label));
+          const x = lookAF(page);
+          if (said(x.rows) !== said(ids.map(wantRowAF)) || x.strip !== STRIP13) wrongTabs.push({ label, rows: x.rows, strip: x.strip });
+        }
+        check(`${name}: on every one of the six tabs, every row shows its own number and marker under the same counts, and `
+            + 'pressing them sends nothing', wrongTabs.length === 0 && net.calls.length === sentTabs,
+        said({ wrongTabs, sent: net.calls.length - sentTabs }));
+
+        // The search, on All.
+        await clickIf(page, tabNamed(page, 'All'));
+        const sentSearch = net.calls.length;
+        const found = async (q) => {
+          await type(page, q);
+          return bodyRows(page).map((tr) => text(numberEls(tr)[0]));
+        };
+        const hits = {
+          n12: await found('12'), hash12: await found('#12'), n21: await found('21'), n1: await found('1'), hash1: await found('#1'),
+          withWord: await found('12 tables'), otherWord: await found('12 court'), spaced: await found('  #12 '),
+        };
+        check(`${name}: a search finds a booking by its number: "12" finds #112 and #12, "#12" #12 alone, "21" #21 alone`,
+          said(hits.n12) === said(['#112', '#12']) && said(hits.hash12) === said(['#12']) && said(hits.n21) === said(['#21']),
+          said(hits));
+        check(`${name}: part of a number matches, as on Payments and Document requests: "1" finds #112, #61, #21, #19, #12, #11, `
+            + '#10 and #1; "#1" the numbers that start with 1: #112, #19, #12, #11, #10 and #1',
+          said(hits.n1) === said(['#112', '#61', '#21', '#19', '#12', '#11', '#10', '#1'])
+            && said(hits.hash1) === said(['#112', '#19', '#12', '#11', '#10', '#1']), said(hits));
+        check(`${name}: the number is one more word of the search: "12 tables" finds #12 (Liza Bantilan's Folding Tables), "12 `
+            + 'court" #112 (Juan Santos Dela Cruz\'s Covered Court), "  #12 " #12',
+          said(hits.withWord) === said(['#12']) && said(hits.otherWord) === said(['#112']) && said(hits.spaced) === said(['#12']),
+          said(hits));
+        await type(page, '1');
+        v = lookAF(page);
+        check(`${name}: with "1", the heading and the counts follow the search as they do for a name: "8 of 13 bookings match", `
+            + '"Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8"',
+          v.heading === '8 of 13 bookings match'
+            && v.strip === 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8',
+          said({ heading: v.heading, strip: v.strip }));
+        const wordHits = {};
+        for (const q of WORDS) wordHits[q] = await found(q);
+        check(`${name}: the marker's words find nothing: "paid", "unpaid", "no fee", "fee", "not billed", "billed", "void"`,
+          Object.values(wordHits).every((list) => list.length === 0) && !!box(page), said(wordHits));
+        await type(page, '');
+        check(`${name}: none of those searches sent a request`, !!box(page) && net.calls.length === sentSearch,
+          `${net.calls.length - sentSearch} request(s)`);
+        sentAF.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // c. Section AE's 28, shaped like the live list, with the charges the
+      // live list carries: an earlier read-only capture of the charges list
+      // (12 Oct 2026) holds 27 rental charges, 17 PAID, 5 UNPAID and 5 VOID,
+      // the VOID ones on cancelled bookings and none of PHP 0, and live
+      // booking 9 has none. Here the 15 stored as confirmed carry 12 PAID and
+      // 3 UNPAID (4 and 14, completed; 5, overdue), the 7 returns 5 PAID and 2
+      // UNPAID (15, with an issue; 21, late), the cancelled 13, 17, 22, 26 and
+      // 28 a VOID each, and 9 nothing. The counts, written by hand: All Paid
+      // 17, Unpaid 5, Void 5, Not billed 1; no No fee, as on the live list.
+      const UNPAID28 = [4, 14, 5, 15, 21];
+      const charge28 = (b) => (b.request_id === 9 ? null : { charge_id: 900 + b.request_id,
+        amount: (Number(b.rental_items.fee) * b.quantity_requested).toFixed(2),
+        status: b.status === 'cancelled' ? 'VOID' : UNPAID28.includes(b.request_id) ? 'UNPAID' : 'PAID',
+        declared_method: null, declared_reference: null, declared_at: null });
+      const LIVE28 = LIST_AE.map((b) => ({ ...b, charges: charge28(b) }));
+      const WANT28 = {
+        Upcoming: {}, Overdue: { Paid: 6, Unpaid: 1 }, Completed: { Paid: 6, Unpaid: 2 }, Returned: { Paid: 5, Unpaid: 2 },
+        Cancelled: { Void: 5, 'Not billed': 1 }, All: { Paid: 17, Unpaid: 5, Void: 5, 'Not billed': 1 },
+      };
+      const tally = (labels) => labels.reduce((m, l) => ({ ...m, [l]: (m[l] || 0) + 1 }), {});
+      const sameTally = (a, b) => said(Object.keys(a).sort().map((k) => [k, a[k]])) === said(Object.keys(b).sort().map((k) => [k, b[k]]));
+      for (const { name, route, token, user } of ROLES_AE) {
+        seedSession(token, user);
+        resetNet(200, answerAF(LIVE28));
+        const page = await globalThis.mountInteractive(root(), route);
+        await page.settle();
+        await clickIf(page, tabNamed(page, 'All'));
+        const sizeSelect = page.query('.pay-pager select');
+        if (sizeSelect) {
+          sizeSelect.value = '100';
+          sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        }
+        await page.settle();
+        const counted = {};
+        for (const label of Object.keys(WANT28)) {
+          await clickIf(page, tabNamed(page, label));
+          counted[label] = tally(bodyRows(page).map((tr) => text(markerEls(tr)[0]) ?? '(no marker)'));
+        }
+        const off = Object.keys(WANT28).filter((label) => !sameTally(counted[label], WANT28[label]));
+        check(`${name}: over the 28 live-shaped bookings, at 100 a page, the markers count as the live list's charges do: All Paid `
+            + '17, Unpaid 5, Void 5, Not billed 1 and no No fee; Overdue Paid 6, Unpaid 1; Completed Paid 6, Unpaid 2; Returned '
+            + 'Paid 5, Unpaid 2; Cancelled Void 5, Not billed 1',
+          off.length === 0, said({ counted, off }));
+        await clickIf(page, tabNamed(page, 'All'));
+        const allNumbers = bodyRows(page).map((tr) => text(numberEls(tr)[0]));
+        await type(page, '27');
+        const n27 = bodyRows(page).map(readRowAF);
+        await type(page, '');
+        check(`${name}: All shows every number in the one order, #1 first, then #2 to #9, #13, #12, #11, #10, #14 … #28, under `
+            + '"28 bookings"; "27" finds booking 27 alone, Maria Elena Villamor Santos\'s Barangay Hall, Paid',
+          said(allNumbers) === said(SENT.map((id) => `#${id}`)) && lookAF(page).heading === '28 bookings'
+            && said(n27) === said(['Maria Elena Villamor Santos | #27 | Paid']), said({ first: allNumbers.slice(0, 14), n27 }));
+        sentAF.push(...net.calls.map((c) => c.method));
+        await page.unmount();
+      }
+
+      // d. The phone card. jsdom applies no width media query, so index.css
+      // is read as a browser of a given width applies it, the cascade settled
+      // and nested rules read whole (section AA's reader), and a rule for
+      // ::before is tried on the element it belongs to.
+      const splitAF = (s) => {
+        const out = [];
+        let depth = 0;
+        let cur = '';
+        for (const ch of s) {
+          if (ch === '(') depth += 1;
+          if (ch === ')') depth -= 1;
+          if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+        }
+        out.push(cur);
+        return out.map((x) => x.trim()).filter(Boolean);
+      };
+      const cssAF = (() => {
+        const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rules = [];
+        const open = [];
+        let from = 0;
+        const own = (block, decl) => {
+          const k = decl.indexOf(':');
+          if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+        };
+        const media = () => open.filter((b) => b.at).map((b) => b.at);
+        const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+        for (let i = 0; i < src.length; i += 1) {
+          const ch = src[i];
+          if (ch === '{') {
+            const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+            const parent = inRule();
+            if (head.startsWith('@')) {
+              const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+              open.push(block);
+              if (parent) rules.push({ ...block, media: media() });
+            } else {
+              const mine = splitAF(head);
+              const selectors = parent
+                ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+                : mine;
+              const block = { selectors, decls: {} };
+              open.push(block);
+              rules.push({ ...block, media: media() });
+            }
+            from = i + 1;
+          } else if (ch === '}') {
+            const block = open.pop();
+            const rest = src.slice(from, i).trim();
+            if (block?.selectors && rest) own(block, rest);
+            from = i + 1;
+          } else if (ch === ';') {
+            const block = open.at(-1);
+            if (block?.selectors) own(block, src.slice(from, i).trim());
+            from = i + 1;
+          }
+        }
+        rules.forEach((r, i) => { r.order = i; });
+        return { rules, balanced: open.length === 0 };
+      })();
+      const appliesAF = (media, width) => media.every((atRule) => {
+        if (!atRule.startsWith('@media')) return !/^@(keyframes|font-face)/.test(atRule);
+        return atRule.slice(6).split(',').some((query) => {
+          if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+          const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+          return max.every((x) => width <= x) && min.every((x) => width >= x);
+        });
+      });
+      const bySpecAF = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+      const specAF = (selector) => {
+        let a = 0;
+        let b = 0;
+        let c = 0;
+        let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+        s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+          const best = splitAF(inner).map(specAF).sort(bySpecAF).at(-1) || [0, 0, 0];
+          a += best[0];
+          b += best[1];
+          c += best[2];
+          return ' ';
+        });
+        s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+        s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+        a += (s.match(/#[\w-]+/g) || []).length;
+        b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+        c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+        return [a, b, c];
+      };
+      const matchAF = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+      // The value of `prop` a browser `width` wide gives `el` (with
+      // `before`, its ::before), or null when no rule sets it. Hover, focus
+      // and active rules are skipped: this reads the element at rest.
+      const valueAF = (width, el, prop, before = false) => {
+        if (!el) return 'no element';
+        let best = null;
+        for (const r of cssAF.rules) {
+          if (!(prop in r.decls) || !appliesAF(r.media, width)) continue;
+          for (const sel of r.selectors) {
+            if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+            const pseudo = sel.match(/^(.*?)::?(before|after|placeholder|first-line|first-letter)$/);
+            if (before ? !pseudo || pseudo[2] !== 'before' || !matchAF(el, pseudo[1]) : !!pseudo || !matchAF(el, sel)) continue;
+            const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specAF(sel)];
+            const better = !best || rank[0] - best.rank[0] || bySpecAF(rank.slice(1), best.rank.slice(1));
+            if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+              best = { rank, order: r.order, value: r.decls[prop].replace(/\s*!important$/, '') };
+            }
+          }
+        }
+        return best?.value ?? null;
+      };
+      // What would hide `el` at `width`, on it or on anything above it up to
+      // the table: a display of none, a visibility of hidden, an opacity or
+      // font size of 0, or a clip.
+      const hidersAF = (width, el) => {
+        const out = [];
+        for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+          for (const [prop, bad] of [['display', /^none/], ['visibility', /^(hidden|collapse)/], ['opacity', /^0(\.0*)?$/],
+            ['font-size', /^0(px|rem|em)?$/], ['clip-path', /./], ['clip', /^rect/]]) {
+            const w = valueAF(width, node, prop);
+            if (w && bad.test(w)) out.push(`${node.tagName}.${[...node.classList].join('.')} ${prop}: ${w}`);
+          }
+          if (node.tagName === 'TABLE') break;
+        }
+        return out;
+      };
+      seedSession(VALID);
+      resetNet(200, answerAF(LIST13));
+      const cardPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await cardPage.settle();
+      await clickIf(cardPage, tabNamed(cardPage, 'All'));
+      const itemCell = cardPage.query('table.data-table tbody td[data-label="Item"]');
+      check('index.css reads as a browser applies it: every brace closed, and a rental cell\'s card label ("Item") printed from '
+          + 'its data-label at 390px and not at 1280px, so what follows is measured right',
+        cssAF.balanced && cssAF.rules.length > 500 && !!itemCell && valueAF(390, itemCell, 'content', true) === 'attr(data-label)'
+          && valueAF(1280, itemCell, 'content', true) === null,
+        said({ balanced: cssAF.balanced, rules: cssAF.rules.length, at390: valueAF(390, itemCell, 'content', true) }));
+      const partsAF = cardPage.queryAll('table.data-table tbody .doc-requests-number, table.data-table tbody .doc-requests-pay');
+      const readAt = (width) => partsAF.map((el) => ({ el: `${el.getAttribute('data-label')} "${text(el)}"`,
+        hidden: hidersAF(width, el), label: valueAF(width, el, 'content', true), labelShown: valueAF(width, el, 'display', true) }));
+      const phoneAF = readAt(390);
+      check('on a phone (390px) nothing hides the number or the marker in any row, and each card prints its label from '
+          + 'data-label ("Booking", "Payment"), shown as a line of its own',
+        partsAF.length === 26 && phoneAF.every((p) => p.hidden.length === 0 && p.label === 'attr(data-label)'
+          && p.labelShown === 'block'),
+        said(phoneAF.filter((p) => p.hidden.length || p.label !== 'attr(data-label)' || p.labelShown !== 'block').slice(0, 4)));
+      const wideAF = readAt(1280);
+      check('  above 640px (1280) nothing hides them either, and no label is printed: the data-label is inert there',
+        partsAF.length === 26 && wideAF.every((p) => p.hidden.length === 0 && p.label === null),
+        said(wideAF.filter((p) => p.hidden.length || p.label !== null).slice(0, 4)));
+      sentAF.push(...net.calls.map((c) => c.method));
+      await cardPage.unmount();
+
+      check('section AF\'s marker and number sent nothing but GETs', sentAF.length > 0 && sentAF.every((m) => m === 'GET'),
+        `${sentAF.length} request(s): ${[...new Set(sentAF)].join(', ')}`);
+
+      // =====================================================================
+      // AF (continued). Rental bookings: the filters row
+      // =====================================================================
+      // The Rental bookings list gains the filters row section AA checks on
+      // Document requests: components/ListFilters.jsx as it is, under the
+      // search row and over the tabs, drawn only once the list has loaded,
+      // in the page's own wrapper (.rental-bookings-filters), which also
+      // carries .doc-requests-filters, so it looks as that list's does. Three
+      // controls: Item, "Any item" and the item names the loaded rows hold,
+      // sorted by name with case ignored ("stick" between "Plastic Chairs"
+      // and "Tables", as on the live list), matched by the whole name ("Tables"
+      // never takes "Folding Tables"); Payment, "Any payment", Paid, Unpaid, No
+      // fee and Not billed, and Void only while a loaded booking's charge is
+      // void (five live ones are): Document requests' own paymentOptions and
+      // matchesPayment, handed on by utils/rentalList.js, which match through
+      // the row's own marker; and Starts, the Manila day a booking starts on
+      // (a booking runs within one day), with presets both ways, Today, Next 7
+      // days, Next 30 days, Last 7 days and Last 30 days, each counting today,
+      // and "Choose dates", From and To with both ends in (From after To
+      // matches nothing and says so; it is never swapped). The list shown is
+      // tab AND search AND filters: the tab counts, the heading ("3 of 5
+      // upcoming bookings match") and the pager follow them, and every filter
+      // change goes back to page 1. A filter sends no request, lives through
+      // Refresh, Try again, a tab, a search, Back from a panel and the reload
+      // after an action, and is kept nowhere in the browser (jsdom's own
+      // Storage counted, as in section AE); a choice the reloaded list no
+      // longer offers goes back to Any. Where the filters leave a tab empty
+      // the text names the tab, "No overdue bookings match your search or
+      // filters.", with "Clear search and filters", which keeps the tab; a
+      // search alone keeps its own text and Clear search. "Today" is fixed at
+      // 12 Oct 2026, 12:00 in Manila, by the helpers' one clock
+      // (utils/chargeFilters.js); the machine is on Los Angeles time, and the
+      // day checks run again on UTC and on Tokyo time: 7:47 AM on 12 Oct in
+      // Manila is 11 Oct in the first two, and 11:48 PM on 12 Oct is 13 Oct in
+      // Tokyo, so every Manila day has to be the code's own doing. Then the
+      // Filters button on a phone, as section AB and AC check Document
+      // requests': its count, its panel, Escape, its open state kept, and
+      // index.css. utils/rentalList.js is checked case by case; then the real
+      // page for the three roles against fourteen stubbed bookings, and forty
+      // for the pager. Every request is answered by the fetch stub; the only
+      // writes, the Secretary's cancel and Staff's return, go to it too.
+      console.log('\n--- Rental bookings: the filters row ---');
+      {
+        const F = globalThis.chargeFilters || {};
+        const previousTZAF = process.env.TZ;
+        const HOME_ZONE = 'America/Los_Angeles';
+        process.env.TZ = HOME_ZONE;
+        const realNowAF = F.clock?.now;
+        const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+        setNow('2026-10-12T04:00:00Z'); // 12:00 on 12 Oct in Manila, 21:00 on 11 Oct in Los Angeles
+        // Three clocks for the machine: on the first two a Manila morning is
+        // the day before, on the third a Manila night is the day after.
+        const ZONES = ['UTC', 'America/Los_Angeles', 'Asia/Tokyo'];
+        const inZone = (zone, f) => {
+          process.env.TZ = zone;
+          try { return f(); } finally { process.env.TZ = HOME_ZONE; }
+        };
+
+        // a. The helpers on their own.
+        const named = (name) => ({ ...one(2), rental_items: name === undefined ? null : { ...one(2).rental_items, name } });
+        const itemOpts = (list) => attempt(() => L.itemOptions(list).map((o) => `${o.value}=${o.label}`).join(' | '));
+        got = itemOpts(['Tent', 'stick', 'Basketball Court', 'Tables', 'Folding Tables', 'Basketball Court', 'Plastic Chairs']
+          .map(named).concat([named(undefined)]));
+        check('itemOptions: "Any item" first, its value empty, then each item the rows hold, once, sorted by name with case ignored '
+            + '("stick" between "Plastic Chairs" and "Tables", as on the live list), each valued by its name; a row with no item adds '
+            + 'none',
+          got === '=Any item | Basketball Court=Basketball Court | Folding Tables=Folding Tables | Plastic Chairs=Plastic Chairs | '
+            + 'stick=stick | Tables=Tables | Tent=Tent', said(got));
+        got = [itemOpts([]), itemOpts([named('any')])];
+        check('  an empty list offers "Any item" alone; an item named "any" is offered as itself, never taken for Any, whose value is '
+            + 'empty (an item always has a name, and "any" is the value of the Payment and Starts filters\' Any)',
+          said(got) === said(['=Any item', '=Any item | any=any']) && L.ANY_ITEM === '', said({ got, ANY_ITEM: L.ANY_ITEM }));
+        // A booking stores no copy of its item's name: the list embeds the
+        // item live (rental_items, by item_id), so every booking of an item
+        // shows its name as it is now, and a deactivated item (is_active
+        // false, which the list does not even send) is still embedded.
+        const ofItem = (item) => ({ ...one(2), rental_items: { ...one(2).rental_items, ...item } });
+        got = itemOpts([ofItem({ item_id: 5, name: 'Tent' }), ofItem({ item_id: 5, name: 'Tent' }),
+          ofItem({ item_id: 23, name: 'stick', type: 'equipment', fee: '12.00', is_active: false })]);
+        check('  two bookings of one item give one choice, and an item no longer active still gives its own while a booking holds '
+            + 'it: the choices are the loaded bookings\' items, by the name each shows, never the active items list',
+          got === '=Any item | stick=stick | Tent=Tent', said(got));
+        const mi = (name, choice) => attempt(() => L.matchesItem(named(name), choice));
+        got = {
+          any: [mi('Tables', L.ANY_ITEM), mi(undefined, L.ANY_ITEM), mi('any', L.ANY_ITEM)],
+          exact: mi('Tables', 'Tables'), longer: mi('Folding Tables', 'Tables'), shorter: mi('Tables', 'Folding Tables'),
+          cased: mi('tables', 'Tables'), part: mi('Tables', 'Table'), none: mi(undefined, 'Tables'),
+          anyName: [mi('any', 'any'), mi('Tables', 'any')],
+        };
+        check('matchesItem: Any takes every booking, one with no item too; an item takes only bookings of exactly that name: not '
+            + '"Folding Tables" for "Tables", nor the reverse, nor another case, nor part of a name; the item named "any" only its own',
+          said(got) === said({ any: [true, true, true], exact: true, longer: false, shorter: false, cased: false, part: false,
+            none: false, anyName: [true, false] }), said(got));
+        check('paymentOptions and matchesPayment are Document requests\' own functions, handed on as they are: the Payment choices are '
+            + 'the marker\'s own words, and a booking matches the one its own marker shows',
+          typeof L.paymentOptions === 'function' && L.paymentOptions === R.paymentOptions
+            && typeof L.matchesPayment === 'function' && L.matchesPayment === R.matchesPayment,
+          said({ options: L.paymentOptions === R.paymentOptions, matches: L.matchesPayment === R.matchesPayment }));
+        const charged = (charges) => ({ ...one(2), charges });
+        const payOpts = (list) => attempt(() => L.paymentOptions(list).map((o) => `${o.value}=${o.label}`).join(' | '));
+        const FIVE = `${F.ANY}=Any payment | Paid=Paid | Unpaid=Unpaid | No fee=No fee | Not billed=Not billed`;
+        got = [payOpts([charged({ status: 'PAID', amount: 300 }), charged({ status: 'UNPAID', amount: 25 }), charged(null)]),
+          payOpts([charged({ status: 'PAID', amount: 300 }), charged({ status: 'VOID', amount: 500 })])];
+        check('  over bookings: "Any payment", Paid, Unpaid, No fee and Not billed where no booking is void, and Void last where one is, '
+            + 'as cancelling an unpaid booking leaves it (five on the live list)',
+          said(got) === said([FIVE, `${FIVE} | Void=Void`]), said(got));
+        const P_CASES = [
+          ['a booking paid', { status: 'PAID', amount: 300 }, 'Paid'],
+          ['a PAID PHP 0.00 charge', { status: 'PAID', amount: '0.00' }, 'No fee'],
+          ['a booking unpaid', { status: 'UNPAID', amount: 25 }, 'Unpaid'],
+          ['an UNPAID PHP 0.00 charge', { status: 'UNPAID', amount: '0.00' }, 'Unpaid'],
+          ['a cancelled booking\'s voided charge', { status: 'VOID', amount: 500 }, 'Void'],
+          ['no charge', null, 'Not billed'],
+        ];
+        const CHOICES = ['Paid', 'Unpaid', 'No fee', 'Not billed', 'Void'];
+        const wrongP = P_CASES.flatMap(([what, c, want]) => {
+          const b = charged(c);
+          const hits = CHOICES.filter((choice) => attempt(() => L.matchesPayment(b, choice)) === true).join(',');
+          const marker = attempt(() => L.paymentMarker(b).label);
+          return hits === want && attempt(() => L.matchesPayment(b, F.ANY)) === true && marker === want ? []
+            : [`${what}: ${hits || '(none)'}, marker ${marker}`];
+        });
+        check('  each booking matches Any payment and the one choice its marker shows, never another: PHP 0 paid No fee, never Paid; '
+            + 'PHP 0 unpaid Unpaid; a voided charge Void; no charge Not billed', wrongP.length === 0, said(wrongP));
+        got = attempt(() => L.STARTS_OPTIONS.map((o) => `${o.value}=${o.label}`).join(' | '));
+        check('STARTS_OPTIONS: "Any date" (Payments\' Any value), Today, Next 7 days, Next 30 days, Last 7 days, Last 30 days and '
+            + '"Choose dates": both ways, as bookings are made ahead and looked back on',
+          got === `${F.ANY}=Any date | today=Today | next7=Next 7 days | next30=Next 30 days | last7=Last 7 days | last30=Last 30 days | `
+            + 'custom=Choose dates', said(got));
+        const rangeOf = (choice, from, to, today) => attempt(() => L.startsRange(choice, from, to, today));
+        //   the choice, From, To, today, the range it must give
+        const RANGES = [
+          ['today', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-10-12' }],
+          ['next7', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-10-18' }],
+          ['next30', '', '', '2026-10-12', { from: '2026-10-12', to: '2026-11-10' }],
+          ['last7', '', '', '2026-10-12', { from: '2026-10-06', to: '2026-10-12' }],
+          ['last30', '', '', '2026-10-12', { from: '2026-09-13', to: '2026-10-12' }],
+          ['next7', '', '', '2026-12-28', { from: '2026-12-28', to: '2027-01-03' }],
+          ['next30', '', '', '2026-12-28', { from: '2026-12-28', to: '2027-01-26' }],
+          ['last7', '', '', '2026-03-01', { from: '2026-02-23', to: '2026-03-01' }],
+          ['last30', '', '', '2026-03-01', { from: '2026-01-31', to: '2026-03-01' }],
+          ['custom', '2026-10-01', '2026-10-31', '2026-10-12', { from: '2026-10-01', to: '2026-10-31' }],
+          ['custom', '2026-10-01', '', '2026-10-12', { from: '2026-10-01', to: null }],
+          ['custom', '', '2026-10-31', '2026-10-12', { from: null, to: '2026-10-31' }],
+          ['custom', '', '', '2026-10-12', null],
+          [F.ANY, '2026-10-01', '2026-10-31', '2026-10-12', null],
+          ['week', '', '', '2026-10-12', null],
+        ];
+        const wrongR = ZONES.flatMap((zone) => inZone(zone, () => RANGES
+          .filter(([choice, from, to, today, want]) => said(rangeOf(choice, from, to, today)) !== said(want))
+          .map(([choice, from, to, today, want]) => `${zone}: ${choice} ${from}..${to} on ${today}: `
+            + `${said(rangeOf(choice, from, to, today))}, want ${said(want)}`)));
+        check('startsRange counts calendar days in Manila, both ends in, the same on every clock: Today 12 Oct; Next 7 days 12 to 18 '
+            + 'Oct; Next 30 days 12 Oct to 10 Nov; Last 7 days 6 to 12 Oct; Last 30 days 13 Sep to 12 Oct; across a year\'s end (28 '
+            + 'Dec: to 3 Jan, to 26 Jan) and February (1 Mar: from 23 Feb, from 31 Jan); Choose dates as typed, and null with no date; '
+            + 'Any date, and a choice it does not offer (Payments\' "week"), null',
+          wrongR.length === 0, wrongR.length ? said(wrongR.slice(0, 6)) : `${RANGES.length} cases on ${ZONES.length} zones`);
+        const starting = (iso) => ({ ...one(2), start_datetime: iso });
+        //   what, starts at, From, To (From undefined: no range), whether it is in
+        const S_CASES = [
+          ['7:47 AM on 12 Oct in Manila (23:47Z on 11 Oct) is a 12 Oct booking', '2026-10-11T23:47:00+00:00', '2026-10-12',
+            '2026-10-12', true],
+          ['  and not an 11 Oct one', '2026-10-11T23:47:00+00:00', '2026-10-11', '2026-10-11', false],
+          ['11:48 PM on 12 Oct in Manila (15:48Z) stays on 12 Oct', '2026-10-12T15:48:00Z', '2026-10-12', '2026-10-12', true],
+          ['  and is not a 13 Oct one, Tokyo\'s day', '2026-10-12T15:48:00Z', '2026-10-13', '2026-10-13', false],
+          ['  To 12 Oct alone takes it: the end day is in', '2026-10-12T15:48:00Z', null, '2026-10-12', true],
+          ['  From 13 Oct alone does not', '2026-10-12T15:48:00Z', '2026-10-13', null, false],
+          ['00:00 on 6 Oct in Manila (16:00Z on 5 Oct) is in 6 Oct to 12 Oct', '2026-10-05T16:00:00Z', '2026-10-06', '2026-10-12', true],
+          ['23:59 on 5 Oct in Manila is not', '2026-10-05T15:59:00Z', '2026-10-06', '2026-10-12', false],
+          ['From after To (12 Oct to 1 Oct) takes nothing, not 5 Oct', '2026-10-05T04:00:00Z', '2026-10-12', '2026-10-01', false],
+          ['no range takes every booking', '2026-10-05T04:00:00Z', undefined, undefined, true],
+          ['  one with no start too', null, undefined, undefined, true],
+          ['a range never takes a booking with no start', null, '2026-10-01', null, false],
+          ['  nor one whose start does not parse', 'not a date', null, '2026-10-12', false],
+        ];
+        const wrongS = ZONES.flatMap((zone) => inZone(zone, () => S_CASES.map(([what, iso, from, to, want]) => {
+          const res = attempt(() => L.matchesStarts(starting(iso), from === undefined ? null : { from, to }));
+          return res === want ? null : `${zone}: ${what.trim()} -> ${res}`;
+        }).filter(Boolean)));
+        check('matchesStarts counts the Manila day a booking starts on, both ends in, on UTC, Los Angeles and Tokyo time alike: 7:47 '
+            + 'AM on 12 Oct in Manila is 12 Oct (11 Oct in UTC and Los Angeles), 11:48 PM on 12 Oct stays 12 Oct (13 Oct in Tokyo) and To '
+            + '12 Oct takes it; From after To takes nothing; no range takes everything; a range never takes a booking with no start',
+          wrongS.length === 0, wrongS.length ? said(wrongS) : `${S_CASES.length} cases on ${ZONES.length} zones`);
+        //   the preset, starts at, whether it is in, with today 12 Oct in Manila
+        const PRESETS = [
+          ['today', '2026-10-11T16:00:00Z', true], ['today', '2026-10-11T15:59:59Z', false],
+          ['today', '2026-10-12T15:59:59Z', true], ['today', '2026-10-12T16:00:00Z', false],
+          ['next7', '2026-10-11T16:00:00Z', true], ['next7', '2026-10-11T15:59:59Z', false],
+          ['next7', '2026-10-18T15:59:59Z', true], ['next7', '2026-10-18T16:00:00Z', false],
+          ['next30', '2026-11-10T15:59:59Z', true], ['next30', '2026-11-10T16:00:00Z', false],
+          ['last7', '2026-10-05T16:00:00Z', true], ['last7', '2026-10-05T15:59:59Z', false],
+          ['last7', '2026-10-12T15:59:59Z', true], ['last7', '2026-10-12T16:00:00Z', false],
+          ['last30', '2026-09-12T16:00:00Z', true], ['last30', '2026-09-12T15:59:59Z', false],
+        ];
+        const presetIn = (choice, iso) => attempt(() => L.matchesStarts(starting(iso), L.startsRange(choice, '', '', F.manilaToday())));
+        const wrongPresets = ZONES.flatMap((zone) => inZone(zone, () => PRESETS.map(([choice, iso, want]) => {
+          const res = presetIn(choice, iso);
+          return res === want ? null : `${zone}: ${choice} ${iso} -> ${res}`;
+        }).filter(Boolean)));
+        check('  the presets, with chargeFilters\' manilaToday as it is, on each zone, at midnight in Manila: Today takes 00:00 on 12 Oct '
+            + 'and 23:59:59 that night, not 23:59:59 on 11 Oct nor 00:00 on 13 Oct; Next 7 days 00:00 on 12 Oct to 23:59:59 on 18 Oct, '
+            + 'not 00:00 on 19 Oct; Next 30 days to 23:59:59 on 10 Nov, not 00:00 on 11 Nov; Last 7 days from 00:00 on 6 Oct to the end '
+            + 'of 12 Oct; Last 30 days from 00:00 on 13 Sep',
+          wrongPresets.length === 0, said(wrongPresets));
+        setNow('2026-10-12T16:30:00Z'); // 00:30 on 13 Oct in Manila, 09:30 on 12 Oct in Los Angeles
+        const pastMidnight = ZONES.map((zone) => inZone(zone, () => ({
+          zone, today: attempt(() => F.manilaToday()),
+          lastNight: presetIn('today', '2026-10-12T15:48:00Z'), lastNightThisWeek: presetIn('last7', '2026-10-12T15:48:00Z'),
+          nextWeekEnd: presetIn('next7', '2026-10-19T15:59:59Z'), nineteenth: presetIn('next7', '2026-10-18T16:00:00Z'),
+        })));
+        setNow('2026-10-12T04:00:00Z');
+        check('  and the day turns at midnight in Manila, whatever the machine\'s clock says: at 00:30 on 13 Oct in Manila (still 12 Oct '
+            + 'in Los Angeles) Today is 13 Oct, so 11:48 PM on 12 Oct is no longer Today but is in Last 7 days, and Next 7 days runs to '
+            + 'the end of 19 Oct, taking 00:00 on 19 Oct',
+          pastMidnight.every((p) => p.today === '2026-10-13' && p.lastNight === false && p.lastNightThisWeek === true
+            && p.nextWeekEnd === true && p.nineteenth === true), said(pastMidnight));
+        const NOMATCH = [['overdue', 'No overdue bookings match your search or filters.'],
+          ['all', 'No bookings match your search or filters.'], ['upcoming', 'No upcoming bookings match your search or filters.']];
+        got = NOMATCH.map(([tab]) => attempt(() => L.filtersNoMatchText(tab)));
+        check('filtersNoMatchText names the tab, as every empty text of this list does, in Payments\' words: "No overdue bookings match '
+            + 'your search or filters.", on All "No bookings match your search or filters."',
+          said(got) === said(NOMATCH.map((n) => n[1])), said(got));
+        const NOTHING = { item: L.ANY_ITEM, payment: F.ANY, date: F.ANY };
+        //   what, the filters (over NOTHING), the count
+        const COUNTS = [
+          ['nothing on', {}, 0], ['Item', { item: 'Tables' }, 1], ['an item named "any", which is not Any', { item: 'any' }, 1],
+          ['Payment', { payment: 'Unpaid' }, 1], ['a Starts preset', { date: 'next7' }, 1], ['Choose dates', { date: 'custom' }, 1],
+          ['Item and Payment', { item: 'stick', payment: 'Void' }, 2],
+          ['all three', { item: 'Tables', payment: 'No fee', date: 'last30' }, 3],
+        ];
+        const wrongCounts = COUNTS.map(([what, over, want]) => ({ what, got: attempt(() => L.filterCount({ ...NOTHING, ...over })), want }))
+          .filter((c) => c.got !== c.want);
+        check('filterCount counts each of Item, Payment and Starts that is off its Any choice, 0 to 3, for the "(2)" on a phone\'s '
+            + 'Filters button: Choose dates once, its dates being its own; an item named "any" is a choice like any other',
+          wrongCounts.length === 0, wrongCounts.length ? said(wrongCounts) : `${COUNTS.length} cases`);
+
+        // b. The real page. Fourteen bookings, newest start first, about
+        // "today" (12 Oct, 12:00 in Manila): five upcoming, one overdue, two
+        // completed, three returned and three cancelled; six items, one name
+        // inside another ("Tables", "Folding Tables") and one in lower case
+        // ("stick"), as on the live list; every payment state; and starts a
+        // minute either side of Manila's midnights. The derived statuses are
+        // the server's, written in: the page never compares a date with the
+        // clock to place a booking in a tab.
+        const ITEM_F = {
+          court: [11, 'Basketball Court', 'facility', '500.00'], hall: [12, 'Multipurpose Hall', 'facility', '1500.00'],
+          chairs: [13, 'Plastic Chairs', 'furniture', '5.00'], tables: [14, 'Tables', 'furniture', '25.00'],
+          folding: [15, 'Folding Tables', 'furniture', '25.00'], stick: [23, 'stick', 'equipment', '12.00'],
+          sound: [3, 'Sound System', 'equipment', '300.00'], hallRenamed: [12, 'Multi-purpose Hall', 'facility', '1500.00'],
+        };
+        //   id, item, who, Manila day, start, end, stored status, derived status, charge
+        const ROWS_F = [
+          [151, 'court', 'juan', '2026-11-11', '08:00', '12:00', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 500 }],
+          [150, 'folding', 'elena', '2026-11-10', '23:30', '23:59', 'confirmed', 'confirmed', { status: 'PAID', amount: '0.00' }],
+          [149, 'tables', 'lourdes', '2026-10-19', '00:00', '06:00', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 25 }],
+          [148, 'stick', 'liza', '2026-10-18', '23:30', '23:59', 'confirmed', 'confirmed', { status: 'PAID', amount: 12 }],
+          [147, 'chairs', 'tess', '2026-10-12', '23:48', '23:58', 'confirmed', 'confirmed', { status: 'UNPAID', amount: 50 }],
+          [146, 'hall', 'mario', '2026-10-12', '07:47', '10:47', 'confirmed', 'completed', { status: 'PAID', amount: 1500 }],
+          [145, 'folding', 'rodrigo', '2026-10-12', '00:00', '06:00', 'confirmed', 'overdue', { status: 'UNPAID', amount: 25 }],
+          [144, 'tables', 'nino', '2026-10-11', '23:30', '23:59', 'returned', 'returned', { status: 'PAID', amount: 25 }],
+          [143, 'chairs', 'juan', '2026-10-06', '00:00', '08:00', 'returned_late', 'returned_late', { status: 'PAID', amount: 0 }],
+          [142, 'court', 'elena', '2026-10-05', '23:30', '23:59', 'cancelled', 'cancelled', { status: 'VOID', amount: 500 }],
+          [141, 'stick', 'ramon', '2026-09-13', '00:00', '08:00', 'returned_with_issue', 'returned_with_issue',
+            { status: 'UNPAID', amount: 12 }],
+          [140, 'chairs', 'liza', '2026-09-12', '23:30', '23:59', 'cancelled', 'cancelled', null],
+          [139, 'court', 'danilo', '2026-09-01', '08:00', '12:00', 'confirmed', 'completed', { status: 'PAID', amount: 500 }],
+          [138, 'hall', 'rodrigo', '2026-08-20', '13:00', '17:00', 'cancelled', 'cancelled', { status: 'VOID', amount: 1500 }],
+        ];
+        const mnl = (day, hm) => new Date(`${day}T${hm}:00+08:00`).toISOString().replace('.000Z', '+00:00');
+        const asBookingF = ([id, itemKey, who, day, from, to, status, derived, charge]) => {
+          const [itemId, itemName, type, fee] = ITEM_F[itemKey];
+          return {
+            ...asBooking([id, 'court', who, day, 8, 12, 1, `Purpose ${id}`, status, derived]),
+            start_datetime: mnl(day, from), end_datetime: mnl(day, to), return_note: null,
+            rental_items: { item_id: itemId, name: itemName, type, fee, quantity_total: 100, quantity_available: 100 },
+            charges: charge === null ? null
+              : { charge_id: 900 + id, declared_method: null, declared_reference: null, declared_at: null, ...charge },
+          };
+        };
+        // "stick" (item 23) is deactivated: the active items list, GET
+        // /rental-items, which the booking forms read, no longer holds it, but
+        // its bookings (148, 141) still embed it, name and all, as the route's
+        // embed takes no notice of is_active. The list page never asks for
+        // that list; the stub answers it as the route would, active items only.
+        const ACTIVE_F = ['court', 'hall', 'chairs', 'tables', 'folding', 'sound'].map((k) => {
+          const [itemId, itemName, type, fee] = ITEM_F[k];
+          return { item_id: itemId, name: itemName, type, description: null, quantity_total: 100, quantity_available: 100, fee };
+        });
+        // The bookings the stub holds, which Refresh and the actions change
+        // as the server would: a cancel voids an unpaid charge and leaves a
+        // paid one, a return leaves the charge as it was.
+        const makeStateF = (rows = ROWS_F) => ({ rows: rows.map((r) => [...r]) });
+        const listAnswerF = (state) => ({ requests: state.rows.map(asBookingF) });
+        const answerForF = (state) => (url, method) => {
+          if (method === 'GET' && /\/rental-requests(\?status=[a-z_]+)?$/.test(url)) return listAnswerF(state);
+          const act = url.match(/\/rental-requests\/(\d+)\/(cancel|return)$/);
+          if (method === 'POST' && act) {
+            const r = state.rows.find((x) => x[0] === Number(act[1]));
+            if (!r) return undefined;
+            if (act[2] === 'cancel') {
+              r[6] = 'cancelled';
+              r[7] = 'cancelled';
+              if (r[8]?.status === 'UNPAID') r[8] = { ...r[8], status: 'VOID' };
+              return { message: `Booking #${r[0]} cancelled.` };
+            }
+            r[6] = 'returned';
+            r[7] = 'returned';
+            return { message: `Return recorded for booking #${r[0]}.` };
+          }
+          if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated.' };
+          if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: ACTIVE_F };
+          return undefined;
+        };
+        // A control found by its visible label, as a person finds it.
+        const labelled = (page, label) => {
+          const found = page.queryAll('label').find((l) => l.textContent === label);
+          return found ? found.control ?? null : null;
+        };
+        const itemSelect = (page) => labelled(page, 'Item');
+        const paySelect = (page) => labelled(page, 'Payment');
+        const dateSelect = (page) => labelled(page, 'Starts');
+        const fromInput = (page) => labelled(page, 'From');
+        const toInput = (page) => labelled(page, 'To');
+        const filtersRow = (page) => itemSelect(page)?.closest('.pay-filters') ?? null;
+        const chosen = (select) => (select ? select.options[select.selectedIndex]?.textContent ?? null : null);
+        const optionsOf = (select) => (select ? [...select.options].map((o) => o.textContent).join(' | ') : null);
+        // Choose the option a select shows as `label`, the way a person does.
+        const pick = async (page, select, label) => {
+          const option = select ? [...select.options].find((o) => o.textContent === label) : null;
+          if (option) {
+            select.value = option.value;
+            select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const pickItem = (page, label) => pick(page, itemSelect(page), label);
+        const pickPay = (page, label) => pick(page, paySelect(page), label);
+        const pickDate = (page, label) => pick(page, dateSelect(page), label);
+        // A date typed into From or To: the native setter and an input event.
+        const typeDate = async (page, input, value) => {
+          if (input) {
+            Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+            input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const HINT = 'The start date is after the end date.';
+        // Clear filters keeps its place in the row while no filter is on,
+        // disabled and aria-hidden, so being in the page is not being offered.
+        const clearOffered = (b) => !!b && !b.disabled && b.getAttribute('aria-hidden') !== 'true';
+        // A row's booking number, as a number.
+        const idOf = (tr) => Number((text(numberEls(tr)[0]) || '#0').slice(1));
+        // What the list and its filters say, read the way a person would.
+        const lookF = (page) => {
+          const empty = page.query('.empty');
+          return {
+            heading: text(page.query('.list-head h2')),
+            strip: tabsOf(page).map(text).join(' · '),
+            pressed: page.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+            rows: bodyRows(page).map(idOf),
+            markers: bodyRows(page).map((tr) => text(markerEls(tr)[0])),
+            empty: text(page.query('.empty p')),
+            emptyButtons: empty ? [...empty.querySelectorAll('button')].map(text) : [],
+            item: chosen(itemSelect(page)),
+            payment: chosen(paySelect(page)),
+            date: chosen(dateSelect(page)),
+            from: fromInput(page)?.value ?? null,
+            to: toInput(page)?.value ?? null,
+            clear: clearOffered(buttonNamed(root(), 'Clear filters')),
+            hint: page.queryAll('[role="status"]').some((el) => el.textContent === HINT),
+            search: box(page)?.value ?? null,
+            showing: text(page.query('.pay-pager-count')),
+            current: page.queryAll('.pay-pager [aria-current="page"]').map(text),
+            error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the bookings')) ?? null,
+            loading: root().textContent.includes('Loading bookings…'),
+          };
+        };
+        // The three filters as one line: "Plastic Chairs / Unpaid / Choose dates 2026-10-01..2026-10-31".
+        const filtersOf = (v) => `${v.item} / ${v.payment} / ${v.date}${v.from !== null ? ` ${v.from}..${v.to}` : ''}`;
+        // Focus first, as a press does in a browser (section Y).
+        const press = async (page, el) => {
+          if (!el) return;
+          el.focus();
+          await page.click(el);
+        };
+        const numberButton = (page, n) => page.query(`.pay-pager button[aria-label="Page ${n}"]`);
+        const setRows = async (page, value) => {
+          const select = page.query('.pay-pager select');
+          if (select) {
+            select.value = String(value);
+            select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+        };
+        const rowButtonF = (page, id, label) => {
+          const tr = bodyRows(page).find((x) => idOf(x) === id);
+          return tr ? [...tr.querySelectorAll('button')].find((b) => b.textContent === label) ?? null : null;
+        };
+        const sentF = [];
+
+        const STRIP14 = 'Upcoming 5 · Overdue 1 · Completed 2 · Returned 3 · Cancelled 3 · All 14';
+        const ALL14 = ROWS_F.map((r) => r[0]);
+        const ITEMS_F = 'Any item | Basketball Court | Folding Tables | Multipurpose Hall | Plastic Chairs | stick | Tables';
+        const PAYS_F = 'Any payment | Paid | Unpaid | No fee | Not billed | Void';
+        const STARTS_F = 'Any date | Today | Next 7 days | Next 30 days | Last 7 days | Last 30 days | Choose dates';
+        // What each choice shows on All, worked out by hand from ROWS_F, in
+        // the one order.
+        const BY_ITEM = { 'Basketball Court': [151, 142, 139], 'Folding Tables': [150, 145], 'Multipurpose Hall': [146, 138],
+          'Plastic Chairs': [147, 143, 140], stick: [148, 141], Tables: [149, 144] };
+        const BY_PAY = {
+          Paid: { rows: [148, 146, 144, 139], strip: 'Upcoming 1 · Overdue 0 · Completed 2 · Returned 1 · Cancelled 0 · All 4' },
+          Unpaid: { rows: [151, 149, 147, 145, 141], strip: 'Upcoming 3 · Overdue 1 · Completed 0 · Returned 1 · Cancelled 0 · All 5' },
+          'No fee': { rows: [150, 143], strip: 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2' },
+          'Not billed': { rows: [140], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 1 · All 1' },
+          Void: { rows: [142, 138], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 2 · All 2' },
+        };
+        const BY_DATE = {
+          Today: [147, 146, 145], 'Next 7 days': [148, 147, 146, 145], 'Next 30 days': [150, 149, 148, 147, 146, 145],
+          'Last 7 days': [147, 146, 145, 144, 143], 'Last 30 days': [147, 146, 145, 144, 143, 142, 141],
+          oct12: [147, 146, 145], fromOct19: [151, 150, 149], toOct11: [144, 143, 142, 141, 140, 139, 138],
+        };
+        const PRESET_LABELS = ['Today', 'Next 7 days', 'Next 30 days', 'Last 7 days', 'Last 30 days'];
+        const OCTOBER = [149, 148, 147, 146, 145, 144, 143, 142];
+
+        for (const { name, route, token, user, opening } of ROLES_AE) {
+          const state = makeStateF();
+          const openRows = opening === 'Overdue' ? [145] : [151, 150, 149, 148, 147];
+          const openingHeading = opening === 'Overdue' ? '1 overdue booking' : '5 upcoming bookings';
+          seedSession(token, user);
+          resetNet(200, answerForF(state));
+          // The first open, held, then failing; then Try again.
+          let at = holdNext();
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const openingLook = { row: !!itemSelect(page), loading: lookF(page).loading };
+          release(at, 500, { error: 'Network down' });
+          await page.settle();
+          const failedOpen = { row: !!itemSelect(page), error: lookF(page).error };
+          at = holdNext();
+          await clickIf(page, tryAgainButton(page));
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          check(`${name}: like the search and the tabs, the filters row is not drawn while the list loads or after a load fails: no `
+              + 'Item select under "Loading bookings…", none beside the error; Try again brings the row back',
+            !openingLook.row && openingLook.loading && !failedOpen.row && failedOpen.error === 'Could not load the bookings: Network down'
+              && !!itemSelect(page) && !!paySelect(page) && !!dateSelect(page),
+            said({ openingLook, failedOpen, after: !!itemSelect(page) }));
+
+          // Where it sits, what it holds, and how it opens.
+          const row = filtersRow(page);
+          const searchRow = box(page)?.closest('.list-head') ?? null;
+          const wrap = row?.closest('.rental-bookings-filters') ?? null;
+          check(`${name}: the row sits where Document requests' does, under the search row and over the tabs, in the page's own `
+              + 'wrapper (.rental-bookings-filters), not part of a .list-head and holding no heading, so the list heading is still the '
+              + 'heading row\'s',
+            !!row && !!wrap && !!searchRow && follows(searchRow, wrap) && !searchRow.contains(row) && follows(row, page.query('.pay-tabs'))
+              && !row.closest('.list-head') && !row.querySelector('h1, h2, h3, h4, h5, h6')
+              && text(page.query('.list-head h2')) === openingHeading,
+            said({ row: row?.className ?? null, wrap: wrap?.className ?? null, inHead: !!row?.closest('.list-head') }));
+          const selects = [itemSelect(page), paySelect(page), dateSelect(page)];
+          const namedOk = selects.map((s, i) => !!s && s.tagName === 'SELECT' && s.labels?.length === 1
+            && s.labels[0].textContent === ['Item', 'Payment', 'Starts'][i] && !!s.id && s.labels[0].htmlFor === s.id
+            && !!row && row.contains(s));
+          check(`${name}: three native selects, each named by its own visible label, "Item", "Payment" and "Starts", in that order (the `
+              + 'label for= its select\'s id, the three ids different)',
+            namedOk.every(Boolean) && new Set(selects.map((s) => s?.id)).size === 3 && follows(selects[0], selects[1])
+              && follows(selects[1], selects[2]), said({ namedOk, ids: selects.map((s) => s?.id ?? null) }));
+          let v = lookF(page);
+          check(`${name}: they open on "Any item", "Any payment" and "Any date", with no From or To, no Clear filters and no hint, and `
+              + `the list as before: ${opening}, "${openingHeading}", "${STRIP14}"`,
+            v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+              && !v.clear && !v.hint && v.heading === openingHeading && v.strip === STRIP14 && said(v.rows) === said(openRows), said(v));
+          check(`${name}: Item offers "Any item" and the six items the loaded rows hold, sorted by name with case ignored: "${ITEMS_F}"`,
+            optionsOf(itemSelect(page)) === ITEMS_F, said(optionsOf(itemSelect(page))));
+          check(`${name}: Payment offers "${PAYS_F}", Void last because two loaded bookings' charges are void; Starts offers "${STARTS_F}"`,
+            optionsOf(paySelect(page)) === PAYS_F && optionsOf(dateSelect(page)) === STARTS_F,
+            said({ payment: optionsOf(paySelect(page)), starts: optionsOf(dateSelect(page)) }));
+          const hintBox = row?.nextElementSibling ?? null;
+          check(`${name}: under the row the hint is in the page, empty, a polite status, so it is heard when its words appear`,
+            !!hintBox && hintBox.getAttribute('role') === 'status' && hintBox.textContent === '' && !!hintBox.id,
+            said({ role: hintBox?.getAttribute('role') ?? null, text: hintBox?.textContent ?? null }));
+
+          // Item, on the opening tab, then on All.
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          const sentBefore = net.calls.length;
+          await pickItem(page, 'Tables');
+          v = lookF(page);
+          const TABLES_STRIP = 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2';
+          if (opening === 'Overdue') {
+            check('Staff: Item "Tables" on Overdue, which holds one booking of Folding Tables: not it, though its name holds "Tables": '
+                + '"0 of 1 overdue booking match", "No overdue bookings match your search or filters." with Clear search and filters; '
+                + `the counts follow, "${TABLES_STRIP}"; Clear filters appears`,
+              v.rows.length === 0 && v.heading === '0 of 1 overdue booking match'
+                && v.empty === 'No overdue bookings match your search or filters.'
+                && said(v.emptyButtons) === said(['Clear search and filters']) && v.strip === TABLES_STRIP && v.clear, said(v));
+          } else {
+            check(`${name}: Item "Tables" on Upcoming: #149 alone, not #150, whose "Folding Tables" holds the name; "1 of 5 upcoming `
+                + `bookings matches"; the counts follow, "${TABLES_STRIP}"; and Clear filters appears`,
+              said(v.rows) === said([149]) && v.heading === '1 of 5 upcoming bookings matches' && v.strip === TABLES_STRIP && v.clear,
+              said(v));
+          }
+          await clickIf(page, tabNamed(page, 'All'));
+          const perItem = {};
+          for (const label of Object.keys(BY_ITEM)) {
+            await pickItem(page, label);
+            perItem[label] = lookF(page).rows;
+          }
+          const wrongItems = Object.keys(BY_ITEM).filter((label) => said(perItem[label]) !== said(BY_ITEM[label]));
+          check(`${name}: on All each item shows exactly its own bookings, in the one order: Basketball Court 3, Folding Tables 2, `
+              + 'Multipurpose Hall 2, Plastic Chairs 3, stick 2, Tables 2 (never the Folding Tables)',
+            wrongItems.length === 0, said(wrongItems.map((label) => ({ label, got: perItem[label], want: BY_ITEM[label] }))));
+          const offeredItems = optionsOf(itemSelect(page))?.split(' | ') ?? [];
+          check(`${name}: Item still lists a deactivated item that old bookings use: "stick" is deactivated (the active items list, `
+              + 'GET /rental-items, no longer holds it), but a booking reads its item\'s name live, so #148 and #141 still name it, '
+              + 'Item offers it once, and choosing it shows those two; the list asked for no items list, its choices being its own '
+              + 'bookings\'',
+            offeredItems.filter((o) => o === 'stick').length === 1 && said(perItem.stick) === said([148, 141])
+              && !ACTIVE_F.some((i) => i.name === 'stick') && !net.calls.some((c) => c.url.endsWith('/rental-items')),
+            said({ offeredItems, stick: perItem.stick, itemsAsked: net.calls.filter((c) => c.url.endsWith('/rental-items')).length }));
+          await pickItem(page, 'Plastic Chairs');
+          const chairsHeading = lookF(page).heading;
+          await pickItem(page, 'Any item');
+          v = lookF(page);
+          check(`${name}: on All, "3 of 14 bookings match" for Plastic Chairs; back on "Any item", all fourteen, "14 bookings", every `
+              + 'count as before, and no Clear filters',
+            chairsHeading === '3 of 14 bookings match' && said(v.rows) === said(ALL14) && v.heading === '14 bookings'
+              && v.strip === STRIP14 && !v.clear, said({ chairsHeading, v }));
+
+          // Payment.
+          const perPay = {};
+          for (const label of Object.keys(BY_PAY)) {
+            await pickPay(page, label);
+            const x = lookF(page);
+            perPay[label] = { rows: x.rows, strip: x.strip, heading: x.heading, markers: [...new Set(x.markers)] };
+          }
+          const wrongPays = Object.keys(BY_PAY).filter((label) => said(perPay[label].rows) !== said(BY_PAY[label].rows)
+            || perPay[label].strip !== BY_PAY[label].strip
+            || perPay[label].heading !== `${BY_PAY[label].rows.length} of 14 bookings ${BY_PAY[label].rows.length === 1 ? 'matches' : 'match'}`);
+          check(`${name}: on All each Payment choice shows its bookings, the counts and the heading following it: Paid 4 (never the PHP 0 `
+              + 'paid #150 or #143), Unpaid 5, No fee 2, Not billed 1 (#140), Void 2 (the cancelled #142 and #138)',
+            wrongPays.length === 0, said(wrongPays.map((label) => ({ label, got: perPay[label], want: BY_PAY[label] }))));
+          check(`${name}: the filter and the row never disagree: every row a choice shows has that word under its badge, and no other`,
+            Object.keys(BY_PAY).every((label) => said(perPay[label].markers) === said([label])),
+            said(Object.fromEntries(Object.keys(BY_PAY).map((label) => [label, perPay[label].markers]))));
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          await pickPay(page, 'Unpaid');
+          v = lookF(page);
+          check(`${name}: a filter and a tab together: Upcoming with Unpaid shows #151, #149 and #147 under "3 of 5 upcoming bookings `
+              + 'match"',
+            said(v.rows) === said([151, 149, 147]) && v.heading === '3 of 5 upcoming bookings match'
+              && said(v.pressed) === said(['Upcoming 3']), said(v));
+
+          // Starts, on three clocks.
+          await clickIf(page, tabNamed(page, 'All'));
+          await pickPay(page, 'Any payment');
+          const byZone = {};
+          for (const zone of ZONES) {
+            process.env.TZ = zone;
+            const seen = {};
+            for (const label of PRESET_LABELS) {
+              await pickDate(page, label);
+              seen[label] = lookF(page).rows;
+            }
+            await pickDate(page, 'Choose dates');
+            await typeDate(page, fromInput(page), '2026-10-12');
+            await typeDate(page, toInput(page), '2026-10-12');
+            seen.oct12 = lookF(page).rows;
+            await typeDate(page, fromInput(page), '2026-10-19');
+            await typeDate(page, toInput(page), '');
+            seen.fromOct19 = lookF(page).rows;
+            await typeDate(page, fromInput(page), '');
+            await typeDate(page, toInput(page), '2026-10-11');
+            seen.toOct11 = lookF(page).rows;
+            await typeDate(page, toInput(page), '');
+            byZone[zone] = seen;
+          }
+          process.env.TZ = HOME_ZONE;
+          const wrongDates = ZONES.flatMap((zone) => Object.keys(BY_DATE)
+            .filter((k) => said(byZone[zone][k]) !== said(BY_DATE[k])).map((k) => ({ zone, k, got: byZone[zone][k] })));
+          check(`${name}: Starts in Manila days, on UTC, Los Angeles and Tokyo time alike: Today, #147 (11:48 PM, Tokyo's 13 Oct), #146 `
+              + '(7:47 AM, 11 Oct in UTC and Los Angeles) and #145 (00:00), not #144 (11:30 PM on 11 Oct); Next 7 days adds #148 (11:30 '
+              + 'PM on 18 Oct), not #149 (00:00 on 19 Oct); Next 30 days adds #149 and #150 (10 Nov), not #151 (11 Nov); Last 7 days '
+              + '#147 to #143 (00:00 on 6 Oct), not #142 (11:30 PM on 5 Oct); Last 30 days adds #142 and #141 (00:00 on 13 Sep), not '
+              + '#140 (11:30 PM on 12 Sep)',
+            wrongDates.filter((w) => PRESET_LABELS.includes(w.k)).length === 0,
+            said(wrongDates.filter((w) => PRESET_LABELS.includes(w.k))));
+          check(`${name}: Choose dates, both ends in, on all three: 12 Oct to 12 Oct takes #147, #146 and #145; From 19 Oct alone #151, `
+              + '#150 and #149; To 11 Oct alone the seven from #144 down',
+            wrongDates.filter((w) => !PRESET_LABELS.includes(w.k)).length === 0,
+            said(wrongDates.filter((w) => !PRESET_LABELS.includes(w.k))));
+          await pickDate(page, 'Today');
+          v = lookF(page);
+          check(`${name}: Today on All: "3 of 14 bookings match", and the counts follow the date, "Upcoming 1 · Overdue 1 · Completed 1 `
+              + '· Returned 0 · Cancelled 0 · All 3"',
+            v.heading === '3 of 14 bookings match'
+              && v.strip === 'Upcoming 1 · Overdue 1 · Completed 1 · Returned 0 · Cancelled 0 · All 3', said(v));
+          await pickDate(page, 'Choose dates');
+          const fromBox = fromInput(page);
+          const toBox = toInput(page);
+          v = lookF(page);
+          check(`${name}: Choose dates brings From and To, date inputs labelled "From" and "To", both described by the hint; with neither `
+              + 'set it restricts nothing ("14 bookings") but is a filter on (Clear filters shows)',
+            fromBox?.type === 'date' && toBox?.type === 'date' && !!hintBox?.id && fromBox.getAttribute('aria-describedby') === hintBox.id
+              && toBox.getAttribute('aria-describedby') === hintBox.id && v.heading === '14 bookings' && v.rows.length === 14 && v.clear,
+            said({ from: fromBox?.type ?? null, to: toBox?.type ?? null, heading: v.heading, clear: v.clear }));
+          await pickItem(page, 'Basketball Court');
+          await pickPay(page, 'Paid');
+          await typeDate(page, fromInput(page), '2026-10-12');
+          await typeDate(page, toInput(page), '2026-10-01');
+          v = lookF(page);
+          check(`${name}: From after To (12 Oct to 1 Oct) is never swapped and takes nothing: the hint "${HINT}", "0 of 14 bookings `
+              + 'match", and "No bookings match your search or filters." with Clear search and filters',
+            v.hint && v.from === '2026-10-12' && v.to === '2026-10-01' && v.rows.length === 0 && v.heading === '0 of 14 bookings match'
+              && v.empty === 'No bookings match your search or filters.' && said(v.emptyButtons) === said(['Clear search and filters']),
+            said(v));
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          v = lookF(page);
+          check(`${name}: Clear filters puts all three back to Any, every one, takes From, To and the hint away, and goes itself; focus `
+              + 'moves to the Item select rather than being dropped; the tab stays: All, "14 bookings"',
+            v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
+              && !v.hint && !v.clear && !!itemSelect(page) && page.active() === itemSelect(page)
+              && said(v.pressed) === said(['All 14']) && v.heading === '14 bookings',
+            said({ v, focus: page.active()?.tagName ?? null }));
+
+          // A tab, filters and a search together; then the empty texts.
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          await pickPay(page, 'Unpaid');
+          const oneFilter = lookF(page);
+          await type(page, 'maria');
+          const withSearch = lookF(page);
+          await pickDate(page, 'Next 7 days');
+          const nothingLeft = lookF(page);
+          check(`${name}: tab, filters and search together: Upcoming with Unpaid, #151, #149 and #147, "3 of 5 upcoming bookings match"; `
+              + 'with "maria" as well, #149 alone (Maria Lourdes Villanueva-Santos), "1 of 5 upcoming bookings matches", the counts '
+              + 'following both; with Next 7 days too nothing is left (#149 starts on 19 Oct): "0 of 5 upcoming bookings match", and '
+              + 'in place of the rows "No upcoming bookings match your search or filters." with one button, Clear search and filters',
+            said(oneFilter.rows) === said([151, 149, 147]) && oneFilter.heading === '3 of 5 upcoming bookings match'
+              && said(withSearch.rows) === said([149]) && withSearch.heading === '1 of 5 upcoming bookings matches'
+              && withSearch.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1'
+              && nothingLeft.rows.length === 0 && nothingLeft.heading === '0 of 5 upcoming bookings match'
+              && nothingLeft.empty === 'No upcoming bookings match your search or filters.'
+              && said(nothingLeft.emptyButtons) === said(['Clear search and filters']),
+            said({ oneFilter, withSearch, nothingLeft }));
+          await clickIf(page, page.query('.empty') ? buttonNamed(page.query('.empty'), 'Clear search and filters') : null);
+          v = lookF(page);
+          check(`${name}: Clear search and filters empties the search and puts every filter back to Any, keeps the tab (Upcoming), and `
+              + 'puts focus in the search box: "5 upcoming bookings", all five',
+            v.search === '' && filtersOf(v) === 'Any item / Any payment / Any date' && !v.clear
+              && said(v.pressed) === said(['Upcoming 5']) && v.heading === '5 upcoming bookings' && v.rows.length === 5
+              && !!box(page) && page.active() === box(page),
+            said({ v, focus: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName ?? null }));
+          await clickIf(page, tabNamed(page, 'Overdue'));
+          await pickPay(page, 'Paid');
+          const filterEmpty = lookF(page);
+          await pickPay(page, 'Any payment');
+          await type(page, 'zzz');
+          const searchEmpty = lookF(page);
+          await type(page, '');
+          check(`${name}: a filter alone that empties a tab says so in the same words: Overdue with Paid, "0 of 1 overdue booking `
+              + 'match", "No overdue bookings match your search or filters." and Clear search and filters',
+            filterEmpty.heading === '0 of 1 overdue booking match'
+              && filterEmpty.empty === 'No overdue bookings match your search or filters.'
+              && said(filterEmpty.emptyButtons) === said(['Clear search and filters']), said(filterEmpty));
+          check(`${name}: a search alone keeps its own text and button, as before: 'No overdue bookings match "zzz"' with Clear search`,
+            searchEmpty.heading === '0 of 1 overdue booking match' && searchEmpty.empty === 'No overdue bookings match "zzz"'
+              && said(searchEmpty.emptyButtons) === said(['Clear search']), said(searchEmpty));
+          await clickIf(page, tabNamed(page, 'All'));
+          await type(page, 'juan');
+          await pickItem(page, 'Basketball Court');
+          await pickPay(page, 'Unpaid');
+          const allSet = lookF(page);
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          v = lookF(page);
+          check(`${name}: Clear filters clears the filters only: with "juan" typed, Basketball Court and Unpaid set (#151), the search `
+              + 'stays, and so do his two bookings, #151 and #143, under "2 of 14 bookings match"; focus on the Item select',
+            said(allSet.rows) === said([151]) && v.search === 'juan' && filtersOf(v) === 'Any item / Any payment / Any date'
+              && said(v.rows) === said([151, 143]) && v.heading === '2 of 14 bookings match' && !!itemSelect(page)
+              && page.active() === itemSelect(page),
+            said({ allSet: allSet.rows, v }));
+          await type(page, '');
+          check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to the browser's storage, the `
+              + 'session\'s stub or jsdom\'s own',
+            net.calls.length === sentBefore && store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && !!itemSelect(page),
+            `${net.calls.length - sentBefore} request(s): ${said(listCalls(net.calls.slice(sentBefore)))}, `
+              + `${store.sets - writesAtOpen} stub write(s), ${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+          // Kept through a tab, a search, Refresh, a failed reload and Back.
+          await pickItem(page, 'Plastic Chairs');
+          await pickPay(page, 'Unpaid');
+          await pickDate(page, 'Choose dates');
+          await typeDate(page, fromInput(page), '2026-10-01');
+          await typeDate(page, toInput(page), '2026-10-31');
+          const SET = 'Plastic Chairs / Unpaid / Choose dates 2026-10-01..2026-10-31';
+          v = lookF(page);
+          check(`${name}: Plastic Chairs, Unpaid, 1 to 31 Oct, on All: #147 alone, "1 of 14 bookings matches"`,
+            filtersOf(v) === SET && said(v.rows) === said([147]) && v.heading === '1 of 14 bookings matches'
+              && v.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1', said(v));
+          await clickIf(page, tabNamed(page, 'Upcoming'));
+          const onUpcoming = lookF(page);
+          await type(page, 'teresita');
+          const searched = lookF(page);
+          await type(page, '');
+          await clickIf(page, tabNamed(page, 'All'));
+          v = lookF(page);
+          check(`${name}: kept through a tab and a search: Upcoming shows #147, "1 of 5 upcoming bookings matches"; "teresita", its `
+              + 'borrower, still finds it; the search cleared and All again, the filters are as set, and so is the row',
+            filtersOf(onUpcoming) === SET && said(onUpcoming.rows) === said([147])
+              && onUpcoming.heading === '1 of 5 upcoming bookings matches' && filtersOf(searched) === SET
+              && said(searched.rows) === said([147]) && filtersOf(v) === SET && said(v.rows) === said([147]),
+            said({ onUpcoming: onUpcoming.rows, searched: searched.rows, v: filtersOf(v) }));
+          at = holdNext();
+          let sent = net.calls.length;
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          const reloading = { row: !!itemSelect(page), loading: lookF(page).loading };
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          v = lookF(page);
+          check(`${name}: Refresh loads the list once, with no filters row while it is out, and keeps every filter and its row`,
+            said(listCalls(net.calls.slice(sent))) === said(['GET /rental-requests?status=all']) && !reloading.row && reloading.loading
+              && filtersOf(v) === SET && said(v.rows) === said([147]) && v.heading === '1 of 14 bookings matches',
+            said({ reloading, v }));
+          at = holdNext();
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          release(at, 500, { error: 'Internal server error' });
+          await page.settle();
+          const failedReload = { row: !!itemSelect(page), error: lookF(page).error };
+          at = holdNext();
+          await clickIf(page, tryAgainButton(page));
+          release(at, 200, listAnswerF(state));
+          await page.settle();
+          net.hold = false;
+          v = lookF(page);
+          check(`${name}: a reload that fails shows no filters row beside the error, and Try again brings it back as it was`,
+            !failedReload.row && failedReload.error === 'Could not load the bookings: Internal server error' && filtersOf(v) === SET
+              && said(v.rows) === said([147]), said({ failedReload, v }));
+          if (name !== 'Punong Barangay') {
+            const label = name === 'Secretary' ? 'Edit' : 'Mark returned';
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 147, label));
+            const opened = text(page.query('.pending-card h3'));
+            await clickIf(page, buttonNamed(root(), '← Back to list'));
+            v = lookF(page);
+            check(`${name}: Back from ${label}, with nothing ${name === 'Secretary' ? 'saved' : 'recorded'}, keeps every filter and its `
+                + 'row; nothing was requested',
+              opened === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147') && filtersOf(v) === SET
+                && said(v.rows) === said([147]) && said(listCalls(net.calls.slice(sent))) === said([]),
+              said({ opened, v: filtersOf(v), rows: v.rows, calls: listCalls(net.calls.slice(sent)) }));
+          }
+
+          // The reload after an action keeps the filters and the tab.
+          await clickIf(page, buttonNamed(root(), 'Clear filters'));
+          await pickPay(page, 'Unpaid');
+          if (name === 'Secretary') {
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 147, 'Cancel'));
+            await cancelWithReason(page);
+            await page.settle();
+            v = lookF(page);
+            check('Secretary: Cancel with Unpaid on posts the cancel, loads the list again, once, and keeps the filter and the tab: '
+                + '#147, its charge now void as the route leaves an unpaid one, has left Unpaid: #151, #149, #145 and #141, "4 of 14 '
+                + 'bookings match"',
+              said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/147/cancel', 'GET /rental-requests?status=all'])
+                && v.payment === 'Unpaid' && said(v.rows) === said([151, 149, 145, 141]) && v.heading === '4 of 14 bookings match'
+                && said(v.pressed) === said(['All 4']), said({ calls: listCalls(net.calls.slice(sent)), v }));
+          }
+          if (name === 'Staff') {
+            sent = net.calls.length;
+            await clickIf(page, rowButtonF(page, 145, 'Mark returned'));
+            if (page.query('.pending-card form')) await page.submit();
+            await page.settle();
+            v = lookF(page);
+            check('Staff: Record return with Unpaid on posts the return, loads the list again, once, and keeps the filter and the tab: '
+                + '#145, returned and still unpaid, is still shown, now counted under Returned: "Upcoming 3 · Overdue 0 · Completed 0 '
+                + '· Returned 2 · Cancelled 0 · All 5"',
+              said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/145/return', 'GET /rental-requests?status=all'])
+                && v.payment === 'Unpaid' && said(v.rows) === said([151, 149, 147, 145, 141])
+                && v.strip === 'Upcoming 3 · Overdue 0 · Completed 0 · Returned 2 · Cancelled 0 · All 5'
+                && said(v.pressed) === said(['All 5']), said({ calls: listCalls(net.calls.slice(sent)), v }));
+          }
+
+          // The choices come from the rows as loaded.
+          await pickPay(page, 'Void');
+          const voidRows = lookF(page).rows;
+          for (const r of state.rows) if (r[8]?.status === 'VOID') r[8] = { ...r[8], status: 'PAID' };
+          state.rows.unshift([152, 'sound', 'nino', '2026-11-12', '08:00', '12:00', 'confirmed', 'confirmed',
+            { status: 'UNPAID', amount: 300 }]);
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          v = lookF(page);
+          check(`${name}: the choices are the loaded rows': after a Refresh that brings a Sound System booking and leaves no void charge, `
+              + 'Item offers Sound System in its place by name, Payment no longer offers Void, and the Void choice goes back to "Any '
+              + 'payment" with all fifteen shown, never a select reading Void over rows it does not hold',
+            voidRows.length > 0 && optionsOf(itemSelect(page)) === 'Any item | Basketball Court | Folding Tables | Multipurpose Hall | '
+              + 'Plastic Chairs | Sound System | stick | Tables'
+              && optionsOf(paySelect(page)) === 'Any payment | Paid | Unpaid | No fee | Not billed' && v.payment === 'Any payment'
+              && v.rows.length === 15 && v.heading === '15 bookings' && !v.clear,
+            said({ voidRows, items: optionsOf(itemSelect(page)), payments: optionsOf(paySelect(page)), v }));
+          await pickItem(page, 'Multipurpose Hall');
+          const hallRows = lookF(page).rows;
+          for (const r of state.rows) if (r[1] === 'hall') r[1] = 'hallRenamed';
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          v = lookF(page);
+          const renamedOptions = optionsOf(itemSelect(page)) ?? '';
+          await pickItem(page, 'Multi-purpose Hall');
+          const renamedRows = lookF(page).rows;
+          const renamedCells = bodyRows(page).map((tr) => text(tr.children[1]));
+          await pickItem(page, 'Any item');
+          check(`${name}: a renamed item shows once, under its current name: with Multipurpose Hall renamed "Multi-purpose Hall" on the `
+              + 'server, a Refresh brings every booking of it under the new name, read live from the item (a booking stores no copy of '
+              + 'it), so Item offers "Multi-purpose Hall" once and "Multipurpose Hall" no more; the choice the reload no longer offers '
+              + 'goes back to "Any item", all fifteen shown; and the new name, chosen, takes both its bookings, the August one too '
+              + '(#146 and #138), each row naming it',
+            said(hallRows) === said([146, 138]) && v.item === 'Any item' && v.rows.length === 15
+              && renamedOptions === 'Any item | Basketball Court | Folding Tables | Multi-purpose Hall | Plastic Chairs | Sound System | '
+                + 'stick | Tables'
+              && said(renamedRows) === said([146, 138]) && said(renamedCells) === said(['Multi-purpose Hall', 'Multi-purpose Hall']),
+            said({ hallRows, v: filtersOf(v), rows: v.rows.length, items: renamedOptions, renamedRows, renamedCells }));
+
+          // A new visit starts again; nothing was kept in the browser. The
+          // second mount does not reseed the session, which would clear storage.
+          const writesAfter = store.sets;
+          const domWritesAfter = domStorage.writes;
+          sentF.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+          resetNet(200, answerForF(makeStateF()));
+          const again = await globalThis.mountInteractive(root(), route);
+          await again.settle();
+          v = lookF(again);
+          check(`${name}: nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window or `
+              + `not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on ${opening}, "${openingHeading}"`,
+            writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '' && filtersOf(v) === 'Any item / Any payment / Any date' && !v.clear
+              && v.heading === openingHeading,
+            said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
+              session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
+          sentF.push(...net.calls.map((c) => c.method));
+          await again.unmount();
+        }
+
+        // c. The pager counts what the filters leave, and every filter change
+        // goes back to page 1. Forty bookings, numbered 3001 to 3040, all
+        // Juan's and overdue: odd ones Plastic Chairs, even ones Tables; Paid
+        // where the number leaves 1 over 3 (14), Unpaid where it leaves 2
+        // (13), no charge where it leaves 0 (13); the first 24 start in
+        // October (1 to 12 Oct, twice), the rest 1 to 16 Sep.
+        const two = (n) => String(n).padStart(2, '0');
+        const PAGER40 = Array.from({ length: 40 }, (_, i) => {
+          const n = i + 1;
+          const charge = n % 3 === 1 ? { status: 'PAID', amount: 50 } : n % 3 === 2 ? { status: 'UNPAID', amount: 50 } : null;
+          const day = n <= 24 ? `2026-10-${two(1 + ((n - 1) % 12))}` : `2026-09-${two(n - 24)}`;
+          return [3000 + n, n % 2 ? 'chairs' : 'tables', 'juan', day, '08:00', '12:00', 'confirmed', 'overdue', charge];
+        });
+        //   the change, then what "Showing" said on page 2 before it and must say after it, and the heading after
+        const STEPS_F = [
+          ['Item "Plastic Chairs"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 20 results', '20 of 40 bookings match'],
+          ['Item "Any item"', 'Showing 11 to 20 of 20 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['Payment "Paid"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 bookings match'],
+          ['Payment "Any payment"', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['Starts "Last 7 days"', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 14 results', '14 of 40 bookings match'],
+          ['Starts "Choose dates", no dates yet', 'Showing 11 to 14 of 14 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+          ['From 1 Oct', 'Showing 11 to 20 of 40 results', 'Showing 1 to 10 of 24 results', '24 of 40 bookings match'],
+          ['To 12 Oct', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 24 results', '24 of 40 bookings match'],
+          ['Clear filters', 'Showing 11 to 20 of 24 results', 'Showing 1 to 10 of 40 results', '40 bookings'],
+        ];
+        for (const { name, route, token, user } of ROLES_AE) {
+          const state = makeStateF(PAGER40);
+          seedSession(token, user);
+          resetNet(200, answerForF(state));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          await clickIf(page, tabNamed(page, 'All'));
+          await setRows(page, 10);
+          const sent = net.calls.length;
+          const changes = [
+            () => pickItem(page, 'Plastic Chairs'), () => pickItem(page, 'Any item'),
+            () => pickPay(page, 'Paid'), () => pickPay(page, 'Any payment'),
+            () => pickDate(page, 'Last 7 days'), () => pickDate(page, 'Choose dates'),
+            () => typeDate(page, fromInput(page), '2026-10-01'), () => typeDate(page, toInput(page), '2026-10-12'),
+            () => clickIf(page, buttonNamed(root(), 'Clear filters')),
+          ];
+          const seen = [];
+          for (let i = 0; i < STEPS_F.length; i += 1) {
+            await press(page, numberButton(page, 2));
+            const before = lookF(page).showing;
+            await changes[i]();
+            const after = lookF(page);
+            seen.push({ change: STEPS_F[i][0], before, after: after.showing, current: after.current, heading: after.heading });
+          }
+          const wrongSteps = seen.filter((s, i) => s.before !== STEPS_F[i][1] || s.after !== STEPS_F[i][2] || s.heading !== STEPS_F[i][3]
+            || said(s.current) !== said(['1']));
+          check(`${name}: every filter change goes back to page 1, from page 2 at 10 a page, and the pager counts what the filters leave: `
+              + 'Item, Payment, a Starts preset, Choose dates, From, To and Clear filters, each from "Showing 11 to …" to "Showing 1 to '
+              + '10 of 20, 40, 14, 40, 14, 40, 24, 24, 40 results", with the heading over the same set',
+            wrongSteps.length === 0, said(wrongSteps.length ? wrongSteps : seen.map((s) => s.after)));
+          // With no filters on screen nothing was changed, so "no request" would say nothing.
+          check(`  ${name}: and none of those changes or page presses sent a request`, !!itemSelect(page) && net.calls.length === sent,
+            `${net.calls.length - sent} request(s), filters ${itemSelect(page) ? 'present' : 'absent'}`);
+          await pickPay(page, 'Paid');
+          await press(page, numberButton(page, 2));
+          const second = lookF(page);
+          for (const r of state.rows) if (r[0] - 3000 <= 16 && r[8]?.status === 'PAID') r[8] = { ...r[8], status: 'UNPAID' };
+          await clickIf(page, buttonNamed(root(), 'Refresh'));
+          const shrunk = lookF(page);
+          check(`${name}: kept, and never an empty page past the end: on page 2 of Paid's 14, a Refresh after six were marked unpaid `
+              + 'elsewhere keeps Paid and shows the 8 left on one page, with no pager, never an empty page 2',
+            second.showing === 'Showing 11 to 14 of 14 results' && shrunk.payment === 'Paid' && shrunk.rows.length === 8
+              && shrunk.showing === null && shrunk.heading === '8 of 40 bookings match', said({ second: second.showing, shrunk }));
+          sentF.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+        const writesF = sentF.filter((m) => m !== 'GET');
+        check('section AF\'s filters row sent GETs, and two POSTs, the Secretary\'s cancel and Staff\'s return, answered by the fetch stub',
+          sentF.length > 0 && said(writesF) === said(['POST', 'POST']), `${sentF.length} request(s): ${said(writesF)}`);
+
+        // d. The Filters button on a phone, as sections AB and AC check
+        // Document requests'. At 640px and below the row and its hint are a
+        // panel behind one full-width "Filters" button, which counts the
+        // filters that are on ("Filters (2)", From and To counting once, with
+        // Starts) and opens and closes the panel in place, by its button and
+        // by Escape (in the open panel or on the button; never from the
+        // search box or a tab); its open state is the page's, kept through
+        // every reload and Back and never in the browser; Clear filters keeps
+        // its place while nothing is on, disabled and hidden. Above 640px no
+        // button and the row as it was. jsdom applies no width media query,
+        // so index.css is read with section AF's reader.
+        console.log('\n--- Rental bookings: the Filters button ---');
+        {
+          const FILTERS_NAME = /^Filters( \(\d+\))?$/;
+          const filtersButton = (page) => page.queryAll('button').find((b) => FILTERS_NAME.test(b.textContent)) ?? null;
+          // The panel the button names, found the way a screen reader finds it.
+          const panelOf = (page) => {
+            const id = filtersButton(page)?.getAttribute('aria-controls');
+            return id ? dom.window.document.getElementById(id) : null;
+          };
+          const slotOf = () => buttonNamed(root(), 'Clear filters') ?? null;
+          const stateOf = (page) => {
+            const b = filtersButton(page);
+            const p = panelOf(page);
+            return { label: b?.textContent ?? null, expanded: b?.getAttribute('aria-expanded') ?? null,
+              open: !!p && p.classList.contains('is-open') };
+          };
+          const isOpen = (s) => s.expanded === 'true' && s.open;
+          const isClosed = (s) => s.label !== null && s.expanded === 'false' && !s.open;
+          // What is drawn of the three, each found on its own.
+          const drawn = (page) => ({ button: !!filtersButton(page), panel: !!page.query('.pay-filters-panel'), slot: !!slotOf() });
+          const none = (d) => !d.button && !d.panel && !d.slot;
+          const toggle = (page) => press(page, filtersButton(page));
+          // Opened or closed by its button only when it is not so already, so
+          // a page that ignores an Escape fails that one check and not every
+          // check after it.
+          const openIt = async (page) => { if (!isOpen(stateOf(page))) await toggle(page); };
+          const closeIt = async (page) => { if (isOpen(stateOf(page))) await toggle(page); };
+          // Escape where focus is, after focusing `el` ('nothing': with nothing
+          // focused): whether the element took focus, and whether the key went
+          // on to the document.
+          const escapeFrom = async (page, el) => {
+            if (el === 'nothing') page.active()?.blur?.();
+            else el?.focus();
+            const focused = el === 'nothing' ? page.active() === dom.window.document.body : !!el && page.active() === el;
+            let reached = false;
+            const spy = (e) => { if (e.key === 'Escape') reached = true; };
+            dom.window.document.addEventListener('keydown', spy);
+            if (focused) await page.key('Escape');
+            await page.settle();
+            dom.window.document.removeEventListener('keydown', spy);
+            return { focused, reached: focused ? reached : null };
+          };
+          const sentB = [];
+
+          for (const { name, route, token, user } of ROLES_AE) {
+            const st = makeStateF();
+            seedSession(token, user);
+            resetNet(200, answerForF(st));
+            let at = holdNext();
+            const page = await globalThis.mountInteractive(root(), route);
+            await page.settle();
+            const whileLoading = { ...drawn(page), loading: lookF(page).loading };
+            release(at, 500, { error: 'Network down' });
+            await page.settle();
+            const afterFailure = { ...drawn(page), error: lookF(page).error };
+            at = holdNext();
+            await clickIf(page, tryAgainButton(page));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            const loaded = drawn(page);
+            check(`${name}: the Filters button, its panel and the Clear filters slot are not drawn while the list loads or beside a `
+                + 'failed load, as the filters row is not; Try again brings all three',
+              none(whileLoading) && whileLoading.loading && none(afterFailure)
+                && afterFailure.error === 'Could not load the bookings: Network down' && loaded.button && loaded.panel && loaded.slot,
+              said({ whileLoading, afterFailure, loaded }));
+
+            // The button and the panel it names.
+            const button = filtersButton(page);
+            const panel = panelOf(page);
+            const wrap = button?.closest('.rental-bookings-filters') ?? null;
+            const searchRow = box(page)?.closest('.list-head') ?? null;
+            const sameId = panel ? [...dom.window.document.querySelectorAll('[id]')].filter((el) => el.id === panel.id).length : 0;
+            check(`${name}: "Filters" is a real button, type="button", named by its own text, with aria-expanded="false" and `
+                + 'aria-controls naming the panel, whose id no other element has; the button is over the panel and outside it, both in '
+                + 'the page\'s filters wrapper (which carries .doc-requests-filters for its look) between the search row and the tabs',
+              !!button && button.tagName === 'BUTTON' && button.getAttribute('type') === 'button' && button.textContent === 'Filters'
+                && !button.hasAttribute('aria-label') && button.getAttribute('aria-expanded') === 'false' && !!panel
+                && button.getAttribute('aria-controls') === panel.id && sameId === 1 && !panel.contains(button)
+                && follows(button, panel) && !!wrap && wrap.classList.contains('doc-requests-filters') && wrap.contains(panel)
+                && follows(searchRow, wrap) && follows(wrap, page.query('.pay-tabs')),
+              said({ button: button ? { text: button.textContent, expanded: button.getAttribute('aria-expanded'),
+                controls: button.getAttribute('aria-controls') } : null, panel: panel?.id ?? null, sameId,
+              wrap: wrap?.className ?? null }));
+            const hint = panel?.querySelector('[role="status"]') ?? null;
+            const held = [itemSelect(page), paySelect(page), dateSelect(page), slotOf(), hint];
+            check(`${name}: the panel holds the three selects, the Clear filters slot and the hint, and nothing else of the list: no `
+                + 'heading, no search box, no tab',
+              !!panel && held.every((el) => !!el && panel.contains(el))
+                && !panel.querySelector('h1, h2, h3, h4, h5, h6, input[type="search"], .pay-tabs'),
+              said({ held: held.map((el) => !!el && !!panel && panel.contains(el)) }));
+
+            // Opening and closing, and Escape.
+            const sentAtOpen = net.calls.length;
+            const writesAtOpen = store.sets;
+            const domWritesAtOpen = domStorage.writes;
+            const s0 = stateOf(page);
+            await toggle(page);
+            const s1 = stateOf(page);
+            const focusAfterOpen = !!filtersButton(page) && page.active() === filtersButton(page);
+            await toggle(page);
+            const s2 = stateOf(page);
+            await toggle(page);
+            const s3 = stateOf(page);
+            check(`${name}: a press opens the panel in place (aria-expanded="true", the panel open) and focus stays on the button; a `
+                + 'second press closes it and a third opens it again',
+              isClosed(s0) && isOpen(s1) && focusAfterOpen && isClosed(s2) && isOpen(s3), said({ s0, s1, focusAfterOpen, s2, s3 }));
+            const onButton = () => !!filtersButton(page) && page.active() === filtersButton(page);
+            await closeIt(page);
+            const k1 = await escapeFrom(page, filtersButton(page));
+            const closedEscape = { ...stateOf(page), onButton: onButton(), ...k1 };
+            check(`${name}: with the panel closed, Escape does nothing: on the Filters button the panel stays closed, focus stays on `
+                + 'the button, and the key goes on unstopped',
+              isClosed(closedEscape) && closedEscape.onButton && k1.focused && k1.reached === true, said(closedEscape));
+            await openIt(page);
+            const k2 = await escapeFrom(page, itemSelect(page));
+            const fromSelect = { ...stateOf(page), onButton: onButton(), ...k2 };
+            check(`${name}: open, Escape from the Item select closes the panel and puts focus back on the Filters button, and the key `
+                + 'goes no further, as on Document requests and Payments',
+              isClosed(fromSelect) && fromSelect.onButton && k2.focused && k2.reached === false, said(fromSelect));
+            await openIt(page);
+            const k3 = await escapeFrom(page, filtersButton(page));
+            const fromButton = { ...stateOf(page), onButton: onButton(), ...k3 };
+            check(`${name}: open, Escape on the Filters button itself closes the panel and leaves focus on the button`,
+              isClosed(fromButton) && fromButton.onButton && k3.focused && k3.reached === false, said(fromButton));
+            await openIt(page);
+            const elsewhere = [];
+            let k = await escapeFrom(page, box(page));
+            elsewhere.push({ what: 'the search box', ...stateOf(page), stays: page.active() === box(page), ...k });
+            const allTab = tabNamed(page, 'All');
+            k = await escapeFrom(page, allTab);
+            elsewhere.push({ what: 'the All tab', ...stateOf(page), stays: page.active() === allTab, ...k });
+            k = await escapeFrom(page, 'nothing');
+            elsewhere.push({ what: 'nothing focused', ...stateOf(page), stays: page.active() === dom.window.document.body, ...k });
+            check(`${name}: open, Escape anywhere else leaves it open: from the search box, from a tab, and with nothing focused; focus `
+                + 'stays where it was',
+              elsewhere.length === 3 && elsewhere.every((x) => isOpen(x) && x.stays && x.focused), said(elsewhere));
+
+            // Clear filters with nothing on: its place kept, nothing to press.
+            const idle = slotOf();
+            const lastInRow = itemSelect(page)?.closest('.pay-filters')?.lastElementChild ?? null;
+            idle?.focus();
+            const idleFocused = !!idle && page.active() === idle;
+            check(`${name}: with nothing on, Clear filters keeps its place, the row's last control, but disabled and `
+                + 'aria-hidden="true": focus cannot reach it',
+              !!idle && idle === lastInRow && idle.disabled && idle.getAttribute('aria-hidden') === 'true' && !idleFocused,
+              said({ idle: idle ? { disabled: idle.disabled, hidden: idle.getAttribute('aria-hidden') } : null, idleFocused }));
+
+            // The count, as filters are chosen in the open panel.
+            await clickIf(page, tabNamed(page, 'All'));
+            const steps = [];
+            const note = (what) => {
+              const s = stateOf(page);
+              steps.push({ what, label: s.label, open: isOpen(s) });
+            };
+            note('nothing on');
+            await pickPay(page, 'Unpaid');
+            note('Payment Unpaid');
+            const live = slotOf();
+            const liveNow = { offered: clearOffered(live), disabled: live?.disabled ?? null };
+            live?.focus();
+            const liveFocused = !!live && page.active() === live;
+            await pickItem(page, 'Plastic Chairs');
+            note('Item Plastic Chairs');
+            await pickDate(page, 'Next 7 days');
+            note('Starts Next 7 days');
+            await pickDate(page, 'Choose dates');
+            note('Choose dates, no date yet');
+            await typeDate(page, fromInput(page), '2026-10-01');
+            note('From 1 Oct');
+            await typeDate(page, toInput(page), '2026-10-31');
+            note('To 31 Oct');
+            const threeOn = lookF(page);
+            const rangeInPanel = [fromInput(page), toInput(page)].every((el) => !!el && !!panelOf(page) && panelOf(page).contains(el));
+            await pickItem(page, 'Any item');
+            note('Item back to Any');
+            await pickPay(page, 'Any payment');
+            note('Payment back to Any');
+            const datesOnly = lookF(page);
+            await pickDate(page, 'Any date');
+            note('Starts back to Any');
+            const COUNTED = ['Filters', 'Filters (1)', 'Filters (2)', 'Filters (3)', 'Filters (3)', 'Filters (3)', 'Filters (3)',
+              'Filters (2)', 'Filters (1)', 'Filters'];
+            check(`${name}: the button counts the filters that are on as they are chosen in the panel: "Filters", "(1)" with Payment, `
+                + '"(2)" with Item, "(3)" with Next 7 days, still "(3)" for Choose dates with no date, with From, and with From and To, '
+                + 'which are one filter, Starts; then "(2)", "(1)" for the dates alone, and "Filters"',
+              said(steps.map((s) => s.label)) === said(COUNTED), said(steps.map((s) => `${s.what}: ${s.label}`)));
+            check(`${name}: the panel stays open through every one of those choices: a pick never closes it`,
+              steps.length === COUNTED.length && steps.every((s) => s.open), said(steps.filter((s) => !s.open).map((s) => s.what)));
+            check(`${name}: with a filter on, Clear filters is a normal button again, enabled and not aria-hidden, and it takes focus`,
+              liveNow.offered && liveFocused, said({ liveNow, liveFocused }));
+            check(`${name}: chosen in the panel, they filter as in the row: Plastic Chairs, Unpaid, 1 to 31 Oct, #147 alone, From and To `
+                + 'inside the panel; those dates alone, the eight that start in October',
+              said(threeOn.rows) === said([147]) && rangeInPanel && said(datesOnly.rows) === said(OCTOBER)
+                && datesOnly.heading === '8 of 14 bookings match',
+              said({ threeOn: threeOn.rows, rangeInPanel, datesOnly: datesOnly.rows }));
+
+            // The count follows Clear filters and "Clear search and filters".
+            await pickItem(page, 'stick');
+            await pickPay(page, 'Paid');
+            await pickDate(page, 'Last 30 days');
+            const beforeClear = stateOf(page);
+            await press(page, slotOf());
+            const afterClear = stateOf(page);
+            const clearedSlot = slotOf();
+            check(`${name}: Clear filters, pressed in the open panel, takes "Filters (3)" back to "Filters", leaves the panel open and `
+                + 'puts focus on the Item select; its slot is disabled and aria-hidden again',
+              beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!itemSelect(page)
+                && page.active() === itemSelect(page) && !!clearedSlot && clearedSlot.disabled
+                && clearedSlot.getAttribute('aria-hidden') === 'true',
+              said({ beforeClear, afterClear, focus: page.active()?.tagName ?? null }));
+            await clickIf(page, tabNamed(page, 'Overdue'));
+            await type(page, 'rodrigo');
+            await pickPay(page, 'Paid');
+            const emptied = { ...stateOf(page), empty: lookF(page).empty };
+            const emptyBox = page.query('.empty');
+            await clickIf(page, emptyBox ? buttonNamed(emptyBox, 'Clear search and filters') : null);
+            const bothCleared = lookF(page);
+            const afterBoth = stateOf(page);
+            check(`${name}: "Clear search and filters" takes the count back too: "Filters (1)" over "No overdue bookings match your search `
+                + 'or filters.", then "Filters", the search empty, the overdue booking back, and the panel as it was, open',
+              emptied.label === 'Filters (1)' && emptied.empty === 'No overdue bookings match your search or filters.'
+                && afterBoth.label === 'Filters' && isOpen(afterBoth) && bothCleared.search === ''
+                && said(bothCleared.rows) === said([145]),
+              said({ emptied, afterBoth, search: bothCleared.search, rows: bothCleared.rows }));
+            // With no button on screen nothing was pressed, so "no request" would say nothing.
+            check(`${name}: none of those presses, Escapes, picks, clears or searches sent a request, and none wrote to the browser's `
+                + 'storage',
+              !!filtersButton(page) && net.calls.length === sentAtOpen && store.sets === writesAtOpen
+                && domStorage.writes === domWritesAtOpen,
+              `${net.calls.length - sentAtOpen} request(s), ${store.sets - writesAtOpen} stub write(s), `
+                + `${domStorage.writes - domWritesAtOpen} jsdom write(s)`);
+
+            // Open, it stays open through a tab, a search, Refresh, a failed
+            // reload and Try again, and Back from a panel; closed, it stays
+            // closed.
+            const keptOpen = [];
+            const keep = (list, what) => list.push({ what, ...stateOf(page) });
+            await clickIf(page, tabNamed(page, 'Upcoming'));
+            keep(keptOpen, 'a tab');
+            await type(page, 'liza');
+            keep(keptOpen, 'a search');
+            await type(page, '');
+            const callsBefore = net.calls.length;
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            const duringRefresh = drawn(page);
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptOpen, 'Refresh');
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            release(at, 500, { error: 'Internal server error' });
+            await page.settle();
+            const besideError = drawn(page);
+            at = holdNext();
+            await clickIf(page, tryAgainButton(page));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptOpen, 'a failed reload, then Try again');
+            const panelLabel = { Secretary: 'Edit', Staff: 'Mark returned' }[name];
+            let openedPanel = null;
+            if (panelLabel) {
+              await clickIf(page, rowButtonF(page, 147, panelLabel));
+              openedPanel = text(page.query('.pending-card h3'));
+              await clickIf(page, buttonNamed(root(), '← Back to list'));
+              keep(keptOpen, `Back from ${panelLabel}`);
+            }
+            const reloadCalls = listCalls(net.calls.slice(callsBefore));
+            check(`${name}: open, the panel stays open through a tab, a search, Refresh, a reload that fails and Try again`
+                + `${panelLabel ? `, and Back from ${panelLabel}` : ''}, though the button is not drawn while the list reloads: the `
+                + 'open state is the page\'s',
+              keptOpen.length === (panelLabel ? 5 : 4) && keptOpen.every((s) => isOpen(s)) && none(duringRefresh) && none(besideError)
+                && (!panelLabel || openedPanel === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147'))
+                && said(reloadCalls) === said(['GET /rental-requests?status=all', 'GET /rental-requests?status=all',
+                  'GET /rental-requests?status=all']),
+              said({ keptOpen, duringRefresh, besideError, openedPanel, reloadCalls }));
+            await toggle(page);
+            const keptClosed = [];
+            at = holdNext();
+            await clickIf(page, buttonNamed(root(), 'Refresh'));
+            release(at, 200, listAnswerF(st));
+            await page.settle();
+            net.hold = false;
+            keep(keptClosed, 'Refresh');
+            await clickIf(page, tabNamed(page, 'All'));
+            keep(keptClosed, 'a tab');
+            await type(page, 'nino');
+            keep(keptClosed, 'a search');
+            await type(page, '');
+            if (panelLabel) {
+              await clickIf(page, rowButtonF(page, 147, panelLabel));
+              await clickIf(page, buttonNamed(root(), '← Back to list'));
+              keep(keptClosed, `Back from ${panelLabel}`);
+            }
+            check(`${name}: closed, it stays closed through Refresh, a tab, a search${panelLabel ? ' and Back from a panel' : ''}`,
+              keptClosed.length === (panelLabel ? 4 : 3) && keptClosed.every((s) => isClosed(s)), said(keptClosed));
+
+            // A new visit starts closed; nothing about it was kept.
+            await toggle(page);
+            const leftOpen = stateOf(page);
+            sentB.push(...net.calls.map((c) => c.method));
+            await page.unmount();
+            resetNet(200, answerForF(makeStateF()));
+            const again = await globalThis.mountInteractive(root(), route);
+            await again.settle();
+            const fresh = stateOf(again);
+            check(`${name}: a new visit opens with the panel closed and the button reading "Filters", though it was left open; nothing `
+                + 'about it is in the browser: no storage write through window or not, sessionStorage empty, no cookie',
+              isOpen(leftOpen) && isClosed(fresh) && fresh.label === 'Filters' && store.sets === writesAtOpen
+                && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0 && dom.window.document.cookie === '',
+              said({ leftOpen, fresh, writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+            sentB.push(...net.calls.map((c) => c.method));
+            await again.unmount();
+          }
+
+          // e. index.css, read with section AF's reader: the button and the
+          // panel at 640px and below, neither above it, and Clear filters'
+          // place, all from Document requests' .doc-requests-filters rules,
+          // which the rental wrapper carries.
+          seedSession(VALID);
+          resetNet(200, answerForF(makeStateF()));
+          const cssPage = await globalThis.mountInteractive(root(), '/secretary/rentals');
+          await cssPage.settle();
+          const tb = filtersButton(cssPage);
+          const pn = panelOf(cssPage);
+          const idleSlot = slotOf();
+          const PHONE_WIDTHS = [320, 390, 640];
+          const WIDE_WIDTHS = [641, 768, 1045, 1046, 1280, 1920];
+          // Every property a rule that applies at `width` and matches `el`
+          // sets, with the value that wins.
+          const styleOf = (width, el) => {
+            if (!el) return null;
+            const hits = cssAF.rules.filter((r) => appliesAF(r.media, width) && r.selectors.some((s) => matchAF(el, s)));
+            const props = [...new Set(hits.flatMap((r) => Object.keys(r.decls)))].sort();
+            return Object.fromEntries(props.map((p) => [p, valueAF(width, el, p)]));
+          };
+          // The rules that apply at `width` and read the panel or its open state.
+          const panelRules = (width) => (pn ? cssAF.rules.filter((r) => appliesAF(r.media, width)
+            && r.selectors.some((s) => /pay-filters-panel|is-open/.test(s) && matchAF(pn, s))).map((r) => r.selectors.join(', '))
+            : ['no panel']);
+          const phoneClosed = PHONE_WIDTHS.map((w) => ({ w, button: [valueAF(w, tb, 'display'), valueAF(w, tb, 'width'),
+            valueAF(w, tb, 'height')], fill: valueAF(w, tb, 'background'), panel: valueAF(w, pn, 'display'),
+          slot: valueAF(w, idleSlot, 'display') }));
+          const wideClosed = WIDE_WIDTHS.map((w) => ({ w, button: valueAF(w, tb, 'display'), panelRules: panelRules(w),
+            slot: [valueAF(w, idleSlot, 'visibility'), valueAF(w, idleSlot, 'display')] }));
+          const styleClosed = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+          await toggle(cssPage);
+          const phoneOpen = PHONE_WIDTHS.map((w) => ({ w, panel: valueAF(w, pn, 'display'), fill: valueAF(w, tb, 'background') }));
+          const wideOpen = WIDE_WIDTHS.map((w) => ({ w, button: valueAF(w, tb, 'display'), panelRules: panelRules(w) }));
+          const styleOpen = WIDE_WIDTHS.map((w) => styleOf(w, pn));
+          const opened = stateOf(cssPage);
+          await pickPay(cssPage, 'Unpaid');
+          const liveSlot = slotOf();
+          const liveRead = [...PHONE_WIDTHS, ...WIDE_WIDTHS].map((w) => ({ w, display: valueAF(w, liveSlot, 'display'),
+            visibility: valueAF(w, liveSlot, 'visibility'), height: valueAF(w, liveSlot, 'height') }));
+          const layered = [390, 1280].flatMap((w) => [tb, pn, liveSlot].map((el) => ({ w, el: el?.className ?? null,
+            z: valueAF(w, el, 'z-index'), position: valueAF(w, el, 'position') })));
+          check('on a phone (320, 390 and 640px) the Filters button is drawn, the full width and a finger\'s 44px tall; closed, the '
+              + 'panel it controls is not drawn; and Clear filters, with nothing on, is not drawn in it',
+            !!tb && !!pn && !!idleSlot && phoneClosed.every((r) => said(r.button) === said(['flex', '100%', '44px'])
+              && r.panel === 'none' && r.slot === 'none'), said(phoneClosed));
+          check('  open, the panel is drawn there (a block: Payments\' card) and the button keeps the open fill, #eff6ff, as Document '
+              + 'requests\' and Payments\' Filters buttons do, white at rest when closed',
+            isOpen(opened) && phoneOpen.every((r) => r.panel === 'block' && r.fill === '#eff6ff')
+              && phoneClosed.every((r) => r.fill === '#fff'), said({ opened, phoneOpen, closedFill: phoneClosed.map((r) => r.fill) }));
+          check('above 640px (641, 768, 1045, 1046, 1280 and 1920) the button is not drawn, and no rule there reads the panel or its '
+              + 'open state: the panel is the row as it was, styled the same open or closed',
+            !!pn && [...wideClosed, ...wideOpen].every((r) => r.button === 'none' && r.panelRules.length === 0)
+              && said(styleClosed) === said(styleOpen),
+            said({ wideClosed: wideClosed.map((r) => [r.w, r.button, r.panelRules]), wideOpen: wideOpen.map((r) => [r.w, r.button,
+              r.panelRules]) }));
+          check('  and there, with nothing on, Clear filters keeps its place in the row, hidden: visibility hidden, never display none, '
+              + 'which would give its place up, so the first filter never makes the row taller',
+            !!idleSlot && wideClosed.every((r) => r.slot[0] === 'hidden' && r.slot[1] !== 'none'),
+            said(wideClosed.map((r) => [r.w, ...r.slot])));
+          check('with a filter on, nothing hides Clear filters at any width, and on a phone it is a finger\'s 44px tall',
+            !!liveSlot && clearOffered(liveSlot) && liveRead.every((r) => r.display !== 'none' && r.visibility === null)
+              && liveRead.filter((r) => r.w <= 640).every((r) => r.height === '44px'), said(liveRead));
+          check('the button, the panel and Clear filters stay in the page\'s flow: no z-index and no position of their own, at 390 or '
+              + '1280', !!tb && !!pn && !!liveSlot && layered.every((r) => r.z === null && r.position === null), said(layered));
+          const cssText = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+          const breakpoints = [...new Set([...cssText.matchAll(/@media[^{]*/g)]
+            .flatMap((m) => [...m[0].matchAll(/(\d+)px/g)].map((x) => Number(x[1]))))].sort((a, b) => a - b);
+          check('index.css gains no breakpoint (its @media widths are still 480, 560, 640, 641, 768 and 1045px), no CSS variable and '
+              + 'no rule for the rental filters of their own: their look is Document requests\' .doc-requests-filters rules',
+            said(breakpoints) === said([480, 560, 640, 641, 768, 1045]) && !/var\(--/.test(cssText)
+              && !/(^|[;{\s])--[\w-]+\s*:/.test(cssText) && !cssAF.rules.some((r) => r.selectors.some((s) => s.includes('rental-bookings-filters'))),
+            said({ breakpoints, own: cssAF.rules.filter((r) => r.selectors.some((s) => s.includes('rental-bookings-filters')))
+              .map((r) => r.selectors.join(', ')) }));
+          sentB.push(...net.calls.map((c) => c.method));
+          await cssPage.unmount();
+          const writesB = sentB.filter((m) => m !== 'GET');
+          check('section AF\'s Filters button sent nothing but GETs', sentB.length > 0 && writesB.length === 0,
+            `${sentB.length} request(s): ${[...new Set(sentB)].join(', ')}`);
+        }
+
+        if (F.clock && realNowAF) F.clock.now = realNowAF;
+        process.env.TZ = previousTZAF;
+      }
+
+      // =====================================================================
+      // AG. Rental bookings: columns that keep their places
+      // =====================================================================
+      // Above 640px the list's table sized its columns to the rows drawn, so
+      // they moved whenever the tab, the page, a search or a filter changed
+      // (by up to 219.5px between All's two pages); the schedule broke
+      // wherever the width fell ("Sep 24, / 2026, / 8:00 AM / – 8:00 PM"),
+      // differently from row to row; and where a filter left a tab one row, a
+      // header wrapped and that row sat 16px lower. The table is now
+      // .rental-bookings-table (this table alone), table-layout: fixed, with a
+      // width for every column but Purpose, which takes the rest and never
+      // less than its heading, 88px: the table is never narrower than the
+      // widths and 88. What each width must hold was measured in Chrome
+      // (Segoe UI) on the 28 live-shaped bookings, and over every day and
+      // minute of 2026, with the cell's 32px of padding (the actions cell's
+      // 24, and each button's 8px margin):
+      //   Booked for  the guest's line, "Guest · +639281112233", 133.84,
+      //               whole: 165.84; and a name on one line up to 176px from
+      //               1046px (208), up to 160 at 641 to 1045px (192)
+      //   Item        "Sinulog Costume Set" on two lines, 85.01: 117.01
+      //   Schedule    the times on one line, at most "12:00 AM – 12:00 AM",
+      //               143.31: 175.31, under the date with its comma, at most
+      //               "May 10, 2026,", 92.83
+      //   Qty         "100", 24.59: 56.59 (its heading, 24.27)
+      //   Status      the "Returned with issue" badge, 136.03: 168.03
+      //   actions     Edit and Cancel side by side, 55.11 and 73.05: 168.16
+      //               (Staff's Mark returned, 124.2: 156.2)
+      // And the table fits the barangay's screens beside the 15px scrollbar
+      // Chrome draws on Windows: 1001px of room at 1280 with the sidebar open,
+      // 975 at 1024. The Schedule cell is two spans in every row, the date with
+      // its comma and the times, each a line of its own above 640px and never
+      // broken, its words formatSchedule's. On a phone (640px and below) none
+      // of it applies, and no rule in the 640px block names the table. The
+      // protected col-*, .row-actions (its three exceptions among them), .num,
+      // .dash-main and .pending-card rules, the Document requests ones
+      // (.doc-requests-*) and this list's heading row's (.rental-bookings-head)
+      // are as they were at a52f978 (R3), read with git. jsdom applies no
+      // width media query, so index.css is read with section AF's reader; the
+      // section sits inside section AF's block for that, its 28 live-shaped
+      // bookings and its helpers.
+      console.log('\n--- Rental bookings: fixed columns ---');
+      {
+        const { execFileSync } = require('child_process');
+        const PINNED_REV = 'a52f978';
+        const WIDE = [641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440, 1920];
+        const PHONES = [320, 390, 640];
+        const NEED = { booked: 165.84, item: 117.01, schedule: 175.31, qty: 56.59, status: 168.03, actions: 168.16 };
+        // A name on one line up to 176px from 1046px, up to 160 below the
+        // sidebar, 641 to 1045px.
+        const BOOKED_FROM = { wide: 208, narrow: 192 };
+        const PURPOSE_FLOOR = 88;
+        // The room beside Chrome's 15px scrollbar: at 1280, the sidebar open,
+        // and at 1024, below it.
+        const ROOM = { 1280: 1001, 1024: 975 };
+        const px = (v) => (typeof v === 'string' && /^\d+(\.\d+)?px$/.test(v) ? Number.parseFloat(v) : null);
+        const sum = (list) => list.reduce((a, b) => a + b, 0);
+        const sentAG = [];
+        // The rule that gives `el` its `prop` at `width`, the cascade's winner,
+        // with the @media it sits in, read as valueAF reads its value.
+        const ruleAG = (width, el, prop) => {
+          if (!el) return null;
+          let best = null;
+          for (const r of cssAF.rules) {
+            if (!(prop in r.decls) || !appliesAF(r.media, width)) continue;
+            for (const sel of r.selectors) {
+              if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+              if (/::?(before|after|placeholder|first-line|first-letter)$/.test(sel) || !matchAF(el, sel)) continue;
+              const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specAF(sel)];
+              const better = !best || rank[0] - best.rank[0] || bySpecAF(rank.slice(1), best.rank.slice(1));
+              if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+                best = { rank, order: r.order, selector: sel, media: r.media, value: r.decls[prop] };
+              }
+            }
+          }
+          return best;
+        };
+        // The schedule as formatSchedule (constants/rentals.js) writes it, in
+        // the zone the bundle loaded in, where its formatters were built:
+        // [the date with its comma, the times].
+        const dayAG = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
+        const hourAG = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
+        const scheduleWant = (b) => [`${dayAG.format(new Date(b.start_datetime))},`,
+          `${hourAG.format(new Date(b.start_datetime))} – ${hourAG.format(new Date(b.end_datetime))}`];
+        const flat = (s) => (s === null || s === undefined ? s : String(s).replace(/\s+/g, ' ').trim());
+        const byNumberAG = (id) => LIVE28.find((b) => `#${b.request_id}` === id) ?? null;
+        // The actions each role's rows have: the Secretary's Edit and Cancel
+        // on every booking stored as confirmed, Staff's Mark returned on those
+        // of equipment and furniture, none for the Punong Barangay.
+        const actionsAG = {
+          Secretary: (b) => (b.status === 'confirmed' ? 'Edit + Cancel' : '(none)'),
+          Staff: (b) => (b.status === 'confirmed' && ['equipment', 'furniture'].includes(b.rental_items.type) ? 'Mark returned' : '(none)'),
+        };
+
+        // The helper on its own: scheduleParts splits formatSchedule's text
+        // into the date with its comma and the times.
+        const partsAG = (b) => attempt(() => L.scheduleParts(b));
+        const helperAG = [one(2), one(18), one(10)].map((b) => ({ id: b.request_id, got: partsAG(b), want: scheduleWant(b) }));
+        const missingAG = [{ ...one(2), start_datetime: null }, { ...one(2), end_datetime: null }].map(partsAG);
+        check('scheduleParts: the date with its comma and the times, as formatSchedule writes them ("Oct 10, 2026," and "8:00 AM – '
+            + '5:00 PM"), so the two with a space between are its whole text; null with no start or no end (formatSchedule\'s "—")',
+          helperAG.every((c) => !!c.got && typeof c.got === 'object' && flat(c.got.date) === flat(c.want[0])
+            && flat(c.got.times) === flat(c.want[1])) && missingAG.every((m) => m === null),
+          said({ helperAG, missingAG }));
+
+        // a. The real page, for the three roles: All, 100 a page, all 28 drawn.
+        for (const { name, route, token, user } of ROLES_AE) {
+          seedSession(token, user);
+          resetNet(200, answerAF(LIVE28));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          await clickIf(page, tabNamed(page, 'All'));
+          const sizeSelect = page.query('.pay-pager select');
+          if (sizeSelect) {
+            sizeSelect.value = '100';
+            sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+          const withActions = name !== 'Punong Barangay';
+          const tbl = page.query('table.data-table');
+          const ths = tbl ? [...tbl.querySelectorAll('thead th')] : [];
+          const HEADS = ['Booked for', 'Item', 'Schedule', 'Qty', 'Purpose', 'Status', ...(withActions ? [''] : [])];
+          const SIZED = ['rental-bookings-booked', 'rental-bookings-item', 'rental-bookings-schedule', 'rental-bookings-qty', null,
+            'rental-bookings-status', ...(withActions ? ['rental-bookings-actions'] : [])];
+          const headClasses = ths.map((th) => th.className);
+          check(`${name}: the list's table is .rental-bookings-table, beside data-table and stack-narrow, with its ${HEADS.length} headers `
+              + `as before, each sized one carrying its class (rental-bookings-booked, -item, -schedule, -qty beside num, -status${withActions
+                ? ', -actions' : ''}) and Purpose none`,
+            !!tbl && ['data-table', 'stack-narrow', 'rental-bookings-table'].every((c) => tbl.classList.contains(c))
+              && said(ths.map(text)) === said(HEADS)
+              && ths.every((th, i) => (SIZED[i] ? th.classList.contains(SIZED[i]) : th.className === ''))
+              && ths[3]?.classList.contains('num'),
+            said({ table: tbl?.className ?? null, headers: ths.map(text), classes: headClasses }));
+
+          // b. index.css for this role's own elements, as a browser of each
+          // width applies it.
+          const sized = ths.filter((_, i) => SIZED[i]);
+          const thPurpose = ths[4] ?? null;
+          const wideRead = WIDE.map((w) => ({
+            w,
+            layout: valueAF(w, tbl, 'table-layout'),
+            min: px(valueAF(w, tbl, 'min-width')),
+            widths: sized.map((th) => px(valueAF(w, th, 'width'))),
+            purpose: valueAF(w, thPurpose, 'width'),
+          }));
+          check(`${name}: above 640px (641, 700, 768, 900, 1045, 1046, 1280, 1366, 1440 and 1920) the columns are fixed: table-layout `
+              + `fixed; Booked for, Item, Schedule, Qty, Status${withActions ? ' and the actions column' : ''} each a width in px; Purpose `
+              + 'none, so it takes the rest; and the table never narrower than those and Purpose\'s 88px',
+            sized.length === SIZED.filter(Boolean).length && wideRead.every((r) => r.layout === 'fixed'
+              && r.widths.every((x) => x !== null) && r.purpose === null && r.min === sum(r.widths) + PURPOSE_FLOOR),
+            said(wideRead.map((r) => [r.w, r.layout, r.widths.join('/'), r.purpose, r.min])));
+          const short = wideRead.flatMap((r) => {
+            const [booked, item, schedule, qty, status, actions] = r.widths;
+            const bookedFloor = r.w >= 1046 ? BOOKED_FROM.wide : BOOKED_FROM.narrow;
+            const bad = [booked >= NEED.booked && booked >= bookedFloor ? null : `Booked for ${booked}`,
+              item >= NEED.item ? null : `Item ${item}`, schedule >= NEED.schedule ? null : `Schedule ${schedule}`,
+              qty >= NEED.qty ? null : `Qty ${qty}`, status >= NEED.status ? null : `Status ${status}`,
+              !withActions || actions >= NEED.actions ? null : `actions ${actions}`].filter(Boolean);
+            return bad.length ? [`${r.w}: ${bad.join(', ')}`] : [];
+          });
+          check(`${name}: each width holds what was measured in Chrome: Booked for the guest's line whole (165.84) and a name on one `
+              + 'line up to 176px from 1046px (208) and 160 below (192); Item "Sinulog Costume Set" on two lines (117.01); Schedule the '
+              + 'widest times of the day on one line (175.31); Qty "100" (56.59); Status the "Returned with issue" badge (168.03)'
+              + `${withActions ? '; the actions column Edit and Cancel side by side (168.16)' : ''}`,
+            short.length === 0, short.length ? said(short) : said(wideRead.map((r) => [r.w, r.widths.join('/')])));
+          const narrowest = { 1280: px(valueAF(1280, tbl, 'min-width')), 1024: px(valueAF(1024, tbl, 'min-width')) };
+          check(`${name}: at its narrowest the table fits beside Chrome's 15px scrollbar: ${narrowest[1280]}px at 1280 (the sidebar open; `
+              + `1001 of room) and ${narrowest[1024]}px at 1024 (975)`,
+            narrowest[1280] !== null && narrowest[1280] <= ROOM[1280] && narrowest[1024] !== null && narrowest[1024] <= ROOM[1024],
+            said(narrowest));
+          const origins = WIDE.flatMap((w) => [[tbl, 'table-layout'], [tbl, 'min-width'], ...sized.map((th) => [th, 'width'])]
+            .map(([el, prop]) => {
+              const win = ruleAG(w, el, prop);
+              return { w, prop, el: el?.textContent?.slice(0, 12) ?? null, selector: win?.selector ?? null, media: win?.media ?? [] };
+            }));
+          const stray = origins.filter((o) => !o.selector || !o.selector.startsWith('.rental-bookings-table')
+            || !o.media.some((m) => /min-width:\s*641px/.test(m)));
+          check(`${name}: every one of those values comes from a rule of this table's own, .rental-bookings-table first in its `
+              + 'selector, inside an @media (min-width: 641px)',
+            origins.length === WIDE.length * (2 + sized.length) && stray.length === 0, said(stray.slice(0, 6)));
+          const phoneRead = PHONES.map((w) => ({ w, layout: valueAF(w, tbl, 'table-layout'), min: valueAF(w, tbl, 'min-width'),
+            widths: ths.map((th) => valueAF(w, th, 'width')) }));
+          check(`${name}: on a phone (320, 390 and 640px) none of it applies: no table-layout, no min-width and no header width reach `
+              + 'the table, which is cards as before',
+            ths.length === HEADS.length && phoneRead.every((r) => r.layout === null && r.min === null && r.widths.every((x) => x === null)),
+            said(phoneRead));
+
+          // c. The Schedule cell, the same in every row: the date with its
+          // comma, a space, the times; two spans and nothing else.
+          const rows = bodyRows(page);
+          const shapes = rows.map((tr) => {
+            const id = text(numberEls(tr)[0]);
+            const b = byNumberAG(id);
+            const cell = [...tr.children][2] ?? null;
+            const kids = cell ? [...cell.childNodes] : [];
+            const [day, times] = b ? scheduleWant(b) : [null, null];
+            return { id, label: cell?.getAttribute('data-label') ?? null,
+              nodes: kids.map((n) => (n.nodeType === 1 ? `${n.tagName.toLowerCase()}.${n.className}` : `text "${n.textContent}"`)),
+              day: flat(cell?.children[0]?.textContent), times: flat(cell?.children[1]?.textContent),
+              ok: !!b && kids.length === 3 && kids[0].nodeType === 1 && kids[0].tagName === 'SPAN'
+                && kids[0].className === 'rental-bookings-date' && kids[1].nodeType === 3 && kids[1].textContent === ' '
+                && kids[2].nodeType === 1 && kids[2].tagName === 'SPAN' && kids[2].className === 'rental-bookings-times'
+                && flat(kids[0].textContent) === flat(day) && flat(kids[2].textContent) === flat(times)
+                && flat(cell.textContent) === flat(`${day} ${times}`) && /\d{4},$/.test(kids[0].textContent) };
+          });
+          check(`${name}: every row's Schedule cell is the same two spans, the date with its comma ("Sep 26, 2026,") then a space then `
+              + 'the times ("8:00 AM – 5:00 PM"), and nothing else; its words are formatSchedule\'s, as before',
+            shapes.length === 28 && shapes.every((s) => s.ok && s.label === 'Schedule'),
+            said(shapes.filter((s) => !s.ok || s.label !== 'Schedule').slice(0, 4)));
+          const spans = rows.flatMap((tr) => [...([...tr.children][2]?.children ?? [])]);
+          const spanRead = (w) => spans.map((sp) => [valueAF(w, sp, 'display'), valueAF(w, sp, 'white-space')].join('/'));
+          const spanWide = WIDE.map((w) => ({ w, read: [...new Set(spanRead(w))] }));
+          const spanPhone = PHONES.map((w) => ({ w, read: [...new Set(spanRead(w))] }));
+          check(`${name}: above 640px each of the two is a line of its own and never breaks (display: block, white-space: nowrap), so `
+              + 'every row breaks after the year; on a phone neither is set, so the card reads one line of text, as before',
+            spans.length === 56 && spanWide.every((r) => said(r.read) === said(['block/nowrap']))
+              && spanPhone.every((r) => said(r.read) === said(['/']))
+              && spans.every((sp) => [641, 1280, 1920].every((w) => (ruleAG(w, sp, 'display')?.selector ?? '').startsWith('.rental-bookings-table'))),
+            said({ spans: spans.length, spanWide: spanWide.slice(0, 3), spanPhone }));
+
+          // d. Nothing else on the list changed: the heading, the counts, the
+          // pager, the filters, the actions; no request; nothing kept.
+          const actionsRead = withActions ? rows.map((tr) => [...([...tr.children][6]?.querySelectorAll('button') ?? [])]
+            .map((x) => x.textContent).join(' + ') || '(none)') : null;
+          const actionsWant = withActions ? rows.map((tr) => actionsAG[name](byNumberAG(text(numberEls(tr)[0])) ?? {})) : null;
+          const filterLabels = page.queryAll('.pay-filters select').map((s) => s.labels?.[0]?.textContent ?? null);
+          check(`${name}: the rest of the list is as it was: "28 bookings", the counts "${STRIP28}", the pager's "Showing 1 to 28 of 28 `
+              + 'results", the filters Item, Payment and Starts, every row\'s actions as before'
+              + `${withActions ? '' : ' (none, and no actions column)'}, and one request, the first GET`,
+            text(page.query('.list-head h2')) === '28 bookings' && tabsOf(page).map(text).join(' · ') === STRIP28
+              && text(page.query('.pay-pager-count')) === 'Showing 1 to 28 of 28 results'
+              && said(filterLabels) === said(['Item', 'Payment', 'Starts'])
+              && (withActions ? said(actionsRead) === said(actionsWant) : page.queryAll('table.data-table tbody button').length === 0)
+              && net.calls.length === 1 && net.calls[0].method === 'GET' && /\/rental-requests\?status=all$/.test(net.calls[0].url),
+            said({ heading: text(page.query('.list-head h2')), strip: tabsOf(page).map(text).join(' · '),
+              showing: text(page.query('.pay-pager-count')), filterLabels, actions: actionsRead?.slice(0, 6) ?? null,
+              calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+          check(`${name}: nothing about it is kept in the browser: no storage write through window or not, sessionStorage empty, no cookie`,
+            store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '',
+            said({ writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+          sentAG.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+
+        // e. index.css as a whole, the source, and another page's table.
+        const tableRules = cssAF.rules.filter((r) => r.selectors.some((s) => s.includes('rental-bookings-table')));
+        const inPhoneBlock = cssAF.rules.filter((r) => r.media.some((m) => /max-width:\s*640px/.test(m))
+          && r.selectors.some((s) => s.includes('rental-bookings-table')));
+        check('index.css: every rule that names .rental-bookings-table is this table\'s, each of its selectors starting with it, and sits '
+            + 'inside an @media (min-width: 641px); none is in the 640px block',
+          tableRules.length > 0 && inPhoneBlock.length === 0
+            && tableRules.every((r) => r.media.some((m) => /min-width:\s*641px/.test(m))
+              && r.selectors.every((s) => s.startsWith('.rental-bookings-table'))),
+          said({ rules: tableRules.map((r) => `${r.media.join(' ')} { ${r.selectors.join(', ')} }`),
+            inPhoneBlock: inPhoneBlock.map((r) => r.selectors.join(', ')) }));
+        // Every style rule of a stylesheet, comments gone and line endings and
+        // spaces tidied: the @-rules round it, its selector, its declarations.
+        const rulesOfAG = (src) => {
+          const css = src.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
+          const out = [];
+          const open = [];
+          let from = 0;
+          for (let i = 0; i < css.length; i += 1) {
+            const ch = css[i];
+            if (ch === '{') {
+              open.push({ head: css.slice(from, i).trim().replace(/\s+/g, ' '), decls: [] });
+              from = i + 1;
+            } else if (ch === ';' || ch === '}') {
+              const decl = css.slice(from, i).trim().replace(/\s+/g, ' ');
+              if (decl && open.length) open.at(-1).decls.push(decl);
+              from = i + 1;
+              const block = ch === '}' ? open.pop() : null;
+              if (block && !block.head.startsWith('@')) {
+                out.push({ at: open.filter((b) => b.head.startsWith('@')).map((b) => b.head), selector: block.head, decls: block.decls });
+              }
+            }
+          }
+          return out;
+        };
+        let pinnedCssAG = null;
+        try {
+          pinnedCssAG = execFileSync('git', ['show', `${PINNED_REV}:frontend/src/index.css`],
+            { cwd: path.join(HERE, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch {
+          pinnedCssAG = null;
+        }
+        const nowCssAG = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8');
+        const KEPT = [
+          ['the col-*, .row-actions (its three exceptions among them), .num, .dash-main and .pending-card rules',
+            /\.col-[\w-]+|row-actions|\.num\b|\.dash-main\b|\.pending-card\b/, 20],
+          ['the Document requests rules (.doc-requests-*)', /\.doc-requests-/, 20],
+          ['the heading row\'s rules (.rental-bookings-head)', /\.rental-bookings-head\b/, 3],
+        ];
+        for (const [what, re, least] of KEPT) {
+          const now = rulesOfAG(nowCssAG).filter((r) => re.test(r.selector));
+          const then = pinnedCssAG === null ? null : rulesOfAG(pinnedCssAG).filter((r) => re.test(r.selector));
+          let firstDiff = -1;
+          for (let i = 0; then && i < Math.max(now.length, then.length); i += 1) {
+            if (said(now[i]) !== said(then[i])) { firstDiff = i; break; }
+          }
+          check(`${what} are as they were at ${PINNED_REV} (R3, read with git): the same rules in the same order, under the same @media, `
+              + 'with the same declarations',
+            !!then && then.length >= least && firstDiff === -1,
+            then === null ? `git could not read ${PINNED_REV}:frontend/src/index.css`
+              : firstDiff === -1 ? `${now.length} rules, the same`
+                : said({ at: firstDiff, now: now[firstDiff] ?? null, then: then[firstDiff] ?? null, counts: [now.length, then.length] }));
+        }
+        const srcRootAG = path.join(HERE, '..', 'src');
+        const sourceFilesAG = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory()
+          ? sourceFilesAG(path.join(dir, d.name)) : /\.jsx?$/.test(d.name) ? [path.join(dir, d.name)] : []));
+        const codeOfAG = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        const carriersAG = sourceFilesAG(srcRootAG).flatMap((f) => {
+          const n = (codeOfAG(fs.readFileSync(f, 'utf8')).match(/rental-bookings-table/g) || []).length;
+          return n ? [`${path.relative(srcRootAG, f).replace(/\\/g, '/')}: ${n}`] : [];
+        });
+        seedSession(RES_TOKEN, RES_USER);
+        resetNet(200, (url, method) => (method === 'GET' && url.includes('/rental-requests/mine')
+          ? { requests: LIVE28.slice(0, 4) } : undefined));
+        const mineAG = await globalThis.mountInteractive(root(), '/resident/rentals');
+        await mineAG.settle();
+        const mineTableAG = mineAG.query('table.data-table');
+        const mineClassAG = mineTableAG?.className ?? null;
+        sentAG.push(...net.calls.map((c) => c.method));
+        await mineAG.unmount();
+        check('.rental-bookings-table is this table\'s alone: the source names it once, in RentalBookingsPage.jsx, and the resident\'s '
+            + 'My rentals table, which shares .data-table and .row-actions with it, does not carry it',
+          said(carriersAG) === said(['pages/RentalBookingsPage.jsx: 1']) && !!mineTableAG
+            && !mineTableAG.classList.contains('rental-bookings-table'),
+          said({ carriers: carriersAG, mineClass: mineClassAG }));
+
+        check('section AG sent nothing but GETs', sentAG.length > 0 && sentAG.every((m) => m === 'GET'),
+          `${sentAG.length} request(s): ${[...new Set(sentAG)].join(', ')}`);
+      }
+
+      // =====================================================================
+      // AG (continued). Rental bookings: the returned-by note
+      // =====================================================================
+      // A returned booking showed, under its status badge, the payment marker
+      // ("Unpaid") and then "by @staff1 on Oct 8, 2026, 1:20 PM", which read,
+      // between the two, as if staff1 had marked the booking unpaid, in a row
+      // and on a phone card, where the line sat under the marker's "Payment"
+      // label. It now names the return, "Returned by @staff1 on Oct 8, 2026,
+      // 1:20 PM", for each of the three outcomes (returned, returned late,
+      // returned with an issue). Only a return writes returned_at
+      // (routes/rentalRequests.js), so no other status shows it. The marker is
+      // still the line under the badge, at one height in every row; the
+      // returned-by note is the next line, and a return note after it. It is
+      // two spans, who and when: above 640px each is a line of its own and the
+      // date never breaks, so every row breaks the note in one place
+      // ("Returned by @staff1 on" over the date); on a phone card the note has
+      // a label of its own, "Return", printed from its data-label as the
+      // number's and the marker's are, so it cannot read as part of the
+      // payment, and a return note follows it there. The search never reads
+      // it. Against section AE's 28 live-shaped bookings, seven of them
+      // returned (four returned, two late, one with an issue), two with a
+      // note; index.css is read with section AF's reader.
+      console.log('\n--- Rental bookings: the returned-by note ---');
+      {
+        // When each returned booking was taken back, as formatDate words it
+        // on this run's clock (UTC, which section AE set), written by hand.
+        const RETURNED_AG = {
+          '#6': 'Oct 5, 2026, 9:00 AM', '#12': 'Sep 26, 2026, 10:00 AM', '#10': 'Sep 26, 2026, 10:00 AM',
+          '#15': 'Sep 19, 2026, 8:00 AM', '#18': 'Sep 6, 2026, 3:00 PM', '#21': 'Aug 23, 2026, 11:00 AM', '#23': 'Aug 9, 2026, 8:00 AM',
+        };
+        const NOTED_AG = { '#10': 'Note: Returned a day after the agreed time', '#15': 'Note: Two tables returned with broken legs' };
+        const PHONES_AG = [320, 390, 640];
+        const WIDE_AG = [641, 768, 1045, 1046, 1280, 1920];
+        const flatAG = (s) => (s === null || s === undefined ? s : String(s).replace(/\s+/g, ' ').trim());
+        const sentNote = [];
+        const kindOf = (el) => (el.classList.contains('badge') ? 'badge' : el.classList.contains('doc-requests-pay') ? 'marker'
+          : el.classList.contains('rental-bookings-return') ? 'return' : el.classList.contains('reason-note') ? 'note' : el.className);
+        const readNotes = (page) => bodyRows(page).map((tr) => {
+          const id = text(numberEls(tr)[0]);
+          const cell = [...tr.children][5] ?? null;
+          const line = cell?.querySelector('.rental-bookings-return') ?? null;
+          return {
+            id, status: text(cell?.querySelector('.badge')), order: cell ? [...cell.children].map(kindOf) : [],
+            line: line ? { text: text(line), cls: line.className, label: line.getAttribute('data-label'),
+              parts: [...line.childNodes].map((n) => (n.nodeType === 1 ? `${n.tagName.toLowerCase()}.${n.className}: ${flatAG(n.textContent)}`
+                : `text "${n.textContent}"`)) } : null,
+            note: text(cell?.querySelector('.reason-note')),
+          };
+        });
+        const orderFor = (id) => (id in RETURNED_AG ? (id in NOTED_AG ? ['badge', 'marker', 'return', 'note'] : ['badge', 'marker', 'return'])
+          : ['badge', 'marker']);
+
+        // a. The real page, for the three roles: All, 100 a page, all 28 drawn.
+        for (const { name, route, token, user } of ROLES_AE) {
+          seedSession(token, user);
+          resetNet(200, answerAF(LIVE28));
+          const page = await globalThis.mountInteractive(root(), route);
+          await page.settle();
+          const writesAtOpen = store.sets;
+          const domWritesAtOpen = domStorage.writes;
+          await clickIf(page, tabNamed(page, 'All'));
+          const sizeSelect = page.query('.pay-pager select');
+          if (sizeSelect) {
+            sizeSelect.value = '100';
+            sizeSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          }
+          await page.settle();
+          const read = readNotes(page);
+          const returned = read.filter((r) => r.id in RETURNED_AG);
+          const wrongLines = returned.filter((r) => !r.line || r.line.text !== `Returned by @staff1 on ${RETURNED_AG[r.id]}`
+            || r.line.label !== 'Return' || r.line.cls !== 'muted small-note rental-bookings-return'
+            || said(r.line.parts) !== said(['span.rental-bookings-return-by: Returned by @staff1 on', 'text " "',
+              `span.rental-bookings-return-at: ${RETURNED_AG[r.id]}`]));
+          check(`${name}: every returned booking's note names the return, "Returned by @staff1 on" and when: the four returned (#6 `
+              + '"Returned by @staff1 on Oct 5, 2026, 9:00 AM", #12, #18, #23), the two returned late (#10, #21) and the one returned with '
+              + 'an issue (#15); two spans, who and when, the line labelled "Return" for a phone card',
+            returned.length === 7 && wrongLines.length === 0
+              && said([...new Set(returned.map((r) => r.status))].sort()) === said(['Returned', 'Returned late', 'Returned with issue']),
+            said(wrongLines.length ? wrongLines.slice(0, 3) : returned.map((r) => [r.id, r.status, r.line?.text])));
+          const others = read.filter((r) => !(r.id in RETURNED_AG));
+          const byLines = page.queryAll('table.data-table tbody *').filter((el) => /^by @/.test(flatAG(el.textContent) ?? '')).length;
+          check(`${name}: no other booking has the line (the 21 confirmed, overdue, completed and cancelled ones), and nothing in the `
+              + 'table reads "by @…" any more',
+            others.length === 21 && others.every((r) => r.line === null) && byLines === 0,
+            said({ withLine: others.filter((r) => r.line).map((r) => r.id), byLines }));
+          const wrongOrder = read.filter((r) => said(r.order) !== said(orderFor(r.id)));
+          check(`${name}: in the Status cell the badge comes first and the marker is the next line, as before, at one height in every `
+              + 'row; then the returned-by note, then a return note (#10\'s and #15\'s), never before the badge or between it and the marker',
+            read.length === 28 && wrongOrder.length === 0 && read.filter((r) => r.note).every((r) => r.note === NOTED_AG[r.id]),
+            said(wrongOrder.length ? wrongOrder.slice(0, 4) : returned.map((r) => [r.id, r.order.join(' ')])));
+          // The search never reads it: who returned a booking, the words, or
+          // when.
+          const sentAtSearch = net.calls.length;
+          const found = {};
+          for (const q of ['staff1', 'returned by', 'returned', 'Sep 26, 2026, 10:00']) {
+            await type(page, q);
+            found[q] = bodyRows(page).length;
+          }
+          await type(page, '');
+          check(`${name}: the search never reads the note: "staff1", "returned by", "returned" and "Sep 26, 2026, 10:00" find nothing, `
+              + 'and none of them sends a request',
+            Object.values(found).every((n) => n === 0) && bodyRows(page).length === 28 && net.calls.length === sentAtSearch, said(found));
+          check(`${name}: nothing about it is kept in the browser: no storage write through window or not, sessionStorage empty, no cookie`,
+            store.sets === writesAtOpen && domStorage.writes === domWritesAtOpen && dom.window.sessionStorage.length === 0
+              && dom.window.document.cookie === '',
+            said({ writes: store.sets - writesAtOpen, domWrites: domStorage.writes - domWritesAtOpen }));
+          sentNote.push(...net.calls.map((c) => c.method));
+          await page.unmount();
+        }
+
+        // b. The phone card and the wide row, read from index.css.
+        seedSession(VALID);
+        resetNet(200, answerAF(LIVE28));
+        const cardAG = await globalThis.mountInteractive(root(), '/secretary/rentals');
+        await cardAG.settle();
+        await clickIf(cardAG, tabNamed(cardAG, 'Returned'));
+        const linesAG = cardAG.queryAll('table.data-table tbody .rental-bookings-return');
+        const partsAG = linesAG.flatMap((el) => [...el.children]);
+        const phoneAG = PHONES_AG.flatMap((w) => linesAG.map((el) => ({ w, hidden: hidersAF(w, el),
+          label: valueAF(w, el, 'content', true), labelShown: valueAF(w, el, 'display', true), labelSize: valueAF(w, el, 'font-size', true),
+          labelCase: valueAF(w, el, 'text-transform', true), margin: valueAF(w, el, 'margin-top'), size: valueAF(w, el, 'font-size') })));
+        check('on a phone (320, 390 and 640px) the returned-by note is a labelled line of its own on the card, as the number and the '
+            + 'marker are: nothing hides it; its label, "Return", is printed from its data-label as a line of its own, in a card label\'s '
+            + 'style (0.75rem, upper case); and it stands 8px under the marker, at the size of the card\'s other fields (0.9rem)',
+          linesAG.length === 7 && phoneAG.every((p) => p.hidden.length === 0 && p.label === 'attr(data-label)' && p.labelShown === 'block'
+            && p.labelSize === '0.75rem' && p.labelCase === 'uppercase' && p.margin === '8px' && p.size === '0.9rem'),
+          said(phoneAG.filter((p) => p.hidden.length || p.label !== 'attr(data-label)' || p.labelShown !== 'block' || p.margin !== '8px'
+            || p.size !== '0.9rem').slice(0, 4)));
+        const partsPhoneAG = PHONES_AG.flatMap((w) => partsAG.map((sp) => `${sp.className}: ${[valueAF(w, sp, 'display'),
+          valueAF(w, sp, 'white-space')].join('/')}`));
+        check('  and on the card its two spans are left inline, one line of text where it fits ("Returned by @staff1 on Oct 5, 2026, '
+            + '9:00 AM"), and where it does not, at 320px, it breaks before the date, which never breaks (white-space: nowrap), never '
+            + 'between a time and its AM or PM',
+          partsAG.length === 14
+            && said([...new Set(partsPhoneAG)]) === said(['rental-bookings-return-by: /', 'rental-bookings-return-at: /nowrap']),
+          said([...new Set(partsPhoneAG)]));
+        const wideAG = WIDE_AG.map((w) => ({ w, labels: [...new Set(linesAG.map((el) => valueAF(w, el, 'content', true)))],
+          hidden: linesAG.flatMap((el) => hidersAF(w, el)),
+          parts: [...new Set(partsAG.map((sp) => `${sp.className}: ${valueAF(w, sp, 'display')}/${valueAF(w, sp, 'white-space')}`))] }));
+        check('above 640px (641, 768, 1045, 1046, 1280 and 1920) no label is printed and nothing hides it; "Returned by @staff1 on" and '
+            + 'the date are each a line of its own, the date never broken (white-space: nowrap), so every row breaks the note in one place',
+          wideAG.every((r) => said(r.labels) === said([null]) && r.hidden.length === 0
+            && said(r.parts) === said(['rental-bookings-return-by: block/null', 'rental-bookings-return-at: block/nowrap'])),
+          said(wideAG));
+        const noteRules = cssAF.rules.filter((r) => r.selectors.some((s) => /rental-bookings-return/.test(s)));
+        const strayNote = noteRules.filter((r) => !(r.media.some((m) => /max-width:\s*640px/.test(m))
+          ? r.selectors.every((s) => s.startsWith('.data-table.stack-narrow .rental-bookings-return'))
+          : r.media.some((m) => /min-width:\s*641px/.test(m)) && r.selectors.every((s) => s.startsWith('.rental-bookings-table '))));
+        check('index.css: the note\'s rules are this list\'s own: on a phone, in the 640px block, .data-table.stack-narrow '
+            + '.rental-bookings-return; above it, inside an @media (min-width: 641px), the two spans under .rental-bookings-table',
+          noteRules.length >= 4 && strayNote.length === 0,
+          said({ rules: noteRules.map((r) => `${r.media.join(' ')} { ${r.selectors.join(', ')} }`), stray: strayNote.map((r) => r.selectors) }));
+        sentNote.push(...net.calls.map((c) => c.method));
+        await cardAG.unmount();
+
+        check('the returned-by note\'s checks sent nothing but GETs', sentNote.length > 0 && sentNote.every((m) => m === 'GET'),
+          `${sentNote.length} request(s): ${[...new Set(sentNote)].join(', ')}`);
+      }
+
+      if (previousScrollAF === undefined) delete protoAF.scrollIntoView;
+      else protoAF.scrollIntoView = previousScrollAF;
+    }
+
+    dom.window.confirm = previousConfirm;
+    if (previousTZAE === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAE;
+  }
+
+  // =========================================================================
+  // AH. Terms of Use and Help Center: a booking is confirmed at once
+  // =========================================================================
+  // A rental booking is confirmed by the system the moment it is submitted,
+  // when the facility or the units asked for are free; nobody approves it
+  // (routes/rentalRequests.js inserts it as confirmed, processed_by_user_id
+  // null). The Terms of Use said, in section 8, that a booking is "confirmed
+  // only when the Barangay approves the booking" and "may be declined", and
+  // the Help Center answered "How do I book a facility?" with "The Barangay
+  // reviews and confirms it. A booking is not confirmed until it is
+  // approved." Both now say a booking is confirmed at once. The modals are
+  // read as a person reads them, opened from /login's legal links, heading by
+  // heading and paragraph by paragraph. docs/legal-copy.md is their source of
+  // truth, each body that file transcribed by hand, so it is read from disk
+  // and must say the same, word for word. The rest of section 8 and the other
+  // two answers about bookings stay as they were.
+  console.log('\n--- Terms of Use and Help Center: a booking is confirmed at once ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const words = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    const T_NEW = 'A booking is confirmed as soon as you submit it, if the facility or the number of items you ask for '
+      + 'is free for that date and time; otherwise it is refused with the reason. The Barangay may change or cancel a '
+      + 'confirmed booking where the facility or item is needed for official use. You can check the status of your '
+      + 'booking under My rentals.';
+    const T_KEPT = [
+      'You are responsible for the facility or item during the period booked. The conditions of use, when it must be '
+        + 'returned, and any charge for late return or damage are agreed with the Barangay at the time of booking.',
+      'The portal does not calculate or apply such charges automatically. Where one applies, the Barangay Treasurer '
+        + 'records it against your account and it appears among your charges.',
+    ];
+    const H_NEW = 'Sign in, open the bookings section, choose the facility or item, and give the date and time. If it '
+      + 'is free, the booking is confirmed at once and its fee appears under My rentals.';
+    const H_GROUP = [
+      { q: 'How do I book a facility?', a: [H_NEW] },
+      { q: 'My requested time was not available.', a: ['A facility cannot be booked for two overlapping periods. '
+        + 'Choose another slot, or ask the Barangay Office what is free.'] },
+      { q: 'What happens when I return the item or facility?', a: ['Barangay staff record the return in the portal.',
+        'Whether there is any charge for returning late or for damage depends on what was agreed with the Barangay '
+          + 'when you booked. The portal does not work such charges out on its own — if one applies, the Treasurer '
+          + 'records it and it appears among your charges.'] },
+    ];
+    // What the two said before, word for word.
+    const OLD = [
+      'are confirmed only when the Barangay approves the booking',
+      'a booking may be declined or cancelled by the Barangay',
+      'The Barangay reviews and confirms it.',
+      'A booking is not confirmed until it is approved.',
+    ];
+    // The sentences, block by block, that tie a booking, a facility or a
+    // rental to an approval, a review, an endorsement or a refusal.
+    const approvalSentences = (blocks) => blocks.flatMap((b) => words(b.text).split(/(?<=[.!?])\s+/))
+      .filter((s) => /\b(book\w*|facilit\w*|rental\w*|reserv\w*)\b/i.test(s) && /(approv|declin|review|endors)/i.test(s));
+    const oldIn = (blocks) => OLD.filter((o) => blocks.some((b) => words(b.text).includes(o)));
+    // An element's text as it reads on screen: a <br /> is a line break, so
+    // a space between the words on either side of it.
+    const shown = (el) => {
+      const copy = el.cloneNode(true);
+      for (const br of copy.querySelectorAll('br')) br.replaceWith(' ');
+      return words(copy.textContent);
+    };
+    // A modal's body as the page shows it: each heading, paragraph and list
+    // item in order, with its text.
+    const openLegal = async (link) => {
+      seedSession(null);
+      resetNet(200);
+      const page = await globalThis.mountInteractive(root(), '/login');
+      await page.settle();
+      const opener = page.queryAll('.legal-links a').find((a) => a.textContent.trim() === link);
+      if (opener) await page.click(opener);
+      const body = page.query('.legal-modal-body');
+      const blocks = body ? [...body.querySelectorAll('h2, h3, h4, p, li')]
+        .map((el) => ({ tag: el.tagName.toLowerCase(), text: shown(el) })) : [];
+      const sent = net.calls.length;
+      await page.unmount();
+      return { blocks, sent };
+    };
+    // One part of docs/legal-copy.md ("## TERMS OF USE", "## HELP CENTER") in
+    // the same blocks: a heading by its #s, a paragraph's lines joined by
+    // spaces, each "- " item a block of its own, the ** and * marks dropped.
+    const mdBlocks = (part) => {
+      const src = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+      const lines = src.split('\n');
+      const start = lines.indexOf(`## ${part}`);
+      const blocks = [];
+      let para = null;
+      const plain = (s) => words(s.replace(/\*\*?/g, ''));
+      const flush = () => {
+        if (para) blocks.push({ tag: para.tag, text: plain(para.lines.join(' ')) });
+        para = null;
+      };
+      for (let i = start + 1; start >= 0 && i < lines.length && !/^## /.test(lines[i]); i += 1) {
+        const line = lines[i];
+        const heading = line.match(/^(#{3,4}) (.*)$/);
+        if (heading) {
+          flush();
+          blocks.push({ tag: `h${heading[1].length}`, text: plain(heading[2]) });
+        } else if (!line.trim() || /^-{3,}$/.test(line.trim())) {
+          // A blank line ends a paragraph; so does a "---" rule between parts.
+          flush();
+        } else if (/^- /.test(line)) {
+          flush();
+          para = { tag: 'li', lines: [line.slice(2)] };
+        } else {
+          if (!para) para = { tag: 'p', lines: [] };
+          para.lines.push(line.trim());
+        }
+      }
+      flush();
+      return blocks;
+    };
+    // The blocks under a heading, up to the next heading of a level in `stop`.
+    const under = (blocks, tag, title, stop) => {
+      const i = blocks.findIndex((b) => b.tag === tag && b.text === title);
+      if (i < 0) return [];
+      const out = [];
+      for (let j = i + 1; j < blocks.length && !stop.includes(blocks[j].tag); j += 1) out.push(blocks[j]);
+      return out;
+    };
+    const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
+
+    const terms = await openLegal('Terms of Use');
+    const help = await openLegal('Help Center');
+    const termsMd = mdBlocks('TERMS OF USE');
+    const helpMd = mdBlocks('HELP CENTER');
+    const t8 = under(terms.blocks, 'h3', '8. Facility bookings', ['h2', 'h3']);
+    const t8Md = under(termsMd, 'h3', '8. Facility bookings', ['h2', 'h3']);
+    const hBook = under(help.blocks, 'h3', 'Facility bookings', ['h2', 'h3']);
+    const hBookMd = under(helpMd, 'h3', 'Facility bookings', ['h2', 'h3']);
+    const wantT8 = [T_NEW, ...T_KEPT].map((t) => `p: ${t}`);
+    const wantBook = H_GROUP.flatMap(({ q, a }) => [`h4: ${q}`, ...a.map((t) => `p: ${t}`)]);
+
+    check('Terms of Use, section 8, as /login\'s modal shows it (TermsOfUse.jsx): "A booking is confirmed as soon as you '
+        + 'submit it, …" where it said a booking waits for the Barangay\'s approval, then its other two paragraphs as '
+        + 'they were',
+      said(lines(t8)) === said(wantT8), said(lines(t8)));
+    check('  and section 8 has no sentence tying a booking to an approval, a review or a refusal, and none of the old '
+        + 'words ("confirmed only when the Barangay approves the booking", "may be declined or cancelled by the Barangay")',
+      t8.length > 0 && approvalSentences(t8).length === 0 && oldIn(t8).length === 0,
+      said({ approval: approvalSentences(t8), old: oldIn(t8) }));
+    check('Help Center, as the modal shows it (HelpCenter.jsx): "How do I book a facility?" is answered "Sign in, … If it '
+        + 'is free, the booking is confirmed at once and its fee appears under My rentals."; the question and the other '
+        + 'two answers about bookings as they were',
+      said(lines(hBook)) === said(wantBook), said(lines(hBook)));
+    check('  and no answer about bookings says the Barangay reviews, confirms or approves a booking ("The Barangay '
+        + 'reviews and confirms it.", "A booking is not confirmed until it is approved.")',
+      hBook.length > 0 && approvalSentences(hBook).length === 0 && oldIn(hBook).length === 0,
+      said({ approval: approvalSentences(hBook), old: oldIn(hBook) }));
+    check('neither modal, read whole, has a sentence tying a booking to an approval, a review or a refusal',
+      terms.blocks.length > 20 && help.blocks.length > 20
+        && approvalSentences(terms.blocks).length === 0 && approvalSentences(help.blocks).length === 0,
+      said({ terms: approvalSentences(terms.blocks), help: approvalSentences(help.blocks) }));
+    check('docs/legal-copy.md, the modals\' source of truth, reads the same new words: section 8 and the Help Center\'s '
+        + 'answers about bookings, and neither part has a sentence tying a booking to an approval',
+      said(lines(t8Md)) === said(wantT8) && said(lines(hBookMd)) === said(wantBook)
+        && approvalSentences(termsMd).length === 0 && approvalSentences(helpMd).length === 0
+        && oldIn(termsMd).length === 0 && oldIn(helpMd).length === 0,
+      said({ t8Md: lines(t8Md), hBookMd: lines(hBookMd), approval: [...approvalSentences(termsMd), ...approvalSentences(helpMd)] }));
+    // The h2 is the modal's title, which the markdown carries as its "##".
+    const termsBody = lines(terms.blocks.filter((b) => b.tag !== 'h2'));
+    const helpBody = lines(help.blocks.filter((b) => b.tag !== 'h2'));
+    const firstDiff = (a, b) => {
+      const i = a.findIndex((x, k) => x !== b[k]);
+      return i < 0 && a.length === b.length ? null : { at: i < 0 ? Math.min(a.length, b.length) : i, jsx: a[i], md: b[i] };
+    };
+    check('docs/legal-copy.md\'s TERMS OF USE and the Terms of Use modal say the same, block for block (no drift between '
+        + 'the markdown and TermsOfUse.jsx)',
+      termsBody.length > 20 && firstDiff(termsBody, lines(termsMd)) === null, said(firstDiff(termsBody, lines(termsMd))));
+    check('docs/legal-copy.md\'s HELP CENTER and the Help Center modal say the same, block for block (no drift between '
+        + 'the markdown and HelpCenter.jsx)',
+      helpBody.length > 20 && firstDiff(helpBody, lines(helpMd)) === null, said(firstDiff(helpBody, lines(helpMd))));
+    check('opening the two modals sent no request', terms.sent === 0 && help.sent === 0, said({ terms: terms.sent, help: help.sent }));
+  }
+
+  // =========================================================================
+  // AI. My rentals and Book a rental: a failed load is an error, never empty
+  // =========================================================================
+  // The resident's two rental pages had the defect section AD fixed on Rental
+  // bookings. My rentals (/resident/rentals) stored an empty list when
+  // GET /rental-requests/mine failed, so the server's bare message sat over
+  // "You haven't booked anything yet." and a "Book a facility" link, which
+  // reads as nothing booked, with no Try again; and Refresh left the old rows
+  // on screen while it was out, so an older answer that arrived late could
+  // replace a newer one. Book a rental (/resident/book-rental) did the same
+  // with GET /rental-items: the message over "Nothing is currently available
+  // for rental.". Each page makes that one load and no other. A failed load
+  // must say so, in Rental bookings' words, with Try again, and show nothing
+  // that reads as empty: no rows, no count, no Pay button, no empty text and
+  // no booking form; every load starts from the loading state, which clears
+  // when it fails; an older answer is dropped. A successful load of nothing is
+  // still a real empty state. A 401 ends the session once, in authFetch, and
+  // the login screen takes the page's place. Every request is answered by the
+  // fetch stub, and only GETs are sent.
+  console.log('\n--- My rentals and Book a rental: a failed load is an error, never an empty list ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // The page's words with a space between neighbouring elements' text, so
+    // that \b finds the edge between "Refresh" and "0 bookings".
+    const spaced = (el) => {
+      const walker = el.ownerDocument.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    // seedSession clears the stub's count for each page, so each page's writes
+    // are added up as it closes; jsdom's own Storage is counted for the run.
+    const kept = { sets: 0, dom: domStorage.writes };
+    const holdNext = () => {
+      net.hold = true;
+      return net.held.length;
+    };
+    const isMine = (call) => call?.method === 'GET' && /\/rental-requests\/mine$/.test(call.url);
+    const isItems = (call) => call?.method === 'GET' && /\/rental-items$/.test(call.url);
+    // My rentals' bookings, in GET /rental-requests/mine's shape (RENTAL_FIELDS
+    // in routes/rentalRequests.js); both unpaid, so each row has a Pay menu.
+    const booking = (id, name) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-10-20T01:00:00+00:00',
+      end_datetime: '2026-10-20T05:00:00+00:00', purpose: `Purpose ${id}`, status: 'confirmed', return_note: null,
+      returned_at: null, rental_items: { item_id: 600 + id, name, type: 'equipment', fee: '25.00' },
+      charges: { charge_id: 950 + id, amount: '25.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+    });
+    const MINE_TWO = () => [booking(411, 'Sound System'), booking(412, 'Folding Tables')];
+    // Book a rental's items, in GET /rental-items' shape (the active ones).
+    const item = (id, name, type, fee, total) => ({ item_id: id, name, type, description: null, quantity_total: total,
+      quantity_available: total, fee });
+    const ITEMS_TWO = () => [item(21, 'Covered Court', 'facility', '300.00', 1),
+      item(22, 'Plastic Chairs', 'furniture', '5.00', 100)];
+    const answerWith = (mine, items) => (url) => {
+      if (/\/rental-requests\/mine$/.test(url)) return { requests: mine };
+      if (/\/rental-items$/.test(url)) return { rental_items: items };
+      return undefined;
+    };
+
+    // What My rentals shows, read the way a person would.
+    const mineView = (page) => {
+      const all = spaced(root());
+      return {
+        heading: text(page.query('.list-head h2')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load your bookings')) ?? null,
+        alerts: page.queryAll('.alert.error').map(text),
+        tryAgain: !!tryAgainButton(page),
+        refresh: !!buttonNamed(root(), 'Refresh'),
+        rows: page.queryAll('table.my-rentals-table tbody tr').map((tr) => text(tr.querySelector('strong'))),
+        pay: page.queryAll('.pay-menu').length,
+        zero: /\b0 bookings?\b/.test(all),
+        empty: all.includes('You haven\'t booked anything yet.'),
+        // The empty state's link, in the page's own column: the resident's
+        // navigation has a "Book a facility" item of its own.
+        bookLink: page.queryAll('.dash-main a').some((a) => text(a) === 'Book a facility'),
+        loading: all.includes('Loading your bookings…'),
+      };
+    };
+    // The error with Try again, alone: no rows, no Pay menu, no count, no
+    // empty text or link, no loading line, and no second, bare message.
+    const mineErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && v.pay === 0 && !v.zero && !v.empty && !v.bookLink && !v.loading;
+    const mineLoadingOnly = (v) => v.loading && !v.error && v.alerts.length === 0 && !v.tryAgain && v.heading === 'Bookings'
+      && v.rows.length === 0 && v.pay === 0 && !v.zero && !v.empty && !v.bookLink;
+    const mineTwo = (v) => said(v.rows) === said(['Sound System', 'Folding Tables']) && v.heading === '2 bookings'
+      && v.pay === 2 && v.refresh && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading && !v.empty;
+
+    // What Book a rental shows: its card, the form's fields and Book now.
+    const bookView = (page) => {
+      const all = spaced(root());
+      return {
+        title: text(page.query('.section-card h3')),
+        error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the rental items')) ?? null,
+        alerts: page.queryAll('.alert.error').map(text),
+        tryAgain: !!tryAgainButton(page),
+        fields: page.queryAll('.section-card select, .section-card input, .section-card textarea').length,
+        bookNow: !!buttonNamed(root(), 'Book now'),
+        empty: all.includes('Nothing is currently available for rental.'),
+        loading: all.includes('Loading rental items…'),
+      };
+    };
+    const bookErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.title === 'Book a facility or item'
+      && v.fields === 0 && !v.bookNow && !v.empty && !v.loading;
+    const bookLoadingOnly = (v) => v.loading && !v.error && v.alerts.length === 0 && !v.tryAgain && v.fields === 0
+      && !v.bookNow && !v.empty;
+    const bookForm = (v) => v.fields >= 5 && v.bookNow && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading
+      && !v.empty;
+    const methodsSent = [];
+    const finish = async (pg) => {
+      methodsSent.push(...net.calls.map((c) => c.method));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+
+    // --- My rentals ---
+    // a. A successful load reads as it always has: one request, the rows.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith(MINE_TWO(), ITEMS_TWO()));
+    let page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineOk = mineView(page);
+    check('My rentals: a successful load shows its two bookings under "2 bookings", each with its Pay menu, from one GET of '
+        + '/rental-requests/mine, with no error',
+      mineTwo(mineOk) && net.calls.length === 1 && isMine(net.calls[0]),
+      said({ mineOk, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+    await finish(page);
+
+    // b. The first open fails: the loading state while it is out, then the
+    // error, with Try again, and nothing else.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    let at = holdNext();
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineOpening = mineView(page);
+    const mineFirst = net.calls[0];
+    release(at, 500, { error: 'Network down' });
+    await page.settle();
+    const mineFailed = mineView(page);
+    check('My rentals: the first open shows "Loading your bookings…" while the list is out, and when it fails (a 500), '
+        + '"Could not load your bookings: Network down" with a Try again button',
+      mineLoadingOnly(mineOpening) && isMine(mineFirst)
+        && mineFailed.error === 'Could not load your bookings: Network down' && mineFailed.tryAgain,
+      `${said(mineOpening)} then ${said(mineFailed)}`);
+    check('  My rentals: and no "You haven\'t booked anything yet.", no "Book a facility" link, no "0 bookings", no rows, '
+        + 'no Pay button and no "Loading…" beside it: it cannot read as nothing booked',
+      mineErrorOnly(mineFailed), said(mineFailed));
+
+    // c. Try again repeats the same load; its rows replace the error.
+    at = holdNext();
+    let sent = net.calls.length;
+    await clickIf(page, tryAgainButton(page));
+    const mineRetrying = mineView(page);
+    const mineRetryCall = net.calls[sent];
+    release(at, 200, { requests: MINE_TWO() });
+    await page.settle();
+    const mineRetried = mineView(page);
+    check('My rentals: Try again loads the list again, once, shows the loading state while it is out, then the two bookings',
+      net.calls.length === sent + 1 && isMine(mineRetryCall) && mineLoadingOnly(mineRetrying) && mineTwo(mineRetried),
+      `${mineRetryCall?.url ?? 'no request'} ${said(mineRetrying)} then ${said(mineRetried)}`);
+
+    // d. Refresh over loaded rows, failing: the loading state, then the
+    // error, and never the old rows.
+    at = holdNext();
+    sent = net.calls.length;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    const mineRefreshing = mineView(page);
+    const mineRefreshCall = net.calls[sent];
+    release(at, 500, { error: 'Internal server error' });
+    await page.settle();
+    const mineRefreshFailed = mineView(page);
+    check('My rentals: Refresh shows the loading state, not the old rows, while it is out, and when it fails, "Could not '
+        + 'load your bookings: Internal server error", never the old rows or their Pay menus',
+      isMine(mineRefreshCall) && mineLoadingOnly(mineRefreshing)
+        && mineRefreshFailed.error === 'Could not load your bookings: Internal server error'
+        && mineErrorOnly(mineRefreshFailed),
+      `${said(mineRefreshing)} then ${said(mineRefreshFailed)}`);
+    check('  My rentals: Refresh stays on screen beside the error, and loads the list again too',
+      mineRefreshFailed.refresh, said(mineRefreshFailed));
+
+    // e. Two loads out at once, Try again and then Refresh before it has
+    // answered, the older answer last: it is dropped.
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at + 1, 200, { requests: MINE_TWO() });
+    await page.settle();
+    release(at, 200, { requests: MINE_TWO().slice(0, 1) });
+    await page.settle();
+    const mineRaced = mineView(page);
+    check('My rentals: an older answer that arrives last cannot replace the newer list: both bookings stay',
+      isMine(net.calls.at(-2)) && isMine(net.calls.at(-1)) && mineTwo(mineRaced), said(mineRaced));
+
+    // f. The same, Refresh pressed twice, with the older load failing last.
+    at = holdNext();
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at + 1, 200, { requests: MINE_TWO() });
+    await page.settle();
+    release(at, 500, { error: 'boom' });
+    await page.settle();
+    const mineRacedFail = mineView(page);
+    check('  My rentals: nor can an older load that fails last (Refresh pressed twice) put its error over the newer list',
+      mineTwo(mineRacedFail), said(mineRacedFail));
+
+    // g. No bookings, loaded successfully, is a real empty state.
+    at = holdNext();
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    release(at, 200, { requests: [] });
+    await page.settle();
+    net.hold = false;
+    const mineNone = mineView(page);
+    check('My rentals: a successful load of no bookings says "0 bookings" over "You haven\'t booked anything yet." and the '
+        + '"Book a facility" link, with Refresh above and no error',
+      mineNone.heading === '0 bookings' && mineNone.empty && mineNone.bookLink && mineNone.refresh && !mineNone.error
+        && mineNone.alerts.length === 0 && !mineNone.tryAgain && !mineNone.loading && mineNone.rows.length === 0,
+      said(mineNone));
+    await finish(page);
+
+    // h. A server that cannot be reached: Rental bookings' wording.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    net.fail = true;
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineUnreachable = mineView(page);
+    check('My rentals: a server that cannot be reached gets "Could not load your bookings: the server did not respond", '
+        + 'never "Cannot reach the server" or "Failed to fetch"',
+      mineUnreachable.error === 'Could not load your bookings: the server did not respond' && mineErrorOnly(mineUnreachable)
+        && !/Cannot reach the server|Failed to fetch/.test(root().textContent), said(mineUnreachable));
+    net.fail = false;
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    release(at, 200, { requests: MINE_TWO() });
+    await page.settle();
+    net.hold = false;
+    check('  My rentals: and Try again recovers once the server answers', mineTwo(mineView(page)), said(mineView(page)));
+    await finish(page);
+
+    // i. An error answer with no message in it.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineBare = mineView(page);
+    check('  My rentals: so does an error answer with no message in it, never "Request failed (502)"',
+      mineBare.error === 'Could not load your bookings: the server did not respond' && mineErrorOnly(mineBare)
+        && !/Request failed/.test(root().textContent), said(mineBare));
+    await finish(page);
+
+    // j. A 401: the session ends once and the login screen takes the page's
+    // place, as on every page (authFetch, section C).
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(401);
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineEnded = mineView(page);
+    check('My rentals: a 401 ends the session once and shows the login screen, with no "You haven\'t booked anything '
+        + 'yet.", no Pay button and no list error',
+      store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+        && !mineEnded.empty && !mineEnded.error && mineEnded.pay === 0 && mineEnded.rows.length === 0 && isMine(net.calls[0]),
+      `${store.removes} teardown(s) ${said(mineEnded)}`);
+    await finish(page);
+
+    // --- Book a rental ---
+    // k. A successful load shows the form, from one request.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith(MINE_TWO(), ITEMS_TWO()));
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookOk = bookView(page);
+    const optionNames = page.queryAll('select[name="item_id"] option').map(text);
+    check('Book a rental: a successful load shows the form, its items offered, from one GET of /rental-items, with no error',
+      bookForm(bookOk) && optionNames.length === 3 && optionNames[1].startsWith('Covered Court')
+        && net.calls.length === 1 && isItems(net.calls[0]),
+      said({ bookOk, optionNames, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
+    await finish(page);
+
+    // l. The first open fails.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    at = holdNext();
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookOpening = bookView(page);
+    const bookFirst = net.calls[0];
+    release(at, 500, { error: 'Network down' });
+    await page.settle();
+    const bookFailed = bookView(page);
+    check('Book a rental: the first open shows "Loading rental items…" while the items are out, and when it fails (a 500), '
+        + '"Could not load the rental items: Network down" with a Try again button',
+      bookLoadingOnly(bookOpening) && isItems(bookFirst)
+        && bookFailed.error === 'Could not load the rental items: Network down' && bookFailed.tryAgain,
+      `${said(bookOpening)} then ${said(bookFailed)}`);
+    check('  Book a rental: and no "Nothing is currently available for rental.", no booking form (no field, no Book now) '
+        + 'and no "Loading…" beside it: it cannot read as nothing to rent',
+      bookErrorOnly(bookFailed), said(bookFailed));
+
+    // m. Try again repeats the same load, and submits nothing.
+    at = holdNext();
+    sent = net.calls.length;
+    await clickIf(page, tryAgainButton(page));
+    const bookRetrying = bookView(page);
+    const bookRetryCall = net.calls[sent];
+    release(at, 200, { rental_items: ITEMS_TWO() });
+    await page.settle();
+    const bookRetried = bookView(page);
+    check('Book a rental: Try again loads the items again, once (a GET; it submits nothing), shows the loading state while '
+        + 'they are out, then the form',
+      net.calls.length === sent + 1 && isItems(bookRetryCall) && bookLoadingOnly(bookRetrying) && bookForm(bookRetried),
+      `${bookRetryCall ? `${bookRetryCall.method} ${bookRetryCall.url}` : 'no request'} ${said(bookRetrying)} then `
+        + said(bookRetried));
+    net.hold = false;
+    await finish(page);
+
+    // n. A server that cannot be reached.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200);
+    net.fail = true;
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookUnreachable = bookView(page);
+    check('Book a rental: a server that cannot be reached gets "Could not load the rental items: the server did not '
+        + 'respond", never "Cannot reach the server" or "Failed to fetch"',
+      bookUnreachable.error === 'Could not load the rental items: the server did not respond'
+        && bookErrorOnly(bookUnreachable) && !/Cannot reach the server|Failed to fetch/.test(root().textContent),
+      said(bookUnreachable));
+    net.fail = false;
+    at = holdNext();
+    await clickIf(page, tryAgainButton(page));
+    release(at, 200, { rental_items: ITEMS_TWO() });
+    await page.settle();
+    net.hold = false;
+    check('  Book a rental: and Try again recovers once the server answers', bookForm(bookView(page)), said(bookView(page)));
+    await finish(page);
+
+    // o. An error answer with no message in it.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(502);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookBare = bookView(page);
+    check('  Book a rental: so does an error answer with no message in it, never "Request failed (502)"',
+      bookBare.error === 'Could not load the rental items: the server did not respond' && bookErrorOnly(bookBare)
+        && !/Request failed/.test(root().textContent), said(bookBare));
+    await finish(page);
+
+    // p. No items, loaded successfully, is a real empty state.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, answerWith([], []));
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookNone = bookView(page);
+    check('Book a rental: a successful load of no items says "Nothing is currently available for rental.", with no form and '
+        + 'no error',
+      bookNone.empty && bookNone.fields === 0 && !bookNone.bookNow && !bookNone.error && bookNone.alerts.length === 0
+        && !bookNone.tryAgain && !bookNone.loading,
+      said(bookNone));
+    await finish(page);
+
+    // q. A 401.
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(401);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const bookEnded = bookView(page);
+    check('Book a rental: a 401 ends the session once and shows the login screen, with no "Nothing is currently available '
+        + 'for rental." and no list error',
+      store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
+        && !bookEnded.empty && !bookEnded.error && !bookEnded.bookNow && isItems(net.calls[0]),
+      `${store.removes} teardown(s) ${said(bookEnded)}`);
+    await finish(page);
+
+    // r. Neither page stores an empty list for one it could not load: the
+    // failed load keeps null (CLAUDE.md: a list that failed to load). Read
+    // from the source, comments stripped, as section AC reads the table's
+    // class; on Book a rental the error-first render already keeps the empty
+    // text away, so this is where a stored [] shows.
+    const codeOf = (file) => fs.readFileSync(path.join(HERE, '..', 'src', 'pages', file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const storesEmpty = ['MyRentalsPage.jsx', 'BookRentalPage.jsx']
+      .map((f) => ({ f, hits: codeOf(f).match(/\bset(Requests|Items)\(\s*\[\s*\]\s*\)/g) || [] }));
+    check('neither page ever stores an empty list in place of one it could not load (no setRequests([]) in '
+        + 'MyRentalsPage.jsx, no setItems([]) in BookRentalPage.jsx)',
+      storesEmpty.every((s) => s.hits.length === 0), said(storesEmpty));
+
+    check('section AI kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom,
+      said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AI\'s loads sent nothing but GETs', methodsSent.length > 0 && methodsSent.every((m) => m === 'GET'),
+      `${methodsSent.length} request(s): ${[...new Set(methodsSent)].join(', ')}`);
+  }
+
+  // =========================================================================
+  // AJ. Book a rental: Manila time, and the times checked before sending
+  // =========================================================================
+  // The date field's earliest day was today in UTC (new Date().toISOString()),
+  // so from midnight to 8 AM in Manila it offered yesterday; and the form sent
+  // any times it was given, a start already past or an end not after the
+  // start included, for the server to refuse. A booking runs within one
+  // Manila day: the server builds its start and end from one date and two
+  // times at +08:00 (parseBookingBody in backend/src/routes/rentalRequests.js)
+  // and refuses an end not after the start, then a start not ahead of now.
+  // The form now does the same before it sends anything: its earliest day is
+  // today in Manila, and it checks the times as the server will, in the
+  // server's order and words, showing the sentence by the time fields and
+  // sending nothing (utils/bookingTimes.js, with utils/chargeFilters.js's
+  // manilaDay and its one clock, which this section fixes). The server stays
+  // the authority: its own refusal is still shown. Everything runs on two
+  // machine clocks, UTC and Los Angeles, where the computer's own day is not
+  // Manila's.
+  console.log('\n--- Book a rental: Manila time, and the times checked before sending ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const B = globalThis.bookingTimes || {};
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const previousTZAJ = process.env.TZ;
+    // The section's own clock between zone changes; deleting TZ would not
+    // bring the machine's zone back (it keeps the last one set).
+    const HOME_ZONE = 'UTC';
+    process.env.TZ = HOME_ZONE;
+    const PAST = 'The booking must start in the future';
+    const END = 'End time must be after the start time (bookings run within one day)';
+    const ZONES = ['UTC', 'America/Los_Angeles'];
+    // An instant's hour on this machine's clock, so each zone is seen to take.
+    const HOUR_AT_17Z = { UTC: 17, 'America/Los_Angeles': 10 };
+    const onZones = (f) => Object.fromEntries(ZONES.map((zone) => {
+      process.env.TZ = zone;
+      try { return [zone, f()]; } finally { process.env.TZ = HOME_ZONE; }
+    }));
+    const call = (name, ...args) => {
+      try { return typeof B[name] === 'function' ? B[name](...args) : `${name} is not exported`; } catch (e) { return `threw: ${e.message}`; }
+    };
+    const kept = { sets: 0, dom: domStorage.writes };
+
+    // a. The zones take, and the sentences are the server's.
+    const tookZones = onZones(() => new Date('2026-10-15T17:00:00Z').getHours());
+    check('the machine\'s clock moves for this section: 17:00 UTC reads 17:00 on a UTC clock and 10:00 on a Los Angeles one',
+      ZONES.every((z) => tookZones[z] === HOUR_AT_17Z[z]), said(tookZones));
+    const route = fs.readFileSync(path.join(HERE, '..', '..', 'backend', 'src', 'routes', 'rentalRequests.js'), 'utf8');
+    check('the form\'s two sentences are the server\'s, word for word, as parseBookingBody (backend/src/routes/'
+        + 'rentalRequests.js) sends them: "The booking must start in the future" and "End time must be after the start '
+        + 'time (bookings run within one day)"',
+      B.PAST_START === PAST && B.END_NOT_AFTER_START === END && route.includes(`'${PAST}'`) && route.includes(`'${END}'`),
+      said({ PAST_START: B.PAST_START ?? null, END_NOT_AFTER_START: B.END_NOT_AFTER_START ?? null }));
+
+    // b. The earliest day, today in Manila at a given moment, on both clocks.
+    const MIN_CASES = [
+      { now: '2026-10-15T17:00:00Z', want: '2026-10-16', note: '16 Oct, 01:00 in Manila; still 15 Oct in UTC and Los Angeles' },
+      { now: '2026-10-16T15:59:59Z', want: '2026-10-16', note: '16 Oct, 23:59:59 in Manila' },
+      { now: '2026-10-16T16:00:00Z', want: '2026-10-17', note: '17 Oct, 00:00 in Manila' },
+    ];
+    for (const { now, want, note } of MIN_CASES) {
+      const got = onZones(() => call('earliestBookingDate', new Date(now)));
+      check(`earliestBookingDate at ${now} (${note}) is ${want}, on a UTC clock and a Los Angeles one`,
+        ZONES.every((z) => got[z] === want), said(got));
+    }
+
+    // c. The times, checked as the server will: the end first, then the
+    // start, against a fixed moment, on both clocks.
+    const AT_10 = '2026-10-16T02:00:00Z'; // 16 Oct, 10:00 in Manila
+    const AT_01 = '2026-10-15T17:00:00Z'; // 16 Oct, 01:00 in Manila; 15 Oct in UTC
+    const TIME_CASES = [
+      { name: 'today, a start already past (09:00, at 10:00)', f: ['2026-10-16', '09:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'today, a start this very minute (10:00, at 10:00: the server refuses a start not ahead of now)',
+        f: ['2026-10-16', '10:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'today, a start a minute ahead (10:01, at 10:00) passes', f: ['2026-10-16', '10:01', '11:00'], now: AT_10, want: null },
+      { name: 'a date before today (15 Oct, at 10:00 on 16 Oct)', f: ['2026-10-15', '09:00', '11:00'], now: AT_10, want: PAST },
+      { name: 'a date before today, its times not yet filled in', f: ['2026-10-15', '', ''], now: AT_10, want: PAST },
+      { name: 'tomorrow, the end equal to the start (09:00 to 09:00)', f: ['2026-10-17', '09:00', '09:00'], now: AT_10, want: END },
+      { name: 'tomorrow, the end before the start (13:00 to 09:00: a booking never runs past midnight)',
+        f: ['2026-10-17', '13:00', '09:00'], now: AT_10, want: END },
+      { name: 'today, a start already past and the end before it: the end is the server\'s first check, so it answers',
+        f: ['2026-10-16', '09:00', '08:00'], now: AT_10, want: END },
+      { name: 'tomorrow, 09:00 to 11:00 passes', f: ['2026-10-17', '09:00', '11:00'], now: AT_10, want: null },
+      { name: 'today, 10:30 to 23:59 passes', f: ['2026-10-16', '10:30', '23:59'], now: AT_10, want: null },
+      { name: 'at 01:00 on 16 Oct in Manila (15 Oct in UTC), 16 Oct at 00:30 has passed',
+        f: ['2026-10-16', '00:30', '02:00'], now: AT_01, want: PAST },
+      { name: 'at 01:00 on 16 Oct in Manila, 15 Oct at 23:00 has passed, though it is still 15 Oct in UTC',
+        f: ['2026-10-15', '23:00', '23:30'], now: AT_01, want: PAST },
+      { name: 'at 01:00 on 16 Oct in Manila, 16 Oct at 01:30 is ahead and passes',
+        f: ['2026-10-16', '01:30', '03:00'], now: AT_01, want: null },
+      { name: 'at 23:59:59 on 16 Oct in Manila, 17 Oct at 00:00 is ahead and passes',
+        f: ['2026-10-17', '00:00', '01:00'], now: '2026-10-16T15:59:59Z', want: null },
+      { name: 'no date yet: nothing to check', f: ['', '09:00', '11:00'], now: AT_10, want: null },
+      { name: 'today, its times not yet filled in: left to the form\'s required fields and the server',
+        f: ['2026-10-16', '', ''], now: AT_10, want: null },
+    ];
+    for (const { name, f: [date, start, end], now, want } of TIME_CASES) {
+      const got = onZones(() => call('bookingTimeError', { date, start_time: start, end_time: end }, new Date(now)));
+      check(`bookingTimeError: ${name}: ${want === null ? 'no message' : `"${want}"`}, on a UTC clock and a Los Angeles one`,
+        ZONES.every((z) => got[z] === want), said(got));
+    }
+
+    // d. The real form, as a resident, at 00:30 on 1 Jan 2027 in Manila: on
+    // these two clocks it is still 31 Dec. The booking form is the page's only
+    // form, so it is submitted as a press of Book now would.
+    const ITEMS = [
+      { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
+    ];
+    const CONFLICT = 'The Covered Court is already booked from 9:00 AM to 11:00 AM on Jan 1, 2027';
+    const booked = (body) => ({
+      message: 'Booking confirmed',
+      request: { request_id: 990, status: 'confirmed', start_datetime: `${body.date}T${body.start_time}:00+08:00`,
+        end_datetime: `${body.date}T${body.end_time}:00+08:00`, quantity_requested: body.quantity_requested,
+        purpose: body.purpose, rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } },
+    });
+    const bodyOf = (c) => { try { return JSON.parse(c?.body || ''); } catch { return null; } };
+    for (const zone of ZONES) {
+      process.env.TZ = zone;
+      setNow('2026-12-31T16:30:00Z');
+      seedSession(RES_TOKEN, RES_USER);
+      let postAnswer = 'confirm';
+      resetNet(200, (url, method) => {
+        if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+        if (method === 'POST' && /\/rental-requests$/.test(url)) {
+          const last = net.calls.at(-1);
+          return postAnswer === 'confirm' ? booked(bodyOf(last)) : { error: CONFLICT };
+        }
+        return undefined;
+      });
+      const page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+      await page.settle();
+      const posts = () => net.calls.filter((c) => c.method === 'POST');
+      // The form back, when a booking went through where it should not have.
+      const toForm = async () => {
+        const again = buttonNamed(root(), 'Book another');
+        if (again) await page.click(again);
+      };
+      const fillIn = async (date, start, end) => {
+        await toForm();
+        const select = page.query('select[name="item_id"]');
+        if (select && select.value !== '21') {
+          select.value = '21';
+          select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          await page.settle();
+        }
+        for (const [name, value] of [['date', date], ['start_time', start], ['end_time', end]]) {
+          if (page.query(`input[name="${name}"]`)) await page.fill(`input[name="${name}"]`, value);
+        }
+        const purpose = page.query('textarea[name="purpose"]');
+        if (purpose && !purpose.value) {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Basketball practice');
+          purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        }
+        await page.settle();
+      };
+      const press = async () => { if (page.query('form')) await page.submit(); };
+      // The time message, where it must be: the line straight after the time
+      // fields' grid; and the card's other messages, above the fields.
+      const view = () => ({
+        message: text(page.query('.section-card .grid-2 + [role="alert"]')),
+        others: page.queryAll('.section-card .alert.error')
+          .filter((el) => el !== page.query('.section-card .grid-2 + [role="alert"]')).map(text),
+        posts: posts().length,
+        bookNow: buttonNamed(root(), 'Book now') ? !buttonNamed(root(), 'Book now').disabled : null,
+        confirmed: text(page.query('.section-card h3')) === 'Booking confirmed',
+      });
+      const refused = (v, want, postsBefore) => v.message === want && v.others.length === 0 && v.posts === postsBefore
+        && v.bookNow === true && !v.confirmed;
+
+      const min = page.query('input[name="date"]')?.getAttribute('min') ?? null;
+      check(`${zone}: the date field's earliest day is 2027-01-01, today in Manila at 00:30, never 2026-12-31, the day on `
+          + 'this computer\'s clock', min === '2027-01-01', said(min));
+
+      await fillIn('2027-01-01', '00:15', '02:00');
+      await press();
+      let v = view();
+      check(`${zone}: today, a start already past (00:15, at 00:30): "${PAST}" straight under the time fields, and no `
+          + 'booking request sent (0 POSTs); Book now stays pressable',
+        refused(v, PAST, 0), said(v));
+
+      await fillIn('2026-12-31', '10:00', '12:00');
+      await press();
+      v = view();
+      check(`${zone}: 31 Dec, the computer's today but yesterday in Manila: "${PAST}", and 0 POSTs`, refused(v, PAST, 0), said(v));
+
+      await fillIn('2027-01-01', '00:30', '02:00');
+      await press();
+      v = view();
+      check(`${zone}: a start this very minute (00:30, at 00:30): "${PAST}", and 0 POSTs`, refused(v, PAST, 0), said(v));
+
+      await fillIn('2027-01-01', '09:00', '09:00');
+      await press();
+      v = view();
+      check(`${zone}: the end equal to the start (09:00 to 09:00): "${END}", and 0 POSTs`, refused(v, END, 0), said(v));
+
+      await fillIn('2027-01-01', '13:00', '09:00');
+      await press();
+      const endBefore = view();
+      await fillIn('2027-01-01', '13:00', '15:00');
+      const corrected = view();
+      check(`${zone}: the end before the start (13:00 to 09:00): "${END}", and 0 POSTs; changing the end time takes the `
+          + 'message away before anything is pressed',
+        refused(endBefore, END, 0) && corrected.message === null && corrected.posts === 0,
+        said({ endBefore, corrected }));
+
+      await fillIn('2027-01-01', '09:00', '11:00');
+      await press();
+      v = view();
+      const sentBody = bodyOf(posts()[0]);
+      check(`${zone}: valid times (1 Jan 2027, 09:00 to 11:00) send exactly one booking request, with the form's date and `
+          + 'times as typed, and the booking is confirmed',
+        v.posts === 1 && /\/rental-requests$/.test(posts()[0]?.url || '') && sentBody?.date === '2027-01-01'
+          && sentBody?.start_time === '09:00' && sentBody?.end_time === '11:00' && sentBody?.item_id === 21 && v.confirmed,
+        said({ v, sentBody }));
+
+      // e. The server is still the authority: a refusal the form cannot
+      // foresee (the slot is taken) is shown as it always was.
+      await toForm();
+      postAnswer = 'conflict';
+      net.status = 409;
+      await fillIn('2027-01-01', '09:00', '11:00');
+      await press();
+      v = view();
+      check(`${zone}: a valid booking the server refuses (409, the slot is taken) sends one request and shows the server's `
+          + 'own words above the fields, with no time message, the form still there',
+        v.posts === 2 && v.others.includes(CONFLICT) && v.message === null && !v.confirmed && v.bookNow === true,
+        said(v));
+      kept.sets += store.sets;
+      await page.unmount();
+    }
+    process.env.TZ = HOME_ZONE;
+    if (F.clock && realNow) F.clock.now = realNow;
+
+    check('section AJ kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    if (previousTZAJ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAJ;
+  }
+
+  // =========================================================================
+  // AK. Terms, Help Center and landing FAQ: where residents see updates
+  // =========================================================================
+  // A resident has no notifications page: the only one is the Secretary's
+  // (/secretary/notifications, routes/notifications.js behind
+  // requireRole('secretary')). The Terms of Use said, in section 10, "Notices
+  // about your requests, bookings, and payments appear inside the portal when
+  // you sign in." and "Check the portal for the current status of anything
+  // you have submitted.", and the Help Center answered "Where do I see updates
+  // about my request?" with "Inside the portal, under notifications, …". A
+  // resident follows a request on My requests and a booking on My rentals,
+  // each row with its status badge and its fee's state. The landing page's
+  // "How do I pay the fee?" said "Once your request is approved, tap Pay
+  // beside it in My requests or My rentals": true of a document request, but
+  // nobody approves a booking, whose Pay is on My rentals from the moment it
+  // is confirmed while its charge is unpaid. The Terms changed, so their date
+  // moves (section 14 promises it); the Privacy Policy did not, so its date
+  // stays. Read as a person reads them, and against docs/legal-copy.md.
+  console.log('\n--- Terms, Help Center and landing FAQ: where residents see updates, and when a rental is paid ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const words = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const copy = el.cloneNode(true);
+      for (const br of copy.querySelectorAll('br')) br.replaceWith(' ');
+      return words(copy.textContent);
+    };
+    const T10_FIRST = 'Updates about your requests and bookings, including whether a fee has been paid, are shown under My '
+      + 'requests and My rentals when you sign in.';
+    const T10_KEPT = 'Email is used only to send password reset links, and the set-password links Barangay officials receive '
+      + 'to set up their accounts. SMS notification is not currently active — messages are recorded against your record '
+      + 'but are not delivered to your phone.';
+    const T10_SECOND = 'Check My requests and My rentals for the current status of anything you have submitted.';
+    const H_WHERE_Q = 'Where do I see updates about my request?';
+    const H_WHERE = 'Under My requests for a document request, or under My rentals for a booking, when you are signed in. '
+      + 'That is the authoritative place.';
+    const H_TEXT_Q = 'Will I get a text message?';
+    const H_TEXT = 'Not at present. SMS notification is not active. Messages are composed and recorded against your record, '
+      + 'but they are not delivered to your phone. Email is used only for password reset links, and for the set-password '
+      + 'links Barangay officials receive to set up their accounts.';
+    const FAQ_PAY_Q = 'How do I pay the fee?';
+    const FAQ_PAY = 'You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is '
+      + 'approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it '
+      + 'is confirmed. Then choose Pay online via GCash.';
+    // What they said before, word for word.
+    const OLD_T = ['Notices about your requests, bookings, and payments appear', 'Check the portal for the current status'];
+    const OLD_H = ['under notifications'];
+    const OLD_FAQ = 'Once your request is approved, tap Pay beside it in My requests or My rentals';
+    const TERMS_DATE = 'Effective: 25 October 2026';
+    // Step B2 changed the Privacy Policy's log paragraph (a cancelled rental
+    // booking, and a GCash payment received after one), so its date moved
+    // too; section AM reads the paragraph.
+    const PRIVACY_DATE = 'Effective: 25 October 2026';
+    const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
+    const has = (blocks, o) => blocks.some((b) => b.text.includes(o));
+
+    // A /login modal as the page shows it: its blocks, its date line, and the
+    // bold words of section 10's first paragraph.
+    const openLegal = async (link) => {
+      seedSession(null);
+      resetNet(200);
+      const page = await globalThis.mountInteractive(root(), '/login');
+      await page.settle();
+      const opener = page.queryAll('.legal-links a').find((a) => a.textContent.trim() === link);
+      if (opener) await page.click(opener);
+      const body = page.query('.legal-modal-body');
+      const blocks = body ? [...body.querySelectorAll('h2, h3, h4, p, li')]
+        .map((el) => ({ tag: el.tagName.toLowerCase(), text: shown(el) })) : [];
+      const effective = body ? words(body.querySelector('.legal-effective')?.textContent) || null : null;
+      const h10 = body ? [...body.querySelectorAll('h3')].find((h) => words(h.textContent) === '10. Notifications') : null;
+      const p10 = h10?.nextElementSibling?.tagName === 'P' ? h10.nextElementSibling : null;
+      const bold10 = p10 ? [...p10.querySelectorAll('strong')].map((s) => words(s.textContent)) : null;
+      const sent = net.calls.length;
+      await page.unmount();
+      return { blocks, effective, bold10, sent };
+    };
+    // One part of docs/legal-copy.md, its raw lines and its blocks, read as
+    // section AH reads it.
+    const legalMd = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+    const mdPart = (part) => {
+      const all = legalMd.split('\n');
+      const start = all.indexOf(`## ${part}`);
+      const raw = [];
+      for (let i = start + 1; start >= 0 && i < all.length && !/^## /.test(all[i]); i += 1) raw.push(all[i]);
+      const blocks = [];
+      let para = null;
+      const plain = (s) => words(s.replace(/\*\*?/g, ''));
+      const flush = () => {
+        if (para) blocks.push({ tag: para.tag, text: plain(para.lines.join(' ')) });
+        para = null;
+      };
+      for (const line of raw) {
+        const heading = line.match(/^(#{3,4}) (.*)$/);
+        if (heading) {
+          flush();
+          blocks.push({ tag: `h${heading[1].length}`, text: plain(heading[2]) });
+        } else if (!line.trim() || /^-{3,}$/.test(line.trim())) {
+          flush();
+        } else if (/^- /.test(line)) {
+          flush();
+          para = { tag: 'li', lines: [line.slice(2)] };
+        } else {
+          if (!para) para = { tag: 'p', lines: [] };
+          para.lines.push(line.trim());
+        }
+      }
+      flush();
+      return { raw, blocks };
+    };
+    const under = (blocks, tag, title, stop) => {
+      const i = blocks.findIndex((b) => b.tag === tag && b.text === title);
+      if (i < 0) return [];
+      const out = [];
+      for (let j = i + 1; j < blocks.length && !stop.includes(blocks[j].tag); j += 1) out.push(blocks[j]);
+      return out;
+    };
+    // The raw markdown lines of one "### " section of a part.
+    const mdSection = (raw, title) => {
+      const i = raw.indexOf(`### ${title}`);
+      if (i < 0) return '';
+      const out = [];
+      for (let j = i + 1; j < raw.length && !/^#{2,3} /.test(raw[j]); j += 1) out.push(raw[j]);
+      return out.join('\n');
+    };
+
+    const terms = await openLegal('Terms of Use');
+    const help = await openLegal('Help Center');
+    const privacy = await openLegal('Privacy Policy');
+    const termsMd = mdPart('TERMS OF USE');
+    const helpMd = mdPart('HELP CENTER');
+    const privacyMd = mdPart('PRIVACY POLICY');
+    const wantT10 = [`p: ${T10_FIRST} ${T10_KEPT}`, `p: ${T10_SECOND}`];
+    const wantHelp = [`h4: ${H_WHERE_Q}`, `p: ${H_WHERE}`, `h4: ${H_TEXT_Q}`, `p: ${H_TEXT}`];
+    const t10 = under(terms.blocks, 'h3', '10. Notifications', ['h2', 'h3']);
+    const t10Md = under(termsMd.blocks, 'h3', '10. Notifications', ['h2', 'h3']);
+    const hNote = under(help.blocks, 'h3', 'Notifications and messages', ['h2', 'h3']);
+    const hNoteMd = under(helpMd.blocks, 'h3', 'Notifications and messages', ['h2', 'h3']);
+
+    check('Terms of Use, section 10, as /login\'s modal shows it (TermsOfUse.jsx): "Updates about your requests and bookings, '
+        + 'including whether a fee has been paid, are shown under My requests and My rentals when you sign in." then the '
+        + 'email and SMS sentences as they were, and "Check My requests and My rentals for the current status …"',
+      said(lines(t10)) === said(wantT10), said(lines(t10)));
+    check('  and section 10\'s first paragraph bolds "My requests and My rentals", where it bolded "inside the portal"',
+      said(terms.bold10) === said(['My requests and My rentals']), said(terms.bold10));
+    check('  and the Terms modal, read whole, has none of the old words ("Notices about your requests, bookings, and payments '
+        + 'appear", "Check the portal for the current status")',
+      terms.blocks.length > 20 && OLD_T.every((o) => !has(terms.blocks, o)), said(OLD_T.filter((o) => has(terms.blocks, o))));
+    check('Help Center, "Notifications and messages", as the modal shows it (HelpCenter.jsx): "Where do I see updates about my '
+        + 'request?" answered "Under My requests for a document request, or under My rentals for a booking, …"; "Will I '
+        + 'get a text message?" and its answer as they were',
+      said(lines(hNote)) === said(wantHelp), said(lines(hNote)));
+    check('  and the Help Center, read whole, never says "under notifications"',
+      help.blocks.length > 20 && OLD_H.every((o) => !has(help.blocks, o)), said(OLD_H.filter((o) => has(help.blocks, o))));
+    check('docs/legal-copy.md says the same words as the two modals: Terms section 10 (with **My requests and My rentals**) '
+        + 'and the Help Center\'s "Notifications and messages", and neither part keeps any of the old words',
+      said(lines(t10Md)) === said(wantT10) && said(lines(hNoteMd)) === said(wantHelp)
+        && mdSection(termsMd.raw, '10. Notifications').includes('**My requests and My rentals**')
+        && [...OLD_T, ...OLD_H].every((o) => !has(termsMd.blocks, o) && !has(helpMd.blocks, o)),
+      said({ t10Md: lines(t10Md), hNoteMd: lines(hNoteMd) }));
+    check(`the Terms of Use are dated "${TERMS_DATE}", in the modal and in docs/legal-copy.md, since they changed`,
+      terms.effective === TERMS_DATE && termsMd.raw.includes(`*${TERMS_DATE}*`),
+      said({ modal: terms.effective, md: termsMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
+    check(`the Privacy Policy is dated "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since step B2 changed it`,
+      privacy.effective === PRIVACY_DATE && privacyMd.raw.includes(`*${PRIVACY_DATE}*`),
+      said({ modal: privacy.effective, md: privacyMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
+    check('opening the three modals sent no request', terms.sent + help.sent + privacy.sent === 0,
+      said({ terms: terms.sent, help: help.sent, privacy: privacy.sent }));
+
+    // The landing page's FAQ, signed out, as its <details> show it.
+    seedSession(null);
+    resetNet(200);
+    const landing = await globalThis.mountInteractive(root(), '/');
+    await landing.settle();
+    const faqs = landing.queryAll('.landing-faq-item').map((d) => ({
+      q: words(d.querySelector('summary')?.textContent), a: words(d.querySelector('p')?.textContent),
+    }));
+    const landingSent = net.calls.length;
+    const kept = store.sets;
+    await landing.unmount();
+    const pay = faqs.find((f) => f.q === FAQ_PAY_Q);
+    check('the landing page\'s FAQ answers "How do I pay the fee?" with "… For a document request, once it is approved, tap '
+        + 'Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it is '
+        + 'confirmed. Then choose Pay online via GCash."',
+      pay?.a === FAQ_PAY, said(pay ?? faqs.map((f) => f.q)));
+    check('  and no FAQ answer says "Once your request is approved, tap Pay beside it in My requests or My rentals", or '
+        + 'promises a notification',
+      faqs.length > 5 && faqs.every((f) => !f.a.includes(OLD_FAQ) && !/notif/i.test(f.a)),
+      said(faqs.filter((f) => f.a.includes(OLD_FAQ) || /notif/i.test(f.a))));
+    check('  and the landing page sent no request and kept nothing in the browser', landingSent === 0 && kept === 0,
+      said({ landingSent, kept }));
+  }
+
+  // =========================================================================
+  // AL. Book a rental: the server refusal read out, Try again spaced
+  // =========================================================================
+  // Book a rental showed the server's refusal of a booking (a slot already
+  // taken) as a plain <div className="alert error">, which a screen reader
+  // does not announce, while the load error and the time message beside it
+  // carry role="alert". And under the load error, the Try again row sat 4px
+  // below the error: the card's .pending-card .alert (4px under) and
+  // .actions (4px over) collapse to 4px, which reads as one block. The row
+  // now carries a class of its own, .book-rental-retry, which one rule in
+  // index.css gives margin-top 16px; the shared .alert, .actions and
+  // .pending-card .alert rules are as they were, and every other .actions
+  // row keeps its 4px. jsdom applies no CSS, so index.css is read as a
+  // browser of a given width applies it, the cascade settled (section AA's
+  // reading), with margin and its longhands competing for each side.
+  console.log('\n--- Book a rental: the server refusal read out, and Try again spaced from the error ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    // 25 Oct 2026, 10:00 in Manila: 26 Oct is ahead, 25 Oct at 09:00 has passed.
+    if (F.clock) F.clock.now = () => new Date('2026-10-25T02:00:00Z');
+    const ITEMS = [
+      { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
+    ];
+    const CONFLICT = 'The Covered Court is already booked from 9:00 AM to 11:00 AM on Oct 26, 2026';
+    const PAST = 'The booking must start in the future';
+    const LOAD_ERROR = 'Could not load the rental items: Network down';
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+    const bookPage = async (answer, status = 200) => {
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(status, answer);
+      const pg = await globalThis.mountInteractive(root(), '/resident/book-rental');
+      await pg.settle();
+      return pg;
+    };
+    const itemsOr = (post) => (url, method) => {
+      if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+      if (method === 'POST' && /\/rental-requests$/.test(url)) return post;
+      return undefined;
+    };
+    const fillIn = async (pg, date, start, end) => {
+      const select = pg.query('select[name="item_id"]');
+      if (select && select.value !== '21') {
+        select.value = '21';
+        select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        await pg.settle();
+      }
+      for (const [name, value] of [['date', date], ['start_time', start], ['end_time', end]]) {
+        if (pg.query(`input[name="${name}"]`)) await pg.fill(`input[name="${name}"]`, value);
+      }
+      const purpose = pg.query('textarea[name="purpose"]');
+      if (purpose && !purpose.value) {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Basketball practice');
+        purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      }
+      await pg.settle();
+    };
+    const press = async (pg) => { if (pg.query('form')) await pg.submit(); };
+    const posts = () => net.calls.filter((c) => c.method === 'POST').length;
+    const retryRows = (pg) => pg.queryAll('.book-rental-retry');
+
+    // --- index.css, read as a browser of a given width applies it ---
+    const splitList = (s) => {
+      const out = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim()).filter(Boolean);
+    };
+    const css = (() => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      const open = [];
+      let from = 0;
+      const own = (block, decl) => {
+        const k = decl.indexOf(':');
+        if (k > 0) block.decls[decl.slice(0, k).trim().toLowerCase()] = decl.slice(k + 1).trim().replace(/\s+/g, ' ');
+      };
+      const media = () => open.filter((b) => b.at).map((b) => b.at);
+      const inRule = () => [...open].reverse().find((b) => b.selectors) ?? null;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim().replace(/\s+/g, ' ');
+          const parent = inRule();
+          if (head.startsWith('@')) {
+            const block = { at: head, ...(parent ? { selectors: parent.selectors, decls: {} } : {}) };
+            open.push(block);
+            if (parent) rules.push({ ...block, media: media() });
+          } else {
+            const mine = splitList(head);
+            const selectors = parent
+              ? parent.selectors.flatMap((p) => mine.map((c) => (c.includes('&') ? c.replace(/&/g, p) : `${p} ${c}`)))
+              : mine;
+            const block = { selectors, decls: {} };
+            open.push(block);
+            rules.push({ ...block, media: media() });
+          }
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          const rest = src.slice(from, i).trim();
+          if (block?.selectors && rest) own(block, rest);
+          from = i + 1;
+        } else if (ch === ';') {
+          const block = open.at(-1);
+          if (block?.selectors) own(block, src.slice(from, i).trim());
+          from = i + 1;
+        }
+      }
+      rules.forEach((r, i) => { r.order = i; });
+      return { rules, balanced: open.length === 0, src };
+    })();
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    const bySpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    const specificity = (selector) => {
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let s = selector.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, ' ');
+      s = s.replace(/:(?:not|is|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+        const best = splitList(inner).map(specificity).sort(bySpec).at(-1) || [0, 0, 0];
+        a += best[0];
+        b += best[1];
+        c += best[2];
+        return ' ';
+      });
+      s = s.replace(/\[[^\]]*\]/g, () => { b += 1; return ' '; });
+      s = s.replace(/::[\w-]+/g, () => { c += 1; return ' '; });
+      a += (s.match(/#[\w-]+/g) || []).length;
+      b += (s.match(/\.[\w-]+/g) || []).length + (s.match(/:[\w-]+/g) || []).length;
+      c += (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+      return [a, b, c];
+    };
+    const tryMatch = (el, selector) => { try { return el.matches(selector); } catch { return false; } };
+    // One side's margin ('top' or 'bottom'): `margin` and `margin-<side>`
+    // compete, the most specific winning, and of equals the later.
+    const sideOf = (value, side) => {
+      // One value, two (top and bottom alike) or three and four (the third
+      // is the bottom).
+      const [t, , b = t] = value.replace(/\s*!important$/, '').split(' ');
+      return side === 'top' ? t : b;
+    };
+    const marginAt = (width, el, side) => {
+      if (!el) return null;
+      let best = null;
+      for (const r of css.rules) {
+        const prop = `margin-${side}` in r.decls ? `margin-${side}` : 'margin' in r.decls ? 'margin' : null;
+        if (!prop || !appliesAt(r.media, width)) continue;
+        for (const sel of r.selectors) {
+          if (/:(hover|focus|focus-visible|focus-within|active)\b/.test(sel)) continue;
+          if (/::?(before|after|placeholder|first-line|first-letter)$/.test(sel) || !tryMatch(el, sel)) continue;
+          // A rule with both is read as written, its longhand after.
+          const value = prop === 'margin' ? sideOf(r.decls.margin, side) : r.decls[prop];
+          const rank = [/!important$/.test(r.decls[prop]) ? 1 : 0, ...specificity(sel)];
+          const better = !best || rank[0] - best.rank[0] || bySpec(rank.slice(1), best.rank.slice(1));
+          if (!best || better > 0 || (better === 0 && r.order > best.order)) {
+            best = { rank, order: r.order, selector: sel, value: value.replace(/\s*!important$/, '') };
+          }
+        }
+      }
+      return best;
+    };
+    const px = (m) => (m && /^-?\d+(\.\d+)?px$/.test(m.value) ? Number.parseFloat(m.value) : m && m.value === '0' ? 0 : null);
+    // The gap a browser leaves between two block siblings: their margins
+    // collapse to the larger (both are positive here).
+    const gapAt = (width, upper, lower) => {
+      const a = px(marginAt(width, upper, 'bottom'));
+      const b = px(marginAt(width, lower, 'top'));
+      return a === null || b === null ? null : Math.max(a, b);
+    };
+    const WIDTHS = [390, 768, 1280];
+
+    // a. The server refuses a valid booking (409, the slot is taken).
+    let page = await bookPage(itemsOr({ error: CONFLICT }));
+    await fillIn(page, '2026-10-26', '09:00', '11:00');
+    net.status = 409;
+    await press(page);
+    const refusal = page.queryAll('.section-card .alert.error').find((el) => text(el) === CONFLICT) ?? null;
+    check('Book a rental: the server\'s refusal of a booking (409, the slot is taken) is read out: its message, "' + CONFLICT
+        + '", carries role="alert"',
+      refusal?.getAttribute('role') === 'alert' && posts() === 1, said({ role: refusal?.getAttribute('role') ?? null,
+        found: !!refusal, posts: posts() }));
+    check('  and nothing else about it changed: "alert error" its only classes, straight under the card\'s heading, the only '
+        + 'message on the card, the form still there below it',
+      refusal?.className === 'alert error' && refusal?.previousElementSibling?.tagName === 'H3'
+        && page.queryAll('.section-card .alert').length === 1 && !!buttonNamed(root(), 'Book now')
+        && page.queryAll('.section-card select, .section-card input, .section-card textarea').length >= 5,
+      said({ className: refusal?.className ?? null, before: refusal?.previousElementSibling?.tagName ?? null,
+        alerts: page.queryAll('.section-card .alert').map(text) }));
+    // b. The time message, on the same page: still read out.
+    await fillIn(page, '2026-10-25', '09:00', '11:00');
+    await press(page);
+    const timeMessage = page.query('.section-card .grid-2 + [role="alert"]');
+    check('  the time message is still read out: "' + PAST + '" under the time fields, role="alert", no request sent',
+      text(timeMessage) === PAST && timeMessage?.className === 'alert error' && posts() === 1,
+      said({ message: text(timeMessage), posts: posts() }));
+    // The form's own .actions row, Book now's: the shared spacing.
+    const bookNowRow = buttonNamed(root(), 'Book now')?.closest('div') ?? null;
+    const bookNowClass = bookNowRow?.className ?? null;
+    const bookNowTop = WIDTHS.map((w) => marginAt(w, bookNowRow, 'top'));
+    await finish(page);
+
+    // c. The load error: still read out; its Try again row carries the
+    // page's class, and is the error's next sibling.
+    page = await bookPage({ error: 'Network down' }, 500);
+    const loadError = page.queryAll('[role="alert"]').find((el) => text(el) === LOAD_ERROR) ?? null;
+    const retryRow = tryAgainButton(page)?.parentElement ?? null;
+    check('Book a rental: the load error is still read out ("' + LOAD_ERROR + '", role="alert")',
+      !!loadError && loadError.className === 'alert error', said({ found: !!loadError, alerts: page.queryAll('.alert').map(text) }));
+    check('  and its Try again row is the error\'s next sibling, with the classes "actions book-rental-retry", the only '
+        + 'such row on the page',
+      !!retryRow && retryRow === loadError?.nextElementSibling && retryRow.className === 'actions book-rental-retry'
+        && retryRows(page).length === 1,
+      said({ className: retryRow?.className ?? null, sibling: retryRow === loadError?.nextElementSibling,
+        rows: retryRows(page).length }));
+    const retryGap = WIDTHS.map((w) => ({ w, alertBottom: marginAt(w, loadError, 'bottom'), rowTop: marginAt(w, retryRow, 'top'),
+      gap: gapAt(w, loadError, retryRow) }));
+    check('  and at 390, 768 and 1280px the Try again row sits 16px under the error: its margin-top 16px from '
+        + '".actions.book-rental-retry", the error\'s margin-bottom still 4px from ".pending-card .alert"',
+      retryGap.every((g) => g.gap === 16 && g.rowTop?.selector === '.actions.book-rental-retry' && g.rowTop?.value === '16px'
+        && g.alertBottom?.selector === '.pending-card .alert' && g.alertBottom?.value === '4px'),
+      said(retryGap.map((g) => ({ w: g.w, gap: g.gap, top: g.rowTop && `${g.rowTop.selector} ${g.rowTop.value}`,
+        bottom: g.alertBottom && `${g.alertBottom.selector} ${g.alertBottom.value}` }))));
+    await finish(page);
+
+    // d. A successful load of nothing is the real empty state it was.
+    page = await bookPage((url) => (/\/rental-items$/.test(url) ? { rental_items: [] } : undefined));
+    check('Book a rental: a successful load of no items still says "Nothing is currently available for rental.", with no '
+        + 'message, no Try again row and no form',
+      root().textContent.includes('Nothing is currently available for rental.') && page.queryAll('.alert').length === 0
+        && retryRows(page).length === 0 && !tryAgainButton(page) && !buttonNamed(root(), 'Book now'),
+      said({ alerts: page.queryAll('.alert').map(text), rows: retryRows(page).length }));
+    await finish(page);
+
+    // e. The form is as it was: its Book now row is a plain .actions row,
+    // with the shared 4px.
+    check('Book a rental: the form is as it was: Book now\'s row is "actions" alone, its margin-top 4px from the shared '
+        + '".actions" at 390, 768 and 1280px',
+      bookNowClass === 'actions' && bookNowTop.every((m) => m?.selector === '.actions' && m?.value === '4px'),
+      said({ bookNowClass, top: bookNowTop.map((m) => m && `${m.selector} ${m.value}`) }));
+
+    // f. Another page's alert and actions row: Staff accounts' create form,
+    // where the temporary-password note (.pending-card .alert) is followed by
+    // the Create account row. It keeps the shared 4px.
+    seedSession(VALID);
+    resetNet(200, (url) => (url.endsWith('/secretary/staff-accounts') ? { accounts: [] } : undefined));
+    page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'New staff account'));
+    const delivery = page.query('select[name="delivery"]');
+    if (delivery) {
+      delivery.value = 'temporary_password';
+      delivery.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await page.settle();
+    }
+    const staffRow = buttonNamed(root(), 'Create account')?.closest('.actions') ?? null;
+    const staffNote = staffRow?.previousElementSibling ?? null;
+    const staffGap = WIDTHS.map((w) => ({ w, gap: gapAt(w, staffNote, staffRow), top: marginAt(w, staffRow, 'top') }));
+    check('another page keeps its spacing: on Staff accounts the temporary-password note (.pending-card .alert) sits 4px over '
+        + 'the Create account row, whose margin-top is still the shared ".actions" 4px, at 390, 768 and 1280px',
+      !!staffNote?.classList.contains('alert') && !!staffNote.closest('.pending-card') && staffRow.className === 'actions'
+        && staffGap.every((g) => g.gap === 4 && g.top?.selector === '.actions'),
+      said({ note: staffNote?.className ?? null, row: staffRow?.className ?? null,
+        staffGap: staffGap.map((g) => ({ w: g.w, gap: g.gap, top: g.top && `${g.top.selector} ${g.top.value}` })) }));
+    methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`));
+    kept.sets += store.sets;
+    await page.unmount();
+
+    // g. The rule itself, and the shared rules as they were at c7d8843.
+    const mine = css.rules.filter((r) => r.selectors.some((s) => s.includes('book-rental-retry')));
+    const declsOf = (selector) => css.rules.filter((r) => r.media.length === 0 && r.selectors.length === 1
+      && r.selectors[0] === selector).map((r) => r.decls);
+    const SHARED = {
+      '.alert': { padding: '10px 12px', 'border-radius': '8px', 'margin-bottom': '16px', 'font-size': '0.9rem' },
+      '.actions': { display: 'flex', 'flex-wrap': 'wrap', gap: '10px', 'margin-top': '4px' },
+      '.pending-card .alert': { margin: '12px 0 4px' },
+    };
+    const sharedNow = Object.fromEntries(Object.keys(SHARED).map((s) => [s, declsOf(s)]));
+    check('index.css has one rule of the page\'s own, ".actions.book-rental-retry { margin-top: 16px }": top level, no @media, '
+        + 'no CSS variable, no z-index, nothing else in it',
+      css.balanced && mine.length === 1 && said(mine[0].selectors) === said(['.actions.book-rental-retry'])
+        && mine[0].media.length === 0 && said(mine[0].decls) === said({ 'margin-top': '16px' }),
+      said(mine.map((r) => ({ selectors: r.selectors, media: r.media, decls: r.decls }))));
+    check('  and the shared ".alert", ".actions" and ".pending-card .alert" rules are as they were (one top-level rule each, '
+        + 'the same declarations)',
+      Object.entries(SHARED).every(([s, want]) => sharedNow[s].length === 1 && said(sharedNow[s][0]) === said(want)),
+      said(sharedNow));
+    const srcFiles = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.jsx?$/.test(e.name)) srcFiles.push(p);
+      }
+    };
+    walk(path.join(HERE, '..', 'src'));
+    // Counted in the code, comments stripped, as section AI reads a page.
+    const codeOf = (f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const usedIn = srcFiles.map((f) => ({ f: path.relative(path.join(HERE, '..', 'src'), f).replace(/\\/g, '/'),
+      n: (codeOf(f).match(/book-rental-retry/g) || []).length })).filter((u) => u.n > 0);
+    check('  and the class is used once, on Book a rental\'s Try again row, and on no other page',
+      said(usedIn) === said([{ f: 'pages/BookRentalPage.jsx', n: 1 }]), said(usedIn));
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    check('section AL kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AL sent only GETs and its booking POSTs, every one answered by the fetch stub',
+      methods.length > 0 && methods.every((m) => /^GET /.test(m) || m === 'POST /rental-requests'),
+      said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AM. Rental Edit and Cancel on the screens (step B2)
+  // =========================================================================
+  // Step B1 moved the rules to the server: Edit changes only the date, the
+  // times and the purpose of a booking that has not started; Cancel needs a
+  // reason of 3 to 300 characters; a resident cancels their own unpaid online
+  // booking up to 24 hours ahead (docs/modules/rental-bookings.md, "Edit and
+  // Cancel"). The screens still asked window.confirm and sent no reason, sent
+  // the quantity on every edit, offered Edit and Cancel on Overdue and
+  // Completed bookings, and gave the resident no way to cancel. Here: the
+  // Secretary's Cancel opens a panel with a required reason and, for a paid
+  // booking, the refund warning; Edit shows only date, times and purpose and
+  // sends no quantity; both are drawn only where the server says the booking
+  // has not started (not_started); a cancelled booking shows its reason, as
+  // text; My rentals draws Cancel booking only where the server says
+  // can_cancel_online, and its note where it does not; and the Activity Log
+  // page words the cancel's facts and the late-payment row.
+  console.log('\n--- Rental Edit and Cancel: the reason panel, the hidden buttons, and the resident\'s own cancel ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const codeOf = (f) => fs.readFileSync(path.join(HERE, '..', 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const bodyOf = (call) => { try { return JSON.parse(call?.body ?? 'null'); } catch { return call?.body ?? null; } };
+    const typeInto = async (pg, el, value) => {
+      if (!el) return;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(el, value);
+      el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await pg.settle();
+    };
+    const previousConfirm = dom.window.confirm;
+    const asked = [];
+    dom.window.confirm = (message) => { asked.push(message); return true; };
+    const kept = { sets: 0, dom: domStorage.writes };
+    const methods = [];
+    const finish = async (pg) => {
+      methods.push(...net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '').replace(/\d+/g, ':id')}`));
+      kept.sets += store.sets;
+      await pg.unmount();
+    };
+    const PESO = (n) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(n);
+    const CHARGE_CHANGED = "This booking's charge just changed (it may have been paid). Refresh and try again; nothing was changed.";
+    const QUANTITY_FIXED = 'The quantity cannot be changed. Cancel this booking and book again.';
+    const TOO_LATE = 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.';
+    const PAID_HALL = 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.';
+    const HELPER = 'The resident receives this reason by text message. Keep it short and use plain letters.';
+    const WARN_902 = `This booking was paid (PHP 150.00). The payment stays recorded. The resident is told to contact the barangay about the refund.`;
+    const UNDO = 'This cannot be undone. You will need to book again.';
+    const SAFE_TEXT = '<b>Typhoon</b> signal no. 2';
+
+    // --- the Secretary's list, in MANAGE_FIELDS' shape with derived_status
+    // and not_started, as GET /rental-requests sends it since step B2 ---
+    const secBooking = (id, who, item, type, extra = {}) => ({
+      request_id: id, quantity_requested: 2,
+      start_datetime: `2026-11-${10 + (id % 10)}T01:00:00+00:00`, end_datetime: `2026-11-${10 + (id % 10)}T05:00:00+00:00`,
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null,
+      resident_id: 800 + id, outside_borrower_name: null, outside_borrower_contact: null,
+      rental_items: { item_id: 600 + id, name: item, type, fee: '75.00', quantity_total: 10, quantity_available: 10 },
+      resident_records: { resident_id: 800 + id, first_name: who[0], middle_name: null, last_name: who[1], suffix: null,
+        account: { username: `res_${id}` } },
+      requester: { user_id: 700 + id, username: `res_${id}`, email: null, profiles: null },
+      returned_by: null,
+      charges: { charge_id: 950 + id, amount: '150.00', status: 'UNPAID', declared_method: null, declared_reference: null,
+        declared_at: null },
+      derived_status: 'confirmed', not_started: true, ...extra,
+    });
+    const SEC_LIST = () => [
+      secBooking(901, ['Ana', 'Cruz'], 'Sound System', 'equipment'),
+      secBooking(902, ['Ben', 'Reyes'], 'Covered Court', 'facility', { quantity_requested: 1,
+        charges: { charge_id: 1852, amount: '150.00', status: 'PAID', declared_method: null, declared_reference: null, declared_at: null } }),
+      // Started an hour ago, still running: stored confirmed, derived confirmed.
+      secBooking(903, ['Carla', 'Santos'], 'Plastic Chairs', 'furniture', { not_started: false }),
+      secBooking(904, ['Dino', 'Tan'], 'Tent (10x10)', 'equipment', { start_datetime: '2026-10-01T01:00:00+00:00',
+        end_datetime: '2026-10-01T05:00:00+00:00', derived_status: 'overdue', not_started: false }),
+      secBooking(905, ['Elsa', 'Uy'], 'Barangay Hall', 'facility', { status: 'cancelled', derived_status: 'cancelled',
+        not_started: false, cancellation_reason: SAFE_TEXT,
+        charges: { charge_id: 1855, amount: '150.00', status: 'VOID', declared_method: null, declared_reference: null, declared_at: null } }),
+      secBooking(906, ['Fe', 'Villa'], 'Covered Court', 'facility', { status: 'cancelled', derived_status: 'cancelled',
+        not_started: false }),
+      secBooking(907, ['x', 'x'], 'Folding Tables', 'furniture', { resident_id: null, resident_records: null,
+        outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000',
+        requester: { user_id: 1, username: 'secretary1', email: null, profiles: null } }),
+    ];
+    const secState = { list: SEC_LIST() };
+    const secAnswer = (st) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: st.list };
+      const cancelAt = url.match(/\/rental-requests\/(\d+)\/cancel$/);
+      if (method === 'POST' && cancelAt) {
+        if (net.status !== 200) return { error: st.refusal };
+        const row = st.list.find((b) => b.request_id === Number(cancelAt[1]));
+        const sent = bodyOf(net.calls.at(-1));
+        Object.assign(row, { status: 'cancelled', derived_status: 'cancelled', not_started: false,
+          cancellation_reason: sent?.reason ?? null });
+        return { message: 'Booking cancelled — the slot has been freed' };
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) {
+        return net.status !== 200 ? { error: st.refusal } : { message: 'Booking updated' };
+      }
+      if (method === 'GET' && url.endsWith('/rental-items')) return { rental_items: [] };
+      return undefined;
+    };
+    const rowOf = (pg, id) => pg.queryAll('table.data-table tbody tr')
+      .find((tr) => text(tr.querySelector('.doc-requests-number')) === `#${id}`) ?? null;
+    const buttonsOf = (pg, id) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
+    const rowButton = (pg, id, label) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])]
+      .find((b) => b.textContent === label) ?? null;
+    const tabNamed = (pg, label) => pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const panelView = (pg) => {
+      const panel = pg.query('.cancel-booking-panel');
+      const box = panel?.querySelector('textarea') ?? null;
+      const submit = panel ? [...panel.querySelectorAll('button')].find((b) => b.textContent === 'Cancel this booking') : null;
+      return {
+        open: !!panel,
+        title: text(panel?.querySelector('h3')),
+        lines: panel ? [...panel.querySelectorAll('.pending-head p')].map(text) : [],
+        label: text(box?.closest('label')) ?? null,
+        maxLength: box?.maxLength ?? null,
+        required: box?.required ?? null,
+        focused: !!box && pg.active() === box,
+        counter: text(panel?.querySelector('.char-counter')),
+        texts: panel ? [...panel.querySelectorAll('p, .alert')].map(text) : [],
+        alerts: panel ? [...panel.querySelectorAll('[role="alert"]')].map(text) : [],
+        submitDisabled: submit ? submit.disabled : null,
+        keep: !!panel && [...panel.querySelectorAll('button')].some((b) => b.textContent === 'Keep booking'),
+        box,
+        submit,
+      };
+    };
+    const secOpen = async () => {
+      seedSession(VALID);
+      resetNet(200, secAnswer(secState));
+      const pg = await globalThis.mountInteractive(root(), '/secretary/rentals');
+      await pg.settle();
+      await clickIf(pg, tabNamed(pg, 'All'));
+      return pg;
+    };
+
+    check('RentalBookingsPage.jsx no longer calls window.confirm (comments stripped)',
+      !/window\.confirm/.test(codeOf('pages/RentalBookingsPage.jsx')),
+      String((codeOf('pages/RentalBookingsPage.jsx').match(/window\.confirm/g) || []).length));
+
+    let page = await secOpen();
+    const ACTIONS_WANT = { 901: 'Edit + Cancel', 902: 'Edit + Cancel', 903: '(none)', 904: '(none)', 905: '(none)', 906: '(none)',
+      907: 'Edit + Cancel' };
+    const actionsNow = Object.fromEntries(Object.keys(ACTIONS_WANT).map((id) => [id, buttonsOf(page, Number(id)).join(' + ') || '(none)']));
+    check('Secretary: Edit and Cancel are drawn only on the bookings the server says have not started (not_started): the '
+        + 'upcoming online ones and the walk-in; none on a booking that has started, an Overdue one or a cancelled one',
+      said(actionsNow) === said(ACTIONS_WANT), said(actionsNow));
+    const reasonLines = (id) => [...(rowOf(page, id)?.querySelectorAll('.reason-note') ?? [])].map(text)
+      .filter((t) => t.startsWith('Reason:'));
+    check('  a cancelled booking shows "Reason: …" from cancellation_reason, as text (its "<b>" shown, never made bold)',
+      said(reasonLines(905)) === said([`Reason: ${SAFE_TEXT}`]) && !rowOf(page, 905)?.querySelector('.reason-note b'),
+      said(reasonLines(905)));
+    check('  and a cancelled booking with no reason shows no "Reason:" line and no placeholder',
+      reasonLines(906).length === 0 && !/Reason:/.test(text(rowOf(page, 906)) ?? ''), text(rowOf(page, 906)));
+
+    // a. Cancel on an upcoming unpaid booking.
+    asked.length = 0;
+    const cancelButton901 = rowButton(page, 901, 'Cancel');
+    await clickIf(page, cancelButton901);
+    let p = panelView(page);
+    check('Secretary: Cancel opens the in-page panel, asks no window.confirm: "Cancel booking #901", the borrower, the item '
+        + 'and the date and time',
+      p.open && asked.length === 0 && p.title === 'Cancel booking #901'
+        && p.lines.some((l) => l.includes('Ana Cruz') && l.includes('Sound System'))
+        && p.lines.some((l) => /Nov 1\d, 2026/.test(l)),
+      said({ asked: asked.length, title: p.title, lines: p.lines }));
+    check('  a required "Reason for cancelling" box, maxLength 300, with the focus in it, a live count and the helper text',
+      p.label?.startsWith('Reason for cancelling') && p.maxLength === 300 && p.required === true && p.focused
+        && p.counter === '0/300' && p.texts.includes(HELPER),
+      said({ label: p.label, maxLength: p.maxLength, required: p.required, focused: p.focused, counter: p.counter, texts: p.texts }));
+    check('  "Cancel this booking" and "Keep booking"; no paid warning on an unpaid booking',
+      !!p.submit && p.keep && !p.texts.some((t) => /was paid/.test(t)), said(p.texts));
+    const disabledAt = {};
+    for (const v of ['', 'ab', '   ab   ', 'abc']) {
+      await typeInto(page, panelView(page).box, v);
+      disabledAt[JSON.stringify(v)] = panelView(page).submitDisabled;
+    }
+    check('  the submit stays disabled until the reason has 3 characters after trimming ("", "ab", "   ab   " disabled; "abc" not)',
+      said(disabledAt) === said({ '""': true, '"ab"': true, '"   ab   "': true, '"abc"': false }), said(disabledAt));
+    check('  and the count follows the box: "3/300"', panelView(page).counter === '3/300', panelView(page).counter);
+    await typeInto(page, panelView(page).box, 'ab');
+    let sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    check('  submitting a 2-character reason anyway sends nothing',
+      net.calls.slice(sent).filter((c) => c.method === 'POST').length === 0, said(net.calls.slice(sent).map((c) => c.method)));
+    await typeInto(page, panelView(page).box, '  Hall needed for a meeting  ');
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const post901 = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  a valid reason posts { reason } trimmed to /rental-requests/901/cancel, then loads the list again',
+      /\/rental-requests\/901\/cancel$/.test(post901?.url ?? '') && said(bodyOf(post901)) === said({ reason: 'Hall needed for a meeting' })
+        && net.calls.slice(sent).some((c) => c.method === 'GET' && /status=all$/.test(c.url)),
+      said(net.calls.slice(sent).map((c) => `${c.method} ${c.url} ${c.body ?? ''}`)));
+    check('  the panel closes, the server\'s message shows, and the booking reads Cancelled with its reason',
+      !panelView(page).open && text(page.query('.alert.success')) === 'Booking cancelled — the slot has been freed',
+      said({ open: panelView(page).open, flash: text(page.query('.alert.success')) }));
+    await clickIf(page, tabNamed(page, 'All'));
+    check('  (on All: #901 Cancelled, "Reason: Hall needed for a meeting", no buttons)',
+      /Cancelled/.test(text(rowOf(page, 901)) ?? '') && said(reasonLines(901)) === said(['Reason: Hall needed for a meeting'])
+        && buttonsOf(page, 901).length === 0, text(rowOf(page, 901)));
+
+    // b. A paid booking: the warning; then the server refuses (the charge
+    // just changed) and the panel says so, in the server's words.
+    await clickIf(page, rowButton(page, 902, 'Cancel'));
+    p = panelView(page);
+    check('Secretary: Cancel on a booking with a PAID charge above PHP 0 warns, in these words: "' + WARN_902 + '"',
+      p.open && p.texts.includes(WARN_902), said(p.texts));
+    await typeInto(page, p.box, 'Court needed for an emergency');
+    secState.refusal = CHARGE_CHANGED;
+    net.status = 409;
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    net.status = 200;
+    p = panelView(page);
+    check('  the server\'s refusal shows inside the panel with role="alert", telling the Secretary to refresh, and the panel stays',
+      p.open && said(p.alerts) === said([CHARGE_CHANGED]) && /Refresh/.test(p.alerts[0] ?? ''), said({ open: p.open, alerts: p.alerts }));
+    sent = net.calls.length;
+    await clickIf(page, [...(page.query('.cancel-booking-panel')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Keep booking'));
+    await page.settle();
+    check('  Keep booking closes it, loads the list again after the refusal, and puts the focus back on #902\'s Cancel',
+      !panelView(page).open && net.calls.slice(sent).some((c) => c.method === 'GET' && /status=all$/.test(c.url))
+        && page.active() === rowButton(page, 902, 'Cancel'),
+      said({ open: panelView(page).open, calls: net.calls.slice(sent).map((c) => c.method), active: page.active()?.textContent }));
+
+    // c. Escape on the walk-in's panel: closed, nothing sent, focus back.
+    await clickIf(page, rowButton(page, 907, 'Cancel'));
+    const opened907 = panelView(page).open;
+    sent = net.calls.length;
+    await page.key('Escape');
+    await page.settle();
+    check('Secretary: Escape closes the panel, sends nothing, and puts the focus back on the walk-in\'s Cancel',
+      opened907 && !panelView(page).open && net.calls.length === sent && page.active() === rowButton(page, 907, 'Cancel'),
+      said({ opened907, open: panelView(page).open, sent: net.calls.length - sent, active: page.active()?.textContent }));
+
+    // d. Edit: date, times and purpose only; no quantity sent.
+    await clickIf(page, rowButton(page, 907, 'Edit'));
+    const edit = page.query('.pending-card');
+    const fields = edit ? [...edit.querySelectorAll('input, select, textarea')].map((el) => el.name) : [];
+    check('Secretary: Edit shows only date, start time, end time and purpose: no quantity or item control',
+      said(fields) === said(['date', 'start_time', 'end_time', 'purpose']), said(fields));
+    const editLines = edit ? [...edit.querySelectorAll('p')].map(text) : [];
+    check('  the quantity as read-only text, with "To change the item or quantity, cancel this booking and book again."',
+      editLines.includes('Quantity: 2') && editLines.includes('To change the item or quantity, cancel this booking and book again.'),
+      said(editLines));
+    sent = net.calls.length;
+    if (page.query('.pending-card form')) await page.submit();
+    const put = net.calls.slice(sent).find((c) => c.method === 'PUT');
+    check('  Save changes sends the PUT with date, start_time, end_time and purpose, and no quantity_requested',
+      /\/rental-requests\/907$/.test(put?.url ?? '') && said(Object.keys(bodyOf(put) ?? {}).sort())
+        === said(['date', 'end_time', 'purpose', 'start_time']),
+      said(bodyOf(put)));
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 907, 'Edit'));
+    secState.refusal = QUANTITY_FIXED;
+    net.status = 400;
+    if (page.query('.pending-card form')) await page.submit();
+    net.status = 200;
+    const editAlerts = page.queryAll('.pending-card [role="alert"]').map(text);
+    check('  a refusal shows in the Edit panel with role="alert"', said(editAlerts) === said([QUANTITY_FIXED]), said(editAlerts));
+    await finish(page);
+
+    // --- My rentals: RENTAL_FIELDS' shape plus can_cancel_online and
+    // cancel_online_note, as GET /rental-requests/mine sends them since B2 ---
+    const mineBooking = (id, item, extra = {}) => ({
+      request_id: id, quantity_requested: 1, start_datetime: `2026-11-2${id % 10}T01:00:00+00:00`,
+      end_datetime: `2026-11-2${id % 10}T05:00:00+00:00`, purpose: `Purpose ${id}`, status: 'confirmed', return_note: null,
+      returned_at: null, cancellation_reason: null,
+      rental_items: { item_id: 600 + id, name: item, type: 'equipment', fee: '50.00' },
+      charges: { charge_id: 950 + id, amount: '50.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', can_cancel_online: false, cancel_online_note: null, ...extra,
+    });
+    const MINE = () => [
+      mineBooking(801, 'Sound System', { can_cancel_online: true }),
+      mineBooking(802, 'Tent (10x10)', { cancel_online_note: TOO_LATE }),
+      mineBooking(803, 'Covered Court', { cancel_online_note: PAID_HALL,
+        charges: { charge_id: 1803, amount: '300.00', status: 'PAID', declared_method: null, declared_reference: null, declared_at: null } }),
+      mineBooking(804, 'Plastic Chairs', { status: 'cancelled', derived_status: 'cancelled', cancellation_reason: 'Change of plans',
+        charges: { charge_id: 1804, amount: '50.00', status: 'VOID', declared_method: null, declared_reference: null, declared_at: null } }),
+    ];
+    // An answer from before step B2, with neither key: no button, no note.
+    const OLD_SHAPE = () => { const b = mineBooking(805, 'Folding Tables'); delete b.can_cancel_online; delete b.cancel_online_note; return b; };
+    const mineState = { list: [...MINE(), OLD_SHAPE()] };
+    const mineAnswer = (st) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests\/mine$/.test(url)) return { requests: st.list };
+      const at = url.match(/\/rental-requests\/mine\/(\d+)\/cancel$/);
+      if (method === 'POST' && at) {
+        if (net.status !== 200) return { error: st.refusal };
+        const row = st.list.find((b) => b.request_id === Number(at[1]));
+        Object.assign(row, { status: 'cancelled', derived_status: 'cancelled', can_cancel_online: false, cancel_online_note: null,
+          cancellation_reason: bodyOf(net.calls.at(-1))?.reason ?? null,
+          charges: { ...row.charges, status: 'VOID' } });
+        return { message: 'Your booking has been cancelled.' };
+      }
+      return undefined;
+    };
+    const mineRow = (pg, item) => pg.queryAll('table.data-table tbody tr').find((tr) => text(tr.querySelector('strong')) === item) ?? null;
+    const mineButtons = (pg, item) => [...(mineRow(pg, item)?.querySelectorAll('button') ?? [])].map((b) => b.textContent)
+      .filter((t) => t === 'Cancel booking');
+    const mineNotes = (pg, item) => [...(mineRow(pg, item)?.querySelectorAll('.cancel-online-note') ?? [])].map(text);
+    const mineOpen = async () => {
+      seedSession(RES_TOKEN, RES_USER);
+      resetNet(200, mineAnswer(mineState));
+      const pg = await globalThis.mountInteractive(root(), '/resident/rentals');
+      await pg.settle();
+      return pg;
+    };
+    page = await mineOpen();
+    const ITEMS_MINE = ['Sound System', 'Tent (10x10)', 'Covered Court', 'Plastic Chairs', 'Folding Tables'];
+    const buttonsMine = Object.fromEntries(ITEMS_MINE.map((i) => [i, mineButtons(page, i).length]));
+    check('My rentals: "Cancel booking" only where can_cancel_online is true (Sound System); none where it is false or absent',
+      said(buttonsMine) === said({ 'Sound System': 1, 'Tent (10x10)': 0, 'Covered Court': 0, 'Plastic Chairs': 0, 'Folding Tables': 0 }),
+      said(buttonsMine));
+    const notesMine = Object.fromEntries(ITEMS_MINE.map((i) => [i, mineNotes(page, i)]));
+    check('  where it is false, cancel_online_note shown as small text instead (the 24-hour and the paid sentences); no note '
+        + 'where there is none',
+      said(notesMine) === said({ 'Sound System': [], 'Tent (10x10)': [TOO_LATE], 'Covered Court': [PAID_HALL], 'Plastic Chairs': [],
+        'Folding Tables': [] }), said(notesMine));
+    check('  a cancelled booking shows "Reason: Change of plans", as text',
+      [...(mineRow(page, 'Plastic Chairs')?.querySelectorAll('.reason-note') ?? [])].map(text).includes('Reason: Change of plans'),
+      text(mineRow(page, 'Plastic Chairs')));
+    asked.length = 0;
+    await clickIf(page, [...(mineRow(page, 'Sound System')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel booking'));
+    p = panelView(page);
+    check('My rentals: Cancel booking opens the panel, asks no window.confirm: an OPTIONAL "Reason (optional)" box, maxLength '
+        + '300, the focus in it, "' + UNDO + '"',
+      p.open && asked.length === 0 && p.label?.startsWith('Reason (optional)') && p.maxLength === 300 && p.required === false
+        && p.focused && p.texts.includes(UNDO),
+      said({ asked: asked.length, label: p.label, maxLength: p.maxLength, required: p.required, focused: p.focused, texts: p.texts }));
+    check('  the submit is enabled with no reason, and the panel says nothing about payment',
+      p.submitDisabled === false && !p.texts.some((t) => /PHP|₱|paid|refund/i.test(t)), said(p.texts));
+    secState.refusal = null;
+    mineState.refusal = TOO_LATE;
+    net.status = 409;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    net.status = 200;
+    check('  a refusal shows inside the panel with role="alert"', said(panelView(page).alerts) === said([TOO_LATE]),
+      said(panelView(page).alerts));
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const postMine = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  with no reason it posts {} to /rental-requests/mine/801/cancel and loads the list again',
+      /\/rental-requests\/mine\/801\/cancel$/.test(postMine?.url ?? '') && said(bodyOf(postMine)) === said({})
+        && net.calls.slice(sent).some((c) => c.method === 'GET' && /\/mine$/.test(c.url)),
+      said(net.calls.slice(sent).map((c) => `${c.method} ${c.url} ${c.body ?? ''}`)));
+    check('  the panel closes, the server\'s message shows, and the booking reads Cancelled with no button',
+      !panelView(page).open && text(page.query('.alert.success')) === 'Your booking has been cancelled.'
+        && /Cancelled/.test(text(mineRow(page, 'Sound System')) ?? '') && mineButtons(page, 'Sound System').length === 0,
+      said({ open: panelView(page).open, flash: text(page.query('.alert.success')), row: text(mineRow(page, 'Sound System')) }));
+    await finish(page);
+    mineState.list = [...MINE(), OLD_SHAPE()];
+    page = await mineOpen();
+    await clickIf(page, [...(mineRow(page, 'Sound System')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel booking'));
+    await typeInto(page, panelView(page).box, '  Change of plans  ');
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const postReason = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  with a reason it posts { reason } trimmed', said(bodyOf(postReason)) === said({ reason: 'Change of plans' }), said(bodyOf(postReason)));
+    await finish(page);
+
+    // --- the Activity Log page's words (constants/activityLog.js) ---
+    const L = globalThis.activityLog || {};
+    const sum = (action, table, before, after) => (typeof L.summarize === 'function'
+      ? L.summarize({ action, table_name: table, record_id: 7, old_value: before, new_value: after }) : null);
+    const C = { status: 'confirmed' };
+    const cancelled = (extra) => ({ status: 'cancelled', ...extra });
+    const SUMS = [
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'VOID', session_expired: true, reason_given: true })),
+        'Cancelled. Charge: voided. GCash checkout: closed. Reason given.'],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'PAID_REFUND_DUE', refund_due: 50, session_expired: 'not_needed',
+        reason_given: true })), `Cancelled. Charge: paid, refund due ${PESO(50)}. GCash checkout: not needed. Reason given.`],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'VOID', session_expired: false,
+        session_expire_failure: 'HTTP 400: Checkout session is already paid', reason_given: false })),
+      'Cancelled. Charge: voided. GCash checkout: could not be closed (HTTP 400: Checkout session is already paid). No reason given.'],
+      [sum('CANCEL', 'rental_requests', C, cancelled({ charge_outcome: 'NONE', session_expired: 'not_needed', reason_given: false })),
+        'Cancelled. Charge: none. GCash checkout: not needed. No reason given.'],
+      // A cancel logged before step B1 reads as it did.
+      [sum('CANCEL', 'rental_requests', C, { status: 'cancelled' }), 'Confirmed to Cancelled'],
+      [sum('PAYMENT_ON_VOID_CHARGE', 'charges', null, { charge_id: 1610, gateway_payment_id: 'pay_test_late_610', amount: 50 }),
+        `GCash payment of ${PESO(50)} received after the booking was cancelled. Not applied; a refund is due. PayMongo payment pay_test_late_610.`],
+    ];
+    check('Activity log: a rental CANCEL row reads as a sentence (charge voided / paid with the refund due / none; the GCash '
+        + 'checkout closed / not needed / could not be closed; whether a reason was given), and an older one as before',
+      SUMS.slice(0, 5).every(([got, want]) => got === want), said(SUMS.slice(0, 5).map(([got]) => got)));
+    check('  the late-payment row reads "GCash payment of ₱50.00 received after the booking was cancelled. Not applied; a refund '
+        + 'is due. PayMongo payment …"', SUMS[5][0] === SUMS[5][1], said(SUMS[5][0]));
+    const meta = typeof L.actionMeta === 'function' ? L.actionMeta('PAYMENT_ON_VOID_CHARGE') : null;
+    check('  PAYMENT_ON_VOID_CHARGE is labelled "Payment after cancellation" and is in the action filter',
+      L.ACTION_META?.PAYMENT_ON_VOID_CHARGE?.label === 'Payment after cancellation' && meta?.label === 'Payment after cancellation'
+        && (L.ACTION_FILTERS || []).some((o) => o.value === 'PAYMENT_ON_VOID_CHARGE' && o.label === 'Payment after cancellation'),
+      said({ meta, inFilter: (L.ACTION_FILTERS || []).find((o) => o.value === 'PAYMENT_ON_VOID_CHARGE') ?? null }));
+
+    // --- the Privacy Policy names both, in the modal and in its source ---
+    const LOG_PARA = 'BrgyServe keeps a log of the actions Barangay officials and staff take on records: adding, editing, '
+      + 'archiving and approving them, recording payments, recording event attendance, recording blotter cases, and sending '
+      + 'an official a set-password link. Actions of yours that change a record are logged too: registering, submitting or '
+      + 'cancelling a request, booking a facility, cancelling a rental booking, declaring a payment, having a GCash payment '
+      + 'confirmed, changing or resetting your password, and setting your password from an emailed set-password link. A '
+      + 'GCash payment received after its booking was cancelled is also recorded in this log.';
+    const flat = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    seedSession(null);
+    resetNet(200);
+    page = await globalThis.mountInteractive(root(), '/login');
+    await page.settle();
+    await clickIf(page, page.queryAll('.legal-links a').find((a) => a.textContent.trim() === 'Privacy Policy'));
+    const logHeading = page.queryAll('.legal-modal-body h4').find((h) => flat(h.textContent) === 'A log of changes to records');
+    const modalPara = flat(logHeading?.nextElementSibling?.textContent);
+    await finish(page);
+    const md = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+    const mdAt = md.indexOf('#### A log of changes to records');
+    const mdPara = mdAt < 0 ? null : flat(md.slice(mdAt).split('\n\n')[1]);
+    check('the Privacy Policy\'s log paragraph names "cancelling a rental booking" and "A GCash payment received after its '
+        + 'booking was cancelled is also recorded in this log.", in the modal (LegalPrivacy.jsx) and in docs/legal-copy.md alike',
+      modalPara === LOG_PARA && mdPara === LOG_PARA, said({ modalPara, mdPara }));
+
+    dom.window.confirm = previousConfirm;
+    check('section AM asked no window.confirm, and kept nothing in the browser', asked.length === 0 && kept.sets === 0
+      && domStorage.writes === kept.dom, said({ asked: asked.length, stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+    check('section AM sent only GETs, the cancels and the edit, every one answered by the fetch stub',
+      methods.length > 0 && methods.every((m) => /^GET /.test(m) || /^POST \/rental-requests(\/mine)?\/:id\/cancel$/.test(m)
+        || m === 'PUT /rental-requests/:id'),
+      said([...new Set(methods)]));
+  }
+
   console.error = origError;
   console.log(`\n${pass} passed, ${fail} failed`);
 })().catch((e) => {
-  console.error('FAILED:', e.stack || e.message);
+  // console.error is silenced while the checks run, so a crash is written to
+  // stderr directly; through console.error it vanished without a word.
+  process.stderr.write(`FAILED: ${e.stack || e.message}\n`);
   process.exitCode = 1;
 });

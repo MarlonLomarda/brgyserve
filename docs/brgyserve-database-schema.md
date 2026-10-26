@@ -240,7 +240,7 @@ Stores the barangay-owned items and facilities available for rental, along with 
 | type | varchar(50) | | No | Category of the resource (Facility, Equipment, Furniture). |
 | description | text | | Yes | Detailed description of the resource. |
 | quantity_total | integer | | No | Total number of units owned. |
-| quantity_available | integer | | No | Number of units currently available for rental. Mirrors quantity_total for now; per-time-slot availability is derived from approved bookings against this value. |
+| quantity_available | integer | | No | Number of units currently available for rental. Mirrors quantity_total for now; per-time-slot availability is derived from confirmed bookings against this value. |
 | is_active | boolean | | No | Whether the resource is available for booking or disabled. |
 | fee | numeric(10,2) | | No | Rental fee per unit per booking (facilities are single-unit, so effectively per booking). Added in migration 009. |
 
@@ -257,13 +257,14 @@ Stores rental and booking requests for barangay items and facilities, including 
 | end_datetime | timestamptz | | No | End date and time of the rental period. |
 | purpose | text | | No | Intended use or reason for the rental request. |
 | status | varchar(50) | | No | Current status. Self-service, so no pending/approved: `confirmed`, `cancelled`, `returned`, `returned_late`, `returned_with_issue` (see `constants/rentals.js`). `completed` (facilities) and `overdue` (physical items) are derived at display, never stored. |
-| processed_by_user_id | bigint | FK → users | Yes | Secretary who edited/cancelled the booking; null otherwise. |
+| processed_by_user_id | bigint | FK → users | Yes | Secretary who cancelled the booking; null otherwise, including a booking the resident cancelled online themselves. An edit does not write it. |
 | return_note | text | | Yes | Optional note recorded with a return (e.g. damage). Added in migration 011. |
 | returned_at | timestamptz | | Yes | When Staff recorded the return; null until returned. Added in migration 011. |
 | returned_by_user_id | bigint | FK → users | Yes | Staff user who recorded the return; null until returned. Added in migration 011. |
 | resident_id | bigint | FK → resident_records | Yes | Resident the booking is for: the submitter's own linked record when they book for themselves, or the resident the Secretary chose for a walk-in. Null only on an outside borrower's booking. CHECK `rental_requests_resident_xor_outside_borrower`: either this is set and both `outside_borrower_*` columns are null, or this is null and both are set. Added in migration 022. |
 | outside_borrower_name | text | | Yes | Name of a borrower from another barangay, who has no resident record; set only when `resident_id` is null. The API limits it to 200 characters. Added in migration 022. |
 | outside_borrower_contact | text | | Yes | That borrower's contact number; set only when `resident_id` is null. The API requires a Philippine mobile number (`09XXXXXXXXX`, `639XXXXXXXXX` or `+639XXXXXXXXX`, at most 50 characters). Added in migration 022. |
+| cancellation_reason | text | | Yes | Why the booking was cancelled: required when the Secretary cancels, optional when a resident cancels their own booking, and sent to the borrower in the cancellation notice. Null when none was given, and on every booking cancelled before migration 023. CHECK `rental_requests_cancellation_reason_length`: null, or 3 to 300 characters after trimming. Added in migration 023. |
 
 ---
 
@@ -284,9 +285,9 @@ Stores all financial charges within the barangay, including fines, document fees
 | document_request_id | bigint | FK → document_requests (UNIQUE) | Yes | Related document request; nullable. UNIQUE so a request has at most one charge (NULLs exempt — fines/rentals unaffected). Added in migration 007. |
 | rental_request_id | bigint | FK → rental_requests | Yes | Related rental request; nullable. |
 | created_at | timestamptz | | No | When the charge was created. |
-| declared_method | varchar(20) | | Yes | Payment method declared by the resident, awaiting verification: `onsite`, `gcash`. Added in migration 008. |
-| declared_reference | varchar(100) | | Yes | GCash reference number submitted by the resident; copied to payments.reference_no on verification. Added in migration 008. |
-| declared_at | timestamptz | | Yes | When the resident declared their payment. Added in migration 008. |
+| declared_method | varchar(20) | | Yes | Payment method declared by the resident, awaiting verification. Only `onsite` is written now, by Pay onsite; `gcash` survives only on charges declared before 10 Oct 2026, when residents could still submit a GCash reference. Added in migration 008. |
+| declared_reference | varchar(100) | | Yes | GCash reference number a resident submitted before 10 Oct 2026. Now always written as null, so Pay onsite clears an old one. On a charge that still holds one, it is the default payments.reference_no when staff record the payment. Added in migration 008. |
+| declared_at | timestamptz | | Yes | When the resident declared their payment; since 10 Oct 2026 always a Pay onsite declaration. Added in migration 008. |
 | paymongo_session_id | varchar(255) | UNIQUE | Yes | PayMongo Checkout Session (`cs_…`) opened for this charge; lets an in-flight checkout be resumed and is what the Treasurer's reconciliation re-checks. Null for charges never paid online. Added in migration 014. |
 | paymongo_payment_id | varchar(255) | UNIQUE | Yes | PayMongo Payment (`pay_…`) from the signature-verified webhook; copied to `payments.reference_no`. UNIQUE is the database-level idempotency guarantee — a repeated webhook delivery can never record the same payment twice. Null for manually paid charges. Added in migration 014. |
 
@@ -298,8 +299,8 @@ Stores payment transactions for charges, including amount paid, payment method, 
 | payment_id | bigint | PK | No | Uniquely identifies each payment transaction. |
 | charge_id | bigint | FK → charges | No | Charge being paid. |
 | amount | numeric(10,2) | | No | Amount paid for the charge. |
-| payment_method | varchar(20) | | No | Method of payment. Canonical lowercase values (defined in `backend/src/constants/charges.js`): `onsite` (cash at the barangay hall), `gcash` (either a resident-declared reference verified by staff, or a PayMongo gateway payment — the two are told apart by `received_by_user_id`). |
-| reference_no | varchar(100) | | Yes | Reference number for the transaction (receipt number, resident-supplied GCash reference, or the PayMongo payment id for gateway payments). |
+| payment_method | varchar(20) | | No | Method of payment. Canonical lowercase values (defined in `backend/src/constants/charges.js`): `onsite` (cash at the barangay hall), `gcash` (either recorded by staff with the GCash reference they enter, or a PayMongo gateway payment — the two are told apart by `received_by_user_id`). |
+| reference_no | varchar(100) | | Yes | Reference number for the transaction (receipt number, the GCash reference staff enter when recording, or the PayMongo payment id for gateway payments). |
 | received_by_user_id | bigint | FK → users | Yes | Staff user who recorded the payment; **null for gateway payments**, which no staff member received. This is the discriminator between a manually verified payment and one confirmed by the PayMongo webhook. |
 | created_at | timestamptz | | No | When the payment was recorded. |
 

@@ -9,7 +9,7 @@
 // would fail the rules below.
 //
 // There is no client-side rule to mirror either. Neither RegisterPage nor the
-// staff-account form in SecretaryReviewPage puts a `pattern` or a `minLength`
+// staff-account form in StaffAccountsPage puts a `pattern` or a `minLength`
 // on the username field, so the server is the only definition there has ever
 // been.
 //

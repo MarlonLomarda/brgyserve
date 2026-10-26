@@ -23,7 +23,11 @@ const RETURNABLE_TYPES = [ITEM_TYPE.EQUIPMENT, ITEM_TYPE.FURNITURE];
 //
 // STORED statuses (written to rental_requests.status):
 //   confirmed             booked; holds the slot/units against conflict checks
-//   cancelled             called off (resident/Secretary); frees the slot
+//   cancelled             called off; frees the slot. A resident cancels their
+//                         own online booking while it is unpaid, up to 24
+//                         hours before it starts; the Secretary cancels any
+//                         booking that has not started, with a reason
+//                         (cancellation_reason, migration 023)
 //   returned              physical item handed back on time, good condition
 //   returned_late         handed back after the booked end time
 //   returned_with_issue   handed back damaged / incomplete (see return_note)

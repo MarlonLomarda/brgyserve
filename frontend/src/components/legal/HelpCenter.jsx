@@ -176,9 +176,9 @@ export default function HelpCenter() {
 
       <h4>How do I book a facility?</h4>
       <p>
-        Sign in, open the bookings section, choose the facility, and give the
-        date and time. The Barangay reviews and confirms it. A booking is not
-        confirmed until it is approved.
+        Sign in, open the bookings section, choose the facility or item, and
+        give the date and time. If it is free, the booking is confirmed at once
+        and its fee appears under My rentals.
       </p>
 
       <h4>My requested time was not available.</h4>
@@ -200,8 +200,8 @@ export default function HelpCenter() {
 
       <h4>Where do I see updates about my request?</h4>
       <p>
-        Inside the portal, under notifications, when you are signed in. That is
-        the authoritative place.
+        Under My requests for a document request, or under My rentals for a
+        booking, when you are signed in. That is the authoritative place.
       </p>
 
       <h4>Will I get a text message?</h4>

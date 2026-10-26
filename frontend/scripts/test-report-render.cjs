@@ -117,6 +117,13 @@ const ENV = {
     check(`RENDER ${key} with live data`, r.ok, r.error || `${r.html.length} chars of HTML`);
     if (r.ok) {
       check(`  ${key}: renders its own tables`, r.html.includes(expectText[key]));
+      // The tile that says why Paid charges can exceed Payments recorded, and
+      // the monthly series' name. A server render draws no chart legend, so
+      // the name is read from the Monthly table's header.
+      if (key === 'collections') {
+        check('  collections: a "No-fee charges" tile, and "Collected (by billed month)" in the Monthly table',
+          r.html.includes('>No-fee charges<') && r.html.includes('>Collected (by billed month)<'));
+      }
       // recharts' ResponsiveContainer has no width during SSR, so the SVG
       // geometry only exists in a real browser; what IS verifiable here is
       // that a chart container was emitted for every chart.

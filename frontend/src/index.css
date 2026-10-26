@@ -867,15 +867,15 @@ a {
    carries margin-top: auto, which bottom-anchors it while there is free
    space and resolves to 0 once there is not — at which point it sits
    directly under the last link and overflow: hidden cuts whatever hangs
-   past the viewport. Measured as Secretary, whose 12 items are the longest
-   nav in the app: 63px logo row + 12 x 44px links + 64.59px footer =
-   655.59px, so below that height the footer starts disappearing and below
-   591px it is gone entirely. 44, not the links' resting 46, because they
-   are 0 1 auto and shrink to their own min-height first — that squeeze is
-   worth 24px on this nav and is the whole reason the threshold is not 679.
-   Those are the numbers FROM THE BUG: the logo row measures 82px now, not
-   63, because the collapse control below became a 44px tap target. The
-   threshold itself no longer exists — the nav scrolls instead.
+   past the viewport. Measured as Secretary, whose 12 items were then the
+   longest nav in the app: 63px logo row + 12 x 44px links + 64.59px footer
+   = 655.59px, so below that height the footer started disappearing and
+   below 591px it was gone entirely. 44, not the links' resting 46, because
+   they are 0 1 auto and shrink to their own min-height first — that squeeze
+   was worth 24px on that nav and is why the threshold was not 679.
+   Those are the numbers FROM THE BUG. Re-measured 9 Oct 2026: 13 items, a
+   73px logo row (the collapse control below is a 44px tap target) and a
+   68.59px footer, so below a 713.59px window the nav scrolls instead.
 
    The drawer has solved this since it was built (.dash-drawer-nav is
    flex: 1 1 auto; overflow-y: auto with head and foot at flex: none) and
@@ -1122,17 +1122,19 @@ a {
 
   /* As the 1fr item of the .dash grid this box would otherwise take
      min-width: auto, and a grid item's automatic minimum is its min-content
-     width — the widest thing the screen holds. The payments table asks for
+     width — the widest thing the screen holds. The payments table asked for
      1084.5px with its column floors against the 1018px this column has at
      1280, so the column grew to the table rather than the table scrolling
      inside .table-wrap: the whole page scrolled sideways, sticky sidebar
      included, at every width above the 1045px breakpoint and on a fresh
-     load. The wrapper's own overflow-x: auto does not excuse it — that
-     automatic minimum is skipped only when the grid ITEM is the scroll
-     container, never when a descendant is. Delete this line and the
-     page-wide scroll returns, and .table-wrap never gets to scroll at all,
-     because the column grows to the table instead of the wrapper ever
-     being the narrower box. */
+     load. (Since 9 Oct 2026 that table's rows are one line and it fits from
+     641px up; the line stays for any table wider than this column.) The
+     wrapper's own overflow-x: auto does not excuse it — that automatic
+     minimum is skipped only when the grid ITEM is the scroll container,
+     never when a descendant is. Delete this line and a table wider than the
+     column scrolls the whole page again, and .table-wrap never gets to
+     scroll at all, because the column grows to the table instead of the
+     wrapper ever being the narrower box. */
   min-width: 0;
 }
 
@@ -1149,11 +1151,11 @@ a {
 }
 
 /* A screen whose whole content is one narrow column, not a table page.
-   .capped-column is a LAYOUT INTENT, not a page name, and is currently on
-   exactly one <main> (Secretary Resident review).
+   .capped-column is a LAYOUT INTENT, not a page name, and is on two page
+   wrappers: Resident review and the Staff accounts page.
 
    The cards there are already capped by the rule above, but .list-head, the
-   alerts and the empty state are direct children of .dash-main — a React
+   alerts and the empty state are direct children of the column — a React
    fragment wraps two of them in the JSX but produces no DOM node, so they sit
    at the same level. Left alone they span the full 1132px while the cards stop
    at 720, which put the Refresh button 412px to the right of the cards it
@@ -1392,29 +1394,18 @@ button.link-button:hover:not(:disabled) {
   font-style: italic;
 }
 
-/* The staff accounts list on the Secretary's review screen (StaffAccountList
-   in SecretaryReviewPage.jsx). It borrows the match-suggestion row above, so
-   everything here is scoped under .staff-accounts and the match suggestions
-   are untouched.
+/* The staff accounts list on the Staff accounts page (StaffAccountList in
+   StaffAccountsPage.jsx). It borrows the match-suggestion row above, so
+   everything here is scoped under .staff-accounts, the list's own class, and
+   the page's other rules under .staff-accounts-page further down; the match
+   suggestions are untouched.
 
-   Three lines per account, each its own line box 4px apart: @username and
-   role, the email, and the status. A username is up to 100 characters and an
-   email address has no spaces, so both may break anywhere rather than push
-   the row past its card (measured at 390px: 141px past it). */
+   Each line of a row is its own line box, 4px apart. A username is up to 100
+   characters and an email address has no spaces, so both may break anywhere
+   rather than push the row past its card (measured at 390px: 141px past it). */
 .staff-accounts .suggestion-info {
   gap: 4px;
   overflow-wrap: anywhere;
-}
-
-/* The status line is a wrapping flex row, so the pill's own padding is part
-   of the line. As an inline span inside the text, the pill's 4px top padding
-   painted over the email line above it. If "Last link sent ..." does not fit
-   beside the pill it moves under it whole. */
-.staff-accounts .account-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
 }
 
 /* A timestamp never breaks inside itself ("11:16:43" / "AM"). */
@@ -1426,6 +1417,67 @@ button.link-button:hover:not(:disabled) {
    sentence, inside the blue notice. */
 .staff-accounts .alert .actions {
   margin-top: 8px;
+}
+
+/* THE STAFF ACCOUNTS PAGE (pages/StaffAccountsPage.jsx). Scoped under
+   .staff-accounts-page, the class on the page's own wrapper, so none of it
+   reaches another screen. .staff-accounts above was already taken, by the
+   list inside it.
+
+   Two lines per account, each a wrapping flex row, so the status pill's own
+   padding is part of its line: "@username · Role" with the status, then the
+   email with the link status. Where a line does not fit, the pill or the link
+   status moves under the rest whole, and on a phone the button goes under
+   the row as before. */
+.staff-accounts-page .account-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+/* The second line's two parts are joined by "· ", so the gap before the dot
+   is about a space, as on the first line. */
+.staff-accounts-page .account-line.muted {
+  column-gap: 4px;
+}
+
+/* The search HIDES what does not match rather than leaving it out, so a row's
+   open "send a link?" question survives typing (see StaffAccountList). The
+   hidden attribute alone loses to the display: flex on .suggestions and
+   .suggestion, which is why it is restated here. */
+.staff-accounts-page .suggestions[hidden],
+.staff-accounts-page .suggestion[hidden] {
+  display: none;
+}
+
+/* The hint names what can be searched. .hint's own grey is too faint to read
+   on white (2.56:1); this is the .muted grey (4.76:1). */
+.staff-accounts-page .account-search .hint {
+  color: #64748b;
+}
+
+/* "Showing 2 of 6 accounts". The line is always in the page, empty until a
+   search is on, so a screen reader hears the count change; it only takes
+   room when it has something to say. */
+.staff-accounts-page .account-search-status:not(:empty) {
+  margin-bottom: 10px;
+}
+
+/* No match: the sentence and "Clear search" on one line where they fit. A
+   long search breaks rather than push the card wider. */
+.staff-accounts-page .account-search-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  overflow-wrap: anywhere;
+}
+
+/* "New staff account" keeps to one line beside the explanation, which wraps
+   instead. It used to share the squeeze and break as "New staff / account". */
+.staff-accounts-page .pending-head > .btn {
+  white-space: nowrap;
 }
 
 .empty {
@@ -1538,8 +1590,8 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* Action cells size themselves from their buttons, so they must be able to
-   wrap. A cell holding two buttons — the payments queue has
-   "Verify" next to "Re-check" — otherwise demands the
+   wrap. A cell holding two buttons — Document types has "Edit" next to
+   "Deactivate" — otherwise demands the
    full width of both on one line and REFUSES to shrink (flex items default to
    min-width: auto), starving every text column in the same table. Wrapping
    drops that demand to the widest single button.
@@ -1555,8 +1607,9 @@ button.link-button:hover:not(:disabled) {
      the table algorithm happily allots less than two buttons need and they
      stack even when the table has hundreds of pixels spare (measured on
      Document types: 282.9px surplus, actions still stacked). This floor asks
-     for enough to keep two ordinary buttons on one line. The payments queue
-     now sits exactly on it — that column measures 200. */
+     for enough to keep two ordinary buttons on one line. Three tables opt
+     out, My requests, My rentals and Payments, whose cells only ever hold one
+     button (see .my-requests-table below). */
   min-width: 200px;
 }
 
@@ -1590,10 +1643,29 @@ button.link-button:hover:not(:disabled) {
   display: inline-flex;
 }
 
+/* My requests, My rentals and Payments only: no 200px floor. Their actions
+   cell only ever holds ONE button — "Pay ▾" (or "Cancel" on a pending
+   request) on the first two, and "View" on Payments since 9 Oct 2026 — so
+   the shared floor above only took width from the text columns. Measured:
+   the column goes from 200 to about 105px (My requests), 99px (My rentals)
+   and 93.5px (Payments). My requests' rows total 119px shorter at 1280; My
+   rentals stops scrolling sideways at 641-700 and its rows total 76-169px
+   shorter between 700 and 1100; with the floor, Payments' one-line table
+   scrolls sideways by 58px at 641 and 5px at 1046, and without it fits at
+   every width from 641 to 1920. Scoped by each table's own class, so the
+   protected .row-actions rule is unchanged for every other table; at
+   (0,2,1) this beats it on specificity, with no !important. */
+.my-requests-table td.row-actions,
+.my-rentals-table td.row-actions,
+.payments-table td.row-actions {
+  min-width: 0;
+}
+
 /* The resident's "Pay ▾" menu (components/PayMenu.jsx) on My rentals and My
-   requests: one button in the actions cell in place of three. The wrapper is
-   the cell's direct child, so it takes the inline-box margins above and the
-   button inside it sits exactly where a lone button would.
+   requests: one button in the actions cell where three buttons used to sit,
+   holding two items since 10 Oct 2026. The wrapper is the cell's direct
+   child, so it takes the inline-box margins above and the button inside it
+   sits exactly where a lone button would.
 
    Above 640px the list FLOATS. It is position: fixed and the component places
    it from the button's rectangle, because the table card is overflow-x: auto
@@ -1640,7 +1712,7 @@ button.link-button:hover:not(:disabled) {
 }
 
 /* The gateway option leads and reads strongest, as the primary button did,
-   so the three stay clearly distinguished. */
+   so the two stay clearly distinguished. */
 .pay-menu .pay-menu-online {
   font-weight: 600;
   color: #1d4ed8;
@@ -1839,6 +1911,24 @@ button.link-button:hover:not(:disabled) {
   font-size: 0.95rem;
 }
 
+/* Report table headers may wrap. The shared `.data-table .num` rule sets
+   nowrap on every numeric cell, header cells included, so a long numeric
+   header could not break: the Collections report's Monthly header,
+   "Collected (by billed month)", made that table 54px wider than its card at
+   390px (124px at 320), and it scrolled sideways inside it. Now that header
+   wraps, to two lines at 390 and three at 320, and the table fits. Only the
+   header is released: the numbers in td.num keep nowrap, and a header breaks
+   only between words, so one-word headers never move. The one other two-word
+   numeric header, Facility utilization's "Units booked", wraps too: By item
+   scrolls 59px at 390 instead of 100, and not at all from 450px, but at 510
+   and 520 the header wraps in a table that already fit, 16px taller.
+   Measured on live data, 12 Oct 2026: on a phone nothing changes from 530px
+   up, and nothing changed at 768, 1280 or 1920. Scoped to reports on purpose:
+   never edit the shared rule, which every table in the app uses. */
+.report-sheet .data-table th.num {
+  white-space: normal;
+}
+
 .chart-area {
   width: 100%;
 }
@@ -2020,6 +2110,237 @@ button.link-button:hover:not(:disabled) {
 
 .modal .list-head {
   margin-bottom: 16px;
+}
+
+/* PAYMENTS VIEW PANEL (PaymentsPage.jsx, 9 Oct 2026). The overlay is the
+   /login modals' .modal-overlay, reused unchanged: fixed, inset 0, z-index
+   50, the rung the drawer and the other modals share, above the sticky
+   header (30), the Pay menu (35), the drawer backdrop (40) and the account
+   menu (45). Every rule here is scoped to the panel's own classes, so
+   nothing reaches the login modals.
+
+   ONE WIDTH FOR EVERY CHARGE, ONE COLUMN: 600px at every width above 640,
+   paid and unpaid alike. Three bands in a flex column: the header (charge,
+   type, status, payer, Close), the details, which scroll when the panel is
+   short, and for an unpaid charge the actions, pinned under the details so
+   Record is on screen without a scroll (measured from 1046x768 and 1280x720
+   up, a Re-check message included). Text stays at the table's size or
+   below: values 0.95rem like a table cell, labels 0.85rem in #64748b,
+   4.76:1 on white. */
+.pay-panel {
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* The container takes focus only so focus lands inside the dialog, as
+   .dash-drawer does, and it drops the ring the same way: it is not a control,
+   and Chrome's default ring drew a thin accent-coloured line along its top
+   and right edges. Every button and field inside keeps its own ring. */
+.pay-panel:focus {
+  outline: none;
+}
+
+.pay-panel-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 14px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pay-panel-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pay-panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* The payer's name at the size and weight the table gives it, so the panel
+   reads as the row it was opened from. */
+.pay-panel h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.pay-panel-user {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* The corner Close. Two classes, because the base button rule paints every
+   button blue and button:hover:not(:disabled) is (0,2,1). It keeps the
+   browser's focus ring. */
+.pay-panel .pay-panel-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  font-size: 0.95rem;
+  color: #475569;
+  background: none;
+  border-radius: 8px;
+}
+
+.pay-panel .pay-panel-x:hover:not(:disabled) {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.pay-panel-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* min-height: 0 lets the details shrink below their content and scroll,
+   which is what keeps the actions under them on screen. */
+.pay-panel-details {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.pay-panel-note {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* Label beside value, every field on its own row: one label column as wide
+   as the longest label, one value column, the same at every width. (Pairing
+   Amount with Billed left "Billed" floating mid-row, out of line with every
+   other value.) Digits are tabular so amounts, dates and references line
+   up. */
+.pay-panel-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px 12px;
+  margin: 0;
+}
+
+.pay-panel-list dt {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.pay-panel-list dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.pay-panel-list .pay-amount {
+  font-weight: 700;
+}
+
+/* The actions: one block, set apart by a rule and a faint fill. */
+.pay-panel-actions {
+  flex: none;
+  padding: 14px 24px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.pay-panel-section + .pay-panel-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pay-panel h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.pay-panel-section > .alert {
+  margin: 0 0 10px;
+}
+
+.pay-panel-recheck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+/* Helper text: the shared .hint is #94a3b8 (2.56:1); this is #64748b. */
+.pay-help {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.pay-panel-recheck .pay-help {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+.pay-panel-message .alert {
+  margin: 10px 0 0;
+}
+
+/* Both labels are one line and both fields the same height, so the two
+   fields share their top edge. */
+.pay-panel-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.pay-field label {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.pay-field select,
+.pay-field input {
+  height: 40px;
+  margin-top: 0;
+  padding: 0 12px;
+  font-size: 0.95rem;
+}
+
+.pay-panel .pay-record {
+  margin-top: 12px;
+}
+
+/* The full-width Close at the foot exists for phones only (the 640px block
+   below shows it); above that, Close is the corner button. */
+.pay-panel-footer {
+  display: none;
 }
 
 /* Households: an ended membership is history — visible but de-emphasised,
@@ -2282,11 +2603,12 @@ button.link-button:hover:not(:disabled) {
    Both are scoped by their own class, not nth-child, so reordering a column
    cannot silently move the rule to a different one. */
 
-/* Payments queue: the billed date and the billed time each read on one line.
-   Since 7 Oct 2026 the time sits under the date (PaymentsPage.jsx), so the
-   column is only as wide as the date: 113.2px, against 180.6 for the one-line
-   timestamp, measured. The format itself is unchanged — the short form was
-   measured as worse (89.8 vs 73.2 min-content). */
+/* Payments queue: the billed date reads on one line. Since 9 Oct 2026 the row
+   shows the date alone and the full timestamp is in the View panel
+   (PaymentsPage.jsx), so the column is only as wide as the date: 113.2px,
+   against 180.6 for the one-line timestamp, measured on 7 Oct when the time
+   first moved under the date. The format itself is unchanged — the short
+   form was measured as worse (89.8 vs 73.2 min-content). */
 .data-table .col-billed {
   white-space: nowrap;
 }
@@ -2316,15 +2638,15 @@ button.link-button:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-/* Payments queue. Both columns carry structural tokens that cannot be broken
-   at a space: usernames (26 chars measured) and PayMongo payment ids, which
-   are always 28 chars. Unbounded they demanded 204.3 and 266.3, pushing the
-   "All charges" view to 1285.1 against a 1130 container. These floors were
-   derived by sweeping candidate values: 140 + 130 lands the table at 1084.5,
-   leaving 45.5px of margin. Sized for a real PayMongo id, NOT for the current
-   demo rows — deleting the gwtest_* accounts does not make this unnecessary,
-   because the first genuine verified GCash payment puts the column straight
-   back where it was. */
+/* .col-resident is the Notifications Recipient column: a name with the
+   contact line under it. Its floor was derived for the Payments queue, whose
+   Resident column carried a 26-character username under the name and whose
+   Declared payment column (.col-declared, 130px) carried a 28-character
+   PayMongo id: unbounded they demanded 204.3 and 266.3, and 140 + 130 landed
+   that table at 1084.5. Since 9 Oct 2026 Payments uses neither — its rows are
+   one line (.payments-table below) — so .col-declared was deleted and this
+   floor serves Notifications alone. The 170px clamp is one of the six
+   protected desktop rules. */
 .data-table .col-resident {
   min-width: 140px;
 }
@@ -2333,24 +2655,772 @@ button.link-button:hover:not(:disabled) {
   max-width: 170px;
 }
 
-.data-table .col-declared {
-  min-width: 130px;
+/* PAYMENTS: EVERY ROW IS ONE LINE (9 Oct 2026). Resident and For are fluid:
+   the two columns share whatever Amount, Method, Status, Billed and View
+   leave, split 35 / 45 by the header cells, and their text is cut with an
+   ellipsis — the full text is the element's title, and in the View panel.
+   Measured on All charges (11 Oct 2026, with the Method column): rows
+   64.5-65px and no sideways scroll at every width from 641 to 1920; Resident
+   and For take 220 and 252px at 1280, 281 and 337 at 1920, and about 108 and
+   86 at 641 (102 and 76 since batch 8 shows Method there instead of Billed).
+
+   max-width: 0 on the cell is what lets a column shrink below its text.
+   Chrome reads a cell's max-width as a limit on the width the cell DEMANDS,
+   not on the width it gets: at 150px the columns still grew to 223 and 260
+   at 1280 but would not go below 150, and with no max-width the table asked
+   for 1420px and scrolled by 419 at 1280. */
+.payments-table th.pay-resident {
+  width: 35%;
 }
 
-.data-table .col-declared .cell-clamp {
-  max-width: 200px;
+.payments-table th.pay-for {
+  width: 45%;
 }
 
-/* Payments queue, For column: a fine's second line is the household address,
-   which can run long. Two lines, then an ellipsis; the full address is the
-   element's title. The column's width is unchanged — only the row stops
-   growing. */
-.data-table .two-line-clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+.payments-table td.pay-fluid {
+  max-width: 0;
+}
+
+.payments-table .pay-cut {
+  display: block;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The Method label ("Paid online", "Cash", "GCash", "No record", "Online
+   pending" or a dash; utils/chargeMethod.js) never wraps; the column measures
+   130.4px when "Online pending" is in it.
+
+   FROM 641 TO 1045px BILLED MAKES WAY FOR METHOD (12 Oct 2026, batch 8).
+   Method used to be the one hidden there, so a Method filter's rows did not
+   show their method. The two do not fit together: with both, the table
+   scrolls sideways by 84px at 641 and 25px at 700, and where it fits, from
+   768, it cuts far more names (all 89 live charges, 100 a page: 81 names and
+   43 For texts cut at 900, against 4 and 0 with one of the two). Method is
+   130.4px to Billed's 115.5, so the swap costs Resident and For 15px between
+   them: from 800 up the same names and For texts are cut as before, at 641
+   to 768 one or two more names, and at 768, 60 For texts against 22. Rows
+   stay one line, 64.5-65px, and the table fits at every width. The billed
+   date is still on a phone's card and in the View panel, and above 1045
+   both columns show, sidebar and all. The range reuses the 641 and 1045
+   values already in this file; it adds no breakpoint. */
+.payments-table .pay-method {
+  white-space: nowrap;
+}
+
+@media (min-width: 641px) and (max-width: 1045px) {
+  .payments-table .col-billed {
+    display: none;
+  }
+}
+
+/* PAYMENTS: SEARCH, TYPE TABS, TOTALS AND PAGER (12 Oct 2026). One row of
+   search, status and Refresh; the type tabs; the totals line, which is the
+   list's h2; the rows; the pager. The row is also a .list-head, whose shared
+   rules are unchanged; everything added here is scoped to a .pay-* class,
+   and the h2 repeats .list-head h2's values rather than borrow the class. */
+.pay-toolbar {
+  gap: 12px;
+}
+
+/* The search takes what the status and Refresh leave, up to 560px. Its icon
+   and Clear (x) sit inside the field. type="search" draws its own clear
+   button in Chrome and Safari; it is hidden so there is one, not two. */
+.pay-search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.pay-search input {
+  margin-top: 0;
+  height: 40px;
+  padding: 8px 40px 8px 38px;
+  font-size: 0.95rem;
+}
+
+.pay-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.pay-search .pay-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.05rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* (0,2,0) beats the base `button` rule. The hover is (0,3,1), as button.tab's
+   is, to beat button:hover:not(:disabled), which would paint it blue. */
+.pay-search .pay-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.1rem;
+  color: #64748b;
+  background: none;
+  border-radius: 6px;
+}
+
+button.pay-search-clear:hover:not(:disabled) {
+  color: #334155;
+  background: #f1f5f9;
+}
+
+/* The phone's status row (batch 8; the 640px block): a Filters button
+   between the status and Refresh opens the second row as a panel, and
+   Refresh is an icon. Above 640px neither is drawn: the second row is
+   always shown, and Refresh is the word alone, as before. */
+.pay-toolbar .pay-filters-toggle,
+.pay-toolbar .pay-refresh-icon {
+  display: none;
+}
+
+/* The second row (batch 7): Method and the date, each a select with its
+   label beside it, as Rows per page is; From and To under "Choose dates",
+   which wrap as one pair; and a quiet Clear filters. The fields match the
+   status select: 40px tall, 0.9rem. The row wraps where the column is too
+   narrow; on a phone it is the Filters panel, which a button opens (the
+   640px block). Its wrapper, .pay-filters-panel, has no rules up here, so
+   the row lays out exactly as it did before it had one. */
+.pay-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.pay-filter,
+.pay-filter-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-filter-range {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+/* (0,1,1) beats the base label, select and input rules: no block label, no
+   14px under it, and each field only as wide as what it holds. */
+.pay-filter label {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.pay-filter select,
+.pay-filter input {
+  width: auto;
+  height: 40px;
+  margin-top: 0;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+/* Quiet: accent text, no fill until hovered (#1d4ed8 is 6.1:1 on the page's
+   #f1f5f9, 5.4:1 on the hover's #e2e8f0). (0,2,0) beats the base button
+   rule; the hover is (0,3,1), as .pay-search-clear's is, to beat
+   button:hover:not(:disabled), which would paint it blue. */
+.pay-filters .pay-filters-clear {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: none;
+  border-radius: 8px;
+}
+
+button.pay-filters-clear:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.pay-filters .pay-filters-clear:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* "The start date is after the end date.", under the row. The words carry
+   it, not the colour, which is .alert.error's red (5.9:1 on #f1f5f9).
+   Empty, it has no margin, so it takes no room. */
+.pay-filters-hint {
+  margin: -2px 0 12px;
+  font-size: 0.85rem;
+  color: #b91c1c;
+}
+
+.pay-filters-hint:empty {
+  margin: 0;
+}
+
+/* The type tabs: toggle buttons, each with its count in a pill (#e2e8f0,
+   because the page behind is body's #f1f5f9 and a pill of that would vanish;
+   the hover is white for the same reason). The strip scrolls sideways inside
+   itself when the four do not fit, so the page never does: by touch, by
+   trackpad, and from the keyboard, as a tab that takes focus is scrolled
+   into view. It draws no scrollbar (batch 8: a phone showed a thin bar under
+   a cut-off "Fine..."); an end with tabs past it fades instead, marked by
+   PaymentsPage in data-fade. The underline is an inset shadow and the focus
+   ring is drawn inside the button, because the strip's overflow would clip
+   anything outside it. */
+.pay-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0 14px;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* Scoped to the strip, as .slider's is: a bare ::-webkit-scrollbar rule would
+   take the scrollbar from every scrolling box in the app. */
+.pay-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* The fades: across the last 24px of an end with tabs past it, the tabs go
+   from solid to nothing. A mask, so there is no colour to match the page
+   and no z-index. COUPLED to TAB_FADE in PaymentsPage.jsx, which scrolls a
+   chosen tab that far clear of them. */
+.pay-tabs[data-fade="end"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.pay-tabs[data-fade="start"] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+}
+
+.pay-tabs[data-fade="start end"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+}
+
+.pay-tabs .pay-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 9px 12px 11px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border-radius: 8px 8px 0 0;
+  white-space: nowrap;
+}
+
+button.pay-tab:hover:not(:disabled) {
+  background: #fff;
+}
+
+.pay-tabs .pay-tab:not([aria-pressed="true"]):hover {
+  color: #334155;
+}
+
+.pay-tabs .pay-tab[aria-pressed="true"] {
+  color: #1d4ed8;
+  box-shadow: inset 0 -2px 0 #1d4ed8;
+}
+
+.pay-tabs .pay-tab:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.pay-tabs .pay-tab-count {
+  min-width: 24px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.pay-tabs .pay-tab[aria-pressed="true"] .pay-tab-count {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+/* A tab with no matches is dimmed, never disabled: pressing it still shows
+   its empty list. The label keeps its colour, because #64748b is 4.76:1 on
+   white and anything paler fails AA, and loses weight; the count goes
+   hollow. */
+.pay-tabs .pay-tab.pay-tab-empty {
+  font-weight: 500;
+}
+
+.pay-tabs .pay-tab.pay-tab-empty .pay-tab-count {
+  color: #94a3b8;
+  background: none;
+  box-shadow: inset 0 0 0 1px #cbd5e1;
+}
+
+/* The totals line: the list's h2, at .list-head h2's size and colour, with
+   figures that line up, and a smaller line of amounts under it. A page change
+   scrolls the h2 into view; its scroll margin clears the sticky header,
+   which exists only at 1045px and below (the second rule). */
+.pay-totals {
+  margin-bottom: 12px;
+}
+
+.pay-totals h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+  scroll-margin-top: 16px;
+}
+
+.pay-totals-detail {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1045px) {
+  .pay-totals h2 {
+    scroll-margin-top: 126px;
+  }
+}
+
+/* The Document requests list's heading (13 Oct 2026). A page change or a new
+   Rows per page brings it into view (components/ListPager.jsx), as it does
+   the Payments totals line above, so it takes that line's scroll margins:
+   16px, and 126px at 1045px and below, clear of the sticky header there. */
+.doc-requests-head h2 {
+  scroll-margin-top: 16px;
+}
+
+/* The Rental bookings list's heading (15 Oct 2026) has the same pager, so it
+   takes the same margins: 16px here, and 126px at 1045px and below, in the
+   block that follows, which already holds the Document requests one. */
+.rental-bookings-head h2 {
+  scroll-margin-top: 16px;
+}
+
+@media (max-width: 1045px) {
+  .doc-requests-head h2 {
+    scroll-margin-top: 126px;
+  }
+
+  .rental-bookings-head h2 {
+    scroll-margin-top: 126px;
+  }
+}
+
+/* The Document requests rows (13 Oct 2026). The request number is a line of
+   its own under the requester, at the account note's size and in its colour
+   (.muted); the payment marker is a line under the status badge, in the
+   colour .charge-word gives a charge's status word, and never breaks inside
+   its words ("Not billed"). Both sit in cells the table already had. The
+   .data-table in each selector outranks .muted's 0.9rem wherever this rule
+   sits. The marker's 8px clears the badge, whose padding reaches below its
+   line. On a phone card each takes a label of its own: see the 640px
+   .stack-narrow block. */
+.data-table .doc-requests-number {
+  font-size: 0.8rem;
+}
+
+.data-table .doc-requests-pay {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The Rental bookings rows (15 Oct 2026) carry these two classes as well, so
+   their booking number and payment marker look as the Document requests
+   ones do, here and on a phone card (the 640px .stack-narrow block): a change
+   to either rule changes both lists. */
+
+/* The Document requests columns (14 Oct 2026). Above 640px the columns stand
+   in the same places on every tab, page, search and filter result: the
+   layout is fixed, so these widths decide the columns, not the rows drawn
+   (which moved them by up to 145px between two views of the list). Each width
+   holds the widest of the 77 live requests (D1's capture, measured in
+   Chrome) and the cell's 32px of padding:
+     Requester 224  "Rodrigo Cempron Bautista" on one line, 189.4
+     Document  192  "Certificate of Residency" on one line, 156.4; 120 at
+                    1045px and below, on two ("Certificate of", 84.7)
+     Status    156  the "Ready for release" badge, 121.7
+     Submitted 128  the date over the time in every row: 96px of text holds
+                    "May 10, 2026,", the widest date half of 2026 (87.9),
+                    and no date with its hour ("Jul 1, 2026, 1:05", 100.1);
+                    balance keeps that break for a narrower font
+     actions   112  the Review button, 75.8, with its margin and padding
+   Purpose has no width: it takes the rest, never under 96px (its heading
+   and the median purpose, 61.4, whole), because the table is never narrower
+   than the five and 96. Below that the table scrolls in its card, as it
+   did. .row-actions' 200px floor does not bind a fixed column, so the
+   actions column needs no exception. Phones keep their cards: nothing here
+   applies at 640px and below. */
+@media (min-width: 641px) {
+  .doc-requests-table {
+    table-layout: fixed;
+    min-width: 908px;
+  }
+
+  .doc-requests-table th.doc-requests-requester {
+    width: 224px;
+  }
+
+  .doc-requests-table th.doc-requests-document {
+    width: 192px;
+  }
+
+  .doc-requests-table th.doc-requests-status {
+    width: 156px;
+  }
+
+  .doc-requests-table th.doc-requests-submitted {
+    width: 128px;
+  }
+
+  .doc-requests-table th.doc-requests-actions {
+    width: 112px;
+  }
+
+  .doc-requests-table td[data-label="Submitted"] {
+    text-wrap: balance;
+  }
+}
+
+/* Below the sidebar, 641 to 1045px, Document takes two lines, so the
+   columns fit from 870px instead of 942px. The range reuses this file's 641
+   and 1045; it adds no breakpoint. */
+@media (min-width: 641px) and (max-width: 1045px) {
+  .doc-requests-table {
+    min-width: 836px;
+  }
+
+  .doc-requests-table th.doc-requests-document {
+    width: 120px;
+  }
+}
+
+/* The Rental bookings columns (15 Oct 2026). Above 640px the columns stand
+   in the same places on every tab, page, search and filter result: the
+   layout is fixed, so these widths decide the columns, not the rows drawn
+   (which moved them by up to 219.5px between two pages of the list). Each
+   width holds the widest of the 28 live-shaped bookings, and of every day
+   and minute of 2026, measured in Chrome, and the cell's 32px of padding:
+     Booked for 208  a name up to 176px on one line ("Rodrigo Cempron
+                     Bautista", 189.4, takes two); 192 at 1045px and below,
+                     up to 160; the guest's line, 133.8, whole
+     Item       118  "Sinulog Costume Set" on two lines, 85.0
+     Schedule   176  the date with its comma over the times, each a line
+                     that never breaks: at most "May 10, 2026," 92.8 and
+                     "12:00 AM – 12:00 AM" 143.3
+     Qty         58  "100", 24.6, and its heading
+     Status     170  the "Returned with issue" badge, 136.0
+     actions    170  Edit and Cancel side by side, 144.2 with their margins
+                     (Staff's Mark returned, 132.2)
+   Purpose has no width: it takes the rest, never under 88px, its heading
+   whole, because the table is never narrower than the others and 88; below
+   that the table scrolls in its card, as it did. At its narrowest, 988px
+   (972 at 1045px and below), it fits beside Chrome's 15px scrollbar at 1280
+   with the sidebar open (1001 of room) and at 1024 (975). The Punong
+   Barangay's table has no actions column, so it is 170px narrower: the
+   :has() rules add that column where it is drawn. .row-actions' 200px floor
+   does not bind a fixed column, so the actions column needs no exception.
+   Phones keep their cards: nothing here applies at 640px and below. */
+@media (min-width: 641px) {
+  .rental-bookings-table {
+    table-layout: fixed;
+    min-width: 818px;
+  }
+
+  .rental-bookings-table:has(th.rental-bookings-actions) {
+    min-width: 988px;
+  }
+
+  .rental-bookings-table th.rental-bookings-booked {
+    width: 208px;
+  }
+
+  .rental-bookings-table th.rental-bookings-item {
+    width: 118px;
+  }
+
+  .rental-bookings-table th.rental-bookings-schedule {
+    width: 176px;
+  }
+
+  .rental-bookings-table th.rental-bookings-qty {
+    width: 58px;
+  }
+
+  .rental-bookings-table th.rental-bookings-status {
+    width: 170px;
+  }
+
+  .rental-bookings-table th.rental-bookings-actions {
+    width: 170px;
+  }
+
+  .rental-bookings-table .rental-bookings-date,
+  .rental-bookings-table .rental-bookings-times {
+    display: block;
+    white-space: nowrap;
+  }
+
+  /* The returned-by note (15 Oct 2026), two spans: "Returned by @staff1
+     on", 133.9, over the date, at most "May 10, 2026, 12:00 AM", 135.3,
+     which never breaks. Both fit the Status column's 138px of text, so
+     every row breaks the note after "on". */
+  .rental-bookings-table .rental-bookings-return-by {
+    display: block;
+  }
+
+  .rental-bookings-table .rental-bookings-return-at {
+    display: block;
+    white-space: nowrap;
+  }
+}
+
+/* Below the sidebar, 641 to 1045px, Booked for is 16px narrower, so the
+   table fits from 1006px instead of 1022px, 1024 among them. The range
+   reuses this file's 641 and 1045; it adds no breakpoint. */
+@media (min-width: 641px) and (max-width: 1045px) {
+  .rental-bookings-table {
+    min-width: 802px;
+  }
+
+  .rental-bookings-table:has(th.rental-bookings-actions) {
+    min-width: 972px;
+  }
+
+  .rental-bookings-table th.rental-bookings-booked {
+    width: 192px;
+  }
+}
+
+/* The Document requests filters (14 Oct 2026). Above 640px the row is
+   always shown, as Payments' is: the phone's Filters button is not drawn
+   (the 640px block draws it), and the panel round the row has no rules up
+   here, so the row lays out as before, open or closed. Clear filters keeps
+   its place at the row's end while no filter is on, hidden, so the first
+   filter never makes the row taller (it moved the list down 50px at 768
+   and 1046): components/ListFilters makes it disabled and aria-hidden then,
+   and this hides it. */
+.doc-requests-filters .pay-filters-toggle {
+  display: none;
+}
+
+.doc-requests-filters .pay-filters .pay-filters-clear[aria-hidden="true"] {
+  visibility: hidden;
+}
+
+/* The Rental bookings filters (15 Oct 2026) carry .doc-requests-filters on
+   their wrapper beside their own .rental-bookings-filters, so these two rules
+   and the 640px block's .doc-requests-filters rules (the phone's Filters
+   button, the panel's margin, Clear filters' 44px and its hidden slot) style
+   both lists: a change to them changes both. */
+
+/* Book a rental (pages/BookRentalPage.jsx, 25 Oct 2026): when the rental
+   items fail to load, the Try again row sits 16px under the error, the gap
+   the base .alert leaves under a message. In the card, .pending-card .alert
+   (4px under) and .actions (4px over) collapse to 4px, which read as one
+   block. Vertical margins collapse, so this 16px is the gap. (0,2,0) beats
+   .actions; the shared .alert, .actions and .pending-card .alert rules, and
+   every other .actions row, are unchanged. */
+.actions.book-rental-retry {
+  margin-top: 16px;
+}
+
+/* The pager (batch 6b): one bar under the rows, a card like the table's. The
+   count on the left; Rows per page, Previous, the page numbers and Next on
+   the right. Where the column is too narrow for one line it wraps, and only
+   one way: the count and Rows per page stay on the first line, the buttons
+   go to the second, at its right end (the select's auto left margin takes
+   the first line's slack; justify-content places the buttons, alone on
+   theirs). No breakpoint decides this, so the same holds wherever the
+   column narrows, sidebar or not. Hidden at 10 matches or fewer
+   (utils/paging.js). An end button is aria-disabled rather than disabled,
+   so the one just pressed keeps focus when it reaches the end (a disabled
+   button drops it); the page ignores a press on it. (0,5,0) beats
+   .btn.secondary's hover. */
+.pay-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* The count reserves the widest it can read, "Showing 991 to 1,000 of 1,000
+   results" (234px measured), and a "…" takes a number's 36px: so the bar is
+   as wide on every page of a list, and a press never moves the buttons
+   between one line and two. Without these, 89 charges at 1046px fit one
+   line on page 1 and wrapped on page 2 (762.8 against 770.6 in a 769 bar). */
+.pay-pager-count {
+  min-width: 16rem;
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-pager-count strong {
+  font-weight: 600;
+  color: #334155;
+}
+
+.pay-pager-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* (0,1,1) beats the base label and select rules: no block label, no 14px
+   under it, and the select only as wide as "100". */
+.pay-pager-size label {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.pay-pager-size select {
+  width: auto;
+  height: 36px;
+  margin-top: 0;
+  padding: 0 8px;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+.pay-pager-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-pager .pay-pager-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px;
+}
+
+.pay-pager .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pay-pager .btn.secondary[aria-disabled="true"]:hover {
+  background: #fff;
+}
+
+.pay-pager-numbers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A page number: (0,2,0) beats the base button rule. The hover is (0,4,1),
+   to beat button:hover:not(:disabled), which would paint it blue, and to
+   leave the current page alone. The ring sits outside the button, because
+   inside the filled current page it would not show. */
+.pay-pager-numbers .pay-page {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+button.pay-page:not([aria-current="page"]):hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* The current page, filled in the accent. A press on it does nothing. */
+.pay-pager-numbers .pay-page[aria-current="page"] {
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+  cursor: default;
+}
+
+.pay-pager-numbers .pay-page:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* The "…" for the pages left out: text, not a button. #64748b is 4.76:1 on
+   white; the paler #94a3b8 would fail AA. */
+.pay-pager-gap {
+  min-width: 36px;
+  font-size: 0.875rem;
+  color: #64748b;
+  text-align: center;
+  user-select: none;
+}
+
+/* "Page 2 of 4": a phone's, in place of the numbers (the 640px block). */
+.pay-pager-short {
+  display: none;
 }
 
 /* Events stage 3c: the resident's household QR code. The code is the only
@@ -2692,6 +3762,20 @@ button.link-button:hover:not(:disabled) {
   width: 100%;
   height: 17px;
   border-radius: 8px;
+}
+
+/* The empty-state row inside a table (My requests). Its padding lives in
+   `.data-table td.table-message`, after the 640px .stack-narrow block, because
+   it has to beat that block's `td` padding on equal specificity. The text is
+   the .empty box's colour, #64748b (4.76:1 on white); the header grey,
+   #94a3b8, is 2.56:1 and too faint for a sentence. */
+.table-message {
+  text-align: center;
+
+  p {
+    margin-top: 0;
+    color: #64748b;
+  }
 }
 
 @keyframes skeleton-loading {
@@ -3206,8 +4290,8 @@ button.link-button:hover:not(:disabled) {
 
    The verified desktop rules are still untouched by this block: .dash-main's
    1180px, the 720px form cap and its :has(.table-wrap) exclusion,
-   .row-actions min-width, .col-billed nowrap and the Purpose/Resident/Declared
-   cell bounds are not referenced here at all.
+   .row-actions min-width, .col-billed nowrap and the Purpose/Resident cell
+   bounds are not referenced here at all.
    ========================================================================== */
 
 .dash-menu-btn,
@@ -3591,9 +4675,10 @@ button.tab:hover:not(:disabled) {
    inside 170px, which is right. A username is a single unbreakable token and
    should be cut with an ellipsis instead.
 
-   Scoped to .small-note inside a clamped cell, which today is exactly the
-   username line under the payer's name — the name itself is a direct child
-   and keeps wrapping normally. */
+   Scoped to .small-note inside a clamped cell — the name itself is a direct
+   child and keeps wrapping normally. Since 9 Oct 2026 the Payments username
+   line it was written for is in the View panel, and the one clamped cell
+   with a .small-note is the Notifications recipient's contact line. */
 .data-table .cell-clamp .small-note {
   overflow-wrap: normal;
   white-space: nowrap;
@@ -3677,6 +4762,30 @@ button.tab:hover:not(:disabled) {
     row-gap: 10px;
   }
 
+  /* The Document requests list's heading has a line of its own on a phone
+     (13 Oct 2026). It names the chosen status tab ("6 pending requests",
+     "77 requests"), so its length changes with the tab and the counts, and
+     where it sometimes fitted beside Refresh and Encode walk-in, pressing a
+     tab moved the tab strip under it by 32px (measured at 360, 375, 390 and
+     414 for the Secretary, and at 320 for Staff). On its own line the row is
+     one height on every tab. Scoped to that page's .list-head. */
+  .doc-requests-head h2 {
+    flex-basis: 100%;
+  }
+
+  /* The Rental bookings list's heading too (15 Oct 2026), for the same
+     reason: it names the chosen status tab and, while a search is on, how
+     many match ("9 of 28 bookings match"), so its length changes with every
+     tab and keystroke. Where it sometimes fitted beside Refresh, and Encode
+     walk-in for the Secretary, a tab press or a keystroke moved the strip
+     and the list by 32px (swept pixel by pixel: 342 to 526 for the
+     Secretary, and 320 to 392 for Staff and the Punong Barangay once a
+     search is on). On its own line the row is one height on every tab, with
+     or without a search. Scoped to that page's .list-head. */
+  .rental-bookings-head h2 {
+    flex-basis: 100%;
+  }
+
   .head-actions input {
     width: auto;
     flex: 1 1 200px;
@@ -3692,8 +4801,9 @@ button.tab:hover:not(:disabled) {
    from 728.9px to 340, Address from 97px wide / 144.5px tall to 314 / 24.
 
    SCOPED TO A MODIFIER, NOT TO .data-table. Twenty tables across fifteen files
-   carry .data-table. Stacking all of them would make the payments queue's
-   measured column budget inert, and would change report PDFs — exportPdf.js
+   carry .data-table. Stacking all of them would have made the payments
+   queue's measured column budget inert (that budget is gone: Payments' rows
+   are one line since 9 Oct 2026), and would change report PDFs — exportPdf.js
    runs html2canvas over the LIVE DOM with no forced width, so an export from a
    narrow window would capture stacked, header-less tables. .stack-narrow is
    named for the behaviour rather than the screen (unlike .roster-table), so a
@@ -3747,6 +4857,24 @@ button.tab:hover:not(:disabled) {
   .data-table.stack-narrow td {
     border: none;
     padding: 4px 0;
+  }
+
+  /* The cards stand on the page, not inside a second card (PR 15). The wrap
+     around a STACKED table drops its white box, border and shadow, and each
+     card takes the white background and the shadow instead. Scoped by :has()
+     to a wrap whose own table is stacked, so a table that keeps its columns on
+     a phone keeps its frame: Rental items, the household and payment-result
+     key-value tables, the attendance roster, and the Reports tables, which
+     exportPdf.js captures from the live page. */
+  .table-wrap:has(> .data-table.stack-narrow) {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .table-wrap:has(> .data-table.stack-narrow) tr {
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
   /* Reuses the <th> type scale this is standing in for, so a stacked field
@@ -3837,10 +4965,11 @@ button.tab:hover:not(:disabled) {
 
   /* Width caps that are correct in a column and wrong in a 314px card.
      Measured against the card: .col-resident held a resident's name to 170px
-     and .col-declared a GCash reference to 200px, both leaving most of the
-     card empty; .truncate cut the text at 240px with an ellipsis while 74px
-     sat unused, which is the worst of the three because it destroys content
-     rather than just wrapping it.
+     and .col-declared a GCash reference to 200px (deleted 9 Oct 2026, with
+     Payments' one-line rows), both leaving most of the card empty; .truncate
+     cut the text at 240px with an ellipsis while 74px sat unused, which is
+     the worst of the three because it destroys content rather than just
+     wrapping it.
 
      THE PROTECTED RULES ARE NOT EDITED. `.data-table.stack-narrow .col-… .cell-clamp`
      is (0,4,0) against `.data-table .col-… .cell-clamp` at (0,3,0), so it wins
@@ -3850,8 +4979,7 @@ button.tab:hover:not(:disabled) {
      fits in 314px), .col-purpose .cell-clamp (caps at 300 in a 314 cell, a
      14px difference not worth a rule) and .col-message .cell-clamp (its 420px
      cap already exceeds the cell, so it never binds). */
-  .data-table.stack-narrow .col-resident .cell-clamp,
-  .data-table.stack-narrow .col-declared .cell-clamp {
+  .data-table.stack-narrow .col-resident .cell-clamp {
     max-width: none;
   }
 
@@ -3864,13 +4992,437 @@ button.tab:hover:not(:disabled) {
     text-overflow: clip;
   }
 
-  /* Payments queue: Billed puts the time under the date so the column stays
-     narrow. A card has room, so the time goes back on the date's line at the
-     date's size, and the card does not grow. */
-  .data-table.stack-narrow .col-billed .small-note {
-    display: inline;
-    font-size: inherit;
+  /* Payments queue (9 Oct 2026). A card has room, so the one-line cut is
+     undone: Resident and For wrap in full, like every other card's text. */
+  .payments-table td.pay-fluid {
+    max-width: none;
   }
+
+  .payments-table .pay-cut {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Payments' cards label EVERY row, the label on the left and the value on
+     the right, so a card reads as a short list. The shared card label above
+     (#94a3b8, 2.56:1 on white, uppercase) stays as it is for every other
+     table; here it is #64748b, 4.76:1, in sentence case. (0,4,1) beats the
+     shared (0,3,1) rules without !important. */
+  .data-table.stack-narrow.payments-table td[data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    text-align: right;
+  }
+
+  .data-table.stack-narrow.payments-table td[data-label]::before {
+    flex: none;
+    font-size: 0.8rem;
+    text-transform: none;
+    letter-spacing: normal;
+    color: #64748b;
+  }
+
+  .data-table.stack-narrow.payments-table td[data-label] > * {
+    min-width: 0;
+  }
+
+  /* Document requests (13 Oct 2026): the request number and the payment
+     marker sit inside the Requester and Status cells, so a cell's own
+     data-label cannot name them. Each carries its own, printed here as a
+     cell's is above (the same size, case, spacing and colour), and stands
+     8px under the field before it, as two cells do with 4px of padding each.
+     On a card their values read at the size of the other fields'. */
+  .data-table.stack-narrow .doc-requests-number,
+  .data-table.stack-narrow .doc-requests-pay {
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .data-table.stack-narrow .doc-requests-number[data-label]::before,
+  .data-table.stack-narrow .doc-requests-pay[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+  }
+
+  /* The Rental bookings returned-by note (15 Oct 2026) is the line after
+     the payment marker in the Status cell, so on a card it takes a label of
+     its own, "Return", printed from its own data-label as the number's and
+     the marker's are, and stands 8px under the marker, at their size: it
+     cannot read as part of the payment, and a return note follows it under
+     the same label. Where the line does not fit, at 320px, it breaks
+     before the date, which never breaks, never between a time and its PM. */
+  .data-table.stack-narrow .rental-bookings-return {
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .data-table.stack-narrow .rental-bookings-return[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+  }
+
+  .data-table.stack-narrow .rental-bookings-return-at {
+    white-space: nowrap;
+  }
+
+  /* The View panel on a phone fills the screen. Everything under the header
+     scrolls as one, details then actions, inside the panel; the page behind
+     is locked. Close is a full-width button pinned at the foot, as on the
+     legal modals, in place of the corner one, and Record and Re-check go
+     full width to match. The two fields stay 16px, because iOS Safari zooms
+     into any field smaller than that when it takes focus. */
+  .pay-panel-overlay {
+    padding: 0;
+  }
+
+  .pay-panel {
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .pay-panel .pay-panel-x {
+    display: none;
+  }
+
+  .pay-panel-head {
+    padding: 16px 20px 12px;
+  }
+
+  /* A desktop browser this narrow draws a 15px scrollbar in the scroll area;
+     reserving the same gutter on the footer keeps Close exactly as wide as
+     Record (measured 335 against 350 without it). A phone's scrollbar
+     overlays the content and reserves nothing. */
+  .pay-panel-main {
+    display: block;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .pay-panel-details {
+    overflow: visible;
+    padding: 14px 20px;
+  }
+
+  /* White on a phone: the actions scroll with the details here, and a fill
+     would stop short of the scrollbar gutter as a visible strip. The rule
+     above them still sets them apart. */
+  .pay-panel-actions {
+    padding: 14px 20px 16px;
+    background: none;
+  }
+
+  .pay-panel-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pay-field select,
+  .pay-field input {
+    font-size: 1rem;
+  }
+
+  .pay-panel .pay-record,
+  .pay-panel-recheck .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
+
+  .pay-panel-footer {
+    display: block;
+    flex: none;
+    padding: 12px 20px;
+    border-top: 1px solid #e2e8f0;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+
+  .pay-panel-footer .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
+
+  /* The Payments search on a phone takes its own full-width row, with the
+     status row under it (.list-head wraps at this width). The field stays
+     16px, so iOS Safari does not zoom into it. */
+  .pay-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .pay-search input {
+    font-size: 1rem;
+  }
+
+  /* The status row (batch 8): the status takes what the Filters button and
+     Refresh leave, all three 44px tall, a finger's height, and the row never
+     wraps: the status gives up width first. The select is 16px, so iOS
+     Safari does not zoom into it. (0,2,0) beats the shared .head-actions
+     wrap above, which is unchanged. min-width: 0 lets the row itself be
+     narrower than its contents' widest, which for a select is its longest
+     option: without it the row kept "Needs verification" whole and pushed
+     Refresh off a 320px screen. */
+  .pay-toolbar .head-actions {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .pay-toolbar .head-actions select {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .pay-toolbar .pay-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    height: 44px;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+
+  /* Open, it keeps its hover fill, as the account menu's button does. */
+  .pay-toolbar .pay-filters-toggle[aria-expanded="true"] {
+    background: #eff6ff;
+  }
+
+  .pay-toolbar .pay-refresh {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .pay-toolbar .pay-refresh-icon {
+    display: block;
+    font-size: 1.25rem;
+  }
+
+  /* The word, out of sight but still the button's name. */
+  .pay-toolbar .pay-refresh-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* The second row is the Filters panel here. Closed, it is not drawn, so
+     nothing in it can be tabbed to or read out; open, it is a card under the
+     status row and pushes the tabs and the list down. No z-index: it is in
+     the page's flow, not over it. */
+  .pay-filters-panel {
+    display: none;
+  }
+
+  .pay-filters-panel.is-open {
+    display: block;
+    margin-bottom: 12px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  /* In the panel every label sits above its field. Method and the date take
+     a line each; From and To share one, side by side, which leaves a date
+     field too narrow for its label beside it. Below 128px a date field cuts
+     off its own year (123px at 320), so where two of those do not fit, about
+     330px, From and To take a line each instead; no breakpoint decides it.
+     The fields are 44px tall and 16px, so iOS Safari does not zoom into
+     them. */
+  /* nowrap matters: in a flex container that may wrap, a stretched item's
+     width is not final while its height is worked out, so the From and To
+     grid measured itself as two rows (stacked) and then drew one, with the
+     difference left as empty space above and below them (measured at 360). */
+  .pay-filters {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 0;
+  }
+
+  .pay-filter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .pay-filter-range {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 12px;
+  }
+
+  .pay-filter select,
+  .pay-filter input {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  /* Clear filters keeps its quiet look, its words in line with the labels. */
+  .pay-filters .pay-filters-clear {
+    align-self: flex-start;
+    margin-left: -10px;
+  }
+
+  /* The hint, under the fields; empty, it still takes no room. */
+  .pay-filters-panel .pay-filters-hint:not(:empty) {
+    margin: 10px 0 0;
+  }
+
+  /* The Document requests filters (14 Oct 2026) are this second row in
+     Payments' panel, which the rules above hide until it is open, draw as a
+     card and stack, one field a line. Its button has a line of its own, the
+     full width and a finger's 44px, with the open fill Payments' button
+     keeps; the card opens 12px under it, and 12px is kept under whichever
+     of the two is last. Clear filters, 40px in Payments' panel, is a
+     finger's 44px, and while no filter is on it is not drawn, so the card
+     ends at its last field. Scoped to that page's wrapper
+     (components/ListFilters). */
+  .doc-requests-filters {
+    margin-bottom: 12px;
+  }
+
+  .doc-requests-filters .pay-filters-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    padding: 0 14px;
+  }
+
+  .doc-requests-filters .pay-filters-toggle[aria-expanded="true"] {
+    background: #eff6ff;
+  }
+
+  .doc-requests-filters .pay-filters-panel.is-open {
+    margin: 12px 0 0;
+  }
+
+  .doc-requests-filters .pay-filters .pay-filters-clear {
+    height: 44px;
+  }
+
+  .doc-requests-filters .pay-filters .pay-filters-clear[aria-hidden="true"] {
+    display: none;
+  }
+
+  /* The type tabs (batch 8): less room around each, so All, Documents,
+     Rentals and Fines with their counts fit on one line from 360px up,
+     measured with two-digit counts: 3.9px to spare at 360, 18.9 at 375 and
+     33.9 at 390, where they overflowed by 96, 81 and 66. Narrower, the strip
+     scrolls and fades. The words stay 0.9rem, the counts 0.75rem as at every
+     width, and the tabs 40px tall. */
+  .pay-tabs {
+    gap: 0;
+  }
+
+  .pay-tabs .pay-tab {
+    gap: 4px;
+    padding: 9px 5px 11px;
+  }
+
+  .pay-tabs .pay-tab-count {
+    padding: 1px 5px;
+  }
+
+  /* The pager on a phone: the count on one line, Rows per page on the next,
+     then Previous and Next, 44px tall, a finger's width, with "Page 2 of 4"
+     between them in place of the numbers. The middle column is auto between
+     two equal ones, so "Page 2 of 4" sits at the centre whatever the two
+     buttons measure. The select is 16px, so iOS Safari does not zoom. */
+  .pay-pager {
+    padding: 12px 14px;
+  }
+
+  .pay-pager-count,
+  .pay-pager-size,
+  .pay-pager-pages {
+    flex: 1 1 100%;
+  }
+
+  /* Each part has its own line here, so the count needs no reserve. */
+  .pay-pager-count {
+    min-width: 0;
+  }
+
+  .pay-pager-size {
+    margin-left: 0;
+  }
+
+  .pay-pager-size select {
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .pay-pager-pages {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .pay-pager-pages > .pay-pager-step:first-child {
+    justify-self: start;
+  }
+
+  .pay-pager-pages > .pay-pager-step:last-child {
+    justify-self: end;
+  }
+
+  .pay-pager .pay-pager-step {
+    height: 44px;
+  }
+
+  .pay-pager-numbers {
+    display: none;
+  }
+
+  .pay-pager-short {
+    display: block;
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}
+
+/* The empty-state row's padding (see .table-message). It must come AFTER the
+   640px .stack-narrow block above: `.data-table.stack-narrow td` is (0,2,1),
+   the same as this selector, so source order decides on a phone. Above 640px
+   it beats `.data-table td` (0,1,1) on specificity alone. No !important. */
+.data-table td.table-message {
+  padding: 2rem;
 }
 
 @media (max-width: 768px) {

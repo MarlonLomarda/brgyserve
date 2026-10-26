@@ -10,7 +10,7 @@ export default function TermsOfUse() {
   return (
     <>
       <h2 id="legal-modal-title">Terms of Use</h2>
-      <p className="legal-effective">Effective: 3 October 2026</p>
+      <p className="legal-effective">Effective: 25 October 2026</p>
 
       <h3>1. What BrgyServe is</h3>
       <p>
@@ -111,11 +111,11 @@ export default function TermsOfUse() {
 
       <h3>8. Facility bookings</h3>
       <p>
-        Facilities are booked for a specific date and time and are confirmed
-        only when the Barangay approves the booking. Overlapping bookings for
-        the same facility and period are not accepted, and a booking may be
-        declined or cancelled by the Barangay where the facility is needed for
-        official use.
+        A booking is confirmed as soon as you submit it, if the facility or the
+        number of items you ask for is free for that date and time; otherwise
+        it is refused with the reason. The Barangay may change or cancel a
+        confirmed booking where the facility or item is needed for official
+        use. You can check the status of your booking under My rentals.
       </p>
       <p>
         You are responsible for the facility or item during the period booked.
@@ -151,15 +151,16 @@ export default function TermsOfUse() {
 
       <h3>10. Notifications</h3>
       <p>
-        Notices about your requests, bookings, and payments appear{' '}
-        <strong>inside the portal</strong> when you sign in. Email is used only
-        to send password reset links, and the set-password links Barangay
-        officials receive to set up their accounts. SMS notification is not
-        currently active — messages are recorded against your record but are
-        not delivered to your phone.
+        Updates about your requests and bookings, including whether a fee has
+        been paid, are shown under <strong>My requests and My rentals</strong>{' '}
+        when you sign in. Email is used only to send password reset links, and
+        the set-password links Barangay officials receive to set up their
+        accounts. SMS notification is not currently active — messages are
+        recorded against your record but are not delivered to your phone.
       </p>
       <p>
-        Check the portal for the current status of anything you have submitted.
+        Check My requests and My rentals for the current status of anything you
+        have submitted.
       </p>
 
       <h3>11. Availability</h3>

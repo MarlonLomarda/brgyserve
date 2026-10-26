@@ -10,6 +10,7 @@ import {
 } from "../constants/requestStatus";
 import PayMenu from "../components/PayMenu";
 import TableSkeleton from "../components/TableSkeleton";
+import { isNoFeeCharge } from "../utils/chargeMethod";
 
 export default function MyRequestsPage() {
   const { authFetch } = useAuth();
@@ -78,10 +79,7 @@ export default function MyRequestsPage() {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [load]);
 
-  const [payTarget, setPayTarget] = useState(null); // request_id entering a GCash ref
-  const [gcashRef, setGcashRef] = useState("");
-
-  async function handleDeclare(r, method, reference) {
+  async function handleDeclare(r, method) {
     setFlash(null);
     setBusyId(r.request_id);
     try {
@@ -89,12 +87,10 @@ export default function MyRequestsPage() {
         `/document-requests/mine/${r.request_id}/pay`,
         {
           method: "POST",
-          body: { method, reference_no: reference },
+          body: { method },
         },
       );
       setFlash({ type: "success", text: data.message });
-      setPayTarget(null);
-      setGcashRef("");
       await load();
     } catch (err) {
       setFlash({ type: "error", text: err.message });
@@ -132,9 +128,9 @@ export default function MyRequestsPage() {
   // /pay route, which records the new method and sets the reference to null,
   // and "Pay online via GCash" can collect a second payment for a charge the
   // resident has already paid by hand. So both ask first, and Cancel sends
-  // nothing. "I already paid via GCash" does not ask: it only replaces the
-  // reference, which is how a mistyped one is fixed. With no GCash reference
-  // on file nothing asks.
+  // nothing. Residents can no longer submit a GCash reference (removed
+  // 10 Oct 2026), so only a charge that kept one from before then asks. With
+  // no GCash reference on file nothing asks.
   //
   // MyRentalsPage.jsx carries the identical checks and wording.
   // IF ONE CHANGES, CHECK THE OTHER.
@@ -222,159 +218,127 @@ export default function MyRequestsPage() {
           )}
         </div>
 
-        {requests?.length === 0 ? (
-          <div className="empty">
-            <p>No document requests to display.</p>
-            <Link className="button-link inline" to="/resident/request">
-              Request a document
-            </Link>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table stack-narrow">
-              <thead>
+        <div className="table-wrap">
+          <table className="data-table stack-narrow my-requests-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th className="col-purpose">Purpose</th>
+                <th className="num">Fee</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton col={6} row={requests?.length || 3} />
+              ) : requests?.length === 0 ? (
                 <tr>
-                  <th>Document</th>
-                  <th className="col-purpose">Purpose</th>
-                  <th className="num">Fee</th>
-                  <th>Status</th>
-                  <th>Submitted</th>
-                  <th></th>
+                  <td colSpan={6} className="table-message">
+                    <p>No document requests to display.</p>
+                    <Link className="button-link inline" to="/resident/request">
+                      Request a document
+                    </Link>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <TableSkeleton col={6} row={8} />
-                ) : (
-                  requests.map((r) => {
-                    const meta = statusMeta(r.status);
-                    const charge = chargeOf(r);
-                    return (
-                      <tr key={r.request_id}>
-                        <td>
-                          <strong>{r.document_types?.name || "—"}</strong>
-                        </td>
-                        <td className="muted col-purpose" data-label="Purpose">
-                          <span className="cell-clamp">{r.purpose}</span>
-                        </td>
-                        <td className="num">
-                          ₱{Number(r.document_types?.fee ?? 0).toFixed(2)}
-                        </td>
-                        <td>
-                          <span className={`badge ${meta.className}`}>
-                            {meta.label}
-                          </span>
-                          {r.status === "rejected" && r.rejection_reason && (
-                            <div className="muted reason-note">
-                              Reason: {r.rejection_reason}
-                            </div>
-                          )}
-                          {r.status === "ready_for_release" && (
-                            <div className="muted reason-note">
-                              Ready to claim — pick it up at the barangay hall
-                              during office hours.
-                            </div>
-                          )}
-                          {r.status === "claimed" && r.claimed_at && (
-                            <div className="muted reason-note">
-                              Claimed on {formatDate(r.claimed_at)}.
-                            </div>
-                          )}
-                          {charge && (
-                            <div className="muted reason-note">
-                              Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
-                              <strong
-                                className={`charge-word ${chargeMeta(charge.status).className}`}
-                              >
-                                {chargeMeta(charge.status).label}
-                              </strong>
-                              {charge.status === "UNPAID" &&
-                                charge.declared_method === "gcash" && (
-                                  <>
-                                    {" "}
-                                    · GCash ref {charge.declared_reference}{" "}
-                                    submitted, awaiting verification
-                                  </>
-                                )}
-                              {charge.status === "UNPAID" &&
-                                charge.declared_method === "onsite" && (
-                                  <>
-                                    {" "}
-                                    · pay in cash at the barangay hall
-                                    treasurer&apos;s desk
-                                  </>
-                                )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="muted" data-label="Submitted">
-                          {formatDate(r.requested_at)}
-                        </td>
-                        <td className="row-actions">
-                          {r.status === "pending" && (
-                            <button
-                              className="btn secondary danger"
-                              disabled={busyId === r.request_id}
-                              onClick={() => handleCancel(r)}
+              ) : (
+                requests.map((r) => {
+                  const meta = statusMeta(r.status);
+                  const charge = chargeOf(r);
+                  const noFee = isNoFeeCharge(charge);
+                  // Once approval has billed the request, the fee is what it
+                  // charged, not the document type's fee today, which can
+                  // have changed since.
+                  const fee = charge?.amount ?? r.document_types?.fee ?? 0;
+                  return (
+                    <tr key={r.request_id}>
+                      <td>
+                        <strong>{r.document_types?.name || "—"}</strong>
+                      </td>
+                      <td className="muted col-purpose" data-label="Purpose">
+                        <span className="cell-clamp">{r.purpose}</span>
+                      </td>
+                      <td className="num">₱{Number(fee).toFixed(2)}</td>
+                      <td>
+                        <span className={`badge ${meta.className}`}>
+                          {meta.label}
+                        </span>
+                        {r.status === "rejected" && r.rejection_reason && (
+                          <div className="muted reason-note">
+                            Reason: {r.rejection_reason}
+                          </div>
+                        )}
+                        {r.status === "ready_for_release" && (
+                          <div className="muted reason-note">
+                            Ready to claim — pick it up at the barangay hall
+                            during office hours.
+                          </div>
+                        )}
+                        {r.status === "claimed" && r.claimed_at && (
+                          <div className="muted reason-note">
+                            Claimed on {formatDate(r.claimed_at)}.
+                          </div>
+                        )}
+                        {noFee && (
+                          <div className="muted reason-note">No fee</div>
+                        )}
+                        {charge && !noFee && (
+                          <div className="muted reason-note">
+                            Amount due: ₱{Number(charge.amount).toFixed(2)} —{" "}
+                            <strong
+                              className={`charge-word ${chargeMeta(charge.status).className}`}
                             >
-                              {busyId === r.request_id
-                                ? "Cancelling…"
-                                : "Cancel"}
-                            </button>
+                              {chargeMeta(charge.status).label}
+                            </strong>
+                            {charge.status === "UNPAID" &&
+                              charge.declared_method === "gcash" && (
+                                <>
+                                  {" "}
+                                  · GCash ref {charge.declared_reference}{" "}
+                                  submitted, awaiting verification
+                                </>
+                              )}
+                            {charge.status === "UNPAID" &&
+                              charge.declared_method === "onsite" && (
+                                <>
+                                  {" "}
+                                  · pay in cash at the barangay hall
+                                  treasurer&apos;s desk
+                                </>
+                              )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="muted" data-label="Submitted">
+                        {formatDate(r.requested_at)}
+                      </td>
+                      <td className="row-actions">
+                        {r.status === "pending" && (
+                          <button
+                            className="btn secondary danger"
+                            disabled={busyId === r.request_id}
+                            onClick={() => handleCancel(r)}
+                          >
+                            {busyId === r.request_id ? "Cancelling…" : "Cancel"}
+                          </button>
+                        )}
+                        {r.status === "approved" &&
+                          charge?.status === "UNPAID" && (
+                            <PayMenu
+                              busy={busyId === r.request_id}
+                              onPayOnline={() => payOnline(r, charge)}
+                              onPayOnsite={() => payOnsite(r, charge)}
+                            />
                           )}
-                          {r.status === "approved" &&
-                            charge?.status === "UNPAID" &&
-                            (payTarget === r.request_id ? (
-                              <form
-                                className="inline-form"
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  handleDeclare(r, "gcash", gcashRef.trim());
-                                }}
-                              >
-                                <input
-                                  value={gcashRef}
-                                  onChange={(e) => setGcashRef(e.target.value)}
-                                  placeholder="GCash reference no."
-                                  maxLength={100}
-                                  required
-                                  autoFocus
-                                />
-                                <button
-                                  className="btn secondary"
-                                  type="submit"
-                                  disabled={busyId === r.request_id}
-                                >
-                                  Submit
-                                </button>
-                                <button
-                                  className="btn secondary"
-                                  type="button"
-                                  onClick={() => setPayTarget(null)}
-                                >
-                                  Cancel
-                                </button>
-                              </form>
-                            ) : (
-                              <PayMenu
-                                busy={busyId === r.request_id}
-                                onPayOnline={() => payOnline(r, charge)}
-                                onPayOnsite={() => payOnsite(r, charge)}
-                                onAlreadyPaid={() => {
-                                  setPayTarget(r.request_id);
-                                  setGcashRef("");
-                                }}
-                              />
-                            ))}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </>
     </>
   );

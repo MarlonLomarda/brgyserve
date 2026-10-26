@@ -18,16 +18,12 @@ export function formatDate(value) {
   return new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-// The two halves of formatDate, same locale and styles, for a cell that shows
-// the date over the time (the Payments queue's Billed column).
+// The date half of formatDate, same locale and style, for a cell that shows
+// the date alone: the Payments queue's Billed column, whose View panel has
+// the full timestamp (9 Oct 2026).
 export function formatDateOnly(value) {
   if (!value) return '—';
   return new Date(value).toLocaleDateString('en-PH', { dateStyle: 'medium' });
-}
-
-export function formatTimeOnly(value) {
-  if (!value) return '';
-  return new Date(value).toLocaleTimeString('en-PH', { timeStyle: 'short' });
 }
 
 // Charge statuses are UPPERCASE (mirrors backend/src/constants/charges.js).

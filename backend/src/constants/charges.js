@@ -14,10 +14,14 @@ const CHARGE_TYPE = {
 };
 
 // Payment methods (lowercase canonical values, like request statuses).
-// Record/verify only — there is NO payment gateway integration.
+// A resident may DECLARE only 'onsite' (POST /mine/:id/pay on documents and
+// rentals). 'gcash' reaches payments.payment_method when staff record a GCash
+// payment with the reference they type, or through the PayMongo gateway
+// (routes/payments.js). Residents declared GCash references themselves until
+// 10 Oct 2026, so a charge from before then may still hold one.
 const PAYMENT_METHOD = {
   ONSITE: 'onsite', // cash at the barangay hall
-  GCASH: 'gcash',   // resident submits a GCash reference number
+  GCASH: 'gcash',   // recorded by staff with its reference, or paid online through PayMongo
 };
 
 module.exports = { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD };

@@ -38,6 +38,12 @@
 // spends the very link the route emailed. It can also be told to report
 // FAILED, which is how a refused send is exercised without any provider.
 //
+// SECTIONS K2 AND K3 ARE THE READ-ONLY PRE-CHECK, POST /set-password/check,
+// which the /set-password page asks when it opens: its one answer for every
+// dead link, that it uses up, logs and notifies nothing, that a failed query
+// is never answered as a dead link, and its own limiter. The limiter is
+// driven through the real middleware with mock requests: no port is opened.
+//
 // SECTION L IS /change-password's answer to a wrong current password: a 400,
 // never a 401, because the frontend ends the session on any 401.
 //
@@ -45,6 +51,7 @@
 // in-memory users/profiles fake (it writes nothing, live or otherwise).
 // ===========================================================================
 const path = require('path');
+const { EventEmitter } = require('events');
 
 process.env.EMAIL_MODE = 'SIMULATED'; // belt and braces — never send from a test
 process.env.SMS_MODE = 'SIMULATED';
@@ -70,7 +77,7 @@ const {
   NEW_PASSWORD_EMAIL_SUBJECT,
 } = require('../src/constants/passwordReset');
 const { ACTIONS } = require('../src/constants/activityLog');
-const { setPasswordLimiter } = require('../src/middleware/rateLimit');
+const { setPasswordLimiter, setPasswordCheckLimiter } = require('../src/middleware/rateLimit');
 
 const authRouter = require('../src/routes/auth');
 // Only for the email-uniqueness section below. The router-level
@@ -949,6 +956,238 @@ let skipReason = '';
     const setLayer = authRouter.stack.find((l) => l.route?.path === '/set-password');
     check('the route runs setPasswordLimiter before its handler',
       setLayer?.route.stack.length === 2 && setLayer.route.stack[0].handle === setPasswordLimiter);
+
+    // ================================================================= K2
+    // THE PRE-CHECK, POST /set-password/check, which the /set-password page
+    // asks when it opens. It answers one thing, usable or /set-password's own
+    // dead answer, and uses nothing up, logs nothing and notifies nothing.
+    // In a block of its own, so its names cannot collide with those above.
+    {
+      section('K2. the pre-check answers, and never writes');
+      const askCheck = handlerFor(authRouter, 'post', '/set-password/check');
+      const checkWith = (body) => invoke(askCheck, { body });
+      // Written out by hand: what /set-password answers for a dead link.
+      const DEAD_BODY = JSON.stringify({ error: SET_PASSWORD_INVALID_MESSAGE, code: 'SET_PASSWORD_TOKEN_INVALID' });
+      const isDead = (r) => r.status === 400 && JSON.stringify(r.body) === DEAD_BODY;
+
+      // Everything the check could write about an account, counted rather
+      // than assumed: log rows with it as actor and as record, notifications,
+      // each of its links with whether it is used, and the account row.
+      const footprint = async (userId) => {
+        const counts = await Promise.all([
+          supabase.from('activity_logs').select('log_id', { count: 'exact', head: true }).eq('user_id', userId),
+          supabase.from('activity_logs').select('log_id', { count: 'exact', head: true })
+            .eq('table_name', 'users').eq('record_id', userId),
+          supabase.from('notifications').select('notification_id', { count: 'exact', head: true }).eq('user_id', userId),
+        ]);
+        const { data: account } = await supabase
+          .from('users').select('password_hash, must_change_password, email_verified, is_active')
+          .eq('user_id', userId).single();
+        return {
+          counts: counts.map((r) => (r.error ? `error: ${r.error.message}` : r.count)),
+          links: (await rowsFor(userId)).map((r) => [r.reset_id, r.used_at]),
+          account,
+        };
+      };
+
+      // ---- a usable link, checked three times ------------------------------
+      // `staff` is the active staff-type throwaway from section B, and nothing
+      // above has issued it a link. The second link is a bystander: a check
+      // must not retire it either.
+      const checked = await issue(staff.user_id);
+      const bystander = await issue(staff.user_id);
+      const before = await footprint(staff.user_id);
+      const answers = [];
+      for (let i = 0; i < 3; i += 1) answers.push(await checkWith({ token: checked.token }));
+      check('a usable staff link answers 200 with exactly {"usable":true}',
+        answers[0].status === 200 && JSON.stringify(answers[0].body) === '{"usable":true}',
+        `${answers[0].status} ${JSON.stringify(answers[0].body)}`);
+      check('  and the same the second and the third time',
+        answers.every((r) => r.status === 200 && JSON.stringify(r.body) === '{"usable":true}'));
+
+      const after = await footprint(staff.user_id);
+      check('  three checks used up nothing: the link is still unused, and so is the bystander',
+        after.links.find(([id]) => id === checked.reset_id)?.[1] === null
+          && after.links.find(([id]) => id === bystander.reset_id)?.[1] === null);
+      check('  every link of the account is as it was',
+        JSON.stringify(after.links) === JSON.stringify(before.links), `${before.links.length} link(s)`);
+      check('  the account row is untouched (password, must_change_password, email_verified, is_active)',
+        !!before.account && JSON.stringify(after.account) === JSON.stringify(before.account));
+      check('  NOTHING was logged or notified',
+        before.counts.every(Number.isInteger) && JSON.stringify(after.counts) === JSON.stringify(before.counts),
+        `log rows as actor and as record, notifications: before ${JSON.stringify(before.counts)}, after ${JSON.stringify(after.counts)}`);
+
+      // ---- the check used nothing up, so the real route still can ----------
+      const CHECKED_PASSWORD = 'Checked-Set-2026!';
+      const spend = await invoke(setPassword, { body: { token: checked.token, new_password: CHECKED_PASSWORD } });
+      check('the real /set-password then spends the link the check was asked about',
+        spend.status === 200, `${spend.status} ${spend.body?.error || ''}`);
+      const { data: spentAccount } = await supabase
+        .from('users').select('password_hash').eq('user_id', staff.user_id).single();
+      check('  the password it set is the one that works',
+        await bcrypt.compare(CHECKED_PASSWORD, spentAccount.password_hash));
+      const { count: setRows } = await supabase
+        .from('activity_logs').select('log_id', { count: 'exact', head: true })
+        .eq('table_name', 'users').eq('record_id', staff.user_id).eq('action', ACTIONS.PASSWORD_SET);
+      check('  PASSWORD_SET was logged once, by the real route', setRows === 1, String(setRows));
+      check('  and its sweep retired the bystander, as it always has',
+        (await rowsFor(staff.user_id)).find((r) => r.reset_id === bystander.reset_id)?.used_at !== null);
+
+      // ---- every dead link gets the one dead answer ------------------------
+      // Issued after the spend above, so its sweep has not touched them.
+      const expired = await issue(staff.user_id, { minutesFromNow: -1 });
+      const markedUsed = await issue(staff.user_id, { used: new Date().toISOString() });
+      const residentReset = await issue(active.user_id);
+      const inactiveOnly = await issue(inactiveStaff.user_id);
+      const deadLinks = [
+        ['the link just spent', checked.token],
+        ['an expired link', expired.token],
+        ['a link already marked used', markedUsed.token],
+        ['an unknown token', generateToken()],
+        ["a resident's reset token", residentReset.token],
+        ['a link for an INACTIVE staff account', inactiveOnly.token],
+      ];
+      const deadAnswers = [];
+      for (const [label, token] of deadLinks) {
+        const r = await checkWith({ token });
+        deadAnswers.push(r);
+        check(`${label}: the dead answer`, isDead(r), `${r.status} ${JSON.stringify(r.body)}`);
+      }
+      check("  the resident's reset link is still unused: the check did not spend it",
+        (await rowsFor(active.user_id)).find((r) => r.reset_id === residentReset.reset_id)?.used_at === null);
+      const { data: residentNow } = await supabase
+        .from('users').select('password_hash').eq('user_id', active.user_id).single();
+      check("  and the resident's password is unchanged",
+        await bcrypt.compare(RETRY_PASSWORD, residentNow.password_hash));
+
+      // ---- a token that is missing, or not a string ------------------------
+      const shapes = [
+        ['no token at all', {}],
+        ['an empty token', { token: '' }],
+        ['a token of spaces', { token: '   ' }],
+        ['a number', { token: 12345 }],
+        ['an object', { token: { token: 'x' } }],
+        ['an array', { token: ['x'] }],
+        ['null', { token: null }],
+      ];
+      for (const [label, body] of shapes) {
+        const r = await checkWith(body);
+        deadAnswers.push(r);
+        check(`${label}: a 400 with the dead answer`, isDead(r), `${r.status} ${JSON.stringify(r.body)}`);
+      }
+
+      // ---- one answer, byte for byte ---------------------------------------
+      const fromSetPassword = await invoke(setPassword, {
+        body: { token: generateToken(), new_password: 'Whatever-Set-99!' },
+      });
+      const distinct = new Set(deadAnswers.map((r) => `${r.status} ${JSON.stringify(r.body)}`));
+      check(`all ${deadAnswers.length} dead answers are byte-identical: one status, one body`,
+        distinct.size === 1, `${distinct.size} distinct`);
+      check("  and identical to /set-password's own dead answer",
+        `${fromSetPassword.status} ${JSON.stringify(fromSetPassword.body)}` === [...distinct][0]);
+
+      // ---- a failed query is never a dead link -----------------------------
+      // A lookup answers with an error instead of a row. Both routes must
+      // THROW, which the error handler in server.js turns into a 500, rather
+      // than tell a person their link is dead.
+      const forced = { data: null, error: { message: 'reset:test forced a query error' } };
+      const failing = (name) => (table) => (table === name
+        ? { select: () => ({ eq: () => ({ maybeSingle: async () => forced }) }) }
+        : realFrom(table));
+      const outcome = async (handler, body, failTable) => {
+        supabase.from = failing(failTable);
+        try {
+          const r = await invoke(handler, { body });
+          return `answered ${r.status} ${JSON.stringify(r.body)}`;
+        } catch (err) {
+          return `threw: ${err.message}`;
+        } finally {
+          supabase.from = realFrom;
+        }
+      };
+      const liveLink = await issue(staff.user_id);
+      const lookupFails = await outcome(askCheck, { token: generateToken() }, 'password_resets');
+      check('a failed link lookup THROWS from the check (a 500), never the dead answer',
+        lookupFails === 'threw: Set-password lookup failed: reset:test forced a query error', lookupFails);
+      const accountFails = await outcome(askCheck, { token: liveLink.token }, 'users');
+      check('  and so does a failed account lookup',
+        accountFails === 'threw: Set-password user lookup failed: reset:test forced a query error', accountFails);
+      const setFails = await outcome(setPassword,
+        { token: generateToken(), new_password: 'Whatever-Set-99!' }, 'password_resets');
+      check('  /set-password throws on the same failure, as before',
+        setFails === 'threw: Set-password lookup failed: reset:test forced a query error', setFails);
+    }
+
+    // ================================================================= K3
+    // THE PRE-CHECK'S OWN LIMITER, driven through the real middleware with
+    // mock requests. Its counts live in this process only, so nothing here
+    // reaches a running server's limits. The addresses come from the range
+    // reserved for documentation (TEST-NET-3), so none is a real caller.
+    {
+      section('K3. the pre-check has its own limiter, 30 per 15 minutes');
+      const checkLayer = authRouter.stack.find((l) => l.route?.path === '/set-password/check');
+      check('the check runs setPasswordCheckLimiter before its handler',
+        typeof setPasswordCheckLimiter === 'function'
+          && checkLayer?.route.stack.length === 2 && checkLayer.route.stack[0].handle === setPasswordCheckLimiter);
+
+      // One request from `address` through `limiter`. If the limiter lets it
+      // through, the route is taken to have answered `status` and the response
+      // finishes, which is when a success is refunded. Resolves to the
+      // limiter's own answer, or to null when it let the request through.
+      const throughLimiter = (limiter, address, status) => new Promise((resolve, reject) => {
+        const req = {
+          ip: address,
+          headers: { 'cf-connecting-ip': address },
+          app: { get: () => 3 }, // trust proxy, as server.js sets it
+          method: 'POST',
+          originalUrl: '/api/auth/set-password/check',
+        };
+        const res = Object.assign(new EventEmitter(), {
+          statusCode: 200,
+          headersSent: false,
+          setHeader() {},
+          getHeader() {},
+          status(code) { this.statusCode = code; return this; },
+          json(body) { resolve({ status: this.statusCode, body }); return this; },
+        });
+        limiter(req, res, (err) => {
+          if (err) { reject(err); return; }
+          res.statusCode = status;
+          res.emit('finish');
+          // The refund runs after 'finish', in microtasks this waits out.
+          setImmediate(() => resolve(null));
+        });
+      });
+
+      let through = 0;
+      let refused = null;
+      for (let i = 1; i <= 31 && !refused; i += 1) {
+        const r = await throughLimiter(setPasswordCheckLimiter, '203.0.113.7', 400);
+        if (r) refused = { at: i, ...r };
+        else through += 1;
+      }
+      check('30 dead answers from one address get through, and the 31st is refused with a 429',
+        through === 30 && refused?.at === 31 && refused.status === 429,
+        `${through} through, refused at ${refused?.at ?? 'none'}`);
+      check('  as JSON, with the message the page shows',
+        refused?.body?.error === 'Too many link checks from this connection. Please wait 15 minutes and try again. Checking a link does not use it up.',
+        JSON.stringify(refused?.body));
+
+      let usableRefused = 0;
+      for (let i = 0; i < 40; i += 1) {
+        if (await throughLimiter(setPasswordCheckLimiter, '203.0.113.8', 200)) usableRefused += 1;
+      }
+      check('40 usable answers from one address are never refused: each is refunded',
+        usableRefused === 0, `${usableRefused} refused`);
+
+      const stillRefused = await throughLimiter(setPasswordCheckLimiter, '203.0.113.7', 400);
+      const otherAddress = await throughLimiter(setPasswordCheckLimiter, '203.0.113.9', 400);
+      check('another address has its own count: refused at the first, through at the other',
+        stillRefused?.status === 429 && otherAddress === null);
+      const otherLimiter = await throughLimiter(setPasswordLimiter, '203.0.113.7', 400);
+      check('  and setPasswordLimiter keeps its own counts: the refused address gets through it',
+        setPasswordCheckLimiter !== setPasswordLimiter && otherLimiter === null);
+    }
 
     // ================================================================== L
     // A WRONG CURRENT PASSWORD IS A 400, NEVER A 401. authFetch in the

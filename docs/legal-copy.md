@@ -7,8 +7,11 @@ against the logging code and its tests (`activity:test`) on 1 October 2026. The
 lines about set-password links and officials' accounts, in §1, §3, §4 and §5 of
 the Privacy Policy, Terms of Use §10, and the Help Center's answer about text
 messages, were checked against the set-password code and its tests
-(`reset:test`) on 3 October 2026. The "No uploaded files" point was corrected on
-24 September 2026 (`3e372e6`). Every other factual claim below was checked
+(`reset:test`) on 3 October 2026. Terms of Use §10 and the Help Center's answer
+about where to see updates were checked on 25 October 2026 against the
+resident's pages and the notifications route, which is the Secretary's alone:
+a resident follows a request on My requests and a booking on My rentals. The
+"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Every other factual claim below was checked
 against the codebase on 10 September 2026. If the system changes, change this
 file and re-render the modals from it — do not edit the JSX copy directly.
 
@@ -19,7 +22,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 3 October 2026*
+*Effective: 25 October 2026*
 
 ### Who we are, and what this system is
 
@@ -90,9 +93,11 @@ BrgyServe keeps a log of the actions Barangay officials and staff take on
 records: adding, editing, archiving and approving them, recording payments,
 recording event attendance, recording blotter cases, and sending an official a
 set-password link. Actions of yours that change a record are logged too:
-registering, submitting or cancelling a request, booking a facility, declaring
-a payment, having a GCash payment confirmed, changing or resetting your
-password, and setting your password from an emailed set-password link.
+registering, submitting or cancelling a request, booking a facility,
+cancelling a rental booking, declaring a payment, having a GCash payment
+confirmed, changing or resetting your password, and setting your password from
+an emailed set-password link. A GCash payment received after its booking was
+cancelled is also recorded in this log.
 
 Each entry holds who took the action, what the action was, which record it was
 taken on, the time, and the values of the changed fields before and after the
@@ -236,7 +241,7 @@ received in person at the Barangay Office.
 
 ## TERMS OF USE
 
-*Effective: 3 October 2026*
+*Effective: 25 October 2026*
 
 ### 1. What BrgyServe is
 
@@ -312,10 +317,11 @@ Requirements, fees, and processing times are set by the Barangay.
 
 ### 8. Facility bookings
 
-Facilities are booked for a specific date and time and are confirmed only when
-the Barangay approves the booking. Overlapping bookings for the same facility
-and period are not accepted, and a booking may be declined or cancelled by the
-Barangay where the facility is needed for official use.
+A booking is confirmed as soon as you submit it, if the facility or the number
+of items you ask for is free for that date and time; otherwise it is refused
+with the reason. The Barangay may change or cancel a confirmed booking where the
+facility or item is needed for official use. You can check the status of your
+booking under My rentals.
 
 You are responsible for the facility or item during the period booked. The
 conditions of use, when it must be returned, and any charge for late return or
@@ -343,13 +349,15 @@ the Barangay Office, not through the portal.
 
 ### 10. Notifications
 
-Notices about your requests, bookings, and payments appear **inside the portal**
-when you sign in. Email is used only to send password reset links, and the
-set-password links Barangay officials receive to set up their accounts. SMS
-notification is not currently active — messages are recorded against your
-record but are not delivered to your phone.
+Updates about your requests and bookings, including whether a fee has been
+paid, are shown under **My requests and My rentals** when you sign in. Email is
+used only to send password reset links, and the set-password links Barangay
+officials receive to set up their accounts. SMS notification is not currently
+active — messages are recorded against your record but are not delivered to
+your phone.
 
-Check the portal for the current status of anything you have submitted.
+Check My requests and My rentals for the current status of anything you have
+submitted.
 
 ### 11. Availability
 
@@ -513,9 +521,9 @@ GCash reference number.
 
 #### How do I book a facility?
 
-Sign in, open the bookings section, choose the facility, and give the date and
-time. The Barangay reviews and confirms it. A booking is not confirmed until it
-is approved.
+Sign in, open the bookings section, choose the facility or item, and give the
+date and time. If it is free, the booking is confirmed at once and its fee
+appears under My rentals.
 
 #### My requested time was not available.
 
@@ -535,8 +543,8 @@ your charges.
 
 #### Where do I see updates about my request?
 
-Inside the portal, under notifications, when you are signed in. That is the
-authoritative place.
+Under My requests for a document request, or under My rentals for a booking,
+when you are signed in. That is the authoritative place.
 
 #### Will I get a text message?
 
