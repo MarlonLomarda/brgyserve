@@ -259,6 +259,19 @@
 // date's earliest day, a failed items load with Try again, its messages read
 // out) and aria-pressed on its two mode buttons.
 //
+// Section AS is the resident search and the rental form layout (step O1/O2),
+// read from index.css by the WINNING rule (specificity, then source order) as
+// a browser of 390, 768 and 1280px applies it: a result's name and details
+// readable at rest and on hover (the hover rule that used to lose to the
+// global button:hover), the picker 14px clear of the next field and its
+// label 6px above it, the four rental panels' head 16px clear of what
+// follows and their Back button on one line, and the Date label the whole
+// row wherever there is no Quantity box (Book a rental, the walk-in form,
+// always on Edit). Then the picker's three bugs: a failed search says so
+// with Try again (never "No matching residents."), Enter in the box submits
+// nothing, and the box is named by its label. The shared rules it must not
+// change are pinned.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -15743,6 +15756,507 @@ const root = () => dom.window.document.getElementById('root');
     check('sections AP to AR sent only the list, the availability, the items, the edits and the return',
       methods.length > 0 && methods.every((m) => ['GET /rental-requests', 'GET /rental-requests/availability', 'PUT /rental-requests/:id',
         'GET /rental-items/all', 'PUT /rental-items/:id', 'POST /rental-requests/:id/return'].includes(m)), said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AS. The resident search and the rental form layout (step O1/O2)
+  // =========================================================================
+  // jsdom lays nothing out and applies no width media query, so the CSS
+  // checks read index.css as a browser of a given width applies it (comments
+  // stripped, each rule kept with its @media conditions) and pick the WINNING
+  // rule for an element by specificity, then source order: a rule that merely
+  // matches proves nothing, since the bug here was a rule that matched and
+  // lost (.picker-option:hover, 0,2,0, under button:hover:not(:disabled),
+  // 0,2,1). "Hover" treats :hover as matching; otherwise a :hover selector
+  // never matches. The pixels are measured in headless Chrome, outside this
+  // file.
+  console.log('\n--- The resident search (readable results, spacing, three bugs) and the rental form layout ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const WIDTHS = [390, 768, 1280];
+
+    // --- the CSS reader --------------------------------------------------
+    const cssRules = () => {
+      const src = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [];
+      const open = [];
+      let from = 0;
+      for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (ch === '{') {
+          const head = src.slice(from, i).trim();
+          open.push(head.startsWith('@') ? { at: head } : { selector: head.replace(/\s+/g, ' '), body: i + 1 });
+          from = i + 1;
+        } else if (ch === '}') {
+          const block = open.pop();
+          if (block && block.selector !== undefined) {
+            const decls = {};
+            for (const d of src.slice(block.body, i).split(';')) {
+              const k = d.indexOf(':');
+              if (k > 0) decls[d.slice(0, k).trim().toLowerCase()] = d.slice(k + 1).trim().replace(/\s+/g, ' ');
+            }
+            rules.push({ selector: block.selector, decls, media: open.filter((b) => b.at).map((b) => b.at), order: rules.length });
+          }
+          from = i + 1;
+        } else if (ch === ';' && !open.some((b) => b.selector !== undefined)) {
+          from = i + 1;
+        }
+      }
+      return { rules, balanced: open.length === 0 };
+    };
+    const appliesAt = (media, width) => media.every((at) => {
+      if (!at.startsWith('@media')) return !/^@(keyframes|font-face)/.test(at);
+      return at.slice(6).split(',').some((query) => {
+        if (/print|prefers-|hover|pointer|orientation|aspect-ratio|height/.test(query)) return false;
+        const max = [...query.matchAll(/max-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        const min = [...query.matchAll(/min-width:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+        return max.every((x) => width <= x) && min.every((x) => width >= x);
+      });
+    });
+    // Commas inside :is(), :not() or :has() do not split a selector list.
+    const splitTop = (list) => {
+      const parts = [];
+      let depth = 0;
+      let from = 0;
+      for (let i = 0; i < list.length; i += 1) {
+        if (list[i] === '(') depth += 1;
+        else if (list[i] === ')') depth -= 1;
+        else if (list[i] === ',' && depth === 0) { parts.push(list.slice(from, i).trim()); from = i + 1; }
+      }
+      parts.push(list.slice(from).trim());
+      return parts;
+    };
+    const closeParen = (s, i) => { let depth = 0; for (let j = i; j < s.length; j += 1) { if (s[j] === '(') depth += 1; else if (s[j] === ')') { depth -= 1; if (depth === 0) return j; } } return s.length; };
+    const bigger = (x, y) => (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) > 0;
+    // [ids, classes + attributes + pseudo-classes, elements + pseudo-elements];
+    // :not(), :is() and :has() count their most specific argument, :where() 0.
+    const specificity = (sel) => {
+      const n = [0, 0, 0];
+      const word = /[\w-]/;
+      let i = 0;
+      while (i < sel.length) {
+        const ch = sel[i];
+        if (ch === '#') { n[0] += 1; i += 1; while (i < sel.length && word.test(sel[i])) i += 1; }
+        else if (ch === '.') { n[1] += 1; i += 1; while (i < sel.length && word.test(sel[i])) i += 1; }
+        else if (ch === '[') { n[1] += 1; i = sel.indexOf(']', i) + 1; }
+        else if (ch === ':' && sel[i + 1] === ':') { n[2] += 1; i += 2; while (i < sel.length && word.test(sel[i])) i += 1; if (sel[i] === '(') i = closeParen(sel, i) + 1; }
+        else if (ch === ':') {
+          i += 1;
+          let name = '';
+          while (i < sel.length && word.test(sel[i])) name += sel[i++];
+          if (sel[i] === '(') {
+            const end = closeParen(sel, i);
+            const inner = sel.slice(i + 1, end);
+            i = end + 1;
+            if (['not', 'is', 'has', 'matches'].includes(name)) {
+              const best = splitTop(inner).map(specificity).reduce((m, s) => (bigger(s, m) ? s : m), [0, 0, 0]);
+              n[0] += best[0]; n[1] += best[1]; n[2] += best[2];
+            } else if (name !== 'where') n[1] += 1;
+          } else if (['before', 'after', 'first-line', 'first-letter'].includes(name)) n[2] += 1;
+          else n[1] += 1;
+        } else if (/[a-zA-Z]/.test(ch)) { n[2] += 1; while (i < sel.length && word.test(sel[i])) i += 1; }
+        else i += 1;
+      }
+      return n;
+    };
+    const tryMatch = (el, s) => { try { return el.matches(s); } catch { return false; } };
+    // The rule a browser `width` wide uses for `prop` on `el` itself (no
+    // inheritance): { selector, value, spec }, or null when none sets it.
+    const winner = (css, el, props, width, { hover = false } = {}) => {
+      const names = [].concat(props);
+      let best = null;
+      for (const r of css.rules) {
+        const prop = names.find((p) => p in r.decls);
+        if (!prop || !appliesAt(r.media, width)) continue;
+        for (const part of splitTop(r.selector)) {
+          if (/::|:(before|after|first-line|first-letter)\b/.test(part)) continue;
+          if (/:hover/.test(part) && !hover) continue;
+          if (!tryMatch(el, part.replace(/:hover/g, ''))) continue;
+          const spec = specificity(part);
+          const important = /!important/.test(r.decls[prop]);
+          const cand = { selector: part, value: r.decls[prop].replace(/\s*!important/, ''), spec, important, order: r.order };
+          if (!best || (important && !best.important) || (important === best.important
+            && (bigger(spec, best.spec) || (!bigger(best.spec, spec) && cand.order > best.order)))) best = cand;
+        }
+      }
+      return best;
+    };
+    const hex = (v) => {
+      if (!v) return null;
+      const m6 = v.match(/#([0-9a-f]{6})\b/i);
+      if (m6) return `#${m6[1].toLowerCase()}`;
+      const m3 = v.match(/#([0-9a-f]{3})\b/i);
+      if (m3) return `#${m3[1].split('').map((c) => c + c).join('').toLowerCase()}`;
+      return null;
+    };
+    const lum = (h) => {
+      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const ratio = (a, b) => (a && b ? Math.round(((Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)) * 100) / 100 : 0);
+    // color inherits: the nearest element whose winning rule sets one.
+    const colorOf = (css, el, width, opts) => {
+      for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+        const w = winner(css, node, 'color', width, opts);
+        if (w && w.value !== 'inherit') return { color: hex(w.value), from: `${w.selector} => ${w.value}` };
+      }
+      return { color: '#1e293b', from: 'nothing set: the body colour' };
+    };
+    // What shows behind `el`: the nearest winning background that paints.
+    const backgroundOf = (css, el, width, opts) => {
+      for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+        const w = winner(css, node, ['background', 'background-color'], width, opts);
+        if (w && hex(w.value)) return { color: hex(w.value), from: `${w.selector} => ${w.value}` };
+      }
+      return { color: '#ffffff', from: 'nothing paints: white' };
+    };
+    const css = cssRules();
+
+    // --- the stubbed API -------------------------------------------------
+    const FOUND = [
+      { resident_id: 1, first_name: 'Juan Miguel', middle_name: 'Torralba', last_name: 'Dela Cruz', suffix: null, birthdate: '1985-03-02',
+        address: 'Purok 3, Ubujan, Tagbilaran City' },
+      { resident_id: 11, first_name: 'Juan', middle_name: null, last_name: 'Dela Cruz', suffix: null, birthdate: null, address: 'Purok 1, Ubujan' },
+    ];
+    const item = (id, name, type, total) => ({ item_id: id, name, type, fee: '50.00', quantity_total: total, quantity_available: total,
+      is_active: true, description: null });
+    const COURT = item(21, 'Covered Court', 'facility', 1);
+    const CHAIRS = item(22, 'Plastic Chairs', 'furniture', 100);
+    const booking = (id, it, extra = {}) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-11-20T01:00:00+00:00', end_datetime: '2026-11-20T05:00:00+00:00',
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null, resident_id: 1,
+      outside_borrower_name: null, outside_borrower_contact: null, rental_items: it,
+      resident_records: { resident_id: 1, first_name: 'Juan', middle_name: null, last_name: 'Dela Cruz', suffix: null, account: { username: 'juan_t' } },
+      requester: { user_id: 9, username: 'juan_t', email: null, profiles: null }, returned_by: null,
+      charges: { charge_id: 500 + id, amount: '50.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', not_started: true, ...extra,
+    });
+    const LIST = [booking(931, COURT), booking(932, CHAIRS, { quantity_requested: 5 }),
+      booking(933, CHAIRS, { start_datetime: '2026-10-20T01:00:00+00:00', end_datetime: '2026-10-21T05:00:00+00:00',
+        derived_status: 'overdue', not_started: false })];
+    const search = { mode: 'found' };
+    const stub = (url, method) => {
+      if (method !== 'GET') return undefined;
+      if (/\/resident-records\?search=/.test(url)) {
+        return search.mode === 'fail' ? { error: 'The database did not answer' } : { records: search.mode === 'empty' ? [] : FOUND };
+      }
+      if (/\/rental-requests\/availability\?/.test(url)) {
+        return { ok: true, item_type: 'facility', total: 1, used: 0, booked: 0, stuck: 0, resting: 0, left: 1, taken: [] };
+      }
+      if (/\/rental-requests\?status=all$/.test(url)) return { requests: LIST };
+      if (/\/rental-items(\?|$)/.test(url)) return { rental_items: [COURT, CHAIRS] };
+      if (/\/document-types/.test(url)) return { document_types: [{ document_type_id: 7, name: 'Barangay Clearance', fee: '50.00', is_active: true }] };
+      if (/\/document-requests\?status=all$/.test(url)) return { requests: [] };
+      if (/\/disputes\?/.test(url)) return { disputes: [], total: 0, page: 1, per_page: 25, total_pages: 0 };
+      if (/\/households\/unassigned-residents/.test(url)) return { residents: [], total: 0, page: 1, per_page: 25, total_pages: 0 };
+      if (/\/households\?/.test(url)) return { households: [], total: 0, total_all: 0, page: 1, per_page: 25, total_pages: 0 };
+      return undefined;
+    };
+    const methods = [];
+    const finish = async (pg) => { methods.push(...net.calls.map((c) => c.method)); await pg.unmount(); };
+    const wait = async (pg, ms = 350) => { await new Promise((r) => setTimeout(r, ms)); await pg.settle(); };
+    const tabNamed = (pg, label) => pg.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith(`${label} `));
+    const rowButton = (pg, id, label) => [...(pg.queryAll('table.data-table tbody tr')
+      .find((tr) => text(tr.querySelector('.doc-requests-number')) === `#${id}`)?.querySelectorAll('button') ?? [])]
+      .find((b) => b.textContent === label) ?? null;
+    const choose = async (pg, selector, value) => {
+      const sel = pg.query(selector);
+      if (!sel) return;
+      sel.value = value;
+      sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await pg.settle();
+    };
+    // The accessible name of an input: aria-labelledby, aria-label, then its
+    // <label>s (a label with for= pointing at it, or one wrapping it).
+    const nameOf = (el) => {
+      if (!el) return null;
+      const by = el.getAttribute('aria-labelledby');
+      if (by) return by.split(/\s+/).map((id) => text(dom.window.document.getElementById(id))).join(' ');
+      if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+      const labels = [...dom.window.document.querySelectorAll('label')].filter((l) => (el.id && l.htmlFor === el.id) || l.contains(el));
+      return labels.length ? labels.map(text).join(' ') : null;
+    };
+    const labelFor = (el) => (el?.id ? [...dom.window.document.querySelectorAll('label')].find((l) => l.htmlFor === el.id) ?? null : null);
+    const declaredAll = (el, prop, want) => WIDTHS.map((w) => {
+      const win = el ? winner(css, el, prop, w) : null;
+      return { w, ok: !!win && win.value === want, by: win ? `${win.selector} => ${win.value}` : null };
+    });
+    const allOk = (rows) => rows.every((r) => r.ok);
+    const panelNamed = (pg, title) => pg.queryAll('.pending-card').find((p) => text(p.querySelector('h3')) === title) ?? null;
+    const headOf = (panel) => panel?.querySelector(':scope > .pending-head') ?? null;
+    const backOf = (panel) => headOf(panel)?.querySelector(':scope > .btn') ?? null;
+    const dateLabel = (pg) => pg.query('input[name="date"]')?.closest('label') ?? null;
+    const RES_INPUT = '.pending-card input[placeholder^="Search the resident"]';
+
+    check('index.css reads as a browser applies it (every brace closed), and the winner picks the more specific rule: '
+        + 'a plain button\'s colour comes from "button => #fff"',
+      css.balanced && css.rules.length > 500 && winner(css, dom.window.document.createElement('button'), 'color', 1280)?.value === '#fff'
+        && said(specificity('button:hover:not(:disabled)')) === said([0, 2, 1]) && said(specificity('.picker-option:hover')) === said([0, 2, 0])
+        && said(specificity('button.picker-option:hover:not(:disabled)')) === said([0, 3, 1]),
+      said({ balanced: css.balanced, rules: css.rules.length }));
+
+    // --- AS-1, AS-2 and AS-5: the walk-in form's resident search ----------
+    seedSession(VALID);
+    resetNet(200, stub);
+    let page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    let input = page.query(RES_INPUT);
+    let picker = input?.closest('.resident-picker') ?? null;
+    check('Walk-in: the search box sits in the picker\'s own root, .resident-picker (the class every use shares)',
+      !!input && !!picker, said({ input: !!input, rootClass: input?.parentElement?.className ?? null }));
+    check('Walk-in: the search box\'s accessible name is "Resident", from the visible label (for= the box\'s id), not the placeholder',
+      nameOf(input) === 'Resident' && labelFor(input) !== null,
+      said({ name: nameOf(input), id: input?.id ?? null, aria: input?.getAttribute('aria-label') ?? null }));
+    const statusBefore = picker?.querySelector('[role="status"]') ?? null;
+    check('  and the picker has a role="status" region before anything is typed, so "Searching…" is announced when it appears',
+      !!statusBefore && text(statusBefore) === '', said(statusBefore ? text(statusBefore) : null));
+    let rows = declaredAll(picker, 'margin-bottom', '14px');
+    check('Spacing: the picker\'s root is 14px clear of the next field (margin-bottom), at 390, 768 and 1280, as a <label> is',
+      allOk(rows), said(rows));
+    rows = declaredAll(labelFor(input), 'margin-bottom', '6px');
+    check('  and the "Resident" label sits 6px above its box (margin-bottom 6px, collapsing with the box\'s 6px), not 14px',
+      allOk(rows), said(rows));
+
+    // "Searching…", held: the answer waits until the test lets it through.
+    net.hold = true;
+    if (input) await page.fill(RES_INPUT, 'Ju');
+    await wait(page);
+    const searchingText = text(picker?.querySelector('[role="status"]'));
+    net.hold = false;
+    for (const release of net.held.splice(0)) release(200, { records: FOUND });
+    await page.settle();
+    check('While the search is out, "Searching…" is in the role="status" region',
+      searchingText === 'Searching…', said(searchingText));
+    const option = page.query('.picker-option');
+    const strong = option?.querySelector('strong') ?? null;
+    const details = option?.querySelector('.muted') ?? null;
+    check('  and the answer shows two results', page.queryAll('.picker-option').length === 2, String(page.queryAll('.picker-option').length));
+
+    // AS-1. Colour.
+    for (const w of [390, 1280]) {
+      const name = strong ? colorOf(css, strong, w) : { color: null };
+      const bg = option ? backgroundOf(css, option, w) : { color: null };
+      const det = details ? colorOf(css, details, w) : { color: null };
+      check(`Colour at ${w}px: a result's name is not white and is at least 4.5:1 on what is behind it`
+          + ` (${name.color} on ${bg.color}: ${ratio(name.color, bg.color)}:1), and the details too (${ratio(det.color, bg.color)}:1)`,
+        !!name.color && name.color !== '#ffffff' && ratio(name.color, bg.color) >= 4.5 && ratio(det.color, bg.color) >= 4.5,
+        said({ name, bg, det }));
+      const hBg = option ? winner(css, option, ['background', 'background-color'], w, { hover: true }) : null;
+      const hBack = option ? backgroundOf(css, option, w, { hover: true }) : { color: null };
+      const hName = strong ? colorOf(css, strong, w, { hover: true }) : { color: null };
+      const hDet = details ? colorOf(css, details, w, { hover: true }) : { color: null };
+      check(`  on hover at ${w}px the row's background comes from button.picker-option:hover:not(:disabled) (${hBack.color}), `
+          + `the name stays at least 4.5:1 (${ratio(hName.color, hBack.color)}:1) and the details too (${ratio(hDet.color, hBack.color)}:1)`,
+        hBg?.selector === 'button.picker-option:hover:not(:disabled)' && ratio(hName.color, hBack.color) >= 4.5
+          && ratio(hDet.color, hBack.color) >= 4.5,
+        said({ hBg, hBack, hName, hDet }));
+    }
+
+    // AS-5. Enter in the box submits nothing; on a result it is left alone.
+    const form = input?.closest('form') ?? null;
+    let submits = 0;
+    const countSubmit = () => { submits += 1; };
+    form?.addEventListener('submit', countSubmit);
+    const enter = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    input?.dispatchEvent(enter);
+    // What a browser does with an Enter nobody prevented: implicit submission.
+    if (form && !enter.defaultPrevented) form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await page.settle();
+    form?.removeEventListener('submit', countSubmit);
+    const pickError = page.queryAll('.pending-card [role="alert"]').map(text).find((t) => /Pick the resident/.test(t)) ?? null;
+    check('Enter in the search box is prevented, so the form is not submitted (no submit event, no "Pick the resident…" message)',
+      !!form && enter.defaultPrevented && submits === 0 && pickError === null,
+      said({ prevented: enter.defaultPrevented, submits, pickError }));
+    const onResult = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    option?.dispatchEvent(onResult);
+    check('  while Enter on a focused result is left alone (not prevented), so the browser still presses that button',
+      !!option && !onResult.defaultPrevented, String(onResult.defaultPrevented));
+
+    // A failed search, then one with nothing in it, then Try again.
+    search.mode = 'fail';
+    net.status = 500;
+    let sent = net.calls.length;
+    await page.fill(RES_INPUT, 'Wil');
+    await wait(page);
+    net.status = 200;
+    const alertEl = picker?.querySelector('[role="alert"]') ?? null;
+    const retry = picker ? [...picker.querySelectorAll('button')].find((b) => b.textContent === 'Try again') ?? null : null;
+    check('A failed search says "Could not search the resident list: The database did not answer." with role="alert"',
+      text(alertEl) === 'Could not search the resident list: The database did not answer.', said(text(alertEl)));
+    check('  with a "Try again" button (btn secondary, type="button"), and never "No matching residents."',
+      !!retry && retry.classList.contains('btn') && retry.classList.contains('secondary') && retry.type === 'button'
+        && !/No matching residents/.test(text(picker) ?? ''), said({ retry: retry?.outerHTML ?? null, picker: text(picker) }));
+    search.mode = 'empty';
+    await page.fill(RES_INPUT, 'Wilf');
+    const clearedAtOnce = !picker?.querySelector('[role="alert"]');
+    await wait(page);
+    check('Changing the search takes the error away at once; a real empty answer then says "No matching residents." (role="status")',
+      clearedAtOnce && text(picker?.querySelector('[role="status"]')) === 'No matching residents.' && !picker?.querySelector('[role="alert"]'),
+      said({ clearedAtOnce, status: text(picker?.querySelector('[role="status"]')) }));
+    search.mode = 'fail';
+    net.status = 500;
+    await page.fill(RES_INPUT, 'Wilfr');
+    await wait(page);
+    net.status = 200;
+    search.mode = 'found';
+    sent = net.calls.length;
+    const retry2 = picker ? [...picker.querySelectorAll('button')].find((b) => b.textContent === 'Try again') ?? null : null;
+    await clickIf(page, retry2);
+    await wait(page);
+    check('"Try again" asks once more, for the same words, and the results replace the error',
+      !!retry2 && net.calls.slice(sent).filter((c) => /\/resident-records\?search=Wilfr&/.test(c.url)).length === 1
+        && page.queryAll('.picker-option').length === 2 && !picker?.querySelector('[role="alert"]') && page.active() === page.query(RES_INPUT),
+      said({ calls: net.calls.slice(sent).map((c) => c.url), focus: page.active()?.tagName }));
+
+    // AS-3. The Date row: full width for a facility, unchanged for a countable item.
+    await choose(page, 'select[name="item_id"]', '21');
+    const fullFacility = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    rows = declaredAll(dateLabel(page), 'grid-column', '1 / -1');
+    await choose(page, 'select[name="item_id"]', '22');
+    const fullCountable = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    check('Walk-in: for a facility (no Quantity box) the Date label carries rental-date-full; for a countable item it does not',
+      fullFacility === true && fullCountable === false && !!page.query('input[name="quantity"]'), said({ fullFacility, fullCountable }));
+    check('  and rental-date-full is grid-column: 1 / -1 at 390, 768 and 1280 (Date the whole row, Start | End under it)',
+      allOk(rows), said(rows));
+
+    // AS-2 and AS-4 on the walk-in panel.
+    let panel = panelNamed(page, 'Encode walk-in booking');
+    rows = declaredAll(headOf(panel), 'margin-bottom', '16px');
+    check('Walk-in: the panel is a rental-form-panel and its head is 16px clear of the tabs (margin-bottom) at 390, 768 and 1280',
+      !!panel?.classList.contains('rental-form-panel') && allOk(rows), said({ cls: panel?.className ?? null, rows }));
+    rows = declaredAll(backOf(panel), 'white-space', 'nowrap');
+    check('  and its "← Back to list" keeps to one line (white-space: nowrap) at 390, 768 and 1280',
+      text(backOf(panel)) === '← Back to list' && allOk(rows), said(rows));
+    // The guest tab shares the head.
+    await clickIf(page, buttonNamed(root(), 'Guest from another barangay'));
+    panel = panelNamed(page, 'Encode walk-in booking');
+    check('  the guest tab is the same panel and head, so it has the same gap',
+      !!panel?.classList.contains('rental-form-panel') && allOk(declaredAll(headOf(panel), 'margin-bottom', '16px')), said(panel?.className ?? null));
+    await clickIf(page, buttonNamed(root(), 'Existing resident'));
+    // The picked state keeps the root, so the 14px holds there too.
+    if (page.query(RES_INPUT)) await page.fill(RES_INPUT, 'Ju');
+    await wait(page);
+    await clickIf(page, page.query('.picker-option'));
+    const picked = page.query('.picker-selected');
+    check('Once a resident is picked, the name and "Change" sit in the same .resident-picker root, so the gap under them is 14px too',
+      !!picked && !!picked.closest('.resident-picker') && allOk(declaredAll(picked.closest('.resident-picker'), 'margin-bottom', '14px')),
+      said(picked ? picked.parentElement?.className ?? picked.className : null));
+    await clickIf(page, buttonNamed(root(), '← Back to list'));
+
+    // Edit: always full-width Date, for a facility and for a countable item.
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 931, 'Edit'));
+    panel = panelNamed(page, 'Edit booking #931');
+    const editFacility = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    const editRows = declaredAll(headOf(panel), 'margin-bottom', '16px');
+    const editBack = declaredAll(backOf(panel), 'white-space', 'nowrap');
+    await clickIf(page, buttonNamed(root(), '← Back to list'));
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 932, 'Edit'));
+    const editCountable = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    check('Edit: the Date label carries rental-date-full always (it has no Quantity box), for a facility and for a countable item',
+      editFacility === true && editCountable === true, said({ editFacility, editCountable }));
+    check('Edit: a rental-form-panel whose head is 16px clear of the Date label, at 390, 768 and 1280',
+      !!panel?.classList.contains('rental-form-panel') && allOk(editRows), said({ cls: panel?.className ?? null, editRows }));
+    check('  and its "← Back to list" keeps to one line (nowrap) at 390, 768 and 1280', allOk(editBack), said(editBack));
+    await clickIf(page, buttonNamed(root(), '← Back to list'));
+
+    // Cancel: the shared CancelBookingPanel (My rentals uses it too).
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 931, 'Cancel'));
+    panel = page.query('.cancel-booking-panel');
+    rows = declaredAll(headOf(panel), 'margin-bottom', '16px');
+    check('Cancel: a rental-form-panel whose head is 16px clear of what follows, at 390, 768 and 1280; it has no Back button '
+        + '("Keep booking" sits under the form), so nowrap has nothing to reach there',
+      !!panel?.classList.contains('rental-form-panel') && allOk(rows) && !backOf(panel), said({ cls: panel?.className ?? null, rows }));
+    await finish(page);
+
+    // Mark returned (Staff).
+    const STAFF_TOKEN = makeToken({ sub: '3', role: 'staff', exp: VALID_EXP });
+    seedSession(STAFF_TOKEN, { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false });
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/staff');
+    await page.settle();
+    await clickIf(page, tabNamed(page, 'All'));
+    await clickIf(page, rowButton(page, 933, 'Mark returned'));
+    panel = page.queryAll('.pending-card').find((p) => /Mark returned|Record the return|return/i.test(text(p.querySelector('h3')) ?? '')) ?? null;
+    rows = declaredAll(headOf(panel), 'margin-bottom', '16px');
+    const retBack = declaredAll(backOf(panel), 'white-space', 'nowrap');
+    check('Mark returned: a rental-form-panel whose head is 16px clear of the first field, at 390, 768 and 1280',
+      !!panel?.classList.contains('rental-form-panel') && allOk(rows), said({ title: text(panel?.querySelector('h3')), cls: panel?.className ?? null, rows }));
+    check('  and its "← Back to list" keeps to one line (nowrap) at 390, 768 and 1280', allOk(retBack), said(retBack));
+    await finish(page);
+
+    // Book a rental (a resident).
+    const RES_TOKEN = makeToken({ sub: '8', role: 'resident', exp: VALID_EXP });
+    seedSession(RES_TOKEN, { user_id: 8, username: 'resident_t', role: 'resident', must_change_password: false });
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    await choose(page, 'select[name="item_id"]', '21');
+    const bookFacility = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    await choose(page, 'select[name="item_id"]', '22');
+    const bookCountable = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    check('Book a rental: for a facility the Date label carries rental-date-full; for a countable item (Quantity shown) it does not',
+      bookFacility === true && bookCountable === false && !!page.query('input[name="quantity"]'), said({ bookFacility, bookCountable }));
+    await finish(page);
+
+    // The other uses of the picker: names and roots.
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/requests');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    input = page.query(RES_INPUT);
+    check('Document requests walk-in: the box is named "Resident" by its label, sits in .resident-picker, and the label is 6px above it',
+      nameOf(input) === 'Resident' && !!input?.closest('.resident-picker') && allOk(declaredAll(labelFor(input), 'margin-bottom', '6px')),
+      said({ name: nameOf(input), root: input?.parentElement?.className ?? null }));
+    await finish(page);
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/blotter');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'Record case'));
+    const partyBoxes = page.queryAll('.party-row input[placeholder^="Search the resident"]');
+    check('Blotter: each party\'s search box (no visible label of its own) is named by aria-label after its role, and sits in .resident-picker',
+      partyBoxes.length === 2 && said(partyBoxes.map(nameOf)) === said(['Complainant resident', 'Respondent resident'])
+        && partyBoxes.every((b) => b.closest('.resident-picker')), said(partyBoxes.map(nameOf)));
+    await finish(page);
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/households');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'New household'));
+    input = page.query('.modal input[placeholder^="Search residents"]');
+    check('Households, New household: the box is named by its "Household head" label and sits in .resident-picker, the label 6px above it',
+      /^Household head/.test(nameOf(input) ?? '') && !!input?.closest('.resident-picker') && allOk(declaredAll(labelFor(input), 'margin-bottom', '6px')),
+      said({ name: nameOf(input), root: input?.parentElement?.className ?? null }));
+    await finish(page);
+
+    // AS-6. The shared rules this step must not change.
+    const SHARED = [
+      ['button', [], { padding: '11px', 'font-size': '1rem', 'font-weight': '600', 'font-family': 'inherit', color: '#fff', background: '#2563eb',
+        border: 'none', 'border-radius': '8px', cursor: 'pointer' }],
+      ['button:hover:not(:disabled)', [], { background: '#1d4ed8' }],
+      ['.pending-head', [], { display: 'flex', 'justify-content': 'space-between', 'align-items': 'flex-start', gap: '12px' }],
+      ['.pending-head', ['@media (max-width: 640px)'], { 'flex-wrap': 'wrap' }],
+      ['.grid-2', [], { display: 'grid', 'grid-template-columns': '1fr 1fr', gap: '0 12px' }],
+      ['.grid-2', ['@media (max-width: 480px)'], { 'grid-template-columns': '1fr' }],
+      ['.muted', [], { color: '#64748b', 'font-size': '0.9rem', margin: '0' }],
+      ['.pending-card:not(:has(.table-wrap))', [], { 'max-width': '720px' }],
+    ];
+    const shared = SHARED.map(([selector, media, want]) => {
+      const found = css.rules.filter((r) => r.selector === selector && said(r.media) === said(media));
+      return { selector, media, ok: found.length === 1 && said(found[0].decls) === said(want), found: found.map((r) => r.decls) };
+    });
+    check('The shared button, button:hover, .pending-head, .grid-2 and .muted rules (and the 720px form cap) are exactly as they were',
+      shared.every((s) => s.ok), said(shared.filter((s) => !s.ok)));
+
+    check('section AS sent only GETs: nothing was saved', methods.length > 0 && methods.every((m) => m === 'GET'), said([...new Set(methods)]));
   }
 
   console.error = origError;
