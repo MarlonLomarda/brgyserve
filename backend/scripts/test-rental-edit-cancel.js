@@ -567,9 +567,9 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     ['NOT_ENOUGH_LEFT, one left', 802, notEnough({ left: 1, used: 99 }), 409,
       'Only 1 of 100 Monobloc Chair is available for that time — you asked for 10.'],
     ['NOT_ENOUGH_LEFT with 5 stuck', 802, notEnough({ stuck: 5 }), 409, `${ONLY3} 5 are overdue and not yet returned.`],
-    ['NOT_ENOUGH_LEFT with 2 resting', 802, notEnough({ resting: 2 }), 409, `${ONLY3} 2 are resting for 24 hours after being returned.`],
+    ['NOT_ENOUGH_LEFT with 2 resting', 802, notEnough({ resting: 2 }), 409, `${ONLY3} 2 are resting for 24 hours after an earlier booking.`],
     ['NOT_ENOUGH_LEFT with 1 stuck and 1 resting', 802, notEnough({ stuck: 1, resting: 1 }), 409,
-      `${ONLY3} 1 is overdue and not yet returned. 1 is resting for 24 hours after being returned.`],
+      `${ONLY3} 1 is overdue and not yet returned. 1 is resting for 24 hours after an earlier booking.`],
   ];
   for (const [what, itemId, answer, status, words] of REFUSALS) {
     r = await book(RES_A, bookBody({ item_id: itemId, quantity_requested: itemId === 801 ? 1 : 3 }),
@@ -719,7 +719,7 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     ['NOT_ENOUGH_LEFT with 2 stuck', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
       stuck: 2, resting: 0 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 2 are overdue and not yet returned.'],
     ['NOT_ENOUGH_LEFT with 3 resting', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
-      stuck: 0, resting: 3 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 3 are resting for 24 hours after being returned.'],
+      stuck: 0, resting: 3 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 3 are resting for 24 hours after an earlier booking.'],
   ];
   for (const [what, answer, status, words] of EDIT_REFUSALS) {
     r = await edit(601, editBody(), { setup: (db) => { db.rpcAnswer.update_rental_booking_time = answer; } });

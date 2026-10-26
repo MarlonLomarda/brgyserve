@@ -361,9 +361,11 @@ const isOrAre = (n) => (n === 1 ? 'is' : 'are');
 // A coded refusal from migration 024's functions, as the status and sentence
 // the caller is given: the words the route gave before the check moved into
 // the database, plus two short add-ons for units that are overdue (stuck) or
-// resting after a return. `item` names the item ({ name }). A code or reason
-// this file does not know is thrown, never answered with a sentence it cannot
-// stand behind (the same rule as an unrecognised 23505).
+// resting for 24 hours after an earlier booking (one already returned, or one
+// that has not ended yet, so "after being returned" would be wrong). `item`
+// names the item ({ name }). A code or reason this file does not know is
+// thrown, never answered with a sentence it cannot stand behind (the same rule
+// as an unrecognised 23505).
 function refusalOf(result, item) {
   const name = item?.name ?? 'item';
   switch (result.code) {
@@ -409,7 +411,7 @@ function refusalOf(result, item) {
         `Only ${left} of ${result.quantity_available} ${name} ${isOrAre(left)} available for that time — you asked for ${result.requested}.`,
       ];
       if (stuck > 0) parts.push(`${stuck} ${isOrAre(stuck)} overdue and not yet returned.`);
-      if (resting > 0) parts.push(`${resting} ${isOrAre(resting)} resting for 24 hours after being returned.`);
+      if (resting > 0) parts.push(`${resting} ${isOrAre(resting)} resting for 24 hours after an earlier booking.`);
       return { status: 409, error: parts.join(' ') };
     }
     default:

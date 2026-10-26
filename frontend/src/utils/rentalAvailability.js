@@ -82,7 +82,7 @@ export function availabilityText(answer, slot) {
   }
   if (answer.resting > 0) {
     lines.push(
-      `${answer.resting} ${isOrAre(answer.resting)} resting for 24 hours after being returned.`,
+      `${answer.resting} ${isOrAre(answer.resting)} resting for 24 hours after an earlier booking.`,
     );
   }
   return { tone: answer.left > 0 ? "free" : "none", lines };

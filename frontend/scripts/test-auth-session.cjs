@@ -14926,9 +14926,9 @@ const root = () => dom.window.document.getElementById('root');
         [NOT_FREE, 'Already taken that day: 7:00 AM to 9:00 AM.']],
       ['an item with some left', items({ used: 3, booked: 3, left: 7 }), 'free', ['For that time: 3 booked, 7 left of 10.']],
       ['an item with 5 overdue and 1 resting', items({ used: 8, booked: 2, stuck: 5, resting: 1, left: 2 }), 'free',
-        ['For that time: 2 booked, 2 left of 10.', '5 are overdue and not yet returned.', '1 is resting for 24 hours after being returned.']],
+        ['For that time: 2 booked, 2 left of 10.', '5 are overdue and not yet returned.', '1 is resting for 24 hours after an earlier booking.']],
       ['an item with 1 overdue and 2 resting', items({ used: 3, booked: 0, stuck: 1, resting: 2, left: 7 }), 'free',
-        ['For that time: 0 booked, 7 left of 10.', '1 is overdue and not yet returned.', '2 are resting for 24 hours after being returned.']],
+        ['For that time: 0 booked, 7 left of 10.', '1 is overdue and not yet returned.', '2 are resting for 24 hours after an earlier booking.']],
       ['an item with none left', items({ used: 10, booked: 10, left: 0 }), 'none', [FULL]],
       ['an item with none left, 4 of them overdue', items({ used: 10, booked: 6, stuck: 4, left: 0 }), 'none',
         [FULL, '4 are overdue and not yet returned.']],
@@ -15170,7 +15170,7 @@ const root = () => dom.window.document.getElementById('root');
       v = look(pg, label);
       check(`${form}: 5 overdue and 1 resting read as two more lines; max 2`,
         said(v.lines) === said(['For that time: 2 booked, 2 left of 10.', '5 are overdue and not yet returned.',
-          '1 is resting for 24 hours after being returned.']) && v.max === '2' && v.enabled === false && v.reason === onlyLeft(2), said(v));
+          '1 is resting for 24 hours after an earlier booking.']) && v.max === '2' && v.enabled === false && v.reason === onlyLeft(2), said(v));
       await put(pg, 'quantity', '1');
       await put(pg, 'start_time', '16:00');
       await put(pg, 'end_time', '18:00');
