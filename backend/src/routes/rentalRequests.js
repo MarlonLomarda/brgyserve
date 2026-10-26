@@ -281,56 +281,48 @@ const TZ = 'Asia/Manila';
 const timeFmt = new Intl.DateTimeFormat('en-PH', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
 const dateFmt = new Intl.DateTimeFormat('en-PH', { timeZone: TZ, dateStyle: 'medium' });
 
-// Overlap rule (half-open ranges): existing and requested slots overlap iff
-//   existing.start < requested.end AND existing.end > requested.start
-// Strict comparisons make ranges that merely touch at an endpoint
-// (existing 2pm-6pm vs requested 6pm-9pm) NOT overlap.
-// Only non-cancelled bookings hold units ('completed' rentals are in the past
-// and can never overlap a future slot anyway, since backdated bookings are
-// refused) — which is also what makes cancelling free the slot.
-// Options: beforeId limits the check to rows inserted earlier (POST
-// concurrency, see below); excludeId ignores one booking — used when EDITING
-// so a booking never conflicts with its own current slot.
-async function overlappingBookings(itemId, startIso, endIso, { beforeId = null, excludeId = null } = {}) {
-  let query = supabase
-    .from('rental_requests')
-    .select('request_id, quantity_requested, start_datetime, end_datetime')
-    .eq('item_id', itemId)
-    .neq('status', RENTAL_STATUS.CANCELLED)
-    .lt('start_datetime', endIso)
-    .gt('end_datetime', startIso)
-    .order('start_datetime', { ascending: true });
-  if (beforeId !== null) query = query.lt('request_id', beforeId);
-  if (excludeId !== null) query = query.neq('request_id', excludeId);
-  const { data, error } = await query;
-  if (error) throw new Error(`Conflict check failed: ${error.message}`);
-  return data;
-}
+// WHETHER A SLOT IS FREE IS THE DATABASE'S DECISION (migration 024). Booking
+// (create_rental_booking), moving a booking (update_rental_booking_time) and
+// the booking forms' question (rental_availability) all go through one rule,
+// rental_holds(), inside functions that lock the item's row first, so two
+// bookings for the same item can no longer both pass a check and both be
+// written. That rule holds equipment and furniture for 24 hours after their
+// return (or their booked end, whichever is later) and keeps an overdue,
+// unreturned booking's units until Staff mark it returned. There is no copy
+// of it here, and there must not be one: the route validates the body and
+// says the function's refusal in words (refusalOf, below).
 
-const unitsUsed = (rows) => rows.reduce((sum, r) => sum + r.quantity_requested, 0);
+const END_NOT_AFTER_START = 'End time must be after the start time (bookings run within one day)';
+const START_NOT_IN_FUTURE = 'The booking must start in the future';
+const QUANTITY_BELOW_ONE = 'quantity_requested must be a whole number of at least 1';
+const ITEM_NOT_FOUND = 'Rental item not found';
+const ITEM_INACTIVE = 'That item is not currently available for rental';
+const NOT_STARTED_EDIT = 'Only a booking that has not started can be changed.';
 
-function conflictMessage(item, quantity, overlapping) {
-  if (item.type === ITEM_TYPE.FACILITY) {
-    const first = overlapping[0];
-    return `The ${item.name} is already booked from ${timeFmt.format(new Date(first.start_datetime))} to ${timeFmt.format(new Date(first.end_datetime))} on that date — please pick a different time.`;
-  }
-  const free = Math.max(0, item.quantity_available - unitsUsed(overlapping));
-  return `Only ${free} of ${item.quantity_available} ${item.name} ${free === 1 ? 'is' : 'are'} available for that time — you asked for ${quantity}.`;
-}
-
-// THE conflict check — shared by resident booking (POST) and Secretary edits
-// (PUT), so there is exactly one implementation of the availability rules.
-// Returns null when the slot fits, or the refusal message when it doesn't.
-async function findConflict(item, quantity, startIso, endIso, opts = {}) {
-  const overlapping = await overlappingBookings(item.item_id, startIso, endIso, opts);
-  if (unitsUsed(overlapping) + quantity > item.quantity_available) {
-    return conflictMessage(item, quantity, overlapping);
+// The format checks for a date and two times: the booking body's and the
+// availability question's. Returns an error sentence or null.
+function slotFormatError(date, startTime, endTime) {
+  if (!DATE_RE.test(date)) return 'date must be in YYYY-MM-DD format';
+  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+    return 'start_time and end_time must be in HH:MM (24-hour) format';
   }
   return null;
 }
 
+// One Manila date and two Manila times as two moments. Same-day bookings by
+// construction: one date, two times. Returns { error } or { start, end }.
+function slotTimes(date, startTime, endTime) {
+  const start = new Date(`${date}T${startTime}:00+08:00`);
+  const end = new Date(`${date}T${endTime}:00+08:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { error: 'Invalid date or time' };
+  }
+  if (end <= start) return { error: END_NOT_AFTER_START };
+  return { start, end };
+}
+
 // Field validation shared by booking and editing. Returns { error } or the
-// parsed values. Same-day bookings by construction: one date, two times.
+// parsed values.
 function parseBookingBody(body) {
   const date = String(body?.date ?? '').trim();
   const startTime = String(body?.start_time ?? '').trim();
@@ -338,11 +330,9 @@ function parseBookingBody(body) {
   const purpose = String(body?.purpose ?? '').trim();
   const quantity = body?.quantity_requested === undefined ? 1 : Number(body?.quantity_requested);
 
-  if (!DATE_RE.test(date)) {
-    return { error: 'date must be in YYYY-MM-DD format' };
-  }
-  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
-    return { error: 'start_time and end_time must be in HH:MM (24-hour) format' };
+  const formatError = slotFormatError(date, startTime, endTime);
+  if (formatError) {
+    return { error: formatError };
   }
   if (!purpose) {
     return { error: 'purpose is required' };
@@ -351,41 +341,107 @@ function parseBookingBody(body) {
     return { error: 'purpose must be 1000 characters or fewer' };
   }
   if (!Number.isInteger(quantity) || quantity < 1) {
-    return { error: 'quantity_requested must be a whole number of at least 1' };
+    return { error: QUANTITY_BELOW_ONE };
   }
 
-  const start = new Date(`${date}T${startTime}:00+08:00`);
-  const end = new Date(`${date}T${endTime}:00+08:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return { error: 'Invalid date or time' };
+  const times = slotTimes(date, startTime, endTime);
+  if (times.error) {
+    return { error: times.error };
   }
-  if (end <= start) {
-    return { error: 'End time must be after the start time (bookings run within one day)' };
-  }
+  const { start, end } = times;
   if (start <= new Date()) {
-    return { error: 'The booking must start in the future' };
+    return { error: START_NOT_IN_FUTURE };
   }
 
   return { start, end, startIso: start.toISOString(), endIso: end.toISOString(), purpose, quantity };
 }
 
-// Item-dependent rules shared by booking and editing.
-function itemQuantityError(item, quantity) {
-  if (item.type === ITEM_TYPE.FACILITY && quantity !== 1) {
-    return `The ${item.name} is booked as a whole — quantity must be 1`;
+const isOrAre = (n) => (n === 1 ? 'is' : 'are');
+
+// A coded refusal from migration 024's functions, as the status and sentence
+// the caller is given: the words the route gave before the check moved into
+// the database, plus two short add-ons for units that are overdue (stuck) or
+// resting after a return. `item` names the item ({ name }). A code or reason
+// this file does not know is thrown, never answered with a sentence it cannot
+// stand behind (the same rule as an unrecognised 23505).
+function refusalOf(result, item) {
+  const name = item?.name ?? 'item';
+  switch (result.code) {
+    case 'TIME_INVALID':
+      if (result.reason === 'END_NOT_AFTER_START') return { status: 400, error: END_NOT_AFTER_START };
+      if (result.reason === 'START_NOT_IN_FUTURE') return { status: 400, error: START_NOT_IN_FUTURE };
+      break;
+    case 'QUANTITY_INVALID':
+      if (result.reason === 'BELOW_ONE') return { status: 400, error: QUANTITY_BELOW_ONE };
+      if (result.reason === 'FACILITY_WHOLE') {
+        return { status: 400, error: `The ${name} is booked as a whole — quantity must be 1` };
+      }
+      if (result.reason === 'MORE_THAN_EXIST') {
+        const n = result.quantity_available;
+        return {
+          status: 400,
+          error: `Only ${n} unit${n === 1 ? '' : 's'} of ${name} exist${n === 1 ? 's' : ''} — you asked for ${result.requested}`,
+        };
+      }
+      break;
+    case 'ITEM_NOT_FOUND':
+      return { status: 404, error: ITEM_NOT_FOUND };
+    case 'ITEM_INACTIVE':
+      return { status: 400, error: ITEM_INACTIVE };
+    case 'BOOKING_NOT_FOUND':
+      return { status: 404, error: 'Booking not found' };
+    case 'BOOKING_STARTED':
+      return { status: 409, error: NOT_STARTED_EDIT };
+    case 'FACILITY_TAKEN': {
+      // The first clash by its start, as the route always named it.
+      const first = Array.isArray(result.clashes) ? result.clashes[0] : null;
+      if (first) {
+        return {
+          status: 409,
+          error: `The ${name} is already booked from ${timeFmt.format(new Date(first.start))} to ${timeFmt.format(new Date(first.end))} on that date — please pick a different time.`,
+        };
+      }
+      break;
+    }
+    case 'NOT_ENOUGH_LEFT': {
+      const { left, stuck, resting } = result;
+      const parts = [
+        `Only ${left} of ${result.quantity_available} ${name} ${isOrAre(left)} available for that time — you asked for ${result.requested}.`,
+      ];
+      if (stuck > 0) parts.push(`${stuck} ${isOrAre(stuck)} overdue and not yet returned.`);
+      if (resting > 0) parts.push(`${resting} ${isOrAre(resting)} resting for 24 hours after being returned.`);
+      return { status: 409, error: parts.join(' ') };
+    }
+    default:
+      break;
   }
-  if (quantity > item.quantity_available) {
-    return `Only ${item.quantity_available} unit${item.quantity_available === 1 ? '' : 's'} of ${item.name} exist${item.quantity_available === 1 ? 's' : ''} — you asked for ${quantity}`;
-  }
-  return null;
+  throw new Error(`Unrecognised booking refusal: ${result.code}${result.reason ? ` (${result.reason})` : ''}`);
 }
 
+// A migration-024 function's answer, or a thrown error when the call failed.
+async function callBookingFunction(name, args) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) {
+    throw new Error(`${name} failed: ${error.message}`);
+  }
+  return data;
+}
+
+// RENTAL_FIELDS' own columns. If the re-read after a booking fails, the answer
+// is built from these and the item, never from the function's row as it came
+// back, which carries the borrower's contact number.
+const RENTAL_COLUMNS = [
+  'request_id', 'quantity_requested', 'start_datetime', 'end_datetime', 'purpose', 'status',
+  'return_note', 'returned_at', 'cancellation_reason',
+];
+
 // POST /api/rental-requests — a resident books for themselves, or the
-// Secretary encodes a WALK-IN. SELF-SERVICE either way: the conflict check
-// runs here at submission and a passing request is confirmed instantly, and
-// because both paths go through this ONE handler a walk-in is checked against
-// exactly the availability rules a resident's own booking is — there is no
-// second code path that could skip them.
+// Secretary encodes a WALK-IN. SELF-SERVICE either way: the booking is checked
+// and written in one call to create_rental_booking (migration 024), confirmed
+// at once when the slot is free, and because both paths go through this ONE
+// handler a walk-in is checked against exactly the availability rules a
+// resident's own booking is — there is no second code path that could skip
+// them.
 //
 // requested_by_user_id records WHO FILED IT; who it is FOR is resident_id or
 // the outside_borrower_* pair — see resolveBorrower().
@@ -406,67 +462,38 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   }
   const isGuest = borrower.kind === 'guest';
 
+  // For the fee, the item's name in the sentences, and the answer. Whether it
+  // exists, is active and has the units is the function's to say.
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
-    .select('item_id, name, type, quantity_total, quantity_available, fee, is_active')
+    .select('item_id, name, type, fee')
     .eq('item_id', itemId)
     .maybeSingle();
   if (itemError) {
     throw new Error(`Failed to load rental item: ${itemError.message}`);
   }
+
+  const result = await callBookingFunction('create_rental_booking', {
+    p_item_id: itemId,
+    p_requested_by_user_id: req.user.user_id,
+    // Exactly one of the two borrower shapes, matching the CHECK from
+    // migration 022. The nulls are sent explicitly so the row states which
+    // path it took.
+    p_resident_id: isGuest ? null : borrower.residentId,
+    p_outside_borrower_name: isGuest ? borrower.name : null,
+    p_outside_borrower_contact: isGuest ? borrower.contact : null,
+    p_quantity: quantity,
+    p_start: startIso,
+    p_end: endIso,
+    p_purpose: purpose,
+  });
+  if (!result?.ok) {
+    const refused = refusalOf(result ?? {}, item);
+    return res.status(refused.status).json({ error: refused.error });
+  }
+  const created = result.request;
   if (!item) {
-    return res.status(404).json({ error: 'Rental item not found' });
-  }
-  if (!item.is_active) {
-    return res.status(400).json({ error: 'That item is not currently available for rental' });
-  }
-  const quantityError = itemQuantityError(item, quantity);
-  if (quantityError) {
-    return res.status(400).json({ error: quantityError });
-  }
-
-  // CONFLICT CHECK, pass 1 (pre-insert): capacity for the slot is
-  // quantity_available; units used = sum of quantity_requested over
-  // overlapping non-cancelled bookings. Facilities are the same math with
-  // capacity 1 — any overlap fills the slot.
-  const conflict = await findConflict(item, quantity, startIso, endIso);
-  if (conflict) {
-    return res.status(409).json({ error: conflict });
-  }
-
-  const { data: created, error: insertError } = await supabase
-    .from('rental_requests')
-    .insert({
-      item_id: itemId,
-      requested_by_user_id: req.user.user_id,
-      // Exactly one of the two borrower shapes, matching the CHECK from
-      // migration 022. The nulls are written explicitly rather than omitted
-      // so the row states which path it took.
-      resident_id: isGuest ? null : borrower.residentId,
-      outside_borrower_name: isGuest ? borrower.name : null,
-      outside_borrower_contact: isGuest ? borrower.contact : null,
-      quantity_requested: quantity,
-      start_datetime: startIso,
-      end_datetime: endIso,
-      purpose,
-      status: RENTAL_STATUS.CONFIRMED,
-      processed_by_user_id: null, // self-service: nobody approves
-    })
-    .select(RENTAL_FIELDS)
-    .single();
-  if (insertError) {
-    throw new Error(`Failed to create booking: ${insertError.message}`);
-  }
-
-  // CONFLICT CHECK, pass 2 (post-insert): supabase-js has no transactions, so
-  // two simultaneous submissions could both pass pass 1. Re-check counting
-  // only rows inserted BEFORE ours (request_id < ours): the earliest insert
-  // sees no one ahead of it and always survives; a loser deletes its own row
-  // and is refused. Deterministic, and never double-books.
-  const lateConflict = await findConflict(item, quantity, startIso, endIso, { beforeId: created.request_id });
-  if (lateConflict) {
-    await supabase.from('rental_requests').delete().eq('request_id', created.request_id);
-    return res.status(409).json({ error: lateConflict });
+    throw new Error(`Booking ${created.request_id} was made for item ${itemId}, which could not be read`);
   }
 
   // Stage 4: a confirmed booking always carries exactly one RENTAL charge
@@ -494,12 +521,18 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     throw new Error(`Booking reverted — failed to create its charge: ${chargeError.message}`);
   }
 
-  // Re-read so the response carries the charge just created.
+  // Re-read so the response carries the charge just created, in RENTAL_FIELDS'
+  // shape.
   const { data: withCharge } = await supabase
     .from('rental_requests')
     .select(RENTAL_FIELDS)
     .eq('request_id', created.request_id)
     .maybeSingle();
+  const answered = withCharge || {
+    ...pick(created, RENTAL_COLUMNS),
+    rental_items: pick(item, ['item_id', 'name', 'type', 'fee']),
+    charges: [],
+  };
 
   // Recorded, not sent. "-" and "x" instead of an em dash and a multiplication
   // sign: both are outside the GSM alphabet and would double the message cost.
@@ -537,8 +570,76 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     message: borrower.walkIn
       ? `Walk-in booking recorded for ${isGuest ? borrower.name : `resident #${borrower.residentId}`}: ${when}.`
       : `Booking confirmed: ${when}.`,
-    request: withDerived(withCharge || created),
+    request: withDerived(answered),
   });
+});
+
+// The keys GET /availability passes on from rental_availability: numbers and
+// the item's type. For a facility, `taken` too, each entry cut to its start
+// and end. Nothing about who booked, or why.
+const AVAILABILITY_KEYS = ['ok', 'item_type', 'total', 'used', 'booked', 'stuck', 'resting', 'left'];
+
+// GET /api/rental-requests/availability?item_id=&date=&start_time=&end_time=
+// — what is free for that item at that time, asked by the booking forms
+// before a booking (the resident's, and the Secretary's walk-in form). Read
+// only. The date and times are read as POST reads them (Manila), and the
+// answer is rental_availability's, the same rule POST is decided by, so the
+// page and the server cannot disagree; the page only advises, and POST
+// decides again. A start already past may be asked about. Declared before
+// GET /:id, which would otherwise catch "/availability" as an id.
+router.get('/availability', requireRole(...CREATE_ROLES), async (req, res) => {
+  const itemId = Number(req.query?.item_id);
+  if (!Number.isInteger(itemId)) {
+    return res.status(400).json({ error: 'An item_id is required' });
+  }
+  const date = String(req.query?.date ?? '').trim();
+  const startTime = String(req.query?.start_time ?? '').trim();
+  const endTime = String(req.query?.end_time ?? '').trim();
+  const formatError = slotFormatError(date, startTime, endTime);
+  if (formatError) {
+    return res.status(400).json({ error: formatError });
+  }
+  const times = slotTimes(date, startTime, endTime);
+  if (times.error) {
+    return res.status(400).json({ error: times.error });
+  }
+
+  // An unknown or inactive item is refused as POST refuses it, before the
+  // function is asked: an inactive item cannot be booked, so there is
+  // nothing to show.
+  const { data: item, error: itemError } = await supabase
+    .from('rental_items')
+    .select('item_id, is_active')
+    .eq('item_id', itemId)
+    .maybeSingle();
+  if (itemError) {
+    throw new Error(`Failed to load rental item: ${itemError.message}`);
+  }
+  if (!item) {
+    return res.status(404).json({ error: ITEM_NOT_FOUND });
+  }
+  if (!item.is_active) {
+    return res.status(400).json({ error: ITEM_INACTIVE });
+  }
+
+  const result = await callBookingFunction('rental_availability', {
+    p_item_id: itemId,
+    p_start: times.start.toISOString(),
+    p_end: times.end.toISOString(),
+  });
+  if (!result?.ok) {
+    if (result?.code === 'TIME_INVALID') {
+      return res.status(400).json({ error: refusalOf(result, null).error, code: result.code });
+    }
+    const refused = refusalOf(result ?? {}, null);
+    return res.status(refused.status).json({ error: refused.error });
+  }
+
+  const answer = pick(result, AVAILABILITY_KEYS);
+  if (result.item_type === ITEM_TYPE.FACILITY && Array.isArray(result.taken)) {
+    answer.taken = result.taken.map((slot) => ({ start: slot.start, end: slot.end }));
+  }
+  res.json(answer);
 });
 
 // POST /api/rental-requests/mine/:id/pay — the resident declares that they
@@ -1046,9 +1147,11 @@ const EDITABLE_COLUMNS = ['start_datetime', 'end_datetime', 'purpose'];
 // the hall to move it). The item, the quantity, the borrower and the status
 // are fixed: to change the quantity or the item, cancel and book again. The
 // fee is item fee x quantity once per booking, so a new date or time never
-// changes what is owed, and the charge is never touched here. The conflict
-// check re-runs on the new slot with THIS booking excluded — otherwise every
-// edit would collide with its own current slot.
+// changes what is owed, and the charge is never touched here. The new slot is
+// checked and written in one call to update_rental_booking_time (migration
+// 024), with THIS booking left out of the count — otherwise every edit would
+// collide with its own current slot — so there is nothing to put back after a
+// clash.
 router.put('/:id', requireRole('secretary'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -1075,68 +1178,41 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     return res.status(404).json({ error: 'Booking not found' });
   }
   if (!hasNotStarted(booking)) {
-    return res.status(409).json({ error: 'Only a booking that has not started can be changed.' });
+    return res.status(409).json({ error: NOT_STARTED_EDIT });
   }
   // The Edit panel still sends the quantity it shows; the same number is
   // accepted, any other is refused rather than silently ignored.
   if (req.body?.quantity_requested !== undefined && parsed.quantity !== booking.quantity_requested) {
     return res.status(400).json({ error: 'The quantity cannot be changed. Cancel this booking and book again.' });
   }
-  const quantity = booking.quantity_requested;
-
-  // The item is loaded even if since deactivated: deactivation only blocks
-  // NEW bookings, not managing existing ones.
+  // The item's name, for the sentences and the notice. Loaded even if since
+  // deactivated: deactivation only blocks NEW bookings, not managing existing
+  // ones (the function does not refuse an inactive item on an edit either).
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
-    .select('item_id, name, type, quantity_total, quantity_available, fee')
+    .select('item_id, name, type')
     .eq('item_id', booking.item_id)
     .maybeSingle();
   if (itemError || !item) {
     throw new Error(`Failed to load rental item: ${itemError?.message || 'not found'}`);
   }
-  const quantityError = itemQuantityError(item, quantity);
-  if (quantityError) {
-    return res.status(400).json({ error: quantityError });
+
+  // The check and the update in one locked call. A booking that started or
+  // was cancelled since the read above comes back as BOOKING_STARTED.
+  const result = await callBookingFunction('update_rental_booking_time', {
+    p_request_id: id,
+    p_start: startIso,
+    p_end: endIso,
+    p_purpose: purpose,
+  });
+  if (!result?.ok) {
+    const refused = refusalOf(result ?? {}, item);
+    return res.status(refused.status).json({ error: refused.error });
   }
 
-  // Conflict check on the NEW values, excluding this booking's own row.
-  const conflict = await findConflict(item, quantity, startIso, endIso, { excludeId: id });
-  if (conflict) {
-    return res.status(409).json({ error: conflict });
-  }
-
-  const { data: updated, error } = await supabase
-    .from('rental_requests')
-    .update({ start_datetime: startIso, end_datetime: endIso, purpose })
-    .eq('request_id', id)
-    .eq('status', RENTAL_STATUS.CONFIRMED) // guard: not if just cancelled
-    .select(MANAGE_FIELDS)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to update booking: ${error.message}`);
-  }
-  if (!updated) {
-    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
-  }
-
-  // Post-update re-check (same compensation idea as the POST route): if a
-  // racing submission landed between check and update, restore the previous
-  // schedule and refuse. Rare double-race leftovers are accepted — a single
-  // Secretary edits, and the POST route's own pass-2 covers the other side.
-  const lateConflict = await findConflict(item, quantity, startIso, endIso, { excludeId: id });
-  if (lateConflict) {
-    await supabase
-      .from('rental_requests')
-      .update({
-        start_datetime: booking.start_datetime,
-        end_datetime: booking.end_datetime,
-        purpose: booking.purpose,
-      })
-      .eq('request_id', id);
-    return res.status(409).json({ error: lateConflict });
-  }
-
-  const diff = diffFields(pick(booking, EDITABLE_COLUMNS), pick(updated, EDITABLE_COLUMNS));
+  // `before` is the row as it was under the function's lock, so the diff and
+  // the notice describe what this edit really changed.
+  const diff = diffFields(pick(result.before, EDITABLE_COLUMNS), pick(result.request, EDITABLE_COLUMNS));
   const changed = Object.keys(diff.after).length > 0;
 
   // The borrower hears of every change the barangay makes to their booking —
@@ -1161,6 +1237,12 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
     after: diff.after,
   });
 
+  // Re-read in the Secretary's projection, never the function's row as it is.
+  const { data: updated } = await supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
   res.json({ message: 'Booking updated', request: withDerived(updated) });
 });
 
