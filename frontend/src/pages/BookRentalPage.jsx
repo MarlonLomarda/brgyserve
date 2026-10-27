@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import PageLayout from "../components/PageLayout";
 import RentalAvailability from "../components/RentalAvailability";
+import { RESIDENT_NAV } from "../constants/nav";
 import {
   ITEM_TYPE_LABELS,
   formatSchedule,
   rentalMeta,
 } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
+import {
+  FACILITY,
+  ITEM,
+  KIND_TEXT,
+  NOT_ASKED,
+  ofKind,
+} from "../utils/bookingKinds";
 import { bookingTimeError, earliestBookingDate } from "../utils/bookingTimes";
 import { clock } from "../utils/chargeFilters";
 import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
@@ -34,7 +43,29 @@ function loadFailure(err) {
     : "the server did not respond";
 }
 
+// FACILITIES | ITEMS (step C2, 27 Oct 2026). One page, two tabs: Facilities
+// lists the facilities, booked and used in place with no quantity; Items
+// lists equipment and furniture, with a Quantity and "Pick-up time" and
+// "Return time" for the times (utils/bookingKinds.js). The page heading
+// follows the tab, "Book a Facility" or "Rent an Item", so the tab is kept
+// here, above PageLayout, and the form below is told it. Every visit opens on
+// Facilities, and the tab is kept nowhere in the browser. Both tabs are the
+// one form with the one availability check, and send the same body.
 export default function BookRentalPage() {
+  const [kind, setKind] = useState(FACILITY);
+  const words = KIND_TEXT[kind];
+  return (
+    <PageLayout
+      dashTitle={words.title}
+      dashSubtitle={words.subtitle}
+      navItems={RESIDENT_NAV}
+    >
+      <BookRentalForm kind={kind} onKind={setKind} />
+    </PageLayout>
+  );
+}
+
+function BookRentalForm({ kind, onKind }) {
   const { authFetch } = useAuth();
   const [items, setItems] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
@@ -69,11 +100,17 @@ export default function BookRentalPage() {
     loadItems();
   }, [loadItems]);
 
-  const selectedItem = items?.find(
+  // The tab's own items: an item the page loads of the other kind is simply
+  // not shown, and cannot be the one chosen.
+  const words = KIND_TEXT[kind];
+  const shownItems = items === null ? null : ofKind(items, kind);
+  const selectedItem = shownItems?.find(
     (i) => String(i.item_id) === String(form.item_id),
   );
-  const isCountable = selectedItem && selectedItem.quantity_total > 1;
-  const quantity = isCountable ? Number(form.quantity) || 0 : 1;
+  // Items always have a Quantity box (capped at what is left), facilities
+  // never: a facility is booked one at a time, and 1 is sent as before.
+  const withQuantity = kind === ITEM;
+  const quantity = withQuantity ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
 
   // What is free for the chosen time, asked of the server once the item, the
@@ -87,10 +124,25 @@ export default function BookRentalPage() {
     form.start_time,
     form.end_time,
   );
-  const answer = availability.status === "ready" ? availability.data : null;
+  // With no item chosen nothing is shown or counted: after a tab switch the
+  // hook still holds the other item's answer for one render.
+  const check = selectedItem ? availability : NOT_ASKED;
+  const answer = check.status === "ready" ? check.data : null;
   const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
-  const blocked = bookingBlock({ answer, quantity, countable: isCountable });
+  const blocked = bookingBlock({ answer, quantity, countable: withQuantity });
   const blockedId = useId();
+
+  // A new tab clears what belonged to the old one: the item, the quantity, a
+  // time message and the server's last refusal (the availability answer goes
+  // with the item). The date, the times and the purpose apply to both and
+  // stay. Nothing is sent.
+  function switchKind(next) {
+    if (next === kind) return;
+    setForm((f) => ({ ...f, item_id: "", quantity: "1" }));
+    setTimeError("");
+    setError("");
+    onKind(next);
+  }
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -204,7 +256,26 @@ export default function BookRentalPage() {
         </div>
       ) : (
         <form className="pending-card section-card" onSubmit={handleSubmit}>
-          <h3>Book a facility or item</h3>
+          {/* The tabs: two toggles, one pressed, as the walk-in form's are.
+              Plain buttons, so a press submits nothing. Drawn whatever the
+              load did: a failed load is the same error on both. */}
+          <div
+            className="tab-container"
+            role="group"
+            aria-label="What to book"
+          >
+            {[FACILITY, ITEM].map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`tab ${kind === k ? "active-tab" : ""}`}
+                aria-pressed={kind === k}
+                onClick={() => switchKind(k)}
+              >
+                {KIND_TEXT[k].tab}
+              </button>
+            ))}
+          </div>
           {/* The server's refusal, read out as the load error and the time
               message are (role="alert"). */}
           {error && (
@@ -236,12 +307,12 @@ export default function BookRentalPage() {
             </>
           ) : items === null ? (
             <p className="muted">Loading rental items…</p>
-          ) : items.length === 0 ? (
-            <p className="muted">Nothing is currently available for rental.</p>
+          ) : shownItems.length === 0 ? (
+            <p className="muted">{words.none}</p>
           ) : (
             <>
               <label>
-                Facility / item
+                {words.field}
                 <select
                   name="item_id"
                   value={form.item_id}
@@ -249,9 +320,9 @@ export default function BookRentalPage() {
                   required
                 >
                   <option value="" disabled>
-                    Select an item…
+                    {words.choose}
                   </option>
-                  {items.map((i) => (
+                  {shownItems.map((i) => (
                     <option key={i.item_id} value={i.item_id}>
                       {i.name} ({ITEM_TYPE_LABELS[i.type] || i.type}) — ₱
                       {Number(i.fee).toFixed(2)}
@@ -268,10 +339,11 @@ export default function BookRentalPage() {
                 </p>
               )}
 
-              {/* Without a Quantity box, Date takes the whole row so Start
-                  and End time sit side by side; with one, Date | Quantity. */}
+              {/* Facilities: Date takes the whole row, so Start and End time
+                  sit side by side under it. Items: Date | Quantity, then
+                  Pick-up | Return time. */}
               <div className="grid-2">
-                <label className={isCountable ? undefined : "rental-date-full"}>
+                <label className={withQuantity ? undefined : "rental-date-full"}>
                   Date
                   <input
                     name="date"
@@ -282,17 +354,19 @@ export default function BookRentalPage() {
                     required
                   />
                 </label>
-                {isCountable && (
+                {withQuantity && (
                   <label>
                     Quantity{" "}
-                    <span className="hint">
-                      {cap > 0 ? `(up to ${cap})` : "(none left)"}
-                    </span>
+                    {selectedItem && (
+                      <span className="hint">
+                        {cap > 0 ? `(up to ${cap})` : "(none left)"}
+                      </span>
+                    )}
                     <input
                       name="quantity"
                       type="number"
                       min="1"
-                      max={Math.max(1, cap)}
+                      max={selectedItem ? Math.max(1, cap) : undefined}
                       step="1"
                       value={form.quantity}
                       onChange={handleChange}
@@ -301,7 +375,7 @@ export default function BookRentalPage() {
                   </label>
                 )}
                 <label>
-                  Start time
+                  {words.start}
                   <input
                     name="start_time"
                     type="time"
@@ -311,7 +385,7 @@ export default function BookRentalPage() {
                   />
                 </label>
                 <label>
-                  End time
+                  {words.end}
                   <input
                     name="end_time"
                     type="time"
@@ -328,7 +402,7 @@ export default function BookRentalPage() {
                   {timeError}
                 </div>
               )}
-              <RentalAvailability check={availability} />
+              <RentalAvailability check={check} />
 
               <label>
                 Purpose
@@ -346,7 +420,7 @@ export default function BookRentalPage() {
               {selectedItem && (
                 <p className="muted">
                   Estimated fee: <strong>₱{estimatedFee.toFixed(2)}</strong>
-                  {isCountable && quantity > 0 && (
+                  {withQuantity && quantity > 0 && (
                     <>
                       {" "}
                       ({quantity} × ₱{Number(selectedItem.fee).toFixed(2)})
