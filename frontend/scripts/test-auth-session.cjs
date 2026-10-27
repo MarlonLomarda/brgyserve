@@ -8965,14 +8965,15 @@ const root = () => dom.window.document.getElementById('root');
       check(`${name}: exactly one request on open, GET /rental-requests?status=all`,
         net.calls.length === 1 && said(listCalls(net.calls)) === said(['GET /rental-requests?status=all']),
         said(net.calls.map((c) => `${c.method} ${c.url}`)));
-      // Since section AF the list has a filters row of three selects, Item,
-      // Payment and Starts, each with its visible label; the status select
-      // must still be gone, so no other select, and no option outside them.
+      // Since section AF the list has a filters row of selects, each with
+      // its visible label (Item, Payment and Starts; Type joined them first
+      // in section AT); the status select must still be gone, so no other
+      // select, and no option outside them.
       const filterSelects = page.queryAll('select').filter((s) => s.closest('.pay-filters'));
-      check(`${name}: the status select is gone: the only selects on the list are the filters row's three, labelled Item, Payment `
-          + `and Starts, no option is outside them, and none of its words is anywhere (${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
-        v.selects === 3 && filterSelects.length === 3
-          && said(filterSelects.map((s) => s.labels?.[0]?.textContent ?? null)) === said(['Item', 'Payment', 'Starts'])
+      check(`${name}: the status select is gone: the only selects on the list are the filters row's four, labelled Type, Item, `
+          + `Payment and Starts, no option is outside them, and none of its words is anywhere (${OLD_WORDS.map((w) => `"${w}"`).join(', ')})`,
+        v.selects === 4 && filterSelects.length === 4
+          && said(filterSelects.map((s) => s.labels?.[0]?.textContent ?? null)) === said(['Type', 'Item', 'Payment', 'Starts'])
           && page.queryAll('option').every((o) => !!o.closest('.pay-filters')) && !OLD_WORDS.some((w) => page.html().includes(w)),
         said({ selects: page.queryAll('select').map((s) => s.labels?.[0]?.textContent ?? s.className),
           outside: page.queryAll('option').filter((o) => !o.closest('.pay-filters')).length,
@@ -11591,6 +11592,9 @@ const root = () => dom.window.document.getElementById('root');
           return found ? found.control ?? null : null;
         };
         const itemSelect = (page) => labelled(page, 'Item');
+        // The row's first select since section AT, where Clear filters puts
+        // the focus.
+        const typeSelect = (page) => labelled(page, 'Type');
         const paySelect = (page) => labelled(page, 'Payment');
         const dateSelect = (page) => labelled(page, 'Starts');
         const fromInput = (page) => labelled(page, 'From');
@@ -11892,9 +11896,9 @@ const root = () => dom.window.document.getElementById('root');
           await clickIf(page, buttonNamed(root(), 'Clear filters'));
           v = lookF(page);
           check(`${name}: Clear filters puts all three back to Any, every one, takes From, To and the hint away, and goes itself; focus `
-              + 'moves to the Item select rather than being dropped; the tab stays: All, "14 bookings"',
+              + 'moves to the row\'s first select, Type (Any type), rather than being dropped; the tab stays: All, "14 bookings"',
             v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
-              && !v.hint && !v.clear && !!itemSelect(page) && page.active() === itemSelect(page)
+              && !v.hint && !v.clear && !!typeSelect(page) && page.active() === typeSelect(page) && chosen(typeSelect(page)) === 'Any type'
               && said(v.pressed) === said(['All 14']) && v.heading === '14 bookings',
             said({ v, focus: page.active()?.tagName ?? null }));
 
@@ -11948,10 +11952,10 @@ const root = () => dom.window.document.getElementById('root');
           await clickIf(page, buttonNamed(root(), 'Clear filters'));
           v = lookF(page);
           check(`${name}: Clear filters clears the filters only: with "juan" typed, Basketball Court and Unpaid set (#151), the search `
-              + 'stays, and so do his two bookings, #151 and #143, under "2 of 14 bookings match"; focus on the Item select',
+              + 'stays, and so do his two bookings, #151 and #143, under "2 of 14 bookings match"; focus on the first select, Type',
             said(allSet.rows) === said([151]) && v.search === 'juan' && filtersOf(v) === 'Any item / Any payment / Any date'
-              && said(v.rows) === said([151, 143]) && v.heading === '2 of 14 bookings match' && !!itemSelect(page)
-              && page.active() === itemSelect(page),
+              && said(v.rows) === said([151, 143]) && v.heading === '2 of 14 bookings match' && !!typeSelect(page)
+              && page.active() === typeSelect(page),
             said({ allSet: allSet.rows, v }));
           await type(page, '');
           check(`${name}: none of those filter, tab and search changes sent a request, and none wrote to the browser's storage, the `
@@ -12405,9 +12409,9 @@ const root = () => dom.window.document.getElementById('root');
             const afterClear = stateOf(page);
             const clearedSlot = slotOf();
             check(`${name}: Clear filters, pressed in the open panel, takes "Filters (3)" back to "Filters", leaves the panel open and `
-                + 'puts focus on the Item select; its slot is disabled and aria-hidden again',
-              beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!itemSelect(page)
-                && page.active() === itemSelect(page) && !!clearedSlot && clearedSlot.disabled
+                + 'puts focus on the first select, Type; its slot is disabled and aria-hidden again',
+              beforeClear.label === 'Filters (3)' && afterClear.label === 'Filters' && isOpen(afterClear) && !!typeSelect(page)
+                && page.active() === typeSelect(page) && !!clearedSlot && clearedSlot.disabled
                 && clearedSlot.getAttribute('aria-hidden') === 'true',
               said({ beforeClear, afterClear, focus: page.active()?.tagName ?? null }));
             await clickIf(page, tabNamed(page, 'Overdue'));
@@ -12830,11 +12834,11 @@ const root = () => dom.window.document.getElementById('root');
           const actionsWant = withActions ? rows.map((tr) => actionsAG[name](byNumberAG(text(numberEls(tr)[0])) ?? {})) : null;
           const filterLabels = page.queryAll('.pay-filters select').map((s) => s.labels?.[0]?.textContent ?? null);
           check(`${name}: the rest of the list is as it was: "28 bookings", the counts "${STRIP28}", the pager's "Showing 1 to 28 of 28 `
-              + 'results", the filters Item, Payment and Starts, every row\'s actions as before'
+              + 'results", the filters Type, Item, Payment and Starts, every row\'s actions as before'
               + `${withActions ? '' : ' (none, and no actions column)'}, and one request, the first GET`,
             text(page.query('.list-head h2')) === '28 bookings' && tabsOf(page).map(text).join(' · ') === STRIP28
               && text(page.query('.pay-pager-count')) === 'Showing 1 to 28 of 28 results'
-              && said(filterLabels) === said(['Item', 'Payment', 'Starts'])
+              && said(filterLabels) === said(['Type', 'Item', 'Payment', 'Starts'])
               && (withActions ? said(actionsRead) === said(actionsWant) : page.queryAll('table.data-table tbody button').length === 0)
               && net.calls.length === 1 && net.calls[0].method === 'GET' && /\/rental-requests\?status=all$/.test(net.calls[0].url),
             said({ heading: text(page.query('.list-head h2')), strip: tabsOf(page).map(text).join(' · '),
@@ -13371,20 +13375,23 @@ const root = () => dom.window.document.getElementById('root');
       && v.pay === 2 && v.refresh && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading && !v.empty;
 
     // What Book a rental shows: its card, the form's fields and Book now.
+    // The card's heading was "Book a facility or item"; since section AT it
+    // opens with its Facilities | Items tabs, Facilities pressed, and each
+    // tab has its own empty sentence.
     const bookView = (page) => {
       const all = spaced(root());
       return {
-        title: text(page.query('.section-card h3')),
+        title: text(page.query('.section-card .tab-container [aria-pressed="true"]')),
         error: page.queryAll('[role="alert"]').map(text).find((t) => t.startsWith('Could not load the rental items')) ?? null,
         alerts: page.queryAll('.alert.error').map(text),
         tryAgain: !!tryAgainButton(page),
         fields: page.queryAll('.section-card select, .section-card input, .section-card textarea').length,
         bookNow: !!buttonNamed(root(), 'Book now'),
-        empty: all.includes('Nothing is currently available for rental.'),
+        empty: /No (facility|item) is currently available for (booking|rental)\./.test(all),
         loading: all.includes('Loading rental items…'),
       };
     };
-    const bookErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.title === 'Book a facility or item'
+    const bookErrorOnly = (v) => !!v.error && v.alerts.length === 1 && v.tryAgain && v.title === 'Facilities'
       && v.fields === 0 && !v.bookNow && !v.empty && !v.loading;
     const bookLoadingOnly = (v) => v.loading && !v.error && v.alerts.length === 0 && !v.tryAgain && v.fields === 0
       && !v.bookNow && !v.empty;
@@ -13555,8 +13562,9 @@ const root = () => dom.window.document.getElementById('root');
     await page.settle();
     const bookOk = bookView(page);
     const optionNames = page.queryAll('select[name="item_id"] option').map(text);
-    check('Book a rental: a successful load shows the form, its items offered, from one GET of /rental-items, with no error',
-      bookForm(bookOk) && optionNames.length === 3 && optionNames[1].startsWith('Covered Court')
+    check('Book a rental: a successful load shows the form, the Facilities tab\'s items offered (the chairs are on Items), '
+        + 'from one GET of /rental-items, with no error',
+      bookForm(bookOk) && optionNames.length === 2 && optionNames[1].startsWith('Covered Court')
         && net.calls.length === 1 && isItems(net.calls[0]),
       said({ bookOk, optionNames, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
     await finish(page);
@@ -13577,7 +13585,7 @@ const root = () => dom.window.document.getElementById('root');
       bookLoadingOnly(bookOpening) && isItems(bookFirst)
         && bookFailed.error === 'Could not load the rental items: Network down' && bookFailed.tryAgain,
       `${said(bookOpening)} then ${said(bookFailed)}`);
-    check('  Book a rental: and no "Nothing is currently available for rental.", no booking form (no field, no Book now) '
+    check('  Book a rental: and no "No facility is currently available for booking.", no booking form (no field, no Book now) '
         + 'and no "Loading…" beside it: it cannot read as nothing to rent',
       bookErrorOnly(bookFailed), said(bookFailed));
 
@@ -13636,7 +13644,7 @@ const root = () => dom.window.document.getElementById('root');
     page = await globalThis.mountInteractive(root(), '/resident/book-rental');
     await page.settle();
     const bookNone = bookView(page);
-    check('Book a rental: a successful load of no items says "Nothing is currently available for rental.", with no form and '
+    check('Book a rental: a successful load of no items says "No facility is currently available for booking.", with no form and '
         + 'no error',
       bookNone.empty && bookNone.fields === 0 && !bookNone.bookNow && !bookNone.error && bookNone.alerts.length === 0
         && !bookNone.tryAgain && !bookNone.loading,
@@ -13649,8 +13657,8 @@ const root = () => dom.window.document.getElementById('root');
     page = await globalThis.mountInteractive(root(), '/resident/book-rental');
     await page.settle();
     const bookEnded = bookView(page);
-    check('Book a rental: a 401 ends the session once and shows the login screen, with no "Nothing is currently available '
-        + 'for rental." and no list error',
+    check('Book a rental: a 401 ends the session once and shows the login screen, with no "No facility is currently available '
+        + 'for booking." and no list error',
       store.removes === 1 && !store.data.has(STORAGE_KEY) && /Forgot your password\?/.test(page.html())
         && !bookEnded.empty && !bookEnded.error && !bookEnded.bookNow && isItems(net.calls[0]),
       `${store.removes} teardown(s) ${said(bookEnded)}`);
@@ -14316,9 +14324,9 @@ const root = () => dom.window.document.getElementById('root');
         + '", carries role="alert"',
       refusal?.getAttribute('role') === 'alert' && posts() === 1, said({ role: refusal?.getAttribute('role') ?? null,
         found: !!refusal, posts: posts() }));
-    check('  and nothing else about it changed: "alert error" its only classes, straight under the card\'s heading, the only '
-        + 'message on the card, the form still there below it',
-      refusal?.className === 'alert error' && refusal?.previousElementSibling?.tagName === 'H3'
+    check('  and nothing else about it changed: "alert error" its only classes, straight under the card\'s Facilities | Items tabs '
+        + '(its heading until section AT), the only message on the card, the form still there below it',
+      refusal?.className === 'alert error' && !!refusal?.previousElementSibling?.classList.contains('tab-container')
         && page.queryAll('.section-card .alert').length === 1 && !!buttonNamed(root(), 'Book now')
         && page.queryAll('.section-card select, .section-card input, .section-card textarea').length >= 5,
       said({ className: refusal?.className ?? null, before: refusal?.previousElementSibling?.tagName ?? null,
@@ -14361,9 +14369,9 @@ const root = () => dom.window.document.getElementById('root');
 
     // d. A successful load of nothing is the real empty state it was.
     page = await bookPage((url) => (/\/rental-items$/.test(url) ? { rental_items: [] } : undefined));
-    check('Book a rental: a successful load of no items still says "Nothing is currently available for rental.", with no '
-        + 'message, no Try again row and no form',
-      root().textContent.includes('Nothing is currently available for rental.') && page.queryAll('.alert').length === 0
+    check('Book a rental: a successful load of no items still says so, in the Facilities tab\'s words since section AT ("No '
+        + 'facility is currently available for booking."), with no message, no Try again row and no form',
+      root().textContent.includes('No facility is currently available for booking.') && page.queryAll('.alert').length === 0
         && retryRows(page).length === 0 && !tryAgainButton(page) && !buttonNamed(root(), 'Book now'),
       said({ alerts: page.queryAll('.alert').map(text), rows: retryRows(page).length }));
     await finish(page);
@@ -15040,6 +15048,13 @@ const root = () => dom.window.document.getElementById('root');
     // Real time: the check waits 400ms after the last change.
     const wait = async (pg, ms = 450) => { await new Promise((r) => setTimeout(r, ms)); await pg.settle(); };
     const choose = async (pg, id) => {
+      // Since section AT a facility and an item are on different tabs or
+      // toggles: press the other one when this one does not offer the item.
+      if (!pg.query(`select[name="item_id"] option[value="${id}"]`)) {
+        const other = pg.queryAll('.tab-container button.tab[aria-pressed="false"]')
+          .find((b) => /^(Facilities|Items|Facility|Item)$/.test(text(b)));
+        if (other) await pg.click(other);
+      }
       const s = pg.query('select[name="item_id"]');
       if (s && s.value !== String(id)) {
         s.value = String(id);
@@ -15302,8 +15317,9 @@ const root = () => dom.window.document.getElementById('root');
       net.calls.slice(sent).filter((c) => /\/rental-items$/.test(c.url)).length === 1 && !!page.query('select[name="item_id"]')
         && !page.queryAll('.pending-card [role="alert"]').some((el) => /Could not load/.test(text(el))),
       said(net.calls.slice(sent).map((c) => c.url)));
-    // The mode buttons are toggles.
-    const pressed = () => page.queryAll('.pending-card .tab-container button').map((b) => `${b.textContent}=${b.getAttribute('aria-pressed')}`);
+    // The mode buttons are toggles: the first .tab-container's (the second,
+    // Facility | Item, is section AT's).
+    const pressed = () => page.queryAll('.pending-card .tab-container:first-of-type button').map((b) => `${b.textContent}=${b.getAttribute('aria-pressed')}`);
     const pressedResident = pressed();
     // (d) a message of the form's own is read out: no resident picked.
     await press(page);
@@ -16116,6 +16132,8 @@ const root = () => dom.window.document.getElementById('root');
     await choose(page, 'select[name="item_id"]', '21');
     const fullFacility = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
     rows = declaredAll(dateLabel(page), 'grid-column', '1 / -1');
+    // The chairs are under the Item toggle since section AT.
+    await clickIf(page, buttonNamed(root(), 'Item'));
     await choose(page, 'select[name="item_id"]', '22');
     const fullCountable = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
     check('Walk-in: for a facility (no Quantity box) the Date label carries rental-date-full; for a countable item it does not',
@@ -16199,6 +16217,8 @@ const root = () => dom.window.document.getElementById('root');
     await page.settle();
     await choose(page, 'select[name="item_id"]', '21');
     const bookFacility = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
+    // The chairs are on the Items tab since section AT.
+    await clickIf(page, buttonNamed(root(), 'Items'));
     await choose(page, 'select[name="item_id"]', '22');
     const bookCountable = dateLabel(page)?.classList.contains('rental-date-full') ?? null;
     check('Book a rental: for a facility the Date label carries rental-date-full; for a countable item (Quantity shown) it does not',
@@ -16257,6 +16277,445 @@ const root = () => dom.window.document.getElementById('root');
       shared.every((s) => s.ok), said(shared.filter((s) => !s.ok)));
 
     check('section AS sent only GETs: nothing was saved', methods.length > 0 && methods.every((m) => m === 'GET'), said([...new Set(methods)]));
+  }
+
+  // =========================================================================
+  // AT. Facilities | Items: the resident's tabs, the Type filter and the
+  //     walk-in's toggle (step C2)
+  // =========================================================================
+  // A facility is booked and used in place (one at a time, no return); an
+  // item, equipment or furniture, is taken out in a quantity and brought
+  // back. The resident's page splits the one dropdown into two tabs, the
+  // walk-in form into two toggles, and the Rental bookings list gains a Type
+  // filter. Every request here goes to the stub: the two bookings this section
+  // makes (one per tab, to read the body) reach no server.
+  console.log('\n--- Facilities | Items: the resident\'s tabs, the Type filter and the walk-in toggle ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    // Every text node, joined with spaces: textContent runs neighbours together.
+    const spaced = (el) => {
+      if (!el) return '';
+      const walker = dom.window.document.createTreeWalker(el, dom.window.NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.nodeValue);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    };
+    const F = globalThis.chargeFilters || {};
+    const realNow = F.clock?.now;
+    // 1 Nov 2026, 08:00 in Manila: 1 Dec is ahead, so a booking passes the
+    // form's time check.
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    setNow('2026-11-01T00:00:00Z');
+    const item = (id, name, type, total) => ({ item_id: id, name, type, fee: '20.00', quantity_total: total, quantity_available: total,
+      is_active: true, description: null });
+    const COURT = item(21, 'Basketball Court', 'facility', 1);
+    const HALL = item(23, 'Multipurpose Hall', 'facility', 1);
+    const TENT = item(24, 'Tent', 'equipment', 1);
+    const COSTUMES = item(25, 'Costumes', 'equipment', 10);
+    const CHAIRS = item(22, 'Plastic Chairs', 'furniture', 100);
+    const ITEMS = [COURT, CHAIRS, HALL, TENT, COSTUMES];
+    const FACILITY_NAMES = ['Basketball Court', 'Multipurpose Hall'];
+    const ITEM_NAMES = ['Plastic Chairs', 'Tent', 'Costumes'];
+    const byId = Object.fromEntries(ITEMS.map((i) => [i.item_id, i]));
+    // Distinct starts, so the list's one order is the same on every load.
+    const booking = (id, it, day) => ({
+      request_id: id, quantity_requested: 1, start_datetime: `2026-12-${day}T01:00:00+00:00`, end_datetime: `2026-12-${day}T05:00:00+00:00`,
+      purpose: `Purpose ${id}`, status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null, resident_id: 1,
+      outside_borrower_name: null, outside_borrower_contact: null, rental_items: { item_id: it.item_id, name: it.name, type: it.type, fee: it.fee },
+      resident_records: { resident_id: 1, first_name: 'Juan', middle_name: null, last_name: 'Dela Cruz', suffix: null, account: { username: 'juan_t' } },
+      requester: { user_id: 9, username: 'juan_t', email: null, profiles: null }, returned_by: null,
+      charges: { charge_id: 600 + id, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', not_started: true,
+    });
+    const LIST = [booking(941, COURT, '10'), booking(942, HALL, '11'), booking(943, TENT, '12'), booking(944, COSTUMES, '13'),
+      booking(945, CHAIRS, '14'), booking(946, CHAIRS, '15')];
+    const FOUND = [{ resident_id: 1, first_name: 'Juan', middle_name: null, last_name: 'Dela Cruz', suffix: null, birthdate: null, address: 'Purok 1, Ubujan' }];
+    const items = { mode: 'all' }; // 'all' | 'facilities' | 'fail'
+    const bodyOf = (c) => { try { return JSON.parse(c?.body || ''); } catch { return null; } };
+    const stub = (url, method) => {
+      if (method === 'POST' && /\/rental-requests$/.test(url)) {
+        const sent = bodyOf(net.calls.at(-1)) || {};
+        const it = byId[sent.item_id] || COURT;
+        return { message: 'Booking confirmed', request: { request_id: 990, status: 'confirmed', start_datetime: '2026-12-01T01:00:00+00:00',
+          end_datetime: '2026-12-01T03:00:00+00:00', quantity_requested: sent.quantity_requested, purpose: sent.purpose,
+          rental_items: { item_id: it.item_id, name: it.name, type: it.type, fee: it.fee } } };
+      }
+      if (method !== 'GET') return undefined;
+      if (/\/rental-requests\/availability\?/.test(url)) {
+        const it = byId[Number(new URL(url, 'http://x').searchParams.get('item_id'))] || COURT;
+        return it.type === 'facility'
+          ? { ok: true, item_type: 'facility', total: 1, used: 0, booked: 0, stuck: 0, resting: 0, left: 1, taken: [] }
+          : { ok: true, item_type: it.type, total: it.quantity_total, used: 0, booked: 0, stuck: 0, resting: 0, left: it.quantity_total };
+      }
+      if (/\/rental-items(\?|$)/.test(url)) {
+        if (items.mode === 'fail') return { error: 'The database did not answer' };
+        return { rental_items: items.mode === 'facilities' ? [COURT, HALL] : ITEMS };
+      }
+      if (/\/rental-requests\?status=all$/.test(url)) return { requests: LIST };
+      if (/\/resident-records\?search=/.test(url)) return { records: FOUND };
+      if (/\/auth\/profile$/.test(url)) {
+        return { user: { username: 'someone_t', email: null, role: 'resident', email_verified: false }, profile: { first_name: null,
+          middle_name: null, last_name: null, suffix: null, birthdate: null, address: null, phone_number: null } };
+      }
+      return undefined;
+    };
+    const wait = async (pg, ms = 550) => { await new Promise((r) => setTimeout(r, ms)); await pg.settle(); };
+    const choose = async (pg, selector, value) => {
+      const sel = pg.query(selector);
+      if (!sel) return;
+      sel.value = value;
+      sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await pg.settle();
+    };
+    const fillArea = async (pg, value) => {
+      const area = pg.query('textarea[name="purpose"]');
+      if (!area) return;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(area, value);
+      area.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await pg.settle();
+    };
+    const fillIf = async (pg, selector, value) => { if (pg.query(selector)) await pg.fill(selector, value); };
+    const fillTimes = async (pg, date, start, end) => {
+      await fillIf(pg, 'input[name="date"]', date);
+      await fillIf(pg, 'input[name="start_time"]', start);
+      await fillIf(pg, 'input[name="end_time"]', end);
+    };
+    // The toggle buttons of one .tab-container, by their words.
+    const toggle = (pg, label) => pg.queryAll('.tab-container button.tab').find((b) => text(b) === label) ?? null;
+    const optionNames = (pg) => pg.queryAll('select[name="item_id"] option')
+      .filter((o) => o.value !== '').map((o) => text(o).replace(/ \(.*$/, ''));
+    const selectLabel = (pg) => {
+      const label = pg.query('select[name="item_id"]')?.closest('label');
+      return label ? text(label.firstChild) : null;
+    };
+    const inputLabel = (pg, name) => {
+      const label = pg.query(`input[name="${name}"]`)?.closest('label');
+      return label ? text(label.firstChild) : null;
+    };
+    const fieldsOf = (pg) => ({
+      tabs: pg.queryAll('.tab-container button.tab').map((b) => [text(b), b.getAttribute('aria-pressed')]),
+      select: selectLabel(pg),
+      options: optionNames(pg),
+      value: pg.query('select[name="item_id"]')?.value ?? null,
+      quantity: pg.query('input[name="quantity"]')?.value ?? null,
+      start: inputLabel(pg, 'start_time'),
+      end: inputLabel(pg, 'end_time'),
+      dateFull: pg.query('input[name="date"]')?.closest('label')?.classList.contains('rental-date-full') ?? null,
+    });
+    const heading = (pg) => ({
+      h1: text(pg.query('.page-title h1')),
+      sub: text(pg.query('.page-title span')),
+      narrow: text(pg.query('.dash-header h1')),
+      tab: dom.window.document.title.split(' — ')[0],
+    });
+    const availabilityText = (pg) => spaced(pg.query('.rental-availability'));
+    const posts = () => net.calls.filter((c) => c.method === 'POST');
+    const RES_T = makeToken({ sub: '8', role: 'resident', exp: VALID_EXP });
+    const RES_U = { user_id: 8, username: 'resident_t', role: 'resident', must_change_password: false };
+
+    // AT-1. The resident page opens on Facilities.
+    seedSession(RES_T, RES_U);
+    items.mode = 'all';
+    resetNet(200, stub);
+    let page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    let f = fieldsOf(page);
+    let h = heading(page);
+    check('AT-1 Book a rental opens on the Facilities tab: two toggles, "Facilities" (pressed) and "Items" (not pressed)',
+      said(f.tabs) === said([['Facilities', 'true'], ['Items', 'false']]), said(f.tabs));
+    check('  its dropdown is labelled "Facility" and lists only the facilities (Basketball Court, Multipurpose Hall)',
+      f.select === 'Facility' && said([...f.options].sort()) === said([...FACILITY_NAMES].sort()), said({ select: f.select, options: f.options }));
+    check('  no Quantity box, the times are "Start time" and "End time", and Date takes the whole row',
+      f.quantity === null && f.start === 'Start time' && f.end === 'End time' && f.dateFull === true, said(f));
+    check('  the page heading is "Book a Facility" (wide and narrow headers, and the browser tab), the subtitle "Book a barangay facility"',
+      h.h1 === 'Book a Facility' && h.narrow === 'Book a Facility' && h.tab === 'Book a Facility' && h.sub === 'Book a barangay facility', said(h));
+
+    // AT-2. The Items tab, and the body each tab sends.
+    let sentGets = net.calls.length;
+    await clickIf(page, toggle(page, 'Items'));
+    f = fieldsOf(page);
+    h = heading(page);
+    check('AT-2 the Items tab: "Items" pressed, the dropdown labelled "Item" lists only equipment and furniture (Plastic Chairs, Tent, Costumes)',
+      said(f.tabs) === said([['Facilities', 'false'], ['Items', 'true']]) && f.select === 'Item'
+        && said([...f.options].sort()) === said([...ITEM_NAMES].sort()), said(f));
+    check('  a Quantity box (1), "Pick-up time" and "Return time", and Date | Quantity on one row (Date not full width)',
+      f.quantity === '1' && f.start === 'Pick-up time' && f.end === 'Return time' && f.dateFull === false, said(f));
+    check('  the heading is "Rent an Item" (wide, narrow, browser tab), the subtitle "Rent a barangay item"; the press sent nothing',
+      h.h1 === 'Rent an Item' && h.narrow === 'Rent an Item' && h.tab === 'Rent an Item' && h.sub === 'Rent a barangay item'
+        && net.calls.length === sentGets, said({ h, sent: net.calls.slice(sentGets).map((c) => c.url) }));
+    const KEYS = said(['date', 'end_time', 'item_id', 'purpose', 'quantity_requested', 'start_time']);
+    await choose(page, 'select[name="item_id"]', '25');
+    await fillIf(page, 'input[name="quantity"]', '3');
+    await fillTimes(page, '2026-12-01', '09:00', '11:00');
+    await fillArea(page, 'School play');
+    await wait(page);
+    await page.submit();
+    const itemBody = bodyOf(posts().at(-1));
+    check('  Book now on the Items tab sends the same six keys as before, the quantity typed (3) and the times as start_time / end_time',
+      !!itemBody && said(Object.keys(itemBody).sort()) === KEYS && itemBody.item_id === 25 && itemBody.quantity_requested === 3
+        && itemBody.start_time === '09:00' && itemBody.end_time === '11:00', said(itemBody));
+    await clickIf(page, buttonNamed(root(), 'Book another'));
+    await clickIf(page, toggle(page, 'Facilities'));
+    await choose(page, 'select[name="item_id"]', '21');
+    await fillTimes(page, '2026-12-01', '09:00', '11:00');
+    await fillArea(page, 'League practice');
+    await wait(page);
+    await page.submit();
+    const facilityBody = bodyOf(posts().at(-1));
+    check('  and on the Facilities tab the same six keys, quantity_requested 1',
+      !!facilityBody && facilityBody !== itemBody && said(Object.keys(facilityBody).sort()) === KEYS && facilityBody.item_id === 21
+        && facilityBody.quantity_requested === 1, said(facilityBody));
+    await page.unmount();
+
+    // AT-3. Switching tabs clears the item, the quantity, a time message and
+    // the availability answer, and sends nothing.
+    setNow('2026-12-01T03:00:00Z'); // 11:00 on 1 Dec in Manila: 09:00 has passed
+    seedSession(RES_T, RES_U);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    await choose(page, 'select[name="item_id"]', '21');
+    await fillTimes(page, '2026-12-01', '09:00', '10:00');
+    await wait(page);
+    const facilityAnswer = availabilityText(page);
+    await page.submit();
+    const timeMessage = text(page.query('.section-card .grid-2 + [role="alert"]'));
+    check('AT-3 set-up: on Facilities, the Basketball Court\'s answer ("Free for …") and a time message show, and nothing was booked',
+      /^Free for/.test(facilityAnswer) && timeMessage === 'The booking must start in the future' && posts().length === 0,
+      said({ facilityAnswer, timeMessage, posts: posts().length }));
+    sentGets = net.calls.length;
+    await clickIf(page, toggle(page, 'Items'));
+    await wait(page);
+    f = fieldsOf(page);
+    const afterSwitch = { answer: availabilityText(page), result: !!page.query('.rental-availability-result'),
+      timeMessage: text(page.query('.section-card .grid-2 + [role="alert"]')), sent: net.calls.slice(sentGets).map((c) => c.url) };
+    check('  pressing Items clears the chosen item (nothing selected), the quantity starts at 1, the time message is gone',
+      f.value === '' && f.quantity === '1' && afterSwitch.timeMessage === null, said({ f, afterSwitch }));
+    check('  the facility\'s answer never shows under an item ("Free for", "Already taken" and "Nothing is taken" all gone), '
+        + 'and the press sent no request',
+      afterSwitch.answer === '' && !afterSwitch.result && afterSwitch.sent.length === 0, said(afterSwitch));
+    await choose(page, 'select[name="item_id"]', '22');
+    await fillIf(page, 'input[name="quantity"]', '7');
+    await clickIf(page, toggle(page, 'Facilities'));
+    const backOnFacilities = fieldsOf(page);
+    await clickIf(page, toggle(page, 'Items'));
+    const backOnItems = fieldsOf(page);
+    check('  an item and a quantity of 7 chosen, then Facilities: nothing selected and no Quantity box; back to Items: nothing '
+        + 'selected and the quantity back at 1',
+      backOnFacilities.value === '' && backOnFacilities.quantity === null && backOnItems.value === '' && backOnItems.quantity === '1',
+      said({ backOnFacilities, backOnItems }));
+    await page.unmount();
+    setNow('2026-11-01T00:00:00Z');
+
+    // AT-4. The sidebar label.
+    const NAV_WANT = {
+      resident: ['My requests', 'Request a document', 'My rentals', 'Facilities and Items', 'Events', 'My household', 'My disputes'],
+      secretary: ['Resident review', 'Resident records', 'Households', 'Document requests', 'Payments', 'Document types', 'Rental items',
+        'Rental bookings', 'Blotter', 'Events', 'Notifications', 'Reports', 'Activity log'],
+      treasurer: ['Payments', 'Reports'],
+      staff: ['Rental bookings', 'Households', 'Resident records', 'Document requests', 'Events'],
+      punong_barangay: ['Rental bookings', 'Blotter', 'Resident records', 'Document requests', 'Events', 'Reports', 'Activity log'],
+    };
+    const navGot = {};
+    for (const role of Object.keys(NAV_WANT)) {
+      seedSession(makeToken({ sub: '5', role, exp: VALID_EXP }), { user_id: 5, username: `${role}_t`, role, must_change_password: false });
+      resetNet(200, stub);
+      page = await globalThis.mountInteractive(root(), '/profile');
+      await page.settle();
+      // The sidebar's links; the drawer draws the same list (navLinks in
+      // DashHeader.jsx) and renders it only while open.
+      navGot[role] = page.queryAll('.dash-side-nav a').map(text);
+      await page.unmount();
+    }
+    check('AT-4 the resident\'s navigation names the page "Facilities and Items" (no "Book a facility")',
+      said(navGot.resident) === said(NAV_WANT.resident), said(navGot.resident));
+    check('  and the Secretary\'s, Treasurer\'s, Staff\'s and Punong Barangay\'s navigation is unchanged',
+      ['secretary', 'treasurer', 'staff', 'punong_barangay'].every((r) => said(navGot[r]) === said(NAV_WANT[r])), said(navGot));
+
+    // AT-5. The Type filter on Rental bookings.
+    const typeSelect = (pg) => pg.queryAll('.rental-bookings-filters .pay-filter')
+      .find((d) => text(d.querySelector('label')) === 'Type')?.querySelector('select') ?? null;
+    const itemSelect = (pg) => pg.queryAll('.rental-bookings-filters .pay-filter')
+      .find((d) => text(d.querySelector('label')) === 'Item')?.querySelector('select') ?? null;
+    const pick = async (pg, sel, value) => {
+      if (!sel) return;
+      sel.value = value;
+      sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await pg.settle();
+    };
+    const rowItems = (pg) => pg.queryAll('table.rental-bookings-table tbody tr').map((tr) => text(tr.querySelector('td[data-label="Item"]')));
+    const tabCount = (pg, label) => {
+      const b = pg.queryAll('.pay-tabs button').find((x) => x.textContent.startsWith(`${label} `));
+      return b ? Number(text(b.querySelector('.pay-tab-count'))) : null;
+    };
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    let sel = typeSelect(page);
+    const labels = sel ? [...sel.options].map((o) => text(o)) : null;
+    const order = page.queryAll('.rental-bookings-filters .pay-filter > label').map(text);
+    check('AT-5 Rental bookings has a "Type" filter in the filters row, first, with Any type, Facility, Equipment, Furniture; '
+        + 'Any type chosen and every booking shown (6, Upcoming 6)',
+      !!sel && said(labels) === said(['Any type', 'Facility', 'Equipment', 'Furniture']) && sel.selectedIndex === 0
+        && said(order.slice(0, 2)) === said(['Type', 'Item']) && rowItems(page).length === 6 && tabCount(page, 'Upcoming') === 6,
+      said({ labels, order, rows: rowItems(page), upcoming: tabCount(page, 'Upcoming') }));
+    const WANT_TYPE = { facility: FACILITY_NAMES, equipment: ['Tent', 'Costumes'], furniture: ['Plastic Chairs', 'Plastic Chairs'] };
+    const perType = {};
+    for (const value of Object.keys(WANT_TYPE)) {
+      const before = net.calls.length;
+      await pick(page, typeSelect(page), value);
+      perType[value] = { rows: rowItems(page), upcoming: tabCount(page, 'Upcoming'), all: tabCount(page, 'All'),
+        filters: text(page.query('.pay-filters-toggle')), sent: net.calls.length - before };
+    }
+    check('  Facility, Equipment and Furniture each show only that type\'s bookings, the tab counts follow (as the other filters '
+        + 'make them), the phone\'s button says "Filters (1)", and no choice sends a request',
+      Object.entries(WANT_TYPE).every(([v, want]) => said([...perType[v].rows].sort()) === said([...want].sort())
+        && perType[v].upcoming === want.length && perType[v].all === want.length && perType[v].filters === 'Filters (1)' && perType[v].sent === 0),
+      said(perType));
+    await pick(page, typeSelect(page), 'equipment');
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    await page.settle();
+    check('  the Type lives through Refresh: Equipment is still chosen and only Tent and Costumes show',
+      typeSelect(page)?.value === 'equipment' && said([...rowItems(page)].sort()) === said(['Costumes', 'Tent']), said({ value: typeSelect(page)?.value, rows: rowItems(page) }));
+    await pick(page, typeSelect(page), 'facility');
+    await pick(page, itemSelect(page), 'Tent');
+    const contradiction = { rows: rowItems(page).length, empty: text(page.query('.empty p')), clear: !!buttonNamed(root(), 'Clear search and filters'),
+      filters: text(page.query('.pay-filters-toggle')) };
+    check('  Type Facility with Item Tent shows nothing and says so ("No upcoming bookings match your search or filters." with '
+        + '"Clear search and filters"); the phone\'s button counts both ("Filters (2)")',
+      contradiction.rows === 0 && contradiction.empty === 'No upcoming bookings match your search or filters.' && contradiction.clear
+        && contradiction.filters === 'Filters (2)', said(contradiction));
+    await clickIf(page, buttonNamed(root(), 'Clear search and filters'));
+    check('  "Clear search and filters" puts the Type back to Any type, with every booking back',
+      typeSelect(page)?.value === F.ANY && rowItems(page).length === 6, said({ value: typeSelect(page)?.value, rows: rowItems(page).length }));
+    await pick(page, typeSelect(page), 'furniture');
+    await clickIf(page, page.query('.pay-filters-clear'));
+    check('  and "Clear filters" in the row does too', typeSelect(page)?.value === F.ANY && rowItems(page).length === 6,
+      said({ value: typeSelect(page)?.value }));
+    await page.unmount();
+    const typeFor = {};
+    for (const [role, route] of [['staff', '/staff'], ['punong_barangay', '/punong-barangay']]) {
+      seedSession(makeToken({ sub: '3', role, exp: VALID_EXP }), { user_id: 3, username: `${role}_t`, role, must_change_password: false });
+      resetNet(200, stub);
+      page = await globalThis.mountInteractive(root(), route);
+      await page.settle();
+      typeFor[role] = !!typeSelect(page);
+      await page.unmount();
+    }
+    check('  Staff and the Punong Barangay, on the same page, have the Type filter too', typeFor.staff && typeFor.punong_barangay, said(typeFor));
+
+    // AT-6. The walk-in's Facility | Item toggle.
+    const RES_BOX = '.pending-card input[placeholder^="Search the resident"]';
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    if (page.query(RES_BOX)) await page.fill(RES_BOX, 'Juan');
+    await wait(page, 400);
+    await clickIf(page, page.query('.picker-option'));
+    f = fieldsOf(page);
+    const walkTabs = (pg) => pg.queryAll('.tab-container').map((c) => [...c.querySelectorAll('button.tab')].map((b) => [text(b), b.getAttribute('aria-pressed')]));
+    check('AT-6 the walk-in form has a second toggle under the borrower\'s: "Facility" (pressed) | "Item"; the dropdown is '
+        + 'labelled "Facility" and lists only facilities; no Quantity; Start time | End time',
+      said(walkTabs(page)) === said([[['Existing resident', 'true'], ['Guest from another barangay', 'false']], [['Facility', 'true'], ['Item', 'false']]])
+        && f.select === 'Facility' && said([...f.options].sort()) === said([...FACILITY_NAMES].sort()) && f.quantity === null
+        && f.start === 'Start time' && f.end === 'End time' && f.dateFull === true,
+      said({ tabs: walkTabs(page), f }));
+    await choose(page, 'select[name="item_id"]', '23');
+    await fillTimes(page, '2026-12-01', '09:00', '11:00');
+    await wait(page);
+    const walkFacilityAnswer = availabilityText(page);
+    sentGets = net.calls.length;
+    await clickIf(page, toggle(page, 'Item'));
+    await wait(page);
+    f = fieldsOf(page);
+    const picked = text(page.query('.picker-selected'));
+    check('  pressing Item: the dropdown is labelled "Item" with only equipment and furniture, nothing selected, Quantity 1, '
+        + 'Pick-up time | Return time',
+      f.select === 'Item' && said([...f.options].sort()) === said([...ITEM_NAMES].sort()) && f.value === '' && f.quantity === '1'
+        && f.start === 'Pick-up time' && f.end === 'Return time' && f.dateFull === false, said(f));
+    check('  the hall\'s answer is gone (none under an item), the press sent nothing, and the resident picked above is still picked',
+      /^Free for/.test(walkFacilityAnswer) && availabilityText(page) === '' && net.calls.length === sentGets && /Juan/.test(picked ?? ''),
+      said({ walkFacilityAnswer, now: availabilityText(page), sent: net.calls.slice(sentGets).map((c) => c.url), picked }));
+    await choose(page, 'select[name="item_id"]', '25');
+    await fillIf(page, 'input[name="quantity"]', '4');
+    await clickIf(page, toggle(page, 'Facility'));
+    const walkBack = fieldsOf(page);
+    check('  an item and a quantity of 4, then Facility: nothing selected, no Quantity, and the resident still picked',
+      walkBack.value === '' && walkBack.quantity === null && /Juan/.test(text(page.query('.picker-selected')) ?? ''), said(walkBack));
+    await clickIf(page, toggle(page, 'Guest from another barangay'));
+    await fillIf(page, 'input[placeholder="As given at the counter"]', 'Maria Santos');
+    await fillIf(page, 'input[placeholder="09XXXXXXXXX"]', '09171234567');
+    await clickIf(page, toggle(page, 'Item'));
+    await clickIf(page, toggle(page, 'Facility'));
+    const guestKept = { name: page.query('input[placeholder="As given at the counter"]')?.value ?? null,
+      contact: page.query('input[placeholder="09XXXXXXXXX"]')?.value ?? null, pressed: walkTabs(page)[1] };
+    check('  a guest\'s typed name and number stay through Item and back to Facility',
+      guestKept.name === 'Maria Santos' && guestKept.contact === '09171234567' && said(guestKept.pressed) === said([['Facility', 'true'], ['Item', 'false']]),
+      said(guestKept));
+    await clickIf(page, toggle(page, 'Existing resident'));
+    check('  and back on Existing resident, the resident picked first is still picked', /Juan/.test(text(page.query('.picker-selected')) ?? ''),
+      said(text(page.query('.picker-selected'))));
+    await page.unmount();
+
+    // AT-7. A failed load is an error with Try again on both tabs and both
+    // toggles; a tab with nothing to offer says so in a sentence.
+    const failedView = (pg) => ({
+      error: text(pg.query('.pending-card .alert.error[role="alert"]')),
+      tryAgain: !!buttonNamed(root(), 'Try again'),
+      select: !!pg.query('select[name="item_id"]'),
+      empty: /currently available/.test(spaced(pg.query('.pending-card'))),
+    });
+    const failedOk = (v) => v.error === 'Could not load the rental items: The database did not answer' && v.tryAgain && !v.select && !v.empty;
+    seedSession(RES_T, RES_U);
+    items.mode = 'fail';
+    resetNet(500, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const resFailed = [failedView(page)];
+    await clickIf(page, toggle(page, 'Items'));
+    resFailed.push(failedView(page));
+    check('AT-7 a failed load on Book a rental is the error with Try again on Facilities and on Items: never the empty text, never the dropdown',
+      resFailed.length === 2 && resFailed.every(failedOk) && toggle(page, 'Items')?.getAttribute('aria-pressed') === 'true', said(resFailed));
+    items.mode = 'all';
+    net.status = 200;
+    await clickIf(page, buttonNamed(root(), 'Try again'));
+    f = fieldsOf(page);
+    check('  Try again on the Items tab loads the items and stays on Items', f.select === 'Item' && said([...f.options].sort()) === said([...ITEM_NAMES].sort()),
+      said(f));
+    await page.unmount();
+    seedSession(VALID);
+    items.mode = 'fail';
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    net.status = 500;
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    const walkFailed = [failedView(page)];
+    await clickIf(page, toggle(page, 'Item'));
+    walkFailed.push(failedView(page));
+    net.status = 200;
+    check('  and on the walk-in form, on Facility and on Item',
+      walkFailed.length === 2 && walkFailed.every(failedOk) && toggle(page, 'Item')?.getAttribute('aria-pressed') === 'true', said(walkFailed));
+    await page.unmount();
+    seedSession(RES_T, RES_U);
+    items.mode = 'facilities';
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const onlyFacilities = { facilities: optionNames(page) };
+    await clickIf(page, toggle(page, 'Items'));
+    onlyFacilities.items = { select: !!page.query('select[name="item_id"]'), says: text(page.query('.pending-card p.muted')) };
+    check('  with only facilities loaded, the Items tab says "No item is currently available for rental." in place of the fields',
+      said([...onlyFacilities.facilities].sort()) === said([...FACILITY_NAMES].sort()) && !onlyFacilities.items.select
+        && onlyFacilities.items.says === 'No item is currently available for rental.', said(onlyFacilities));
+    await page.unmount();
+    items.mode = 'all';
+
+    if (F.clock && realNow) F.clock.now = realNow;
   }
 
   console.error = origError;
