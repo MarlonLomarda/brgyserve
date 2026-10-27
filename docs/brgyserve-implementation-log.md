@@ -1003,6 +1003,33 @@ Neither has been measured against the other screens it reaches.
     - No sideways scroll anywhere.
 - **Found and not changed:** the Document requests walk-in panel and the blotter's case form have the same 0px head gap, and the Document requests walk-in's Back still wraps to two lines at 768 and 1280. Neither is a rental panel, so they were left for the owner to decide.
 
+### Step C2: Facilities | Items, the Type filter and the walk-in toggle, 27 Oct 2026
+
+- **Why:** Lon decided on 16 Oct, and again on 27 Oct, to separate facility bookings (used in place, quantity 1, no return) from item rentals (equipment and furniture, a quantity, taken out and returned). One dropdown mixed them on Book a rental and on the walk-in form. The rules are in `docs/modules/rental-bookings.md`, "Facilities | Items".
+- **Read first:**
+  - The list's select already embeds `rental_items ( item_id, name, type, … )` (`routes/rentalRequests.js`), so the Type filter needed no backend change.
+  - The heading was set by App.jsx's `PageLayout` around the page, and the sidebar label is in `constants/nav.js`. `roles:test` pins neither. `test:auth` pinned the card's heading, the single dropdown, three filters and the focus on Item.
+  - The Terms and the Help Center name no navigation label ("open the bookings section").
+  - The tab look is the walk-in's `.tab-container` / `.tab` / `.active-tab` with `aria-pressed`.
+- **Decisions taken here (flagged in the report):**
+  - The page draws its own `PageLayout`, so the heading can follow the tab. The card's "Book a facility or item" heading gave way to the tabs.
+  - The Items tab always has a Quantity box, a one-unit item included, so its row is Date | Quantity as asked.
+  - The Item filter's choices stay every item, the simpler choice; a disagreeing Type and Item show the filters' empty text.
+  - Type is the row's first select, so Clear filters now focuses it.
+  - A tab switch keeps the date, the times and the purpose.
+  - The My rentals empty state's link keeps "Book a facility".
+- **Tested:**
+  - **Red first:** section AT written first: `test:auth` 1952 passed, 26 failed, every failure in AT for the missing feature (the 6 that passed pin what must not change or already held: the body's six keys on both tabs, no Quantity box before an item is chosen, the AT-3 set-up, the other roles' navigation, and the resident kept through the borrower toggle); the 1946 older checks stayed green.
+  - **Green:** `test:auth` 1946 to 1978; `roles:test` 179 and `rentals:test` 273, unchanged (no backend change); lint 7 warnings, the same seven; the build is clean.
+  - **Older checks that pinned the old page, updated, not deleted (44 failures at the first green run):** AD's "the status select is gone" (four selects, Type first; 3 roles); AF's two Clear filters focus checks and the Filters button's one (focus on Type; 3 roles each); AG's "the filters Item, Payment and Starts" (3 roles); AI's card view (the tabs in place of the heading, the Facilities tab's options and empty sentence; 5 checks); AL's refusal "under the card's heading" and its empty sentence; AN/AO's `choose` presses the other tab or toggle when the item is not offered (19 checks), and its mode-button check reads the first toggle only; AS's countable-item Date checks press Items / Item first.
+  - **Mutations, in memory, sha256 of the eight touched files the same before and after:** control green (1978); facilities shown on the Items tab, 4 red; Quantity kept on the Facilities tab, 3; the item not cleared on a tab switch, 11; the old sidebar label, 1; the type test dropped from the filter, 4; the resident cleared on a toggle switch, 3.
+  - **Pixels:** headless Chrome over CDP on the real app (`file://`, the real `index.css`, a fetch stub answering GETs and refusing every other method, no server, no database), at 390 (`innerWidth` 390), 768 and 1280, with a "before" bundle built from a `git archive` of HEAD:
+    - No sideways scroll on Book a rental (both tabs), the walk-in (both toggles, resident and guest) or the list with the Type filter; no state sent a write.
+    - The resident tabs sit 21px under the card's top. The second walk-in toggle is 14px under the picked resident or the guest fields, then 16px over the dropdown. Every toggle is one line, nothing clipped.
+    - The filters row: 1 line at 1280 (was 1); **2 lines at 768 (was 1, with 24.5px to spare)**, Starts on the second; at 390 the Filters panel, Type first and full width.
+    - The table scrolling inside its `.table-wrap` at 768 (right edge 989) is the same before and after.
+- **Found and not changed:** on a phone the item dropdown's option text ("Costumes (Equipment) — ₱150.00 per unit · 12 units") is cut by the select, as before; at 768 "Multipurpose Hall" breaks inside the word in the fixed Item column, as before (R4's widths).
+
 ## Resident Records Management
 
 ### Planned design
