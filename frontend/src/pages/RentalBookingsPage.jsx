@@ -45,6 +45,7 @@ import {
   matchesItem,
   matchesPayment,
   matchesStarts,
+  matchesType,
   matchingBookings,
   noMatchText,
   openingTab,
@@ -59,7 +60,15 @@ import {
   startsRange,
   tabCounts,
   tabHeading,
+  TYPE_OPTIONS,
 } from "../utils/rentalList";
+import {
+  FACILITY,
+  ITEM,
+  KIND_TEXT,
+  NOT_ASKED,
+  ofKind,
+} from "../utils/bookingKinds";
 
 // All-bookings view, shared by three roles: the Secretary manages
 // (canManage — edit/cancel), Barangay Staff mark physical items returned
@@ -153,6 +162,13 @@ import {
 // CancelBookingPanel with a required reason, and for a paid booking says the
 // payment stays recorded and a refund is due. A cancelled booking shows its
 // reason under its status, as text.
+//
+// TYPE AND KIND (27 Oct 2026, step C2). The filters row opens with a Type
+// filter, Any type, Facility, Equipment or Furniture (utils/rentalList.js),
+// which narrows with the others: the tab counts, the heading and Clear
+// filters treat it as they treat Item. The walk-in form splits its dropdown
+// with a Facility | Item toggle, as Book a rental's tabs do
+// (utils/bookingKinds.js). The Edit panel is unchanged: its item is fixed.
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -526,6 +542,9 @@ function WalkInBookingPanel({ onDone }) {
   const [items, setItems] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [mode, setMode] = useState("resident"); // 'resident' | 'guest'
+  // What is booked: a facility or an item (utils/bookingKinds.js), as Book a
+  // rental's tabs split it. Facility to start, on every visit.
+  const [kind, setKind] = useState(FACILITY);
   const [resident, setResident] = useState(null);
   const residentBoxId = useId(); // the "Resident" label's for=
   const [guest, setGuest] = useState({ name: "", contact: "" });
@@ -557,23 +576,29 @@ function WalkInBookingPanel({ onDone }) {
     loadItems();
   }, [loadItems]);
 
-  const selectedItem = items?.find(
+  // The toggle's own items, and Book a rental's rules for them: a Quantity
+  // for an item, none for a facility.
+  const words = KIND_TEXT[kind];
+  const shownItems = items === null ? null : ofKind(items, kind);
+  const selectedItem = shownItems?.find(
     (i) => String(i.item_id) === String(form.item_id),
   );
-  const isCountable = selectedItem && selectedItem.quantity_total > 1;
-  const quantity = isCountable ? Number(form.quantity) || 0 : 1;
+  const withQuantity = kind === ITEM;
+  const quantity = withQuantity ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
 
-  // What is free for the chosen time: advice only, as on Book a rental.
+  // What is free for the chosen time: advice only, as on Book a rental, and
+  // nothing while no item is chosen.
   const availability = useRentalAvailability(
     selectedItem?.item_id,
     form.date,
     form.start_time,
     form.end_time,
   );
-  const answer = availability.status === "ready" ? availability.data : null;
+  const check = selectedItem ? availability : NOT_ASKED;
+  const answer = check.status === "ready" ? check.data : null;
   const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
-  const blocked = bookingBlock({ answer, quantity, countable: isCountable });
+  const blocked = bookingBlock({ answer, quantity, countable: withQuantity });
   const blockedId = useId();
 
   function handleChange(e) {
@@ -591,6 +616,17 @@ function WalkInBookingPanel({ onDone }) {
 
   function switchMode(next) {
     setMode(next);
+    setError("");
+  }
+
+  // Facility | Item clears the item, the quantity and a time message (the
+  // availability answer goes with the item), as Book a rental's tabs do. The
+  // resident or guest above, the date, the times and the purpose stay.
+  function switchKind(next) {
+    if (next === kind) return;
+    setKind(next);
+    setForm((f) => ({ ...f, item_id: "", quantity: "1" }));
+    setTimeError("");
     setError("");
   }
 
@@ -741,6 +777,25 @@ function WalkInBookingPanel({ onDone }) {
           </div>
         )}
 
+        {/* The second toggle: what is booked. Drawn whatever the load did. */}
+        <div
+          className="tab-container"
+          role="group"
+          aria-label="What to book"
+        >
+          {[FACILITY, ITEM].map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`tab ${kind === k ? "active-tab" : ""}`}
+              aria-pressed={kind === k}
+              onClick={() => switchKind(k)}
+            >
+              {KIND_TEXT[k].toggle}
+            </button>
+          ))}
+        </div>
+
         {/* The error first, then loading, then empty, then the fields. Try
             again is a plain button, so pressing it inside this form loads the
             items again and submits nothing. */}
@@ -761,12 +816,12 @@ function WalkInBookingPanel({ onDone }) {
           </>
         ) : items === null ? (
           <p className="muted">Loading rental items…</p>
-        ) : items.length === 0 ? (
-          <p className="muted">Nothing is currently available for rental.</p>
+        ) : shownItems.length === 0 ? (
+          <p className="muted">{words.none}</p>
         ) : (
           <>
             <label>
-              Facility / item
+              {words.field}
               <select
                 name="item_id"
                 value={form.item_id}
@@ -774,9 +829,9 @@ function WalkInBookingPanel({ onDone }) {
                 required
               >
                 <option value="" disabled>
-                  Select an item…
+                  {words.choose}
                 </option>
-                {items.map((i) => (
+                {shownItems.map((i) => (
                   <option key={i.item_id} value={i.item_id}>
                     {i.name} ({ITEM_TYPE_LABELS[i.type] || i.type}) — ₱
                     {Number(i.fee).toFixed(2)}
@@ -793,10 +848,11 @@ function WalkInBookingPanel({ onDone }) {
               </p>
             )}
 
-            {/* Without a Quantity box, Date takes the whole row so Start and
-                End time sit side by side; with one, Date | Quantity. */}
+            {/* Facility: Date takes the whole row, so Start and End time sit
+                side by side under it. Item: Date | Quantity, then Pick-up |
+                Return time. */}
             <div className="grid-2">
-              <label className={isCountable ? undefined : "rental-date-full"}>
+              <label className={withQuantity ? undefined : "rental-date-full"}>
                 Date
                 <input
                   name="date"
@@ -807,17 +863,19 @@ function WalkInBookingPanel({ onDone }) {
                   required
                 />
               </label>
-              {isCountable && (
+              {withQuantity && (
                 <label>
                   Quantity{" "}
-                  <span className="hint">
-                    {cap > 0 ? `(up to ${cap})` : "(none left)"}
-                  </span>
+                  {selectedItem && (
+                    <span className="hint">
+                      {cap > 0 ? `(up to ${cap})` : "(none left)"}
+                    </span>
+                  )}
                   <input
                     name="quantity"
                     type="number"
                     min="1"
-                    max={Math.max(1, cap)}
+                    max={selectedItem ? Math.max(1, cap) : undefined}
                     step="1"
                     value={form.quantity}
                     onChange={handleChange}
@@ -826,7 +884,7 @@ function WalkInBookingPanel({ onDone }) {
                 </label>
               )}
               <label>
-                Start time
+                {words.start}
                 <input
                   name="start_time"
                   type="time"
@@ -836,7 +894,7 @@ function WalkInBookingPanel({ onDone }) {
                 />
               </label>
               <label>
-                End time
+                {words.end}
                 <input
                   name="end_time"
                   type="time"
@@ -852,7 +910,7 @@ function WalkInBookingPanel({ onDone }) {
                 {timeError}
               </div>
             )}
-            <RentalAvailability check={availability} />
+            <RentalAvailability check={check} />
 
             <label>
               Purpose
@@ -870,7 +928,7 @@ function WalkInBookingPanel({ onDone }) {
             {selectedItem && (
               <p className="muted">
                 Estimated fee: <strong>₱{estimatedFee.toFixed(2)}</strong>
-                {isCountable && quantity > 0 && (
+                {withQuantity && quantity > 0 && (
                   <>
                     {" "}
                     ({quantity} × ₱{Number(selectedItem.fee).toFixed(2)})
@@ -939,10 +997,11 @@ export default function RentalBookingsPage({
   // Like the search, both live through every reload and Back from a panel.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  // The filters: Item, Payment and Starts (its choice, and From and To under
-  // "Choose dates"). Like the search, they live here, so they outlive the list
-  // while a panel takes its place; every visit starts them at Any, and none
-  // is kept in the browser.
+  // The filters: Type, Item, Payment and Starts (its choice, and From and To
+  // under "Choose dates"). Like the search, they live here, so they outlive
+  // the list while a panel takes its place; every visit starts them at Any,
+  // and none is kept in the browser.
+  const [typeChoice, setTypeChoice] = useState(ANY);
   const [itemChoice, setItemChoice] = useState(ANY_ITEM);
   const [paymentChoice, setPaymentChoice] = useState(ANY);
   const [dateChoice, setDateChoice] = useState(ANY);
@@ -1043,10 +1102,14 @@ export default function RentalBookingsPage({
   // A filter that restricts something: "Choose dates" with no date is on
   // (Clear filters shows) but restricts nothing.
   const filtered =
-    itemChoice !== ANY_ITEM || paymentChoice !== ANY || range !== null;
+    typeChoice !== ANY ||
+    itemChoice !== ANY_ITEM ||
+    paymentChoice !== ANY ||
+    range !== null;
   // How many filters are on: the "(2)" on a phone's Filters button, and Clear
   // filters is offered while it is above 0.
   const filtersOn = filterCount({
+    type: typeChoice,
     item: itemChoice,
     payment: paymentChoice,
     date: dateChoice,
@@ -1054,6 +1117,7 @@ export default function RentalBookingsPage({
   const searched = requests === null ? [] : matchingBookings(requests, query);
   const matching = searched.filter(
     (r) =>
+      matchesType(r, typeChoice) &&
       matchesItem(r, itemChoice) &&
       matchesPayment(r, paymentChoice) &&
       matchesStarts(r, range),
@@ -1106,13 +1170,14 @@ export default function RentalBookingsPage({
     setPage(1);
   }
 
-  // Item, Payment, Starts, From and To.
+  // Type, Item, Payment, Starts, From and To.
   function narrowBy(set, value) {
     set(value);
     setPage(1);
   }
 
   function resetFilters() {
+    setTypeChoice(ANY);
     setItemChoice(ANY_ITEM);
     setPaymentChoice(ANY);
     setDateChoice(ANY);
@@ -1260,6 +1325,12 @@ export default function RentalBookingsPage({
               <ListFilters
                 className="rental-bookings-filters doc-requests-filters"
                 selects={[
+                  {
+                    label: "Type",
+                    value: typeChoice,
+                    options: TYPE_OPTIONS,
+                    onChange: (value) => narrowBy(setTypeChoice, value),
+                  },
                   {
                     label: "Item",
                     value: itemChoice,

@@ -54,7 +54,18 @@
 // (index.css), so each row's schedule is drawn as two lines, the date with
 // its comma over the times (scheduleParts), the break in the same place in
 // every row.
-import { displayStatus, formatSchedule } from "../constants/rentals";
+//
+// TYPE (27 Oct 2026, step C2). A fourth filter, first in the row: the item's
+// type, Facility, Equipment or Furniture (TYPE_OPTIONS, matchesType), read
+// from the type the booking's item carries. It narrows with the others, so
+// the tab counts and the heading follow it as they follow Item. The Item
+// choices stay every item the rows hold: a Type and an Item that disagree
+// (Facility and Tent) show nothing, with the filters' own empty text.
+import {
+  displayStatus,
+  formatSchedule,
+  ITEM_TYPE_LABELS,
+} from "../constants/rentals";
 import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
 import { matchesPayment, paymentMarker, paymentOptions } from "./requestList";
@@ -332,6 +343,22 @@ export function matchesItem(booking, choice) {
   return choice === ANY_ITEM || booking.rental_items?.name === choice;
 }
 
+// The Type choices: "Any type", then the three types in the words the Edit
+// panel uses for them (ITEM_TYPE_LABELS). A fixed list, as Starts' is, so
+// every type is offered whether or not a loaded booking has one.
+export const TYPE_OPTIONS = [
+  { value: ANY, label: "Any type" },
+  ...Object.entries(ITEM_TYPE_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  })),
+];
+
+// A booking matches a type when its item is of that type.
+export function matchesType(booking, choice) {
+  return choice === ANY || booking.rental_items?.type === choice;
+}
+
 // The Starts choices. Bookings are made ahead and looked back on, so the
 // presets go both ways, and each counts today: Next 7 days is today and the 6
 // days after it, Last 7 days today and the 6 before it (Payments' Last 7
@@ -399,9 +426,9 @@ export function filtersNoMatchText(tab) {
 }
 
 // How many filters are on, for the "(2)" on a phone's Filters button: each of
-// Item, Payment and Starts that is off its Any choice. From and To are
+// Type, Item, Payment and Starts that is off its Any choice. From and To are
 // Starts' own ("Choose dates"), so they never count apart from it.
-export function filterCount({ item, payment, date }) {
-  const on = [item !== ANY_ITEM, payment !== ANY, date !== ANY];
+export function filterCount({ type = ANY, item, payment, date }) {
+  const on = [type !== ANY, item !== ANY_ITEM, payment !== ANY, date !== ANY];
   return on.filter(Boolean).length;
 }
