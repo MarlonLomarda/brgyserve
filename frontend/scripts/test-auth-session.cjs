@@ -279,8 +279,11 @@
 // input by input; Book a rental and the walk-in form showing the hours, the
 // limit beside the date and the time fields held to them, and refusing out
 // of hours or too far ahead before sending; and the Rental items page: the
-// hours on the form and in the list, the Booking rules box, and a failed
-// list load that is an error with Try again, never an empty list.
+// hours on the form and in the list, and a failed list load that is an
+// error with Try again, never an empty list. Since step O43 the page has no
+// Booking rules box (the limit is a constant in the server's code), and
+// AU-e holds the Secretary's Edit panel to the same rules as the booking
+// forms (P29).
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -9110,6 +9113,12 @@ const root = () => dom.window.document.getElementById('root');
         await clickIf(page, buttonNamed(root(), '← Back to list'));
         const backCalls = listCalls(net.calls.slice(sent));
         await clickIf(page, rowButton(page, 'Ben Reyes', 'Edit'));
+        // Since step O43 Save checks the times as the booking forms do, and
+        // #502 started on 19 Oct (not_started here is a stand-in), so it is
+        // moved a week ahead of the page's clock before Save.
+        const weekAhead = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' })
+          .format(new Date((globalThis.chargeFilters?.clock?.now?.() ?? new Date()).getTime() + 7 * 86400000));
+        if (page.query('.pending-card input[name="date"]')) await page.fill('.pending-card input[name="date"]', weekAhead);
         if (page.query('.pending-card form')) await page.submit();
         await page.settle();
         v = look(page);
@@ -9855,9 +9864,12 @@ const root = () => dom.window.document.getElementById('root');
         const opened = text(page.query('.pending-card h3'));
         await clickIf(page, buttonNamed(root(), '← Back to list'));
         v = look(page);
+        // The Edit panel asks GET /rental-settings for its days-ahead hint
+        // (step O43), and nothing else.
         check('Secretary: Back from Edit, with nothing saved, keeps the search and the tab: "santos" in the box, Overdue '
-            + 'chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested',
-          opened === 'Edit booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said([]),
+            + 'chosen, its four rows under "4 of 7 overdue bookings match"; nothing was requested but the Edit panel\'s '
+            + 'GET /rental-settings',
+          opened === 'Edit booking #2' && kept(v) && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-settings']),
           said({ opened, v, calls: listCalls(net.calls.slice(sent)) }));
         sent = net.calls.length;
         await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
@@ -10389,8 +10401,11 @@ const root = () => dom.window.document.getElementById('root');
           const opened = text(page.query('.pending-card h3'));
           await clickIf(page, buttonNamed(root(), '← Back to list'));
           v = lookP(page);
-          check('Secretary: Back from Edit on page 2, with nothing saved, keeps the page; nothing was requested',
-            opened === 'Edit booking #27' && onPage(v, 2, 2, 26, 28, 28) && said(listCalls(net.calls.slice(sent))) === said([]),
+          // The Edit panel asks GET /rental-settings (step O43), and nothing else.
+          check('Secretary: Back from Edit on page 2, with nothing saved, keeps the page; nothing was requested but the Edit '
+              + 'panel\'s GET /rental-settings',
+            opened === 'Edit booking #27' && onPage(v, 2, 2, 26, 28, 28)
+              && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-settings']),
             said({ opened, after: brief(v), calls: listCalls(net.calls.slice(sent)) }));
           // The reload after an action keeps the page where it still exists.
           sent = net.calls.length;
@@ -12033,10 +12048,13 @@ const root = () => dom.window.document.getElementById('root');
             const opened = text(page.query('.pending-card h3'));
             await clickIf(page, buttonNamed(root(), '← Back to list'));
             v = lookF(page);
+            // The Edit panel asks GET /rental-settings (step O43); Mark
+            // returned asks nothing.
+            const expectCalls = name === 'Secretary' ? ['GET /rental-settings'] : [];
             check(`${name}: Back from ${label}, with nothing ${name === 'Secretary' ? 'saved' : 'recorded'}, keeps every filter and its `
-                + 'row; nothing was requested',
+                + `row; nothing was requested${name === 'Secretary' ? ' but the Edit panel\'s GET /rental-settings' : ''}`,
               opened === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147') && filtersOf(v) === SET
-                && said(v.rows) === said([147]) && said(listCalls(net.calls.slice(sent))) === said([]),
+                && said(v.rows) === said([147]) && said(listCalls(net.calls.slice(sent))) === said(expectCalls),
               said({ opened, v: filtersOf(v), rows: v.rows, calls: listCalls(net.calls.slice(sent)) }));
           }
 
@@ -12491,8 +12509,10 @@ const root = () => dom.window.document.getElementById('root');
                 + 'open state is the page\'s',
               keptOpen.length === (panelLabel ? 5 : 4) && keptOpen.every((s) => isOpen(s)) && none(duringRefresh) && none(besideError)
                 && (!panelLabel || openedPanel === (name === 'Secretary' ? 'Edit booking #147' : 'Mark returned — booking #147'))
+                // The Secretary's Edit panel also asks GET /rental-settings
+                // (step O43).
                 && said(reloadCalls) === said(['GET /rental-requests?status=all', 'GET /rental-requests?status=all',
-                  'GET /rental-requests?status=all']),
+                  'GET /rental-requests?status=all', ...(name === 'Secretary' ? ['GET /rental-settings'] : [])]),
               said({ keptOpen, duringRefresh, besideError, openedPanel, reloadCalls }));
             await toggle(page);
             const keptClosed = [];
@@ -15783,7 +15803,8 @@ const root = () => dom.window.document.getElementById('root');
     check('sections AP to AR asked no window.confirm and kept nothing in the browser (no localStorage or sessionStorage write)',
       asked.length === 0 && kept.sets === 0 && domStorage.writes === kept.dom,
       said({ asked: asked.length, stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
-    // GET /rental-settings: the Rental items page's Booking rules box (step R1).
+    // GET /rental-settings: the Edit panel's days-ahead hint (step O43; the
+    // Rental items page's Booking rules box, which asked it in step R1, is gone).
     check('sections AP to AR sent only the list, the availability, the items, the booking rules, the edits and the return',
       methods.length > 0 && methods.every((m) => ['GET /rental-requests', 'GET /rental-requests/availability', 'PUT /rental-requests/:id',
         'GET /rental-items/all', 'GET /rental-settings', 'PUT /rental-items/:id', 'POST /rental-requests/:id/return'].includes(m)),
@@ -16736,9 +16757,10 @@ const root = () => dom.window.document.getElementById('root');
 
   // =========================================================================
   // AU. The booking rules (step R1, migration 025): each item's hours, how
-  // far ahead a booking may start, a booking that ends at midnight, and the
-  // Rental items page (the hours on the form and in the list, the Booking
-  // rules box, and a failed list load that is an error, never an empty list).
+  // far ahead a booking may start, a booking that ends at midnight, the
+  // Rental items page (the hours on the form and in the list, no Booking
+  // rules box since step O43, and a failed list load that is an error, never
+  // an empty list), and the Edit panel's hours, limit and refusals (P29).
   // =========================================================================
   console.log('\n--- The booking rules: an item\'s hours, how far ahead, and the Rental items page ---');
   {
@@ -17043,14 +17065,12 @@ const root = () => dom.window.document.getElementById('root');
 
     // --- AU-d. the Rental items page -------------------------------------------
     const ITEMS_ALL = [{ ...COURT, description: 'Outdoor court' }, { ...HALL }, { ...CHAIRS, is_active: false }];
-    const it = { list: 'ok', rules: 'ok' };
+    // Step O43: the page no longer asks /rental-settings, so the stub has no
+    // answer for it (a request there is counted below as a failure).
+    const it = { list: 'ok' };
     const itemsStub = (url, method) => {
       if (method === 'GET' && /\/rental-items\/all$/.test(url)) {
         return it.list === 'ok' ? { rental_items: ITEMS_ALL } : { error: 'The database did not answer' };
-      }
-      if (method === 'GET' && /\/rental-settings$/.test(url)) return it.rules === 'ok' ? { max_days_ahead: 31 } : { error: 'Rules unreadable' };
-      if (method === 'PUT' && /\/rental-settings$/.test(url)) {
-        return { message: 'Booking rules saved', max_days_ahead: bodyOf(net.calls.at(-1))?.max_days_ahead };
       }
       if (method === 'PUT' && /\/rental-items\/\d+$/.test(url)) return { message: 'Rental item updated', rental_item: {} };
       if (method === 'POST' && /\/rental-items$/.test(url)) return { message: 'Rental item created', rental_item: {} };
@@ -17067,12 +17087,10 @@ const root = () => dom.window.document.getElementById('root');
         empty: !!pg.query('.empty'),
         rows: pg.queryAll('table.data-table tbody tr').map((tr) => [...tr.querySelectorAll('td')].map(text)),
         headers: pg.queryAll('table.data-table thead th').map(text),
-        rulesValue: pg.query('input[name="max_days_ahead"]')?.value ?? null,
       };
     };
     seedSession(VALID);
     it.list = 'fail';
-    it.rules = 'fail';
     resetNet(500, itemsStub);
     page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
     await page.settle();
@@ -17082,11 +17100,8 @@ const root = () => dom.window.document.getElementById('root');
     iv.alerts.includes('Could not load the rental items: The database did not answer') && iv.rows.length === 0 && iv.retry >= 1, said(iv));
     check('  never an empty list: the heading stays "Rental items" (never "0 rental items"), no "No rental items yet." and no loading line',
       iv.heading === 'Rental items' && !iv.empty && iv.loading.length === 0, said(iv));
-    check('  the Booking rules box says its own failure, "Could not load the booking rules: Rules unreadable", and shows no number',
-      iv.alerts.includes('Could not load the booking rules: Rules unreadable') && iv.rulesValue === null, said(iv));
     net.status = 200;
     it.list = 'ok';
-    it.rules = 'ok';
     net.hold = true;
     const listRetry = page.queryAll('button').filter((b) => text(b) === 'Try again')
       .find((b) => b.previousElementSibling && text(b.previousElementSibling).startsWith('Could not load the rental items'));
@@ -17101,11 +17116,6 @@ const root = () => dom.window.document.getElementById('root');
     check('  and then the rows: 3 rental items, with a "Booking hours" column reading "7:00 AM – 12:00 midnight", "7:00 AM – 5:00 PM"',
       iv.heading === '3 rental items' && iv.headers.includes('Booking hours') && iv.rows.length === 3
         && iv.rows[0].includes('7:00 AM – 12:00 midnight') && iv.rows[1].includes('7:00 AM – 5:00 PM'), said(iv));
-    const rulesRetry = page.queryAll('button').find((b) => text(b) === 'Try again');
-    await clickIf(page, rulesRetry);
-    await page.settle();
-    iv = itemsView(page);
-    check('  the rules box\'s own Try again loads it: the field reads 31', iv.rulesValue === '31', said(iv));
     await finish(page);
 
     seedSession(VALID);
@@ -17140,7 +17150,7 @@ const root = () => dom.window.document.getElementById('root');
     check('Editing the court: Opens 07:00 and Closes 00:00 (its stored 24:00:00, midnight), time fields, "(12:00 AM means midnight)" by Closes',
       hf.opens === '07:00' && hf.closes === '00:00' && hf.opensType === 'time' && /12:00 AM means midnight/.test(hf.closesLabel || ''), said(hf));
     await fillIf(page, 'input[name="booking_opens_at"]', '06:00');
-    // The item form's own Save (the Booking rules box is a form too).
+    // The item form's own Save.
     await clickIf(page, buttonNamed(root(), 'Save changes'));
     const putItem = net.calls.filter((c) => c.method === 'PUT' && /\/rental-items\/31$/.test(c.url)).at(-1);
     check('  Save sends booking_opens_at "06:00" and booking_closes_at "00:00" with the other fields',
@@ -17151,27 +17161,137 @@ const root = () => dom.window.document.getElementById('root');
     check('A new item starts at Opens 07:00 and Closes 17:00, the database\'s own defaults', hf.opens === '07:00' && hf.closes === '17:00', said(hf));
     await finish(page);
 
-    // The Booking rules box.
+    // No Booking rules box since step O43: the limit is a constant in the
+    // server's code, and the Secretary no longer changes it here. (The box's
+    // own checks, its load failure, its Try again and Save rules' PUT, were
+    // deleted with it.)
     seedSession(VALID);
     resetNet(200, itemsStub);
     page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
     await page.settle();
-    const box = page.queryAll('section.pending-card').find((s) => text(s.querySelector('h3')) === 'Booking rules') ?? null;
-    check('The Booking rules box: heading "Booking rules", the field "Days ahead a booking can be made" reading 31, 1 to 366',
-      !!box && /^Days ahead a booking can be made/.test(text(box.querySelector('label')) || '')
-        && box.querySelector('input[name="max_days_ahead"]')?.value === '31'
-        && box.querySelector('input[name="max_days_ahead"]')?.getAttribute('min') === '1'
-        && box.querySelector('input[name="max_days_ahead"]')?.getAttribute('max') === '366',
-      said(text(box)));
-    await fillIf(page, 'input[name="max_days_ahead"]', '14');
-    await clickIf(page, buttonNamed(box ?? root(), 'Save rules'));
+    const ruleBits = {
+      headings: page.queryAll('h2, h3').map(text).filter((t) => /booking rules/i.test(t)),
+      field: !!page.query('input[name="max_days_ahead"]'),
+      saveRules: page.queryAll('button').filter((b) => text(b) === 'Save rules').length,
+      settings: net.calls.filter((c) => /\/rental-settings$/.test(c.url)).map((c) => c.method),
+    };
+    check('Rental items (step O43): no "Booking rules" box, no days-ahead field, no Save rules, and no request to /rental-settings',
+      ruleBits.headings.length === 0 && !ruleBits.field && ruleBits.saveRules === 0 && ruleBits.settings.length === 0
+        && itemsView(page).rows.length === 3, said({ ...ruleBits, rows: itemsView(page).rows.length }));
+    await finish(page);
+
+    // --- AU-e. the Secretary's Edit panel follows the rules (step O43, P29) ---
+    // Moving a court booking to 6:00 AM showed a green "Free for 6:00 AM to
+    // 12:00 AM." above the server's "The Basketball Court can be booked from
+    // 7:00 AM to 12:00 midnight.": the panel knew neither the item's hours
+    // nor the limit. Now it shows both as the booking forms do, asks nothing
+    // while the slot breaks a rule, and Save refuses it in the rules' words
+    // under the time fields, sending nothing.
+    setNow(NOW); // 8:00 AM on 1 Nov 2026 in Manila
+    const courtBooking = {
+      request_id: 931, quantity_requested: 1,
+      // 9 AM to 1 PM on 11 Nov in Manila.
+      start_datetime: '2026-11-11T01:00:00+00:00', end_datetime: '2026-11-11T05:00:00+00:00',
+      purpose: 'Liga practice', status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null,
+      resident_id: 831, outside_borrower_name: null, outside_borrower_contact: null,
+      // MANAGE_FIELDS' item, with the hours it carries since step O43.
+      rental_items: { item_id: 31, name: 'Basketball Court', type: 'facility', fee: '20.00', quantity_total: 1, quantity_available: 1,
+        booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' },
+      resident_records: { resident_id: 831, first_name: 'Ana', middle_name: null, last_name: 'Reyes', suffix: null,
+        account: { username: 'res_931' } },
+      requester: { user_id: 731, username: 'res_931', email: null, profiles: null },
+      returned_by: null,
+      charges: { charge_id: 981, amount: '20.00', status: 'UNPAID', declared_method: null, declared_reference: null, declared_at: null },
+      derived_status: 'confirmed', not_started: true,
+    };
+    const FREE_COURT = { ok: true, item_type: 'facility', total: 1, used: 0, booked: 0, stuck: 0, resting: 0, left: 1, taken: [] };
+    const editStub = (url, method) => {
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: [courtBooking] };
+      if (method === 'GET' && /\/rental-settings$/.test(url)) return { max_days_ahead: 31 };
+      if (method === 'GET' && /\/rental-requests\/availability\?/.test(url)) return FREE_COURT;
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated' };
+      return undefined;
+    };
+    const editAsks = () => net.calls.filter((c) => /\/rental-requests\/availability\?/.test(c.url))
+      .map((c) => Object.fromEntries(new URL(c.url).searchParams.entries()));
+    const editPuts = () => net.calls.filter((c) => c.method === 'PUT');
+    const settleAsk = async (pg) => { await new Promise((r) => setTimeout(r, 450)); await pg.settle(); };
+    const editView = (pg) => {
+      const panel = pg.query('.rental-form-panel');
+      const field = (name) => panel?.querySelector(`input[name="${name}"]`) ?? null;
+      const grid = field('start_time')?.closest('.grid-2') ?? null;
+      const afterGrid = grid?.nextElementSibling ?? null;
+      const region = panel?.querySelector('.rental-availability [role="status"]') ?? null;
+      return {
+        title: text(panel?.querySelector('h3')),
+        head: [...(panel?.querySelectorAll('.pending-head p') ?? [])].map(text),
+        dateLabel: text(field('date')?.closest('label')),
+        dateMax: field('date')?.getAttribute('max') ?? null,
+        start: [field('start_time')?.getAttribute('min') ?? null, field('start_time')?.getAttribute('max') ?? null],
+        end: [field('end_time')?.getAttribute('min') ?? null, field('end_time')?.getAttribute('max') ?? null],
+        lines: region ? [...region.querySelectorAll('.rental-availability-line')].map(text) : [],
+        timeAlert: afterGrid?.matches('.alert.error[role="alert"]') ? text(afterGrid) : null,
+      };
+    };
+    const editRow = (pg) => pg.queryAll('table.data-table tbody tr')
+      .find((tr) => text(tr.querySelector('.doc-requests-number')) === '#931') ?? null;
+    seedSession(VALID);
+    resetNet(200, editStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
     await page.settle();
-    const putRules = net.calls.filter((c) => c.method === 'PUT' && /\/rental-settings$/.test(c.url));
-    check('  Save rules sends one PUT /rental-settings { max_days_ahead: 14 } and says "Booking rules saved"',
-      putRules.length === 1 && said(bodyOf(putRules[0])) === said({ max_days_ahead: 14 })
-        && text(box?.querySelector('.alert.success')) === 'Booking rules saved', said({ sent: putRules.map(bodyOf), box: text(box) }));
-    check('  and the item list is not reloaded by it', net.calls.filter((c) => /\/rental-items\/all$/.test(c.url)).length === 1,
-      said(net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`)));
+    await clickIf(page, page.queryAll('.pay-tabs button').find((b) => b.textContent.startsWith('All ')));
+    await clickIf(page, [...(editRow(page)?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Edit'));
+    await settleAsk(page);
+    let ev = editView(page);
+    check('AU-e Edit panel: the court\'s hours under its name, "Open 7:00 AM – 12:00 midnight", as the booking forms say them',
+      ev.title === 'Edit booking #931' && ev.head.includes('Open 7:00 AM – 12:00 midnight'), said(ev));
+    check('  "(up to 31 days ahead)" by the date, whose max is 2026-12-02 (today in Manila plus 31)',
+      /^Date \(up to 31 days ahead\)/.test(ev.dateLabel || '') && ev.dateMax === '2026-12-02', said(ev));
+    check('  the time fields held to the hours: start 07:00 to 23:59, end 07:00 to 00:00 (a range that wraps past midnight)',
+      said(ev.start) === said(['07:00', '23:59']) && said(ev.end) === said(['07:00', '00:00']), said(ev));
+    check('  the stored 9:00 AM to 1:00 PM is asked about and shown free', editAsks().length === 1 && editAsks()[0].start_time === '09:00'
+      && /^Free for /.test(ev.lines[0] || ''), said({ asked: editAsks(), lines: ev.lines }));
+
+    let askedBefore = editAsks().length;
+    await fillIf(page, '.rental-form-panel input[name="start_time"]', '06:00');
+    await settleAsk(page);
+    ev = editView(page);
+    check('P29: moved to 6:00 AM (before the court opens): nothing is asked and no green "Free for …" is shown',
+      editAsks().length === askedBefore && ev.lines.length === 0, said({ asked: editAsks().slice(askedBefore), lines: ev.lines }));
+    let putsBefore = editPuts().length;
+    await page.submit();
+    ev = editView(page);
+    check(`  Save shows "${COURT_WORDS}" under the time fields (role="alert") and sends nothing`,
+      ev.timeAlert === COURT_WORDS && editPuts().length === putsBefore, said({ ev, puts: editPuts().length - putsBefore }));
+
+    askedBefore = editAsks().length;
+    await fillIf(page, '.rental-form-panel input[name="start_time"]', '08:00');
+    ev = editView(page);
+    check('  changing a time clears that message', ev.timeAlert === null, said(ev));
+    await fillIf(page, '.rental-form-panel input[name="date"]', '2026-12-03');
+    await settleAsk(page);
+    ev = editView(page);
+    check('Moved to 2026-12-03 (32 days ahead): nothing asked about that date, no "Free for …"',
+      !editAsks().slice(askedBefore).some((p) => p.date === '2026-12-03') && ev.lines.length === 0, said({ asked: editAsks().slice(askedBefore), ev }));
+    putsBefore = editPuts().length;
+    await page.submit();
+    ev = editView(page);
+    check(`  Save shows "${AHEAD}" and sends nothing`, ev.timeAlert === AHEAD && editPuts().length === putsBefore, said(ev));
+
+    askedBefore = editAsks().length;
+    await fillIf(page, '.rental-form-panel input[name="date"]', '2026-12-02');
+    await fillIf(page, '.rental-form-panel input[name="start_time"]', '22:00');
+    await fillIf(page, '.rental-form-panel input[name="end_time"]', '00:00');
+    await settleAsk(page);
+    ev = editView(page);
+    check('Within the rules (2026-12-02, 10:00 PM until midnight): asked again and shown free',
+      editAsks().slice(askedBefore).some((p) => p.date === '2026-12-02' && p.start_time === '22:00' && p.end_time === '00:00')
+        && /^Free for /.test(ev.lines[0] || '') && ev.timeAlert === null, said({ asked: editAsks().slice(askedBefore), ev }));
+    putsBefore = editPuts().length;
+    await page.submit();
+    check('  and Save sends one PUT with that date and those times', editPuts().length === putsBefore + 1
+      && said(bodyOf(editPuts().at(-1))) === said({ date: '2026-12-02', start_time: '22:00', end_time: '00:00', purpose: 'Liga practice' }),
+    said(editPuts().map(bodyOf)));
     await finish(page);
 
     if (F.clock && realNow) F.clock.now = realNow;

@@ -23,7 +23,7 @@ process.env.JWT_SECRET = 'activity-test-signing-key';
 
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { logActivity, logActivityMany, diffFields, scrub } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
-const { ACTIONS, isSensitiveKey, isPersonalKey, LOGGED_TABLES } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
+const { ACTIONS, isSensitiveKey, isPersonalKey, LOGGED_TABLES, RETIRED_LOGGED_TABLES = [] } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -308,9 +308,18 @@ const fakeFrom = (table) => {
   const unlabelled = [
     ...Object.keys(ACTIONS).filter((a) => !new RegExp(`^\\s*${a}:\\s*\\{\\s*label:`, 'm').test(frontendVocab)),
     ...LOGGED_TABLES.filter((t) => !new RegExp(`^\\s*${t}:\\s*'`, 'm').test(frontendVocab)),
+    // A retired table's rows are still in the log, so it keeps its label.
+    ...RETIRED_LOGGED_TABLES.filter((t) => !new RegExp(`^\\s*${t}:\\s*'`, 'm').test(frontendVocab)),
   ];
-  check('the frontend labels every action and every logged table', unlabelled.length === 0,
-    unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables`);
+  // Step O43: PUT /api/rental-settings is gone, so nothing logs
+  // rental_settings now, but its two old rows stay in the log: the table is
+  // RETIRED, never logged again and never left unlabelled.
+  check('rental_settings is retired, not logged: in RETIRED_LOGGED_TABLES, out of LOGGED_TABLES, and no call site logs it',
+    RETIRED_LOGGED_TABLES.includes('rental_settings') && !LOGGED_TABLES.includes('rental_settings')
+      && RETIRED_LOGGED_TABLES.every((t) => !tablesLogged.includes(t)),
+    `retired: ${RETIRED_LOGGED_TABLES.join(', ') || '(none)'}; logged: ${tablesLogged.join(', ')}`);
+  check('the frontend labels every action, every logged table and every retired one', unlabelled.length === 0,
+    unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables, ${RETIRED_LOGGED_TABLES.length} retired`);
   // Keys a route invents for the log rather than copying from a column. The
   // frontend would fall back to "Parties renamed 0 to 1" without its own
   // wording, so each must be named there.
@@ -411,6 +420,31 @@ const fakeFrom = (table) => {
     Promise.resolve(handler(req, res)).catch(reject);
   });
   const secretary = { user_id: 4242, username: 'probe_secretary', role: 'secretary' };
+
+  // A retired table's old rows can still be filtered by record type, and a
+  // click on one's record sends the same table (step O43): a 200 with the
+  // filter applied, while an unknown table is still a 400.
+  {
+    const activityLogsRoute = require(path.join(ROUTES, 'activityLogs.js'));
+    const eqs = [];
+    const before = supabase.from;
+    supabase.from = () => {
+      const b = new Proxy({}, { get(_, k) {
+        if (k === 'then') return (res, rej) => Promise.resolve({ data: [], error: null, count: 0 }).then(res, rej);
+        return (...args) => { if (k === 'eq') eqs.push(args); return b; };
+      } });
+      return b;
+    };
+    const list = handlerFor(activityLogsRoute, 'get', '/');
+    const retired = await invoke(list, { user: secretary, query: { table: 'rental_settings', record_id: '1' } });
+    check('GET /api/activity-logs?table=rental_settings&record_id=1 (a retired table): 200, filtered on the table and the record',
+      retired.status === 200 && eqs.some(([c, v]) => c === 'table_name' && v === 'rental_settings')
+        && eqs.some(([c, v]) => c === 'record_id' && v === 1), JSON.stringify({ status: retired.status, body: retired.body, eqs }));
+    const unknown = await invoke(list, { user: secretary, query: { table: 'no_such_table' } });
+    check('  an unknown table is still 400 "Unknown record type \'no_such_table\'"', unknown.status === 400
+      && unknown.body?.error === "Unknown record type 'no_such_table'", JSON.stringify(unknown));
+    supabase.from = before;
+  }
 
   const disputes = require(path.join(ROUTES, 'disputes.js'));
   answers.dispute_records = { dispute_id: 9, barangay_case_no: 'X-1', is_settled: true, dispute_parties: [] };

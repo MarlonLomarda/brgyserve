@@ -20,10 +20,15 @@
 //
 // Since step R1 (28 Oct 2026), migration 025: the booking rules. Each item
 // can be booked only within its own hours, a booking may start no more than
-// rental_settings.max_days_ahead days after today in Manila, and an end at
-// 00:00 is midnight at the end of the date, allowed only for an item that
-// closes at 24:00. Checked by the ROUTE on a booking, a walk-in and an edit;
-// stored bookings are not checked again. And GET/PUT /api/rental-settings.
+// 31 days after today in Manila, and an end at 00:00 is midnight at the end
+// of the date, allowed only for an item that closes at 24:00. Checked by the
+// ROUTE on a booking, a walk-in and an edit; stored bookings are not checked
+// again. And GET /api/rental-settings.
+//
+// Since step O43 (28 Oct 2026) the 31 is a constant in the code
+// (MAX_DAYS_AHEAD, constants/rentalBookingRules.js): PUT /api/rental-settings
+// is gone and nothing reads the rental_settings table, which migration 026
+// drops. The fake database here holds no such table, so a read of it throws.
 //
 // And since step C1b (26 Oct 2026), migration 024: the database decides
 // whether a slot is free. POST / books through create_rental_booking, PUT /:id
@@ -59,11 +64,14 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const supabase = require('../src/config/supabase');
 const paymongo = require('../src/services/paymongo');
 const rentals = require('../src/routes/rentalRequests');
 const rentalItems = require('../src/routes/rentalItems');
 const rentalSettings = require('../src/routes/rentalSettings');
+const RULES = require('../src/constants/rentalBookingRules');
 const { webhookHandler } = require('../src/routes/payments');
 
 let pass = 0;
@@ -145,7 +153,6 @@ function freshDb() {
       { item_id: 802, name: 'Monobloc Chair', type: 'furniture', fee: 5, quantity_total: 100, quantity_available: 100, is_active: true,
         booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' },
     ],
-    rental_settings: [{ id: 1, max_days_ahead: 31 }],
     rental_requests: [
       booking(601),
       booking(602, { start_datetime: at(23), end_datetime: at(25) }),
@@ -1253,15 +1260,20 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   check(`32 days ahead: 400 "${AHEAD_31}", the function never asked`, refusedUnasked(r, AHEAD_31), said(r));
   r = await book(RES_A, ruleBody({ date: dayAhead(32), start_time: '05:00' }));
   check('  too far ahead AND outside the hours: the days-ahead sentence first', refusedUnasked(r, AHEAD_31), said(r));
-  const settingsTo = (n) => (db) => { db.rental_settings[0].max_days_ahead = n; };
-  r = await book(RES_A, ruleBody({ date: dayAhead(1) }), { setup: settingsTo(1) });
-  check('With the limit at 1: tomorrow is 201', r.status === 201, said(r));
-  r = await book(RES_A, ruleBody({ date: dayAhead(2) }), { setup: settingsTo(1) });
-  check('  the day after is 400 "Bookings can be made up to 1 day ahead."',
-    refusedUnasked(r, 'Bookings can be made up to 1 day ahead.'), said(r));
-  r = await book(RES_A, ruleBody({ date: dayAhead(14) }), { setup: settingsTo(7) });
-  check('The limit is read fresh for every booking (7: 14 days ahead is refused)',
-    refusedUnasked(r, 'Bookings can be made up to 7 days ahead.'), said(r));
+  // Step O43: the limit is a constant in the code, never read from a table.
+  check('The limit is MAX_DAYS_AHEAD = 31 in constants/rentalBookingRules.js (step O43)', RULES.MAX_DAYS_AHEAD === 31,
+    String(RULES.MAX_DAYS_AHEAD));
+  r = await book(RES_A, ruleBody({ date: dayAhead(31) }));
+  check('  a booking reads no rental_settings table (this fake has none, so a read would throw)', r.status === 201
+    && !r.db.calls.some((c) => c.table === 'rental_settings'), JSON.stringify(r.db.calls.map((c) => c.table)));
+  r = await edit(601, editBody({ date: dayAhead(31) }));
+  check('  nor does an edit (31 days ahead: 200)', r.status === 200 && !r.db.calls.some((c) => c.table === 'rental_settings'), said(r));
+  const SRC = path.join(__dirname, '..', 'src');
+  const srcFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true })
+    .flatMap((d) => (d.isDirectory() ? srcFiles(path.join(dir, d.name)) : d.name.endsWith('.js') ? [path.join(dir, d.name)] : []));
+  const readers = srcFiles(SRC).filter((f) => /\.from\(\s*['"`]rental_settings['"`]/.test(fs.readFileSync(f, 'utf8')))
+    .map((f) => path.relative(SRC, f));
+  check('No file under backend/src reads the rental_settings table (no .from("rental_settings"))', readers.length === 0, readers.join(', '));
 
   // Same day: the court open all day, a start a few minutes from now.
   const soon = new Date(NOW + 10 * 60000);
@@ -1292,13 +1304,8 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   r = await book(RES_A, ruleBody({ item_id: 999, start_time: '05:00' }), { setup: (db) => { db.rpcAnswer.create_rental_booking = { ok: false, code: 'ITEM_NOT_FOUND' }; } });
   check('  and an unknown item is still 404 "Rental item not found"', r.status === 404 && r.body?.error === ITEM_GONE, said(r));
 
-  r = await book(RES_A, ruleBody(), { setup: (db) => { db.failWhen = ({ table }) => (table === 'rental_settings' ? { message: 'settings read failed' } : null); } });
-  check('A failed read of the rules is a 500, never "no limit", and nothing is written',
-    r.status === 'threw' && /settings read failed/.test(r.body?.error || '') && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
-  r = await book(RES_A, ruleBody(), { setup: (db) => { db.rental_settings = []; } });
-  check('  and so is a missing rules row', r.status === 'threw' && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
   r = await book(RES_A, ruleBody(), { setup: (db) => { delete db.rental_items.find((i) => i.item_id === 802).booking_closes_at; } });
-  check('  and so is an item read with no hours (never treated as open all day)', r.status === 'threw'
+  check('An item read with no hours is a 500, never treated as open all day, and nothing is written', r.status === 'threw'
     && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
 
   // The Secretary's edit: the new time obeys the rules; the stored one is not checked.
@@ -1332,6 +1339,13 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   r = await ask(RES_A, avQuery({ start_time: '22:00', end_time: '00:00' }));
   check('GET /availability reads an end of 00:00 as midnight too (the function is asked about the next day\'s 00:00)',
     r.status === 200 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(AV_DAY), JSON.stringify(r.rpcCalls()[0]?.args));
+
+  // The Edit panel shows the item's hours and holds its fields to them (P29),
+  // so the Secretary's list carries them on each booking's item.
+  const manageFields = (/const MANAGE_FIELDS = `([\s\S]*?)`;/.exec(fs.readFileSync(path.join(SRC, 'routes', 'rentalRequests.js'), 'utf8')) || [])[1] || '';
+  const itemEmbed = (/rental_items \(([^)]*)\)/.exec(manageFields) || [])[1] || '';
+  check('MANAGE_FIELDS (GET /, GET /:id, the answer to an edit) gives each booking\'s item its booking_opens_at and booking_closes_at',
+    /\bbooking_opens_at\b/.test(itemEmbed) && /\bbooking_closes_at\b/.test(itemEmbed), itemEmbed.replace(/\s+/g, ' ').trim());
 
   // ======================================================= the items' hours
   section('PUT/POST /api/rental-items — an item\'s hours');
@@ -1377,37 +1391,19 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     JSON.stringify(r.body?.rental_items?.map((i) => [i.name, i.booking_opens_at, i.booking_closes_at])));
 
   // ===================================================== /api/rental-settings
-  section('GET/PUT /api/rental-settings — how far ahead');
+  // Step O43: GET answers the constant and reads no table; PUT is gone (the
+  // Secretary no longer changes the limit). The checks of PUT's roles, its
+  // saving, its log row and its 400s were deleted with the route.
+  section('GET /api/rental-settings — how far ahead, a constant');
   const settings = (method, user, body = {}, opts = {}) => call({ method, path: '/', user, id: '', body, chain: true, router: rentalSettings, ...opts });
   for (const user of [RES_A, SEC, STAFF, TREASURER, PB]) {
     r = await settings('get', user);
-    check(`GET as ${user.role}: 200 { max_days_ahead: 31 }`, r.status === 200 && sameJson(r.body, { max_days_ahead: 31 }), said(r));
+    check(`GET as ${user.role}: 200 { max_days_ahead: 31 }, no table read`, r.status === 200 && sameJson(r.body, { max_days_ahead: 31 })
+      && r.db.calls.length === 0, said(r));
   }
-  r = await settings('get', RES_A, {}, { setup: (db) => { db.rental_settings = []; } });
-  check('GET with no row: 500, never a made-up default', r.status === 'threw', said(r));
-  for (const user of [RES_A, STAFF, TREASURER, PB]) {
-    r = await settings('put', user, { max_days_ahead: 14 });
-    check(`PUT as ${user.role}: 403, nothing saved`, r.status === 403 && r.db.rental_settings[0].max_days_ahead === 31
-      && r.db.activity_logs.length === 0, said(r));
-  }
-  r = await settings('put', SEC, { max_days_ahead: 14 });
-  check('PUT 14 as the Secretary: 200, saved', r.status === 200 && r.body?.max_days_ahead === 14
-    && r.db.rental_settings[0].max_days_ahead === 14 && r.body?.message === 'Booking rules saved', said(r));
-  const setLog = r.db.activity_logs;
-  check('  logged once: UPDATE on rental_settings #1 by the Secretary, 31 to 14', setLog.length === 1 && setLog[0].action === 'UPDATE'
-    && setLog[0].table_name === 'rental_settings' && setLog[0].record_id === 1 && setLog[0].user_id === SEC.user_id
-    && sameJson(setLog[0].old_value, { max_days_ahead: 31 }) && sameJson(setLog[0].new_value, { max_days_ahead: 14 }),
-  JSON.stringify(setLog));
-  r = await settings('put', SEC, { max_days_ahead: '366' });
-  check('PUT "366" (a string of digits): 200, 366', r.status === 200 && r.db.rental_settings[0].max_days_ahead === 366, said(r));
-  r = await settings('put', SEC, { max_days_ahead: 31 });
-  check('PUT the same number: 200, and nothing logged', r.status === 200 && r.db.activity_logs.length === 0, said(r));
-  for (const bad of [0, 367, 1.5, -3, 'abc', '', null, '7 days', true]) {
-    r = await settings('put', SEC, { max_days_ahead: bad });
-    check(`PUT ${JSON.stringify(bad)}: 400, nothing saved or logged`, r.status === 400
-      && r.body?.error === 'max_days_ahead must be a whole number from 1 to 366' && r.db.rental_settings[0].max_days_ahead === 31
-      && !r.db.calls.some((c) => c.op === 'update') && r.db.activity_logs.length === 0, said(r));
-  }
+  const settingsRoutes = rentalSettings.stack.filter((l) => l.route).map((l) => `${Object.keys(l.route.methods).join(',').toUpperCase()} ${l.route.path}`);
+  check('routes/rentalSettings.js has GET / and nothing else: PUT /api/rental-settings is gone', sameJson(settingsRoutes, ['GET /']),
+    JSON.stringify(settingsRoutes));
 
   // ================================================================ return
   // Mark returned (step C3, O7): never for a booking that has not started.

@@ -25,9 +25,10 @@
 // open to all five roles.
 //
 // rentalSettings.js joined with the booking rules (migration 025, 28 Oct
-// 2026): GET is for every signed-in role (the booking forms show the limit),
-// PUT is the Secretary's alone. It guards per route under a router-level
-// authenticate, so a route added there without a guard is open to all.
+// 2026): GET is for every signed-in role (the booking forms show the limit).
+// Its PUT, the Secretary's, was removed in step O43 (the limit is a constant
+// in the code now), so GET is its only route. It has a router-level
+// authenticate and no role guard, so a route added there is open to all.
 //
 // rentalRequests.js joined with rental Edit and Cancel (25 Oct 2026), when
 // residents gained POST /mine/:id/cancel. Like documentRequests.js it guards
@@ -162,8 +163,7 @@ const EXPECTED = {
     'POST /:id/return': STAFF_ONLY,          // Staff's one write action
   },
   'rentalSettings.js': {
-    'GET /': ALL_ROLES,                      // how far ahead a booking may start: every booking form shows it (migration 025)
-    'PUT /': SECRETARY_ONLY,                 // the Secretary changes it on the Rental items page
+    'GET /': ALL_ROLES,                      // how far ahead a booking may start (a constant since step O43): every booking form shows it
   },
 };
 
