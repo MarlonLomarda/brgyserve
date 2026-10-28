@@ -12,7 +12,7 @@ const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/cha
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
-const { MIDNIGHT, clockMinutes, bookingRuleRefusal } = require('../constants/rentalBookingRules');
+const { MIDNIGHT, MAX_DAYS_AHEAD, clockMinutes, bookingRuleRefusal } = require('../constants/rentalBookingRules');
 const { logActivity, diffFields, pick } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
 const paymongo = require('../services/paymongo');
@@ -25,7 +25,8 @@ const RENTAL_FIELDS =
   'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, cancellation_reason, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
 // Management/staff views: adds the requester (with their profile name), the
-// item's capacity numbers (the edit form needs them), and the return record.
+// item's capacity numbers and booking hours (the Edit panel shows the hours
+// and holds its time fields to them, step O43), and the return record.
 // rental_requests has three FKs to users, so each user embed names its
 // constraint.
 //
@@ -51,7 +52,8 @@ const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   return_note, returned_at, cancellation_reason,
   resident_id, outside_borrower_name, outside_borrower_contact,
-  rental_items ( item_id, name, type, fee, quantity_total, quantity_available ),
+  rental_items ( item_id, name, type, fee, quantity_total, quantity_available,
+    booking_opens_at, booking_closes_at ),
   resident_records ( resident_id, first_name, middle_name, last_name, suffix,
     account:profiles ( ...users ( username ) ) ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
@@ -336,28 +338,16 @@ function slotTimes(date, startTime, endTime) {
 const manilaDayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
 
 // THE BOOKING RULES (migration 025): the item's own hours, and how far ahead
-// a booking may start (rental_settings.max_days_ahead, from today in Manila).
-// Checked on a resident's booking, a walk-in and the Secretary's edit alike;
-// bookings already stored are not checked again. Enforced HERE, never inside
-// migration 024's functions, which decide only whether a slot is free. The
-// rules are read fresh for every booking. Returns the refusal sentence or
-// null; a failed read is thrown, never answered as "no limit".
-async function bookingRulesRefusal(parsed, item) {
-  const { data: settings, error } = await supabase
-    .from('rental_settings')
-    .select('max_days_ahead')
-    .eq('id', 1)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to load the booking rules: ${error.message}`);
-  }
-  if (!Number.isInteger(settings?.max_days_ahead)) {
-    throw new Error('The booking rules (rental_settings) have no row');
-  }
+// a booking may start (MAX_DAYS_AHEAD, from today in Manila; a constant since
+// step O43, never read from the database). Checked on a resident's booking, a
+// walk-in and the Secretary's edit alike; bookings already stored are not
+// checked again. Enforced HERE, never inside migration 024's functions, which
+// decide only whether a slot is free. Returns the refusal sentence or null.
+function bookingRulesRefusal(parsed, item) {
   return bookingRuleRefusal(
     { date: parsed.date, startMinutes: parsed.startMinutes, endMinutes: parsed.endMinutes },
     item,
-    settings.max_days_ahead,
+    MAX_DAYS_AHEAD,
     manilaDayFmt.format(new Date())
   );
 }
@@ -527,7 +517,7 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   // An unknown or inactive item is left to the function's own refusal, as
   // before, so the order of the answers does not change for one.
   if (item?.is_active) {
-    const ruleRefusal = await bookingRulesRefusal(parsed, item);
+    const ruleRefusal = bookingRulesRefusal(parsed, item);
     if (ruleRefusal) {
       return res.status(400).json({ error: ruleRefusal });
     }
@@ -1278,7 +1268,7 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   // The new time obeys the booking rules, as a new booking does (the item's
   // hours as they are today, even for an item since deactivated). The
   // booking's stored time is not checked: only what this edit asks for.
-  const ruleRefusal = await bookingRulesRefusal(parsed, item);
+  const ruleRefusal = bookingRulesRefusal(parsed, item);
   if (ruleRefusal) {
     return res.status(400).json({ error: ruleRefusal });
   }

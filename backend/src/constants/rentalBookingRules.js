@@ -1,9 +1,16 @@
 // The barangay's booking rules (migration 025, 28 Oct 2026): each rental item
 // can be booked only within its own hours (rental_items.booking_opens_at and
-// booking_closes_at), and a booking may start no more than max_days_ahead
-// days after today in Manila (rental_settings, one row). Same-day bookings
-// are allowed; the start must only be in the future, which parseBookingBody
-// and migration 024's functions already check.
+// booking_closes_at), and a booking may start no more than MAX_DAYS_AHEAD
+// days after today in Manila. Same-day bookings are allowed; the start must
+// only be in the future, which parseBookingBody and migration 024's
+// functions already check.
+//
+// THE 31 IS FIXED IN THE CODE (step O43, 28 Oct 2026). Migration 025 kept it
+// in a one-row rental_settings table that the Secretary could change on the
+// Rental items page; the Secretary does not need to, so the box, PUT
+// /api/rental-settings and every read of the table were removed, and
+// migration 026 drops the table. GET /api/rental-settings still answers
+// { max_days_ahead } for the booking forms, from this constant.
 //
 // No requires, so test:auth can load this file and compare the booking
 // forms' copy of these sentences (frontend/src/utils/bookingTimes.js) with
@@ -17,8 +24,7 @@
 // at 24:00.
 
 const MIDNIGHT = 24 * 60;
-const MAX_DAYS_AHEAD_MIN = 1;
-const MAX_DAYS_AHEAD_MAX = 366;
+const MAX_DAYS_AHEAD = 31;
 
 // "HH:MM" or "HH:MM:SS" (what PostgREST sends for a `time`) as minutes since
 // midnight, 0 to 1440; null for anything else. Seconds must be :00.
@@ -75,8 +81,7 @@ function bookingRuleRefusal(slot, item, maxDaysAhead, today) {
 
 module.exports = {
   MIDNIGHT,
-  MAX_DAYS_AHEAD_MIN,
-  MAX_DAYS_AHEAD_MAX,
+  MAX_DAYS_AHEAD,
   clockMinutes,
   clockText,
   hoursRefusal,

@@ -126,6 +126,9 @@ export function recordLabel(row) {
   }
   if (row.table_name === 'users' || row.table_name === 'profiles') return `Account #${row.record_id}`;
   // One row for the whole barangay (migration 025): its id says nothing.
+  // Nothing writes such a row since step O43 (the limit is fixed in the code
+  // and migration 026 drops the table), but the two written before stay in
+  // the log, so the label stays.
   if (row.table_name === 'rental_settings') return TABLE_LABELS.rental_settings;
   return `${TABLE_LABELS[row.table_name] || humanize(row.table_name)} #${row.record_id}`;
 }
@@ -148,7 +151,8 @@ const FIELD_LABELS = {
   quantity_total: 'Total units',
   quantity_available: 'Units available',
   // The booking rules (migration 025): an item's hours, and the
-  // barangay-wide limit on how far ahead a booking may start.
+  // barangay-wide limit on how far ahead a booking may start (no longer
+  // changed since step O43; kept for the rows already in the log).
   booking_opens_at: 'Booking opens',
   booking_closes_at: 'Booking closes',
   max_days_ahead: 'Days ahead a booking can be made',

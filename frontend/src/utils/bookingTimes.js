@@ -10,7 +10,9 @@
 // sent. The server stays the authority and checks again; its clock decides.
 //
 // THE BOOKING RULES (migration 025): each item has its own hours, and a
-// booking may start no more than max_days_ahead days after today in Manila.
+// booking may start no more than max_days_ahead days after today in Manila
+// (31, a constant in the server's code since step O43, sent by GET
+// /rental-settings).
 // An end time of 00:00 is MIDNIGHT AT THE END OF THE DATE, allowed only for
 // an item that closes at midnight (stored as 24:00:00). The sentences are the
 // server's, from backend/src/constants/rentalBookingRules.js, which this file

@@ -91,58 +91,6 @@ export default function RentalItemsPage() {
     load();
   }, [load]);
 
-  // THE BOOKING RULES (migration 025): how many days ahead a booking may
-  // start, one number for the whole barangay. Each item's hours are on the
-  // item (the form below). `rules` is null while loading or after a failed
-  // load, and a failure is said, never shown as a number.
-  const [rules, setRules] = useState(null);
-  const [rulesError, setRulesError] = useState(null);
-  const [daysAhead, setDaysAhead] = useState("");
-  const [rulesNote, setRulesNote] = useState(null); // { type, text } after a save
-  const [rulesBusy, setRulesBusy] = useState(false);
-  const rulesSeq = useRef(0);
-
-  const loadRules = useCallback(async () => {
-    const seq = ++rulesSeq.current;
-    setRulesError(null);
-    setRules(null);
-    try {
-      const data = await authFetch("/rental-settings");
-      if (seq !== rulesSeq.current) return;
-      if (!Number.isInteger(data?.max_days_ahead)) {
-        setRulesError("the server did not send the limit");
-        return;
-      }
-      setRules(data);
-      setDaysAhead(String(data.max_days_ahead));
-    } catch (err) {
-      if (seq === rulesSeq.current) setRulesError(loadFailure(err));
-    }
-  }, [authFetch]);
-
-  useEffect(() => {
-    loadRules();
-  }, [loadRules]);
-
-  async function saveRules(e) {
-    e.preventDefault();
-    setRulesNote(null);
-    setRulesBusy(true);
-    try {
-      const data = await authFetch("/rental-settings", {
-        method: "PUT",
-        body: { max_days_ahead: Number(daysAhead) },
-      });
-      setRules({ max_days_ahead: data.max_days_ahead });
-      setDaysAhead(String(data.max_days_ahead));
-      setRulesNote({ type: "success", text: data.message });
-    } catch (err) {
-      setRulesNote({ type: "error", text: err.message });
-    } finally {
-      setRulesBusy(false);
-    }
-  }
-
   function openCreate() {
     setFormError("");
     setStockWarning(null);
@@ -250,67 +198,6 @@ export default function RentalItemsPage() {
   return (
     <>
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-
-      {/* The barangay-wide rule, in a small box of its own. The error first,
-          then loading, then the field. */}
-      <section className="pending-card section-card">
-        <h3>Booking rules</h3>
-        {rulesError ? (
-          <>
-            <div className="alert error" role="alert">
-              Could not load the booking rules: {rulesError}
-            </div>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={loadRules}
-            >
-              Try again
-            </button>
-          </>
-        ) : rules === null ? (
-          <p className="muted">Loading the booking rules…</p>
-        ) : (
-          <form onSubmit={saveRules}>
-            {rulesNote && (
-              <div
-                className={`alert ${rulesNote.type}`}
-                role={rulesNote.type === "error" ? "alert" : "status"}
-              >
-                {rulesNote.text}
-              </div>
-            )}
-            <label>
-              Days ahead a booking can be made{" "}
-              <span className="hint">
-                (1 to 366; same-day bookings are allowed)
-              </span>
-              <input
-                name="max_days_ahead"
-                type="number"
-                min="1"
-                max="366"
-                step="1"
-                value={daysAhead}
-                onChange={(e) => {
-                  setDaysAhead(e.target.value);
-                  setRulesNote(null);
-                }}
-                required
-              />
-            </label>
-            <p className="muted small-note">
-              Each item&apos;s opening and closing times are set on the item:
-              press Edit beside it.
-            </p>
-            <div className="actions">
-              <button className="btn" type="submit" disabled={rulesBusy}>
-                {rulesBusy ? "Saving…" : "Save rules"}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
 
       <div className="list-head">
         <h2>

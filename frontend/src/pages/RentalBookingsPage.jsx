@@ -266,9 +266,21 @@ function ReturnedBy({ booking }) {
 // (exclude_request_id), and the booking's own quantity decides whether Save
 // is blocked (editBlock). Advice only: the server checks again on Save. The
 // fields are filled, and the date's earliest day set, in Manila time.
+//
+// Since step O43 (P29) it follows the booking rules as the two booking forms
+// do: the item's hours under its name ("Open 7:00 AM – 12:00 midnight"), the
+// time fields held to them, "(up to 31 days ahead)" by the date with the
+// date's max, and what is free is NOT ASKED while the slot breaks a rule: a
+// green "Free for 6:00 AM to 12:00 AM." sat above the server's refusal of the
+// same slot. Save then refuses it in the rules' words, under the time fields,
+// and sends nothing. The hours come with the list (MANAGE_FIELDS); an answer
+// without them shows no hours and leaves them to the server.
 function EditPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
+  const maxDaysAhead = useRentalSettings();
+  const hours = item ? hoursText(item) : null;
+  const limits = timeLimits(item);
   const [form, setForm] = useState(() => {
     const start = manilaInputs(booking.start_datetime);
     return {
@@ -279,21 +291,33 @@ function EditPanel({ booking, onDone }) {
     };
   });
   const [error, setError] = useState("");
+  const [timeError, setTimeError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // A slot that breaks the booking rules is not asked about, as on the
+  // booking forms: Save refuses it in the rules' words.
+  const ruleBroken = item
+    ? bookingRuleError(form, clock.now(), { item, maxDaysAhead })
+    : null;
+  const askable = item && !ruleBroken;
   const availability = useRentalAvailability(
-    item?.item_id,
+    askable ? item.item_id : undefined,
     form.date,
     form.start_time,
     form.end_time,
     booking.request_id,
   );
-  const answer = availability.status === "ready" ? availability.data : null;
+  const check = askable ? availability : NOT_ASKED;
+  const answer = check.status === "ready" ? check.data : null;
   const blocked = editBlock({ answer, quantity: booking.quantity_requested });
   const blockedId = useId();
 
   function handleChange(e) {
     const { name, value } = e.target;
+    // A changed date or time may answer the check; it runs again on Save.
+    if (name === "date" || name === "start_time" || name === "end_time") {
+      setTimeError("");
+    }
     setForm((f) => ({ ...f, [name]: value }));
   }
 
@@ -302,6 +326,12 @@ function EditPanel({ booking, onDone }) {
     // Save is disabled then; this stops the Enter key too.
     if (blocked) return;
     setError("");
+    // The times, checked as the server will and in its words, before anything
+    // is sent (utils/bookingTimes.js, as on the booking forms). The server
+    // checks again with its own clock.
+    const refused = bookingTimeError(form, clock.now(), { item, maxDaysAhead });
+    setTimeError(refused || "");
+    if (refused) return;
     setBusy(true);
     try {
       const data = await authFetch(`/rental-requests/${booking.request_id}`, {
@@ -325,6 +355,7 @@ function EditPanel({ booking, onDone }) {
   // Today in Manila, as on the booking forms: it was today in UTC, which
   // until 8 AM in Manila is yesterday.
   const today = earliestBookingDate(clock.now());
+  const latest = latestBookingDate(clock.now(), maxDaysAhead);
 
   return (
     <div className="pending-card rental-form-panel">
@@ -335,6 +366,7 @@ function EditPanel({ booking, onDone }) {
             {residentName(booking)} · {item?.name} (
             {ITEM_TYPE_LABELS[item?.type] || item?.type})
           </p>
+          {hours && <p className="muted">Open {hours}</p>}
           <p className="muted">
             Quantity: {booking.quantity_requested}
           </p>
@@ -358,11 +390,17 @@ function EditPanel({ booking, onDone }) {
             and End time sit side by side under it. */}
         <div className="grid-2">
           <label className="rental-date-full">
-            Date
+            Date{" "}
+            {maxDaysAhead !== null && (
+              <span className="hint">
+                (up to {maxDaysAhead} day{maxDaysAhead === 1 ? "" : "s"} ahead)
+              </span>
+            )}
             <input
               name="date"
               type="date"
               min={today}
+              max={latest ?? undefined}
               value={form.date}
               onChange={handleChange}
               required
@@ -373,6 +411,7 @@ function EditPanel({ booking, onDone }) {
             <input
               name="start_time"
               type="time"
+              {...limits.start}
               value={form.start_time}
               onChange={handleChange}
               required
@@ -383,14 +422,21 @@ function EditPanel({ booking, onDone }) {
             <input
               name="end_time"
               type="time"
+              {...limits.end}
               value={form.end_time}
               onChange={handleChange}
               required
             />
           </label>
         </div>
+        {/* The times' own check, by the fields it is about. */}
+        {timeError && (
+          <div className="alert error" role="alert">
+            {timeError}
+          </div>
+        )}
         <RentalAvailability
-          check={availability}
+          check={check}
           failedText={EDIT_AVAILABILITY_FAILED}
         />
         <label>

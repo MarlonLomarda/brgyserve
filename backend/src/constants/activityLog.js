@@ -105,10 +105,18 @@ const isPersonalKey = (key) => PERSONAL_FIELDS.includes(String(key).toLowerCase(
 const LOGGED_TABLES = [
   'users', 'profiles', 'resident_records', 'household_records', 'household_members',
   'document_types', 'document_requests', 'charges', 'rental_items', 'rental_requests',
-  'rental_settings', 'events', 'event_attendees', 'dispute_records',
+  'events', 'event_attendees', 'dispute_records',
 ];
+
+// Tables no call site logs any more but whose rows are still in the log, so
+// the record-type filter (and a click on such a row's record) still accepts
+// them. rental_settings: PUT /api/rental-settings logged two UPDATE rows
+// before step O43 removed it (28 Oct 2026); migration 026 drops the table,
+// and the rows stay, as every log row does. activity:test fails if a table
+// here is logged again, or is left without a label on the page.
+const RETIRED_LOGGED_TABLES = ['rental_settings'];
 
 module.exports = {
   ACTIONS, SENSITIVE_KEYS, SENSITIVE_PREFIXES, SENSITIVE_SUBSTRINGS, RESIDENT_LOG_FIELDS, isSensitiveKey,
-  PERSONAL_FIELDS, isPersonalKey, LOGGED_TABLES,
+  PERSONAL_FIELDS, isPersonalKey, LOGGED_TABLES, RETIRED_LOGGED_TABLES,
 };
