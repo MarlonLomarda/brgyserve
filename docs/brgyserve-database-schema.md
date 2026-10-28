@@ -4,14 +4,15 @@ Source of truth for the BrgyServe database, converted from the Chapter 3 data
 dictionary into PostgreSQL (Supabase) types. Table numbers match the thesis
 Chapter 3 File Structure. Table 19 is a new addition (not yet in the thesis)
 required by the fuzzy name-matching research contribution, Table 20 is a
-new addition required by password reset, and Table 21 is a new addition
-required by the rental booking rules (migration 025).
+new addition required by password reset. Table 21 (`rental_settings`,
+migration 025) is DROPPED by migration 026 and kept below only as a record.
 
 **The ERD and Chapter 3 owe migrations 020, 021 and 025** (CLAUDE.md, "A
 schema change is not finished when the migration is applied"): Table 20
 `password_resets` (020), the unique index on `lower(users.email)` (021), and
-from 025 the new Table 21 `rental_settings` plus the two new columns on Table
-13 `rental_items` (`booking_opens_at`, `booking_closes_at`).
+from 025 the two new columns on Table 13 `rental_items` (`booking_opens_at`,
+`booking_closes_at`). **Table 21 `rental_settings` is owed nothing** once
+migration 026 is applied: it never needs a Chapter 3 table or an ERD entity.
 
 ## Type conventions (MySQL → PostgreSQL)
 
@@ -386,8 +387,17 @@ Stores pairs of resident records flagged by the two-stage fuzzy name-matching co
 
 ## Rental booking rules (NEW — not yet in the thesis)
 
-### TABLE 21. rental_settings
-The barangay-wide booking rules (migration 025). Exactly one row.
+### TABLE 21. rental_settings — DROPPED by migration 026 (step O43)
+**This table no longer exists once migration 026 is applied.** It held the
+barangay-wide limit on how far ahead a booking may start, so the Secretary
+could change it. The Secretary does not need to: since step O43 (28 Oct 2026)
+the limit is fixed at 31 days in the code (`MAX_DAYS_AHEAD`,
+`backend/src/constants/rentalBookingRules.js`), nothing reads the table, and
+`PUT /api/rental-settings` is gone. `GET /api/rental-settings` still answers
+`{ max_days_ahead: 31 }`, from the constant. Apply migration 026 only AFTER
+that code is deployed. The two columns migration 025 added to Table 13
+(`booking_opens_at`, `booking_closes_at`) stay. Kept below as a record of
+what migration 025 created:
 
 | Field | Type | Key | Nullable | Description |
 |---|---|---|---|---|
@@ -395,8 +405,8 @@ The barangay-wide booking rules (migration 025). Exactly one row.
 | max_days_ahead | integer | | No | How many days after today (in Manila) a booking may start. Default 31; CHECK `rental_settings_max_days_ahead_range`: 1 to 366. Same-day bookings are always allowed; the start must only be in the future. |
 
 **Notes:**
-- Read by `GET /api/rental-settings` (any signed-in role) and by the booking routes on every booking and edit; changed only by `PUT /api/rental-settings` (Secretary), which writes an `UPDATE` row to `activity_logs` with `table_name = 'rental_settings'` and `record_id = 1`.
-- **Row Level Security is enabled with zero policies**, like every other table.
+- Until step O43 it was read by `GET /api/rental-settings` and by the booking routes on every booking and edit, and changed only by `PUT /api/rental-settings` (Secretary), which wrote an `UPDATE` row to `activity_logs` with `table_name = 'rental_settings'` and `record_id = 1`. **Two such rows exist and are kept** (`table_name` is text, not a foreign key); the Activity Log page still labels them "Rental booking rules".
+- **Row Level Security was enabled with zero policies**, like every other table.
 
 ---
 
