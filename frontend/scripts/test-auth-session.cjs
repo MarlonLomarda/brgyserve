@@ -272,6 +272,16 @@
 // nothing, and the box is named by its label. The shared rules it must not
 // change are pinned.
 //
+// Section AU is the booking rules (step R1, migration 025): each item's
+// hours, how far ahead a booking may start, and an end at midnight. The
+// helpers in utils/bookingTimes.js case by case, their sentences compared
+// with the server's own file (backend/src/constants/rentalBookingRules.js)
+// input by input; Book a rental and the walk-in form showing the hours, the
+// limit beside the date and the time fields held to them, and refusing out
+// of hours or too far ahead before sending; and the Rental items page: the
+// hours on the form and in the list, the Booking rules box, and a failed
+// list load that is an error with Try again, never an empty list.
+//
 // No backend required.
 //   cd frontend && npm run test:auth
 
@@ -9854,9 +9864,11 @@ const root = () => dom.window.document.getElementById('root');
         const walkIn = text(page.query('.pending-card h3'));
         await clickIf(page, buttonNamed(root(), '← Back to list'));
         v = look(page);
-        check('  Secretary: and so does Back from Encode walk-in, which asked only for the rental items',
+        // The walk-in form asks for the booking rules after the items (step
+        // R1, migration 025): how far ahead a booking may start.
+        check('  Secretary: and so does Back from Encode walk-in, which asked only for the rental items and the booking rules',
           walkIn === 'Encode walk-in booking' && kept(v)
-            && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-items']),
+            && said(listCalls(net.calls.slice(sent))) === said(['GET /rental-items', 'GET /rental-settings']),
           said({ walkIn, v, calls: listCalls(net.calls.slice(sent)) }));
       }
       if (name === 'Staff') {
@@ -13562,10 +13574,12 @@ const root = () => dom.window.document.getElementById('root');
     await page.settle();
     const bookOk = bookView(page);
     const optionNames = page.queryAll('select[name="item_id"] option').map(text);
+    // Since step R1 the page also asks GET /rental-settings (how far ahead a
+    // booking may start), after the items: still one load of the items.
     check('Book a rental: a successful load shows the form, the Facilities tab\'s items offered (the chairs are on Items), '
-        + 'from one GET of /rental-items, with no error',
+        + 'from one GET of /rental-items (then the booking rules), with no error',
       bookForm(bookOk) && optionNames.length === 2 && optionNames[1].startsWith('Covered Court')
-        && net.calls.length === 1 && isItems(net.calls[0]),
+        && net.calls.length === 2 && isItems(net.calls[0]) && /\/rental-settings$/.test(net.calls[1].url),
       said({ bookOk, optionNames, calls: net.calls.map((c) => `${c.method} ${c.url}`) }));
     await finish(page);
 
@@ -15402,8 +15416,8 @@ const root = () => dom.window.document.getElementById('root');
     if (F.clock && realNow) F.clock.now = realNow;
     check('sections AN and AO kept nothing in the browser: no write to localStorage or sessionStorage',
       kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
-    check('sections AN and AO sent only GETs (the items, the list, the availability) and booking POSTs',
-      methods.length > 0 && methods.every((m) => /^GET \/(rental-items|rental-requests\/availability|rental-requests)$/.test(m)
+    check('sections AN and AO sent only GETs (the items, the booking rules, the list, the availability) and booking POSTs',
+      methods.length > 0 && methods.every((m) => /^GET \/(rental-items|rental-settings|rental-requests\/availability|rental-requests)$/.test(m)
         || m === 'POST /rental-requests'), said([...new Set(methods)]));
   }
 
@@ -15769,9 +15783,11 @@ const root = () => dom.window.document.getElementById('root');
     check('sections AP to AR asked no window.confirm and kept nothing in the browser (no localStorage or sessionStorage write)',
       asked.length === 0 && kept.sets === 0 && domStorage.writes === kept.dom,
       said({ asked: asked.length, stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
-    check('sections AP to AR sent only the list, the availability, the items, the edits and the return',
+    // GET /rental-settings: the Rental items page's Booking rules box (step R1).
+    check('sections AP to AR sent only the list, the availability, the items, the booking rules, the edits and the return',
       methods.length > 0 && methods.every((m) => ['GET /rental-requests', 'GET /rental-requests/availability', 'PUT /rental-requests/:id',
-        'GET /rental-items/all', 'PUT /rental-items/:id', 'POST /rental-requests/:id/return'].includes(m)), said([...new Set(methods)]));
+        'GET /rental-items/all', 'GET /rental-settings', 'PUT /rental-items/:id', 'POST /rental-requests/:id/return'].includes(m)),
+      said([...new Set(methods)]));
   }
 
   // =========================================================================
@@ -16716,6 +16732,451 @@ const root = () => dom.window.document.getElementById('root');
     items.mode = 'all';
 
     if (F.clock && realNow) F.clock.now = realNow;
+  }
+
+  // =========================================================================
+  // AU. The booking rules (step R1, migration 025): each item's hours, how
+  // far ahead a booking may start, a booking that ends at midnight, and the
+  // Rental items page (the hours on the form and in the list, the Booking
+  // rules box, and a failed list load that is an error, never an empty list).
+  // =========================================================================
+  console.log('\n--- The booking rules: an item\'s hours, how far ahead, and the Rental items page ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const B = globalThis.bookingTimes || {};
+    const F = globalThis.chargeFilters || {};
+    const L = globalThis.activityLog || {};
+    const fn = (obj, name, ...args) => {
+      try { return typeof obj[name] === 'function' ? obj[name](...args) : `${name} is not exported`; } catch (e) { return `threw: ${e.message}`; }
+    };
+    // The server's own sentences, from the file the routes use: the booking
+    // forms' copy must say them word for word.
+    const SERVER = require(path.join(HERE, '..', '..', 'backend', 'src', 'constants', 'rentalBookingRules.js'));
+    const realNow = F.clock?.now;
+    const setNow = (iso) => { if (F.clock) F.clock.now = () => new Date(iso); };
+    const bodyOf = (c) => { try { return JSON.parse(c?.body || ''); } catch { return null; } };
+    const kept = { sets: 0, dom: domStorage.writes };
+    const finish = async (pg) => { kept.sets += store.sets; await pg.unmount(); };
+
+    // --- AU-a. the helpers, case by case ------------------------------------
+    const NOW = '2026-11-01T00:00:00Z'; // 8:00 AM on 1 Nov 2026 in Manila
+    for (const m of [0, 1, 61, 420, 719, 720, 721, 1020, 1439, 1440]) {
+      check(`clockText(${m}) is the server's: "${SERVER.clockText(m)}"`, fn(B, 'clockText', m) === SERVER.clockText(m), said(fn(B, 'clockText', m)));
+    }
+    for (const t of ['07:00', '07:00:00', '24:00', '24:00:00', '00:00', '23:59', '23:60', '25:00', '7:00', '07:00:30', '', null, 'noon']) {
+      check(`clockMinutes(${said(t)}) is the server's (${said(SERVER.clockMinutes(t))})`,
+        fn(B, 'clockMinutes', t) === SERVER.clockMinutes(t), said(fn(B, 'clockMinutes', t)));
+    }
+    for (const [name, opens, closes] of [['Basketball Court', '07:00:00', '24:00:00'], ['Tent', '07:00:00', '17:00:00'],
+      ['Stage', '00:00:00', '12:00:00'], ['Hall', '06:30:00', '21:45:00']]) {
+      check(`hoursRefusal for ${name} ${opens}-${closes}: "${SERVER.hoursRefusal(name, opens, closes)}"`,
+        fn(B, 'hoursRefusal', name, opens, closes) === SERVER.hoursRefusal(name, opens, closes), said(fn(B, 'hoursRefusal', name, opens, closes)));
+    }
+    for (const n of [1, 2, 31, 366]) {
+      check(`daysAheadRefusal(${n}): "${SERVER.daysAheadRefusal(n)}"`, fn(B, 'daysAheadRefusal', n) === SERVER.daysAheadRefusal(n),
+        said(fn(B, 'daysAheadRefusal', n)));
+    }
+    check('the two sentences read as the brief asks: "The Covered Court can be booked from 7:00 AM to 12:00 midnight." and '
+        + '"Bookings can be made up to 31 days ahead."',
+    fn(B, 'hoursRefusal', 'Covered Court', '07:00:00', '24:00:00') === 'The Covered Court can be booked from 7:00 AM to 12:00 midnight.'
+      && fn(B, 'daysAheadRefusal', 31) === 'Bookings can be made up to 31 days ahead.');
+    check('hoursText: "7:00 AM – 5:00 PM", "7:00 AM – 12:00 midnight", and null for an item with no hours',
+      fn(B, 'hoursText', { booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' }) === '7:00 AM – 5:00 PM'
+        && fn(B, 'hoursText', { booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' }) === '7:00 AM – 12:00 midnight'
+        && fn(B, 'hoursText', { name: 'Old answer' }) === null,
+      said([fn(B, 'hoursText', { booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' }),
+        fn(B, 'hoursText', { booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' }), fn(B, 'hoursText', { name: 'x' })]));
+    check('timeLimits: 07:00-17:00 holds both fields to 07:00..17:00; a midnight close runs the start to 23:59 and gives the end a max of '
+        + '00:00 (a range that wraps past midnight); no hours, no limits',
+    said(fn(B, 'timeLimits', { booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' }))
+        === said({ start: { min: '07:00', max: '17:00' }, end: { min: '07:00', max: '17:00' } })
+      && said(fn(B, 'timeLimits', { booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' }))
+        === said({ start: { min: '07:00', max: '23:59' }, end: { min: '07:00', max: '00:00' } })
+      && said(fn(B, 'timeLimits', undefined)) === said({ start: {}, end: {} }),
+    said(fn(B, 'timeLimits', { booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' })));
+    check('latestBookingDate: today in Manila (1 Nov) plus 31 is 2 Dec; plus 1 is 2 Nov; no limit known is null',
+      fn(B, 'latestBookingDate', new Date(NOW), 31) === '2026-12-02' && fn(B, 'latestBookingDate', new Date(NOW), 1) === '2026-11-02'
+        && fn(B, 'latestBookingDate', new Date(NOW), null) === null,
+      said([fn(B, 'latestBookingDate', new Date(NOW), 31), fn(B, 'latestBookingDate', new Date(NOW), 1)]));
+
+    const COURT_R = { item_id: 31, name: 'Basketball Court', booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' };
+    const HALL_R = { item_id: 32, name: 'Multipurpose Hall', booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' };
+    const rules = (item, maxDaysAhead = 31) => ({ item, maxDaysAhead });
+    const slot = (date, start_time, end_time) => ({ date, start_time, end_time });
+    const HALL_WORDS = SERVER.hoursRefusal('Multipurpose Hall', '07:00:00', '17:00:00');
+    const COURT_WORDS = SERVER.hoursRefusal('Basketball Court', '07:00:00', '24:00:00');
+    const AHEAD = SERVER.daysAheadRefusal(31);
+    const TIME_CASES = [
+      ['the hall from 07:00 to 17:00 exactly', slot('2026-11-05', '07:00', '17:00'), rules(HALL_R), null],
+      ['the hall from 06:59', slot('2026-11-05', '06:59', '10:00'), rules(HALL_R), HALL_WORDS],
+      ['the hall until 17:01', slot('2026-11-05', '16:00', '17:01'), rules(HALL_R), HALL_WORDS],
+      ['the hall until 00:00 (midnight)', slot('2026-11-05', '16:00', '00:00'), rules(HALL_R), HALL_WORDS],
+      ['the court from 22:00 until 00:00 (midnight)', slot('2026-11-05', '22:00', '00:00'), rules(COURT_R), null],
+      ['the court from 06:00', slot('2026-11-05', '06:00', '08:00'), rules(COURT_R), COURT_WORDS],
+      ['31 days ahead (2 Dec)', slot('2026-12-02', '08:00', '10:00'), rules(HALL_R), null],
+      ['32 days ahead (3 Dec)', slot('2026-12-03', '08:00', '10:00'), rules(HALL_R), AHEAD],
+      ['32 days ahead and outside the hours: how far ahead first', slot('2026-12-03', '05:00', '06:00'), rules(HALL_R), AHEAD],
+      ['the limit at 1: 3 Nov', slot('2026-11-03', '08:00', '10:00'), rules(HALL_R, 1), SERVER.daysAheadRefusal(1)],
+      ['same day, later today', slot('2026-11-01', '09:00', '10:00'), rules(HALL_R), null],
+      ['a start already past is still the past-start sentence, before the rules', slot('2026-11-01', '06:00', '07:30'), rules(HALL_R),
+        B.PAST_START],
+      ['an end not after the start is still first', slot('2026-12-03', '10:00', '10:00'), rules(HALL_R), B.END_NOT_AFTER_START],
+      ['no item and no limit: the rules are left to the server', slot('2026-12-30', '05:00', '06:00'), {}, null],
+      ['no limit known: the date is left to the server, the hours still checked', slot('2026-12-30', '08:00', '10:00'),
+        rules(HALL_R, null), null],
+    ];
+    for (const [what, form, r, want] of TIME_CASES) {
+      const got = fn(B, 'bookingTimeError', form, new Date(NOW), r);
+      check(`bookingTimeError: ${what}: ${want === null ? 'no message' : `"${want}"`}`, got === want, said(got));
+    }
+    const midnightWindow = fn(B, 'bookingWindow', slot('2026-11-05', '22:00', '00:00'));
+    check('bookingWindow reads an end of 00:00 as midnight at the end of the date (the availability check asks for that slot)',
+      midnightWindow?.start?.toISOString?.() === '2026-11-05T14:00:00.000Z' && midnightWindow?.end?.toISOString?.() === '2026-11-05T16:00:00.000Z',
+      said(midnightWindow));
+
+    // The Activity Log's words for the new rows.
+    const settingsRow = { action: 'UPDATE', table_name: 'rental_settings', record_id: 1,
+      old_value: { max_days_ahead: 31 }, new_value: { max_days_ahead: 14 } };
+    const hoursRow = { action: 'UPDATE', table_name: 'rental_items', record_id: 21,
+      old_value: { booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' }, new_value: { booking_opens_at: '06:00:00', booking_closes_at: '24:00:00' } };
+    check('the Activity Log names the rules row "Rental booking rules" (no #1) and words a change "Days ahead a booking can be made 31 to 14"',
+      fn(L, 'recordLabel', settingsRow) === 'Rental booking rules' && fn(L, 'summarize', settingsRow) === 'Days ahead a booking can be made 31 to 14',
+      said([fn(L, 'recordLabel', settingsRow), fn(L, 'summarize', settingsRow)]));
+    check('  and an item\'s hours as the forms say them: "Booking opens 7:00 AM to 6:00 AM; Booking closes 5:00 PM to 12:00 midnight"',
+      fn(L, 'summarize', hoursRow) === 'Booking opens 7:00 AM to 6:00 AM; Booking closes 5:00 PM to 12:00 midnight', said(fn(L, 'summarize', hoursRow)));
+
+    // --- AU-b. Book a rental against a stubbed API ---------------------------
+    setNow(NOW);
+    const item = (id, name, type, total, opens, closes) => ({ item_id: id, name, type, fee: '20.00', quantity_total: total,
+      quantity_available: total, is_active: true, description: null, booking_opens_at: opens, booking_closes_at: closes });
+    const COURT = item(31, 'Basketball Court', 'facility', 1, '07:00:00', '24:00:00');
+    const HALL = item(32, 'Multipurpose Hall', 'facility', 1, '07:00:00', '17:00:00');
+    const CHAIRS = item(33, 'Plastic Chairs', 'furniture', 100, '07:00:00', '17:00:00');
+    const ITEMS = [COURT, HALL, CHAIRS];
+    const byId = Object.fromEntries(ITEMS.map((i) => [i.item_id, i]));
+    const st = { settings: { max_days_ahead: 31 } };
+    const stub = (url, method) => {
+      if (method === 'POST' && /\/rental-requests$/.test(url)) {
+        const sent = bodyOf(net.calls.at(-1)) || {};
+        const it = byId[sent.item_id] || COURT;
+        return { message: 'Booking confirmed', request: { request_id: 990, status: 'confirmed', start_datetime: '2026-11-05T14:00:00+00:00',
+          end_datetime: '2026-11-05T16:00:00+00:00', quantity_requested: sent.quantity_requested, purpose: sent.purpose,
+          rental_items: { item_id: it.item_id, name: it.name, type: it.type, fee: it.fee } } };
+      }
+      if (method !== 'GET') return undefined;
+      if (/\/rental-settings$/.test(url)) return st.settings;
+      if (/\/rental-requests\/availability\?/.test(url)) {
+        const it = byId[Number(new URL(url, 'http://x').searchParams.get('item_id'))] || COURT;
+        return it.type === 'facility'
+          ? { ok: true, item_type: 'facility', total: 1, used: 0, booked: 0, stuck: 0, resting: 0, left: 1, taken: [] }
+          : { ok: true, item_type: it.type, total: 100, used: 0, booked: 0, stuck: 0, resting: 0, left: 100 };
+      }
+      if (/\/rental-items$/.test(url)) return { rental_items: ITEMS };
+      if (/\/rental-requests\?status=all$/.test(url)) return { requests: [] };
+      return undefined;
+    };
+    const choose = async (pg, value) => {
+      const sel = pg.query('select[name="item_id"]');
+      if (!sel) return;
+      sel.value = String(value);
+      sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await pg.settle();
+    };
+    const fillIf = async (pg, selector, value) => { if (pg.query(selector)) await pg.fill(selector, value); };
+    // Every step goes on when a form or field is not there, so a run against
+    // the code before step R1 reaches every check instead of stopping at the
+    // first booking that went through.
+    const submitIf = async (pg) => { if (pg.query('form')) await pg.submit(); };
+    const fillArea = async (pg, value) => {
+      const area = pg.query('textarea[name="purpose"]');
+      if (!area) return;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(area, value);
+      area.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await pg.settle();
+    };
+    const fillSlot = async (pg, date, start, end) => {
+      await fillIf(pg, 'input[name="date"]', date);
+      await fillIf(pg, 'input[name="start_time"]', start);
+      await fillIf(pg, 'input[name="end_time"]', end);
+      await fillArea(pg, 'Basketball league');
+    };
+    const card = (pg) => pg.query('.pending-card');
+    const view = (pg) => {
+      const c = card(pg);
+      const dateLabel = c?.querySelector('input[name="date"]')?.closest('label') ?? null;
+      const select = c?.querySelector('select[name="item_id"]')?.closest('label') ?? null;
+      const lines = [...(c?.querySelectorAll('p.type-description') ?? [])].map(text);
+      const grid = c?.querySelector('input[name="start_time"]')?.closest('.grid-2') ?? null;
+      const timeAlert = grid?.nextElementSibling?.matches('.alert.error[role="alert"]') ? text(grid.nextElementSibling) : null;
+      const attr = (name, a) => c?.querySelector(`input[name="${name}"]`)?.getAttribute(a) ?? null;
+      return {
+        hours: lines.find((l) => l.startsWith('Open ')) ?? null,
+        hoursUnderSelect: !!select && select.nextElementSibling?.textContent.startsWith('Open '),
+        dateHint: text(dateLabel?.querySelector('.hint')),
+        dateMin: attr('date', 'min'), dateMax: attr('date', 'max'),
+        start: [attr('start_time', 'min'), attr('start_time', 'max')],
+        end: [attr('end_time', 'min'), attr('end_time', 'max')],
+        timeAlert,
+      };
+    };
+    const posts = () => net.calls.filter((c) => c.method === 'POST');
+    const RES_T = makeToken({ sub: '8', role: 'resident', exp: VALID_EXP });
+    const RES_U = { user_id: 8, username: 'resident_t', role: 'resident', must_change_password: false };
+    const toggle = (pg, label) => pg.queryAll('.tab-container button.tab').find((b) => text(b) === label) ?? null;
+
+    seedSession(RES_T, RES_U);
+    resetNet(200, stub);
+    let page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    check('AU-b Book a rental asks GET /rental-settings once when it opens, beside GET /rental-items',
+      net.calls.filter((c) => /\/rental-settings$/.test(c.url)).length === 1 && net.calls.some((c) => /\/rental-items$/.test(c.url)),
+      said(net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`)));
+    let v = view(page);
+    check('  before an item is chosen: no hours line and no time limits; the date says "(up to 31 days ahead)", its max 2026-12-02 '
+        + '(today in Manila, 1 Nov, plus 31) and its min 2026-11-01',
+    v.hours === null && said(v.start) === said([null, null]) && said(v.end) === said([null, null])
+      && v.dateHint === '(up to 31 days ahead)' && v.dateMax === '2026-12-02' && v.dateMin === '2026-11-01', said(v));
+    await choose(page, 31);
+    v = view(page);
+    check('  the court chosen: "Open 7:00 AM – 12:00 midnight" straight under the Facility field',
+      v.hours === 'Open 7:00 AM – 12:00 midnight' && v.hoursUnderSelect, said(v));
+    check('  the start time is held to 07:00..23:59 and the end to 07:00..00:00 (a range that wraps past midnight)',
+      said(v.start) === said(['07:00', '23:59']) && said(v.end) === said(['07:00', '00:00']), said(v));
+    await choose(page, 32);
+    v = view(page);
+    check('  the hall chosen: "Open 7:00 AM – 5:00 PM", both times held to 07:00..17:00',
+      v.hours === 'Open 7:00 AM – 5:00 PM' && said(v.start) === said(['07:00', '17:00']) && said(v.end) === said(['07:00', '17:00']), said(v));
+
+    await fillSlot(page, '2026-11-05', '16:00', '00:00');
+    let sent = posts().length;
+    await submitIf(page);
+    v = view(page);
+    check(`  the hall until 00:00 (midnight): Book now shows "${HALL_WORDS}" under the time fields and sends nothing`,
+      v.timeAlert === HALL_WORDS && posts().length === sent, said({ v, posts: posts().length - sent }));
+    await new Promise((r) => setTimeout(r, 550));
+    await page.settle();
+    const asked = (id) => net.calls.filter((c) => /\/rental-requests\/availability\?/.test(c.url))
+      .map((c) => Object.fromEntries(new URL(c.url).searchParams.entries())).filter((q) => q.item_id === String(id));
+    check('  and while the slot breaks the hours, what is free is neither asked nor shown (no "Free for …" beside the refusal)',
+      asked(32).length === 0 && !/Free for|Not free/.test(text(card(page)?.querySelector('.rental-availability')) || ''),
+      said({ asked: asked(32), shown: text(card(page)?.querySelector('.rental-availability')) }));
+    await fillSlot(page, '2026-11-05', '06:30', '09:00');
+    await submitIf(page);
+    v = view(page);
+    check('  the hall from 06:30: the same sentence, nothing sent', v.timeAlert === HALL_WORDS && posts().length === sent, said(v));
+    await fillSlot(page, '2026-12-03', '08:00', '10:00');
+    await submitIf(page);
+    v = view(page);
+    check(`  3 Dec (32 days ahead): "${AHEAD}", nothing sent`, v.timeAlert === AHEAD && posts().length === sent, said(v));
+    await fillSlot(page, '2026-12-02', '08:00', '10:00');
+    check('  changing the date takes the message away', view(page).timeAlert === null, said(view(page)));
+    await choose(page, 31);
+    await fillSlot(page, '2026-11-05', '22:00', '00:00');
+    await new Promise((r) => setTimeout(r, 550));
+    await page.settle();
+    check('  the court from 22:00 to 00:00 is within its hours, so what is free is asked, with end_time 00:00, and shown',
+      asked(31).some((q) => q.start_time === '22:00' && q.end_time === '00:00' && q.date === '2026-11-05')
+        && /Free for/.test(text(card(page)?.querySelector('.rental-availability')) || ''),
+      said({ asked: asked(31), shown: text(card(page)?.querySelector('.rental-availability')) }));
+    await submitIf(page);
+    const booked = bodyOf(posts().at(-1));
+    check('  the court from 22:00 to 00:00: no message, and the booking is sent with end_time "00:00" (midnight, read by the server)',
+      posts().length === sent + 1 && booked?.item_id === 31 && booked?.start_time === '22:00' && booked?.end_time === '00:00'
+        && booked?.date === '2026-11-05', said(booked));
+    await finish(page);
+
+    // Items tab: the chairs' hours.
+    seedSession(RES_T, RES_U);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    await clickIf(page, toggle(page, 'Items'));
+    await choose(page, 33);
+    v = view(page);
+    check('  Items tab, the chairs: "Open 7:00 AM – 5:00 PM", Pick-up and Return time held to it',
+      v.hours === 'Open 7:00 AM – 5:00 PM' && said(v.start) === said(['07:00', '17:00']) && said(v.end) === said(['07:00', '17:00']), said(v));
+    await finish(page);
+
+    // The limit not known (an answer with no number in it): nothing said, nothing limited.
+    st.settings = { error: 'no limit here' };
+    seedSession(RES_T, RES_U);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    await choose(page, 32);
+    v = view(page);
+    check('  with no limit in GET /rental-settings\' answer: no "(up to …)" hint and no max on the date, the hours still shown',
+      v.dateHint === null && v.dateMax === null && v.hours === 'Open 7:00 AM – 5:00 PM', said(v));
+    await fillSlot(page, '2026-12-30', '08:00', '10:00');
+    sent = posts().length;
+    await submitIf(page);
+    check('  and a date far ahead is left to the server: no message, the booking is sent', view(page).timeAlert === null
+      && posts().length === sent + 1, said(view(page)));
+    await finish(page);
+    st.settings = { max_days_ahead: 31 };
+
+    // --- AU-c. the walk-in form -----------------------------------------------
+    seedSession(VALID);
+    resetNet(200, stub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rentals');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'Encode walk-in'));
+    await choose(page, 31);
+    v = view(page);
+    check('AU-c the walk-in form: the court shows "Open 7:00 AM – 12:00 midnight", the date "(up to 31 days ahead)" with max 2026-12-02, '
+        + 'the times held as on Book a rental',
+    v.hours === 'Open 7:00 AM – 12:00 midnight' && v.dateHint === '(up to 31 days ahead)' && v.dateMax === '2026-12-02'
+      && said(v.start) === said(['07:00', '23:59']) && said(v.end) === said(['07:00', '00:00']), said(v));
+    // A guest, so the borrower checks pass and the time check is reached.
+    await clickIf(page, toggle(page, 'Guest from another barangay'));
+    await fillIf(page, 'input[placeholder="As given at the counter"]', 'Pedro Guest');
+    await fillIf(page, 'input[placeholder="09XXXXXXXXX"]', '09179990000');
+    await choose(page, 32);
+    await fillSlot(page, '2026-11-05', '18:00', '19:00');
+    sent = posts().length;
+    await submitIf(page);
+    v = view(page);
+    check(`  a guest's booking of the hall from 18:00: Record booking shows "${HALL_WORDS}" and sends nothing`,
+      v.timeAlert === HALL_WORDS && posts().length === sent, said(v));
+    await finish(page);
+
+    // --- AU-d. the Rental items page -------------------------------------------
+    const ITEMS_ALL = [{ ...COURT, description: 'Outdoor court' }, { ...HALL }, { ...CHAIRS, is_active: false }];
+    const it = { list: 'ok', rules: 'ok' };
+    const itemsStub = (url, method) => {
+      if (method === 'GET' && /\/rental-items\/all$/.test(url)) {
+        return it.list === 'ok' ? { rental_items: ITEMS_ALL } : { error: 'The database did not answer' };
+      }
+      if (method === 'GET' && /\/rental-settings$/.test(url)) return it.rules === 'ok' ? { max_days_ahead: 31 } : { error: 'Rules unreadable' };
+      if (method === 'PUT' && /\/rental-settings$/.test(url)) {
+        return { message: 'Booking rules saved', max_days_ahead: bodyOf(net.calls.at(-1))?.max_days_ahead };
+      }
+      if (method === 'PUT' && /\/rental-items\/\d+$/.test(url)) return { message: 'Rental item updated', rental_item: {} };
+      if (method === 'POST' && /\/rental-items$/.test(url)) return { message: 'Rental item created', rental_item: {} };
+      return undefined;
+    };
+    const itemsView = (pg) => {
+      const head = pg.query('.list-head h2');
+      const alerts = pg.queryAll('.alert.error[role="alert"]').map(text);
+      return {
+        heading: text(head),
+        alerts,
+        retry: pg.queryAll('button').filter((b) => text(b) === 'Try again').length,
+        loading: pg.queryAll('p.muted').map(text).filter((t) => /^Loading/.test(t)),
+        empty: !!pg.query('.empty'),
+        rows: pg.queryAll('table.data-table tbody tr').map((tr) => [...tr.querySelectorAll('td')].map(text)),
+        headers: pg.queryAll('table.data-table thead th').map(text),
+        rulesValue: pg.query('input[name="max_days_ahead"]')?.value ?? null,
+      };
+    };
+    seedSession(VALID);
+    it.list = 'fail';
+    it.rules = 'fail';
+    resetNet(500, itemsStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
+    await page.settle();
+    let iv = itemsView(page);
+    check('AU-d Rental items, the first load fails: "Could not load the rental items: The database did not answer" (role="alert") '
+        + 'with Try again, in place of the table',
+    iv.alerts.includes('Could not load the rental items: The database did not answer') && iv.rows.length === 0 && iv.retry >= 1, said(iv));
+    check('  never an empty list: the heading stays "Rental items" (never "0 rental items"), no "No rental items yet." and no loading line',
+      iv.heading === 'Rental items' && !iv.empty && iv.loading.length === 0, said(iv));
+    check('  the Booking rules box says its own failure, "Could not load the booking rules: Rules unreadable", and shows no number',
+      iv.alerts.includes('Could not load the booking rules: Rules unreadable') && iv.rulesValue === null, said(iv));
+    net.status = 200;
+    it.list = 'ok';
+    it.rules = 'ok';
+    net.hold = true;
+    const listRetry = page.queryAll('button').filter((b) => text(b) === 'Try again')
+      .find((b) => b.previousElementSibling && text(b.previousElementSibling).startsWith('Could not load the rental items'));
+    await clickIf(page, listRetry);
+    iv = itemsView(page);
+    check('  Try again starts from the loading state: "Loading rental items…", the error gone', iv.loading.includes('Loading rental items…')
+      && !iv.alerts.some((a) => a.startsWith('Could not load the rental items')), said(iv));
+    while (net.held.length) net.held.shift()(200, { rental_items: ITEMS_ALL });
+    net.hold = false;
+    await page.settle();
+    iv = itemsView(page);
+    check('  and then the rows: 3 rental items, with a "Booking hours" column reading "7:00 AM – 12:00 midnight", "7:00 AM – 5:00 PM"',
+      iv.heading === '3 rental items' && iv.headers.includes('Booking hours') && iv.rows.length === 3
+        && iv.rows[0].includes('7:00 AM – 12:00 midnight') && iv.rows[1].includes('7:00 AM – 5:00 PM'), said(iv));
+    const rulesRetry = page.queryAll('button').find((b) => text(b) === 'Try again');
+    await clickIf(page, rulesRetry);
+    await page.settle();
+    iv = itemsView(page);
+    check('  the rules box\'s own Try again loads it: the field reads 31', iv.rulesValue === '31', said(iv));
+    await finish(page);
+
+    seedSession(VALID);
+    resetNet(200, itemsStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
+    await page.settle();
+    net.hold = true;
+    await clickIf(page, buttonNamed(root(), 'Refresh'));
+    iv = itemsView(page);
+    check('Refresh starts from the loading state too: the rows gone, "Loading rental items…" shown, the heading "Rental items"',
+      iv.rows.length === 0 && iv.loading.includes('Loading rental items…') && iv.heading === 'Rental items', said(iv));
+    while (net.held.length) net.held.shift()(500, { error: 'Timed out' });
+    net.hold = false;
+    await page.settle();
+    iv = itemsView(page);
+    check('  a Refresh that fails is the error with Try again, never "0 rental items"', iv.alerts.includes('Could not load the rental items: Timed out')
+      && iv.heading === 'Rental items' && !iv.empty && iv.rows.length === 0, said(iv));
+    await finish(page);
+
+    // The form: the hours on an edit and on a new item.
+    seedSession(VALID);
+    resetNet(200, itemsStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
+    await page.settle();
+    const rowEdit = page.queryAll('table.data-table tbody tr')[0]?.querySelector('button');
+    await clickIf(page, rowEdit);
+    const hoursFields = () => ({ opens: page.query('input[name="booking_opens_at"]')?.value ?? null,
+      closes: page.query('input[name="booking_closes_at"]')?.value ?? null,
+      opensType: page.query('input[name="booking_opens_at"]')?.type ?? null,
+      closesLabel: text(page.query('input[name="booking_closes_at"]')?.closest('label')) });
+    let hf = hoursFields();
+    check('Editing the court: Opens 07:00 and Closes 00:00 (its stored 24:00:00, midnight), time fields, "(12:00 AM means midnight)" by Closes',
+      hf.opens === '07:00' && hf.closes === '00:00' && hf.opensType === 'time' && /12:00 AM means midnight/.test(hf.closesLabel || ''), said(hf));
+    await fillIf(page, 'input[name="booking_opens_at"]', '06:00');
+    // The item form's own Save (the Booking rules box is a form too).
+    await clickIf(page, buttonNamed(root(), 'Save changes'));
+    const putItem = net.calls.filter((c) => c.method === 'PUT' && /\/rental-items\/31$/.test(c.url)).at(-1);
+    check('  Save sends booking_opens_at "06:00" and booking_closes_at "00:00" with the other fields',
+      bodyOf(putItem)?.booking_opens_at === '06:00' && bodyOf(putItem)?.booking_closes_at === '00:00' && bodyOf(putItem)?.name === 'Basketball Court',
+      said(bodyOf(putItem)));
+    await clickIf(page, buttonNamed(root(), 'New rental item'));
+    hf = hoursFields();
+    check('A new item starts at Opens 07:00 and Closes 17:00, the database\'s own defaults', hf.opens === '07:00' && hf.closes === '17:00', said(hf));
+    await finish(page);
+
+    // The Booking rules box.
+    seedSession(VALID);
+    resetNet(200, itemsStub);
+    page = await globalThis.mountInteractive(root(), '/secretary/rental-items');
+    await page.settle();
+    const box = page.queryAll('section.pending-card').find((s) => text(s.querySelector('h3')) === 'Booking rules') ?? null;
+    check('The Booking rules box: heading "Booking rules", the field "Days ahead a booking can be made" reading 31, 1 to 366',
+      !!box && /^Days ahead a booking can be made/.test(text(box.querySelector('label')) || '')
+        && box.querySelector('input[name="max_days_ahead"]')?.value === '31'
+        && box.querySelector('input[name="max_days_ahead"]')?.getAttribute('min') === '1'
+        && box.querySelector('input[name="max_days_ahead"]')?.getAttribute('max') === '366',
+      said(text(box)));
+    await fillIf(page, 'input[name="max_days_ahead"]', '14');
+    await clickIf(page, buttonNamed(box ?? root(), 'Save rules'));
+    await page.settle();
+    const putRules = net.calls.filter((c) => c.method === 'PUT' && /\/rental-settings$/.test(c.url));
+    check('  Save rules sends one PUT /rental-settings { max_days_ahead: 14 } and says "Booking rules saved"',
+      putRules.length === 1 && said(bodyOf(putRules[0])) === said({ max_days_ahead: 14 })
+        && text(box?.querySelector('.alert.success')) === 'Booking rules saved', said({ sent: putRules.map(bodyOf), box: text(box) }));
+    check('  and the item list is not reloaded by it', net.calls.filter((c) => /\/rental-items\/all$/.test(c.url)).length === 1,
+      said(net.calls.map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`)));
+    await finish(page);
+
+    if (F.clock && realNow) F.clock.now = realNow;
+    check('section AU kept nothing in the browser: no write to localStorage or sessionStorage',
+      kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
   }
 
   console.error = origError;

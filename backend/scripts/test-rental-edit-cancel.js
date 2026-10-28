@@ -18,6 +18,13 @@
 //   - A payment the webhook receives for a VOID charge writes one activity log
 //     row, and nothing else.
 //
+// Since step R1 (28 Oct 2026), migration 025: the booking rules. Each item
+// can be booked only within its own hours, a booking may start no more than
+// rental_settings.max_days_ahead days after today in Manila, and an end at
+// 00:00 is midnight at the end of the date, allowed only for an item that
+// closes at 24:00. Checked by the ROUTE on a booking, a walk-in and an edit;
+// stored bookings are not checked again. And GET/PUT /api/rental-settings.
+//
 // And since step C1b (26 Oct 2026), migration 024: the database decides
 // whether a slot is free. POST / books through create_rental_booking, PUT /:id
 // moves a booking through update_rental_booking_time, and GET /availability
@@ -56,6 +63,7 @@ const supabase = require('../src/config/supabase');
 const paymongo = require('../src/services/paymongo');
 const rentals = require('../src/routes/rentalRequests');
 const rentalItems = require('../src/routes/rentalItems');
+const rentalSettings = require('../src/routes/rentalSettings');
 const { webhookHandler } = require('../src/routes/payments');
 
 let pass = 0;
@@ -129,10 +137,15 @@ function freshDb() {
       { resident_id: 9101, first_name: 'Ana', middle_name: null, last_name: 'Probe', suffix: null, contact_number: '09170000001', is_archived: false },
       { resident_id: 9102, first_name: 'Ben', middle_name: null, last_name: 'Probe', suffix: null, contact_number: '09170000002', is_archived: false },
     ],
+    // Hours as PostgREST sends a `time` (migration 025): the court until
+    // midnight, the chairs the default 07:00 to 17:00.
     rental_items: [
-      { item_id: 801, name: 'Covered Court', type: 'facility', fee: 500, quantity_total: 1, quantity_available: 1, is_active: true },
-      { item_id: 802, name: 'Monobloc Chair', type: 'furniture', fee: 5, quantity_total: 100, quantity_available: 100, is_active: true },
+      { item_id: 801, name: 'Covered Court', type: 'facility', fee: 500, quantity_total: 1, quantity_available: 1, is_active: true,
+        booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' },
+      { item_id: 802, name: 'Monobloc Chair', type: 'furniture', fee: 5, quantity_total: 100, quantity_available: 100, is_active: true,
+        booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' },
     ],
+    rental_settings: [{ id: 1, max_days_ahead: 31 }],
     rental_requests: [
       booking(601),
       booking(602, { start_datetime: at(23), end_datetime: at(25) }),
@@ -250,8 +263,16 @@ function fakeFrom(db) {
       }
       if (q.op === 'insert') {
         db.calls.push({ table, op: 'insert', rows: q.rows });
-        db[table].push(...[].concat(q.rows).map((r) => structuredClone(r)));
-        return { data: null, error: null };
+        const added = [].concat(q.rows).map((r) => structuredClone(r));
+        // rental_items' create reads its new row back (.insert().select());
+        // the fake gives it the next id. Nothing else here reads an insert.
+        if (q.returning && table === 'rental_items') {
+          for (const row of added) row.item_id = Math.max(...db.rental_items.map((i) => i.item_id)) + 1;
+        }
+        db[table].push(...added);
+        if (!q.returning) return { data: null, error: null };
+        const out = added.map((row) => shape(db, table, row, q.sel));
+        return { data: q.single ? out[0] : out, error: null };
       }
       const rows = db[table].filter(matches);
       if (q.op === 'select') db.calls.push({ table, op: 'select', filters: q.filters });
@@ -270,7 +291,7 @@ function fakeFrom(db) {
       return { data: out[0] ?? null, error: null };
     };
     const b = {
-      select(sel) { q.sel = sel ?? '*'; return b; },
+      select(sel) { q.sel = sel ?? '*'; if (q.op === 'insert') q.returning = true; return b; },
       eq(c, v) { q.filters.push(['eq', c, v]); return b; },
       neq(c, v) { q.filters.push(['neq', c, v]); return b; },
       lt(c, v) { q.filters.push(['lt', c, v]); return b; },
@@ -1181,6 +1202,212 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     ? { message: 'bookings read failed' } : null); } });
   check('A failed bookings read is a 500 and saves nothing (never a silent "no warning")',
     r.status === 'threw' && tentOf(r).quantity_total === 20, said(r));
+
+  // ============================================================ booking rules
+  // Step R1 (28 Oct 2026), migration 025: the item's hours, how far ahead,
+  // and an end at midnight. The route checks them before the function is
+  // asked, on a resident's booking, a walk-in and an edit alike.
+  section('Booking rules — the item\'s hours and how far ahead (migration 025)');
+  const CHAIR_HOURS = 'The Monobloc Chair can be booked from 7:00 AM to 5:00 PM.';
+  const COURT_HOURS = 'The Covered Court can be booked from 7:00 AM to 12:00 midnight.';
+  const AHEAD_31 = 'Bookings can be made up to 31 days ahead.';
+  const RULE_DAY = dayAhead(5);
+  const nextMidnight = (day) => new Date(Date.parse(`${day}T00:00:00+08:00`) + 24 * HOUR).toISOString();
+  const ruleBody = (extra = {}) => ({
+    item_id: 802, date: RULE_DAY, start_time: '08:00', end_time: '10:00', purpose: 'Birthday party', quantity_requested: 3, ...extra,
+  });
+  const refusedUnasked = (res, words) => res.status === 400 && res.body?.error === words && res.rpcCalls().length === 0
+    && nothingWritten(res);
+
+  r = await book(RES_A, ruleBody({ start_time: '07:00', end_time: '17:00' }));
+  check('Chairs (7:00 AM to 5:00 PM), booked from 07:00 to 17:00 exactly: 201, the function is asked',
+    r.status === 201 && r.rpcCalls().length === 1, said(r));
+  for (const [what, times] of [['06:59 to 10:00', { start_time: '06:59', end_time: '10:00' }],
+    ['16:00 to 17:01', { start_time: '16:00', end_time: '17:01' }],
+    ['05:00 to 06:00, wholly before', { start_time: '05:00', end_time: '06:00' }],
+    ['17:00 to 18:00, wholly after', { start_time: '17:00', end_time: '18:00' }]]) {
+    r = await book(RES_A, ruleBody(times));
+    check(`Chairs ${what}: 400 "${CHAIR_HOURS}", the function never asked, nothing written`, refusedUnasked(r, CHAIR_HOURS), said(r));
+  }
+  r = await book(RES_A, ruleBody({ start_time: '16:00', end_time: '00:00' }));
+  check('Chairs until 00:00 (midnight): refused in the chairs\' hours, since they close at 5:00 PM', refusedUnasked(r, CHAIR_HOURS), said(r));
+
+  const courtBody = (extra) => ruleBody({ item_id: 801, quantity_requested: 1, ...extra });
+  r = await book(RES_A, courtBody({ start_time: '22:00', end_time: '00:00' }));
+  check('The court (closes 24:00) from 22:00 to 00:00: 201, and the end sent is midnight at the END of the date, 00:00 of the next day',
+    r.status === 201 && r.rpcCalls()[0]?.args?.p_start === manilaIso(RULE_DAY, '22:00')
+      && r.rpcCalls()[0]?.args?.p_end === nextMidnight(RULE_DAY), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  r = await book(RES_A, courtBody({ start_time: '22:00', end_time: '24:00' }));
+  check('  an end of "24:00" is the same midnight', r.status === 201 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(RULE_DAY), said(r));
+  r = await book(RES_A, courtBody({ start_time: '24:00', end_time: '00:00' }));
+  check('  but a START of "24:00" is a format error, as before', r.status === 400
+    && r.body?.error === 'start_time and end_time must be in HH:MM (24-hour) format' && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_A, courtBody({ start_time: '00:00', end_time: '00:00' }));
+  check('  00:00 to 00:00 is the whole day, refused in the court\'s hours (it opens at 7:00 AM)', refusedUnasked(r, COURT_HOURS), said(r));
+  r = await book(RES_A, courtBody({ start_time: '06:30', end_time: '08:00' }));
+  check('The court from 06:30: 400 "The Covered Court can be booked from 7:00 AM to 12:00 midnight."', refusedUnasked(r, COURT_HOURS), said(r));
+
+  r = await book(RES_A, ruleBody({ date: dayAhead(31) }));
+  check('31 days ahead (the limit, today in Manila + 31): 201', r.status === 201 && r.rpcCalls().length === 1, said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(32) }));
+  check(`32 days ahead: 400 "${AHEAD_31}", the function never asked`, refusedUnasked(r, AHEAD_31), said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(32), start_time: '05:00' }));
+  check('  too far ahead AND outside the hours: the days-ahead sentence first', refusedUnasked(r, AHEAD_31), said(r));
+  const settingsTo = (n) => (db) => { db.rental_settings[0].max_days_ahead = n; };
+  r = await book(RES_A, ruleBody({ date: dayAhead(1) }), { setup: settingsTo(1) });
+  check('With the limit at 1: tomorrow is 201', r.status === 201, said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(2) }), { setup: settingsTo(1) });
+  check('  the day after is 400 "Bookings can be made up to 1 day ahead."',
+    refusedUnasked(r, 'Bookings can be made up to 1 day ahead.'), said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(14) }), { setup: settingsTo(7) });
+  check('The limit is read fresh for every booking (7: 14 days ahead is refused)',
+    refusedUnasked(r, 'Bookings can be made up to 7 days ahead.'), said(r));
+
+  // Same day: the court open all day, a start a few minutes from now.
+  const soon = new Date(NOW + 10 * 60000);
+  const soonDay = manilaDay.format(soon);
+  const soonTime = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(soon);
+  const allDay = (db) => { Object.assign(db.rental_items.find((i) => i.item_id === 801), { booking_opens_at: '00:00:00' }); };
+  r = await book(RES_A, courtBody({ date: soonDay, start_time: soonTime, end_time: '00:00' }), { setup: allDay });
+  // (Within ten minutes of midnight in Manila, "soon" is already tomorrow;
+  // the label prints the day used.)
+  check(`Same day still works: today in Manila (${soonDay}), from ${soonTime} to midnight, the court open 00:00 to 24:00: 201`,
+    r.status === 201, said(r));
+  r = await book(RES_A, courtBody({ date: manilaDay.format(new Date(NOW)), start_time: '00:00', end_time: '00:01' }), { setup: allDay });
+  check('  and a start already past today is still "The booking must start in the future"', r.status === 400
+    && r.body?.error === PAST_START && r.rpcCalls().length === 0, said(r));
+
+  r = await book(SEC, ruleBody({ start_time: '18:00', end_time: '19:00', outside_borrower_name: 'Pedro Guest',
+    outside_borrower_contact: '09179990000' }));
+  check('A guest walk-in obeys the hours: 400, the function never asked', refusedUnasked(r, CHAIR_HOURS), said(r));
+  r = await book(SEC, ruleBody({ resident_id: 9102, date: dayAhead(40) }));
+  check('A resident walk-in obeys the days ahead: 400', refusedUnasked(r, AHEAD_31), said(r));
+
+  r = await book(RES_A, ruleBody({ start_time: '05:00' }), { setup: (db) => {
+    db.rental_items.find((i) => i.item_id === 802).is_active = false;
+    db.rpcAnswer.create_rental_booking = { ok: false, code: 'ITEM_INACTIVE' };
+  } });
+  check('An inactive item outside its hours is refused as inactive, as before (the rules are not asked first)',
+    r.status === 400 && r.body?.error === ITEM_OFF && r.rpcCalls().length === 1, said(r));
+  r = await book(RES_A, ruleBody({ item_id: 999, start_time: '05:00' }), { setup: (db) => { db.rpcAnswer.create_rental_booking = { ok: false, code: 'ITEM_NOT_FOUND' }; } });
+  check('  and an unknown item is still 404 "Rental item not found"', r.status === 404 && r.body?.error === ITEM_GONE, said(r));
+
+  r = await book(RES_A, ruleBody(), { setup: (db) => { db.failWhen = ({ table }) => (table === 'rental_settings' ? { message: 'settings read failed' } : null); } });
+  check('A failed read of the rules is a 500, never "no limit", and nothing is written',
+    r.status === 'threw' && /settings read failed/.test(r.body?.error || '') && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
+  r = await book(RES_A, ruleBody(), { setup: (db) => { db.rental_settings = []; } });
+  check('  and so is a missing rules row', r.status === 'threw' && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
+  r = await book(RES_A, ruleBody(), { setup: (db) => { delete db.rental_items.find((i) => i.item_id === 802).booking_closes_at; } });
+  check('  and so is an item read with no hours (never treated as open all day)', r.status === 'threw'
+    && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
+
+  // The Secretary's edit: the new time obeys the rules; the stored one is not checked.
+  r = await edit(601, editBody({ start_time: '06:00', end_time: '08:00' }));
+  check('Edit to 06:00: 400 in the chairs\' hours, update_rental_booking_time never asked', refusedUnasked(r, CHAIR_HOURS), said(r));
+  r = await edit(601, editBody({ date: dayAhead(32) }));
+  check('Edit to 32 days ahead: 400, never asked', refusedUnasked(r, AHEAD_31), said(r));
+  r = await edit(601, editBody({ start_time: '16:00', end_time: '17:00' }));
+  check('Edit to 16:00-17:00: 200, moved', r.status === 200 && r.rpcCalls()[0]?.name === 'update_rental_booking_time', said(r));
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '22:00', end_time: '00:00', quantity_requested: 1 }));
+  check('Edit of a court booking to 22:00 until midnight: 200, the end is 00:00 of the next day',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(CLASH_DAY), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  r = await edit(601, editBody({ start_time: '06:00' }), { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('Edit of a booking of a since-deactivated item still obeys its hours', refusedUnasked(r, CHAIR_HOURS), said(r));
+
+  // Stored bookings are not checked again: 605 sits at 03:00-04:00, outside
+  // the chairs' hours, and every other route still serves it.
+  const outOfHours = (db) => { Object.assign(db.rental_requests.find((b) => b.request_id === 605), {
+    start_datetime: manilaIso(dayAhead(3), '03:00'), end_datetime: manilaIso(dayAhead(3), '04:00') }); };
+  r = await call({ method: 'post', path: '/:id/cancel', user: SEC, id: 605, body: { reason: REASON }, setup: outOfHours });
+  check('A stored booking outside its item\'s hours can still be cancelled by the Secretary (200)',
+    r.status === 200 && r.booking(605).status === 'cancelled', said(r));
+  r = await call({ method: 'get', path: '/mine', user: RES_B, id: '', setup: outOfHours });
+  check('  and is still listed for its resident, untouched', r.status === 200
+    && JSON.stringify(r.body).includes(manilaIso(dayAhead(3), '03:00').slice(0, 16)), said(r));
+  check('  reading it never asks for the rules', !r.db.calls.some((c) => c.table === 'rental_settings'),
+    JSON.stringify(r.db.calls.map((c) => c.table)));
+  r = await book(RES_A, ruleBody(), { setup: outOfHours });
+  check('  and a new booking does not check it (201)', r.status === 201, said(r));
+
+  r = await ask(RES_A, avQuery({ start_time: '22:00', end_time: '00:00' }));
+  check('GET /availability reads an end of 00:00 as midnight too (the function is asked about the next day\'s 00:00)',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(AV_DAY), JSON.stringify(r.rpcCalls()[0]?.args));
+
+  // ======================================================= the items' hours
+  section('PUT/POST /api/rental-items — an item\'s hours');
+  const hoursOf = (res, id) => { const i = res.db.rental_items.find((x) => x.item_id === id); return [i?.booking_opens_at, i?.booking_closes_at]; };
+  const itemPut = (id, body) => call({ method: 'put', path: '/:id', user: SEC, id, body, router: rentalItems });
+  const courtItem = (extra = {}) => ({ name: 'Covered Court', type: 'facility', description: '', quantity_total: 1, fee: 500, ...extra });
+  r = await itemPut(801, courtItem({ booking_opens_at: '06:00', booking_closes_at: '00:00' }));
+  check('Closes "00:00" is saved as midnight, 24:00:00 (opens 06:00)', r.status === 200
+    && JSON.stringify(hoursOf(r, 801)) === JSON.stringify(['06:00:00', '24:00:00']), `${said(r)} ${JSON.stringify(hoursOf(r, 801))}`);
+  check('  logged as an UPDATE on rental_items with the opening only (the close was already midnight)',
+    r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { booking_opens_at: '07:00:00' })
+      && sameJson(r.db.activity_logs[0].new_value, { booking_opens_at: '06:00:00' }),
+    JSON.stringify(r.db.activity_logs.map((l) => [l.old_value, l.new_value])));
+  r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 5,
+    booking_opens_at: '08:00', booking_closes_at: '24:00' });
+  check('Closes "24:00" is accepted too', r.status === 200 && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['08:00:00', '24:00:00']), said(r));
+  const HOURS_BAD = [
+    ['an opening after the close', { booking_opens_at: '18:00', booking_closes_at: '17:00' }, 'The opening time must be before the closing time'],
+    ['an opening equal to the close', { booking_opens_at: '17:00', booking_closes_at: '17:00' }, 'The opening time must be before the closing time'],
+    ['only the opening', { booking_opens_at: '08:00' }, 'booking_opens_at and booking_closes_at must be sent together'],
+    ['only the close', { booking_closes_at: '20:00' }, 'booking_opens_at and booking_closes_at must be sent together'],
+    ['an opening of 24:00', { booking_opens_at: '24:00', booking_closes_at: '24:00' }, 'booking_opens_at must be a time in HH:MM (24-hour) format'],
+    ['an opening of "7am"', { booking_opens_at: '7am', booking_closes_at: '17:00' }, 'booking_opens_at must be a time in HH:MM (24-hour) format'],
+    ['a close of 25:00', { booking_opens_at: '07:00', booking_closes_at: '25:00' },
+      'booking_closes_at must be a time in HH:MM (24-hour) format, or 24:00 for midnight'],
+  ];
+  for (const [what, hours, words] of HOURS_BAD) {
+    r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 5, ...hours });
+    check(`${what}: 400 "${words}", nothing saved`, r.status === 400 && r.body?.error === words
+      && !r.db.calls.some((c) => c.op === 'update') && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['07:00:00', '17:00:00']), said(r));
+  }
+  r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 6 });
+  check('A save with neither leaves the hours as they are', r.status === 200
+    && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['07:00:00', '17:00:00']), said(r));
+  r = await call({ method: 'post', path: '/', user: SEC, id: '', router: rentalItems,
+    body: { name: 'Stage', type: 'facility', quantity_total: 1, fee: 0, booking_opens_at: '09:00', booking_closes_at: '21:30' } });
+  check('A new item is created with its hours', r.status === 201
+    && JSON.stringify(r.db.rental_items.find((i) => i.name === 'Stage') && [r.db.rental_items.find((i) => i.name === 'Stage').booking_opens_at,
+      r.db.rental_items.find((i) => i.name === 'Stage').booking_closes_at]) === JSON.stringify(['09:00:00', '21:30:00']), said(r));
+  r = await call({ method: 'get', path: '/', user: RES_A, id: '', router: rentalItems });
+  check('GET /api/rental-items (what residents see) carries each item\'s hours', r.status === 200
+    && r.body?.rental_items?.length === 2 && r.body.rental_items.every((i) => i.booking_opens_at && i.booking_closes_at),
+    JSON.stringify(r.body?.rental_items?.map((i) => [i.name, i.booking_opens_at, i.booking_closes_at])));
+
+  // ===================================================== /api/rental-settings
+  section('GET/PUT /api/rental-settings — how far ahead');
+  const settings = (method, user, body = {}, opts = {}) => call({ method, path: '/', user, id: '', body, chain: true, router: rentalSettings, ...opts });
+  for (const user of [RES_A, SEC, STAFF, TREASURER, PB]) {
+    r = await settings('get', user);
+    check(`GET as ${user.role}: 200 { max_days_ahead: 31 }`, r.status === 200 && sameJson(r.body, { max_days_ahead: 31 }), said(r));
+  }
+  r = await settings('get', RES_A, {}, { setup: (db) => { db.rental_settings = []; } });
+  check('GET with no row: 500, never a made-up default', r.status === 'threw', said(r));
+  for (const user of [RES_A, STAFF, TREASURER, PB]) {
+    r = await settings('put', user, { max_days_ahead: 14 });
+    check(`PUT as ${user.role}: 403, nothing saved`, r.status === 403 && r.db.rental_settings[0].max_days_ahead === 31
+      && r.db.activity_logs.length === 0, said(r));
+  }
+  r = await settings('put', SEC, { max_days_ahead: 14 });
+  check('PUT 14 as the Secretary: 200, saved', r.status === 200 && r.body?.max_days_ahead === 14
+    && r.db.rental_settings[0].max_days_ahead === 14 && r.body?.message === 'Booking rules saved', said(r));
+  const setLog = r.db.activity_logs;
+  check('  logged once: UPDATE on rental_settings #1 by the Secretary, 31 to 14', setLog.length === 1 && setLog[0].action === 'UPDATE'
+    && setLog[0].table_name === 'rental_settings' && setLog[0].record_id === 1 && setLog[0].user_id === SEC.user_id
+    && sameJson(setLog[0].old_value, { max_days_ahead: 31 }) && sameJson(setLog[0].new_value, { max_days_ahead: 14 }),
+  JSON.stringify(setLog));
+  r = await settings('put', SEC, { max_days_ahead: '366' });
+  check('PUT "366" (a string of digits): 200, 366', r.status === 200 && r.db.rental_settings[0].max_days_ahead === 366, said(r));
+  r = await settings('put', SEC, { max_days_ahead: 31 });
+  check('PUT the same number: 200, and nothing logged', r.status === 200 && r.db.activity_logs.length === 0, said(r));
+  for (const bad of [0, 367, 1.5, -3, 'abc', '', null, '7 days', true]) {
+    r = await settings('put', SEC, { max_days_ahead: bad });
+    check(`PUT ${JSON.stringify(bad)}: 400, nothing saved or logged`, r.status === 400
+      && r.body?.error === 'max_days_ahead must be a whole number from 1 to 366' && r.db.rental_settings[0].max_days_ahead === 31
+      && !r.db.calls.some((c) => c.op === 'update') && r.db.activity_logs.length === 0, said(r));
+  }
 
   // ================================================================ return
   // Mark returned (step C3, O7): never for a booking that has not started.
