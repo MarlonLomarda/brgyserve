@@ -1030,6 +1030,31 @@ Neither has been measured against the other screens it reaches.
     - The table scrolling inside its `.table-wrap` at 768 (right edge 989) is the same before and after.
 - **Found and not changed:** on a phone the item dropdown's option text ("Costumes (Equipment) — ₱150.00 per unit · 12 units") is cut by the select, as before; at 768 "Multipurpose Hall" breaks inside the word in the fixed Item column, as before (R4's widths).
 
+### Step R1: booking hours, how far ahead, and midnight, 28 Oct 2026 (migration 025)
+
+- **Why:** the Secretary gave the real rules: the barangay hall closes at 5:00 PM, it is open every day, same-day bookings are allowed, a booking can be made up to one month ahead, and the covered court can be booked until 12:00 midnight. Nothing stored hours or a limit. The rules are in `docs/modules/rental-bookings.md`, "Booking rules".
+- **Read first:**
+  - `parseBookingBody()` and `slotFormatError()` took `HH:MM` with hours 00 to 23 and built both moments on the one date, so an end of `00:00` was before any start and refused as an end not after the start; `24:00` was a format error. `utils/bookingTimes.js` did the same, and a time field cannot produce `24:00` at all.
+  - Migration 024's functions check only `p_end <= p_start` and `p_start <= now()`, so an end at 00:00 of the next day passes them unchanged: **024 was not touched.**
+  - Same-day booking already worked: the start only has to be after now (route and functions), and the date's `min` is today in Manila.
+  - The live database held 9 rental items (read-only count) and no item named "Covered Court"; the court was not guessed.
+  - `RentalItemsPage.jsx` stored `[]` beside the error on a failed load (O40).
+- **Decisions taken here (flagged in the report):**
+  - `time` for the hours, which holds `24:00:00`; an end of `00:00` (or `24:00`) is midnight at the end of the date; the Secretary types a midnight close as 12:00 AM.
+  - The rules live in `backend/src/constants/rentalBookingRules.js` (no requires) and in a frontend copy in `utils/bookingTimes.js`, compared input by input by `test:auth`.
+  - On POST the rules are checked only for an active item, so an unknown or inactive item keeps its old refusal; on PUT for any item. How far ahead first, then the hours.
+  - The booking forms ask `GET /rental-settings` after their items load; a failed or empty answer shows no hint and limits nothing. The time fields get `min`/`max`, with a wrapping range for midnight (Chrome honours it).
+  - The availability check is not asked while the slot breaks a rule (found in the pixel check: "Free for 6:30 AM to 9:00 AM." showed under the hours refusal).
+  - Rental items' hours are written as `HH:MM:00` so the edit log's diff compares like with like.
+  - The Booking rules box sits above the items list.
+- **Tested:**
+  - **Red first, against HEAD** (a `git archive` copy of HEAD with the new test files dropped in, a stub router for the new settings route): `rentals:test` 287 passed, 58 failed, every failure in the three new sections (the 12 + 1 + 1 that passed pin what already held: an in-hours booking, same day, a past start, an inactive or unknown item's refusal, a stored booking left alone, a save with no hours; "GET with no row: 500" passed vacuously, as HEAD has no route); `test:auth` 1984 passed, 79 failed: 73 of section AU's 85, the 2 updated request-count checks below, and 4 that only fail in a copy that is not a git repository (they read old `index.css` blobs with git).
+  - **Green:** `rentals:test` 273 to 345; `roles:test` 179 to 182 (the two settings routes and their authenticate); `activity:test` 77, unchanged in count, now seeing 14 logged tables; `test:auth` 1978 to 2063; lint 7 warnings, the same seven; the build is clean.
+  - **Older checks updated, not deleted (8 failures at the first green run):** four Book a rental load checks answered held requests by position, and the settings request took the place of the items one; fixed by asking the settings after the items, not by editing the checks. Then AI's "one GET of /rental-items" (now the items, then the rules), the walk-in's Back check (`GET /rental-items`, `GET /rental-settings`), and the method lists of AN/AO and AP to AR (`GET /rental-settings` added).
+  - **The migration** ran in PGlite (Postgres in WebAssembly, in the scratchpad) against stand-in tables with the 9 live item names: the dry run reports 12 rows, 10 PASS and 2 INFO, and leaves nothing; the COMMIT copy gives the same rows and the stored state; a second run aborts at its first hard stop. Not run against Supabase.
+  - **Pixels:** headless Chrome over CDP on the real app (`file://`, the real `index.css`, GET fixtures, no server), at 390 (`innerWidth` 390), 768 and 1280, with a HEAD bundle for comparison: no sideways page scroll on Book a rental (the court chosen; the hours refusal), the walk-in form, the Rental items page (list, edit form, load error); the hours line one line at every width; the Rental items table 912px against 819 at HEAD, inside its `.table-wrap` at 390 and 768 as before, fitting at 1280. No CSS changed.
+- **Found and not changed:** the Terms (section 8) and the Help Center say nothing of hours or how far ahead; the office hours "Open Monday to Friday, 8:00 AM to 5:00 PM. Closed Saturdays and Sundays." appear three times in `docs/legal-copy.md`; the Edit panel shows neither the hours nor the limit (the server's refusal does); CLAUDE.md's "`activity:test` (76 checks)" was already 77 at HEAD.
+
 ## Resident Records Management
 
 ### Planned design
