@@ -12,6 +12,7 @@ const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/cha
 const { notify } = require('../services/notifications');
 const { RELATED_TYPE } = require('../constants/notifications');
 const { PH_MOBILE_RE, PH_MOBILE_FORMS } = require('../constants/phoneNumber');
+const { MIDNIGHT, clockMinutes, bookingRuleRefusal } = require('../constants/rentalBookingRules');
 const { logActivity, diffFields, pick } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
 const paymongo = require('../services/paymongo');
@@ -300,25 +301,65 @@ const ITEM_INACTIVE = 'That item is not currently available for rental';
 const NOT_STARTED_EDIT = 'Only a booking that has not started can be changed.';
 
 // The format checks for a date and two times: the booking body's and the
-// availability question's. Returns an error sentence or null.
+// availability question's. Returns an error sentence or null. The end may
+// also be "24:00", midnight (see slotTimes).
 function slotFormatError(date, startTime, endTime) {
   if (!DATE_RE.test(date)) return 'date must be in YYYY-MM-DD format';
-  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+  if (!TIME_RE.test(startTime) || !(TIME_RE.test(endTime) || endTime === '24:00')) {
     return 'start_time and end_time must be in HH:MM (24-hour) format';
   }
   return null;
 }
 
+// An end time of "00:00" or "24:00" is MIDNIGHT AT THE END OF THE DATE, 00:00
+// of the next day (migration 025): a booking runs within one day, so an end at
+// the day's own first minute could never be after its start, and was always
+// refused. Whether the item may be booked until midnight is the booking
+// rules' question (bookingRuleRefusal), not this one.
+const endsAtMidnight = (endTime) => endTime === '00:00' || endTime === '24:00';
+
 // One Manila date and two Manila times as two moments. Same-day bookings by
 // construction: one date, two times. Returns { error } or { start, end }.
 function slotTimes(date, startTime, endTime) {
   const start = new Date(`${date}T${startTime}:00+08:00`);
-  const end = new Date(`${date}T${endTime}:00+08:00`);
+  const end = endsAtMidnight(endTime)
+    ? new Date(new Date(`${date}T00:00:00+08:00`).getTime() + MIDNIGHT * 60000)
+    : new Date(`${date}T${endTime}:00+08:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     return { error: 'Invalid date or time' };
   }
   if (end <= start) return { error: END_NOT_AFTER_START };
   return { start, end };
+}
+
+// Today's date in Manila, "YYYY-MM-DD", whatever zone the server runs in.
+const manilaDayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
+
+// THE BOOKING RULES (migration 025): the item's own hours, and how far ahead
+// a booking may start (rental_settings.max_days_ahead, from today in Manila).
+// Checked on a resident's booking, a walk-in and the Secretary's edit alike;
+// bookings already stored are not checked again. Enforced HERE, never inside
+// migration 024's functions, which decide only whether a slot is free. The
+// rules are read fresh for every booking. Returns the refusal sentence or
+// null; a failed read is thrown, never answered as "no limit".
+async function bookingRulesRefusal(parsed, item) {
+  const { data: settings, error } = await supabase
+    .from('rental_settings')
+    .select('max_days_ahead')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load the booking rules: ${error.message}`);
+  }
+  if (!Number.isInteger(settings?.max_days_ahead)) {
+    throw new Error('The booking rules (rental_settings) have no row');
+  }
+  return bookingRuleRefusal(
+    { date: parsed.date, startMinutes: parsed.startMinutes, endMinutes: parsed.endMinutes },
+    item,
+    settings.max_days_ahead,
+    manilaDayFmt.format(new Date())
+  );
 }
 
 // Field validation shared by booking and editing. Returns { error } or the
@@ -353,7 +394,13 @@ function parseBookingBody(body) {
     return { error: START_NOT_IN_FUTURE };
   }
 
-  return { start, end, startIso: start.toISOString(), endIso: end.toISOString(), purpose, quantity };
+  return {
+    start, end, startIso: start.toISOString(), endIso: end.toISOString(), purpose, quantity,
+    // For the booking rules: the date, and the times as minutes on it.
+    date,
+    startMinutes: clockMinutes(startTime),
+    endMinutes: endsAtMidnight(endTime) ? MIDNIGHT : clockMinutes(endTime),
+  };
 }
 
 const isOrAre = (n) => (n === 1 ? 'is' : 'are');
@@ -464,15 +511,26 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   }
   const isGuest = borrower.kind === 'guest';
 
-  // For the fee, the item's name in the sentences, and the answer. Whether it
-  // exists, is active and has the units is the function's to say.
+  // For the fee, the item's name in the sentences, the booking rules, and the
+  // answer. Whether it exists, is active and has the units is the function's
+  // to say.
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
-    .select('item_id, name, type, fee')
+    .select('item_id, name, type, fee, is_active, booking_opens_at, booking_closes_at')
     .eq('item_id', itemId)
     .maybeSingle();
   if (itemError) {
     throw new Error(`Failed to load rental item: ${itemError.message}`);
+  }
+
+  // The item's hours and how far ahead: for a resident and a walk-in alike.
+  // An unknown or inactive item is left to the function's own refusal, as
+  // before, so the order of the answers does not change for one.
+  if (item?.is_active) {
+    const ruleRefusal = await bookingRulesRefusal(parsed, item);
+    if (ruleRefusal) {
+      return res.status(400).json({ error: ruleRefusal });
+    }
   }
 
   const result = await callBookingFunction('create_rental_booking', {
@@ -1211,11 +1269,18 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   // ones (the function does not refuse an inactive item on an edit either).
   const { data: item, error: itemError } = await supabase
     .from('rental_items')
-    .select('item_id, name, type')
+    .select('item_id, name, type, booking_opens_at, booking_closes_at')
     .eq('item_id', booking.item_id)
     .maybeSingle();
   if (itemError || !item) {
     throw new Error(`Failed to load rental item: ${itemError?.message || 'not found'}`);
+  }
+  // The new time obeys the booking rules, as a new booking does (the item's
+  // hours as they are today, even for an item since deactivated). The
+  // booking's stored time is not checked: only what this edit asks for.
+  const ruleRefusal = await bookingRulesRefusal(parsed, item);
+  if (ruleRefusal) {
+    return res.status(400).json({ error: ruleRefusal });
   }
 
   // The check and the update in one locked call. A booking that started or

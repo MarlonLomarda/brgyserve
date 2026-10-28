@@ -17,10 +17,15 @@ import {
   rentalMeta,
 } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
+import useRentalSettings from "../hooks/useRentalSettings";
 import {
+  bookingRuleError,
   bookingTimeError,
   earliestBookingDate,
+  hoursText,
+  latestBookingDate,
   manilaInputs,
+  timeLimits,
 } from "../utils/bookingTimes";
 import { ANY, backwards, clock, manilaToday } from "../utils/chargeFilters";
 import { searchTerms } from "../utils/chargeSearch";
@@ -576,6 +581,11 @@ function WalkInBookingPanel({ onDone }) {
     loadItems();
   }, [loadItems]);
 
+  // How many days ahead a booking may start, or null while not known, asked
+  // after the items. The same rules as a resident's booking: the server
+  // applies them to both.
+  const maxDaysAhead = useRentalSettings();
+
   // The toggle's own items, and Book a rental's rules for them: a Quantity
   // for an item, none for a facility.
   const words = KIND_TEXT[kind];
@@ -586,16 +596,25 @@ function WalkInBookingPanel({ onDone }) {
   const withQuantity = kind === ITEM;
   const quantity = withQuantity ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
+  // The booking rules, as on Book a rental: the item's hours and how far
+  // ahead.
+  const hours = selectedItem ? hoursText(selectedItem) : null;
+  const limits = timeLimits(selectedItem);
 
   // What is free for the chosen time: advice only, as on Book a rental, and
-  // nothing while no item is chosen.
+  // nothing while no item is chosen or while the slot breaks the booking
+  // rules (Record booking refuses it in their words).
+  const ruleBroken = selectedItem
+    ? bookingRuleError(form, clock.now(), { item: selectedItem, maxDaysAhead })
+    : null;
+  const askable = selectedItem && !ruleBroken;
   const availability = useRentalAvailability(
-    selectedItem?.item_id,
+    askable ? selectedItem.item_id : undefined,
     form.date,
     form.start_time,
     form.end_time,
   );
-  const check = selectedItem ? availability : NOT_ASKED;
+  const check = askable ? availability : NOT_ASKED;
   const answer = check.status === "ready" ? check.data : null;
   const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
   const blocked = bookingBlock({ answer, quantity, countable: withQuantity });
@@ -652,7 +671,10 @@ function WalkInBookingPanel({ onDone }) {
     // The times, checked as the server will and in its words, before anything
     // is sent (utils/bookingTimes.js, as on Book a rental). The server checks
     // again with its own clock.
-    const refused = bookingTimeError(form, clock.now());
+    const refused = bookingTimeError(form, clock.now(), {
+      item: selectedItem,
+      maxDaysAhead,
+    });
     setTimeError(refused || "");
     if (refused) return;
     setBusy(true);
@@ -687,6 +709,7 @@ function WalkInBookingPanel({ onDone }) {
   // field's earliest day. It was today in UTC, which until 8 AM in Manila is
   // yesterday.
   const today = earliestBookingDate(clock.now());
+  const latest = latestBookingDate(clock.now(), maxDaysAhead);
 
   return (
     <div className="pending-card rental-form-panel">
@@ -842,6 +865,9 @@ function WalkInBookingPanel({ onDone }) {
                 ))}
               </select>
             </label>
+            {hours && (
+              <p className="muted type-description">Open {hours}</p>
+            )}
             {selectedItem?.description && (
               <p className="muted type-description">
                 {selectedItem.description}
@@ -853,11 +879,18 @@ function WalkInBookingPanel({ onDone }) {
                 Return time. */}
             <div className="grid-2">
               <label className={withQuantity ? undefined : "rental-date-full"}>
-                Date
+                Date{" "}
+                {maxDaysAhead !== null && (
+                  <span className="hint">
+                    (up to {maxDaysAhead} day{maxDaysAhead === 1 ? "" : "s"}{" "}
+                    ahead)
+                  </span>
+                )}
                 <input
                   name="date"
                   type="date"
                   min={today}
+                  max={latest ?? undefined}
                   value={form.date}
                   onChange={handleChange}
                   required
@@ -888,6 +921,7 @@ function WalkInBookingPanel({ onDone }) {
                 <input
                   name="start_time"
                   type="time"
+                  {...limits.start}
                   value={form.start_time}
                   onChange={handleChange}
                   required
@@ -898,6 +932,7 @@ function WalkInBookingPanel({ onDone }) {
                 <input
                   name="end_time"
                   type="time"
+                  {...limits.end}
                   value={form.end_time}
                   onChange={handleChange}
                   required

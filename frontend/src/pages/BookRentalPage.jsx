@@ -10,6 +10,7 @@ import {
   rentalMeta,
 } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
+import useRentalSettings from "../hooks/useRentalSettings";
 import {
   FACILITY,
   ITEM,
@@ -17,7 +18,14 @@ import {
   NOT_ASKED,
   ofKind,
 } from "../utils/bookingKinds";
-import { bookingTimeError, earliestBookingDate } from "../utils/bookingTimes";
+import {
+  bookingRuleError,
+  bookingTimeError,
+  earliestBookingDate,
+  hoursText,
+  latestBookingDate,
+  timeLimits,
+} from "../utils/bookingTimes";
 import { clock } from "../utils/chargeFilters";
 import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
 
@@ -100,6 +108,10 @@ function BookRentalForm({ kind, onKind }) {
     loadItems();
   }, [loadItems]);
 
+  // How many days ahead a booking may start, or null while not known. Asked
+  // after the items, the page's own load.
+  const maxDaysAhead = useRentalSettings();
+
   // The tab's own items: an item the page loads of the other kind is simply
   // not shown, and cannot be the one chosen.
   const words = KIND_TEXT[kind];
@@ -112,6 +124,18 @@ function BookRentalForm({ kind, onKind }) {
   const withQuantity = kind === ITEM;
   const quantity = withQuantity ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
+  // The booking rules (migration 025): the chosen item's hours, which hold
+  // the time fields, and how far ahead the date may be.
+  const hours = selectedItem ? hoursText(selectedItem) : null;
+  const limits = timeLimits(selectedItem);
+
+  // A slot that breaks the booking rules is not asked about: Book now will
+  // refuse it in the rules' words, and a "Free for …" beside that would
+  // contradict it.
+  const ruleBroken = selectedItem
+    ? bookingRuleError(form, clock.now(), { item: selectedItem, maxDaysAhead })
+    : null;
+  const askable = selectedItem && !ruleBroken;
 
   // What is free for the chosen time, asked of the server once the item, the
   // date and both times are set. ADVICE ONLY: the server decides at Book now.
@@ -119,14 +143,14 @@ function BookRentalForm({ kind, onKind }) {
   // beside it; no answer (none yet, one out, or a check that failed) leaves
   // the form as it was.
   const availability = useRentalAvailability(
-    selectedItem?.item_id,
+    askable ? selectedItem.item_id : undefined,
     form.date,
     form.start_time,
     form.end_time,
   );
   // With no item chosen nothing is shown or counted: after a tab switch the
   // hook still holds the other item's answer for one render.
-  const check = selectedItem ? availability : NOT_ASKED;
+  const check = askable ? availability : NOT_ASKED;
   const answer = check.status === "ready" ? check.data : null;
   const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
   const blocked = bookingBlock({ answer, quantity, countable: withQuantity });
@@ -167,7 +191,10 @@ function BookRentalForm({ kind, onKind }) {
     // is sent; the button stays pressable, so the press is what shows why. A
     // time field changes as each part of it is typed, so checking as you
     // type would flash a refusal at half-typed times. The server checks again.
-    const refused = bookingTimeError(form, clock.now());
+    const refused = bookingTimeError(form, clock.now(), {
+      item: selectedItem,
+      maxDaysAhead,
+    });
     setTimeError(refused || "");
     if (refused) return;
     setBusy(true);
@@ -198,6 +225,7 @@ function BookRentalForm({ kind, onKind }) {
   // Today in Manila, whatever clock this computer keeps: the date field's
   // earliest day. In UTC, until 8 AM in Manila, it would still be yesterday.
   const today = earliestBookingDate(clock.now());
+  const latest = latestBookingDate(clock.now(), maxDaysAhead);
   const meta = booked ? rentalMeta(booked.status) : null;
 
   return (
@@ -333,6 +361,9 @@ function BookRentalForm({ kind, onKind }) {
                   ))}
                 </select>
               </label>
+              {hours && (
+                <p className="muted type-description">Open {hours}</p>
+              )}
               {selectedItem?.description && (
                 <p className="muted type-description">
                   {selectedItem.description}
@@ -344,11 +375,18 @@ function BookRentalForm({ kind, onKind }) {
                   Pick-up | Return time. */}
               <div className="grid-2">
                 <label className={withQuantity ? undefined : "rental-date-full"}>
-                  Date
+                  Date{" "}
+                  {maxDaysAhead !== null && (
+                    <span className="hint">
+                      (up to {maxDaysAhead} day{maxDaysAhead === 1 ? "" : "s"}{" "}
+                      ahead)
+                    </span>
+                  )}
                   <input
                     name="date"
                     type="date"
                     min={today}
+                    max={latest ?? undefined}
                     value={form.date}
                     onChange={handleChange}
                     required
@@ -379,6 +417,7 @@ function BookRentalForm({ kind, onKind }) {
                   <input
                     name="start_time"
                     type="time"
+                    {...limits.start}
                     value={form.start_time}
                     onChange={handleChange}
                     required
@@ -389,6 +428,7 @@ function BookRentalForm({ kind, onKind }) {
                   <input
                     name="end_time"
                     type="time"
+                    {...limits.end}
                     value={form.end_time}
                     onChange={handleChange}
                     required

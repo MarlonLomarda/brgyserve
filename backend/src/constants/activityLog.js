@@ -105,7 +105,7 @@ const isPersonalKey = (key) => PERSONAL_FIELDS.includes(String(key).toLowerCase(
 const LOGGED_TABLES = [
   'users', 'profiles', 'resident_records', 'household_records', 'household_members',
   'document_types', 'document_requests', 'charges', 'rental_items', 'rental_requests',
-  'events', 'event_attendees', 'dispute_records',
+  'rental_settings', 'events', 'event_attendees', 'dispute_records',
 ];
 
 module.exports = {

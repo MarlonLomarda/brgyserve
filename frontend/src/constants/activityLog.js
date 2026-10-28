@@ -16,6 +16,7 @@ import { EVENT_TYPE_LABELS } from './events';
 import { rejectionReasonLabel } from './registration';
 import { ROLE_LABELS } from '../auth/roles';
 import { formatPeso } from './reports';
+import { clockMinutes, clockText } from '../utils/bookingTimes';
 
 // Badge colours reuse the request-status classes: blue adds or allows, cyan
 // edits, green completes, yellow records money or a credential, red refuses
@@ -71,6 +72,7 @@ export const TABLE_LABELS = {
   charges: 'Charge',
   rental_items: 'Rental item',
   rental_requests: 'Rental booking',
+  rental_settings: 'Rental booking rules',
   events: 'Event',
   event_attendees: 'Event attendance',
   dispute_records: 'Blotter case',
@@ -123,6 +125,8 @@ export function recordLabel(row) {
     return TABLE_LABELS[row.table_name] || humanize(row.table_name);
   }
   if (row.table_name === 'users' || row.table_name === 'profiles') return `Account #${row.record_id}`;
+  // One row for the whole barangay (migration 025): its id says nothing.
+  if (row.table_name === 'rental_settings') return TABLE_LABELS.rental_settings;
   return `${TABLE_LABELS[row.table_name] || humanize(row.table_name)} #${row.record_id}`;
 }
 
@@ -143,6 +147,11 @@ const FIELD_LABELS = {
   quantity_requested: 'Quantity',
   quantity_total: 'Total units',
   quantity_available: 'Units available',
+  // The booking rules (migration 025): an item's hours, and the
+  // barangay-wide limit on how far ahead a booking may start.
+  booking_opens_at: 'Booking opens',
+  booking_closes_at: 'Booking closes',
+  max_days_ahead: 'Days ahead a booking can be made',
   masterlist_registered_on: 'Masterlist registration date',
   educational_attainment: 'Educational attainment',
   civil_status: 'Civil status',
@@ -178,6 +187,9 @@ const BOOLEAN_WORDS = {
 };
 const MONEY_KEYS = ['fee', 'fine_amount', 'amount', 'amount_each', 'total_amount', 'refund_due'];
 const TIME_KEYS = ['start_datetime', 'end_datetime', 'date_created', 'registered_at', 'timestamp'];
+// A time of day ("07:00:00", or "24:00:00" for midnight), said as the booking
+// forms say it: "7:00 AM", "12:00 midnight".
+const CLOCK_KEYS = ['booking_opens_at', 'booking_closes_at'];
 
 function statusLabel(table, value) {
   if (table === 'charges') return CHARGE_META[value]?.label || value;
@@ -192,6 +204,7 @@ function formatValue(table, key, v) {
   if (typeof v === 'boolean') return (BOOLEAN_WORDS[key] || ['No', 'Yes'])[v ? 1 : 0];
   if (MONEY_KEYS.includes(key) && !Number.isNaN(Number(v))) return formatPeso(v);
   if (TIME_KEYS.includes(key)) return formatLogTime(v);
+  if (CLOCK_KEYS.includes(key) && clockMinutes(v) !== null) return clockText(clockMinutes(v));
   if (key === 'status') return statusLabel(table, v);
   if (key === 'type') return (table === 'rental_items' ? ITEM_TYPE_LABELS : EVENT_TYPE_LABELS)[v] || v;
   if (typeof v === 'number') return String(v);

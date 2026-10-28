@@ -4,13 +4,15 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { ITEM_TYPE, ITEM_TYPES, RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
 const { logActivity, diffFields } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
+const { MIDNIGHT, clockMinutes } = require('../constants/rentalBookingRules');
 
 const router = express.Router();
 
 const MAX_FEE = 99999999.99; // numeric(10,2) ceiling
 const MAX_QUANTITY = 100000;
 
-const ITEM_FIELDS = 'item_id, name, type, description, quantity_total, quantity_available, fee, is_active';
+const ITEM_FIELDS =
+  'item_id, name, type, description, quantity_total, quantity_available, fee, is_active, booking_opens_at, booking_closes_at';
 
 // Returns the fee as a number rounded to centavos, or null if invalid.
 function parseFee(fee) {
@@ -44,13 +46,48 @@ function validateBody(body) {
 
   const description = String(body?.description ?? '').trim() || null;
 
+  const hours = parseHours(body);
+  if (hours.error) return { error: hours.error };
+
   // quantity_available mirrors quantity_total for now: a single number cannot
   // express per-time-slot availability, so the stage-2 conflict check derives
   // free units per slot from approved bookings against quantity_available.
   // Keeping the columns separate lets damaged/retired stock lower it later.
   return {
-    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee },
+    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee, ...hours.value },
   };
+}
+
+// The item's booking hours (migration 025), "HH:MM". Optional as a PAIR: a
+// body with neither leaves them as they are (a new item takes the
+// database's 07:00 to 17:00), one with either must carry both. A close of
+// "00:00" or "24:00" is midnight, stored as 24:00 (a `time` holds it), since
+// a close at the day's first minute could never be after the opening. The
+// opening must be before the close; the database CHECKs that too.
+function parseHours(body) {
+  const opensRaw = body?.booking_opens_at;
+  const closesRaw = body?.booking_closes_at;
+  if (opensRaw === undefined && closesRaw === undefined) return { value: {} };
+  if (opensRaw === undefined || closesRaw === undefined) {
+    return { error: 'booking_opens_at and booking_closes_at must be sent together' };
+  }
+  const opens = clockMinutes(String(opensRaw).trim());
+  if (opens === null || opens === MIDNIGHT) {
+    return { error: 'booking_opens_at must be a time in HH:MM (24-hour) format' };
+  }
+  const closesText = String(closesRaw).trim();
+  let closes = clockMinutes(closesText);
+  if (closes === 0) closes = MIDNIGHT;
+  if (closes === null) {
+    return { error: 'booking_closes_at must be a time in HH:MM (24-hour) format, or 24:00 for midnight' };
+  }
+  if (opens >= closes) {
+    return { error: 'The opening time must be before the closing time' };
+  }
+  // As PostgREST sends a `time` back ("07:00:00"), so the log's diff of the
+  // row before and after compares like with like.
+  const clock = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`;
+  return { value: { booking_opens_at: clock(opens), booking_closes_at: clock(closes) } };
 }
 
 // Case-insensitive duplicate-name check (excludeId for updates).
@@ -91,10 +128,12 @@ async function heldUnits(itemId, type) {
 
 // GET /api/rental-items — ACTIVE items only; any authenticated user.
 // This is what residents will use to pick an item when booking (stage 2).
+// Each item carries its booking hours (migration 025), which the booking
+// forms show and hold the time fields to.
 router.get('/', authenticate, async (req, res) => {
   const { data, error } = await supabase
     .from('rental_items')
-    .select('item_id, name, type, description, quantity_total, quantity_available, fee')
+    .select('item_id, name, type, description, quantity_total, quantity_available, fee, booking_opens_at, booking_closes_at')
     .eq('is_active', true)
     .order('name', { ascending: true });
   if (error) throw new Error(`Failed to load rental items: ${error.message}`);

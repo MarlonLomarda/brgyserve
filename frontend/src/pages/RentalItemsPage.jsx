@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { ITEM_TYPE_LABELS as TYPE_LABELS } from "../constants/rentals";
+import { clockMinutes, hoursText } from "../utils/bookingTimes";
 
 // Facilities are whole venues booked as one unit, so quantity locks to 1.
 
@@ -19,6 +20,28 @@ function stockWarningText({ bookings, units, largest, new_total }, name) {
     .join(" ");
 }
 
+// Why a load failed, for "Could not load the rental items: …". The server's
+// own message when it sent one (the API's errors are plain sentences, never a
+// stack). Anything else, a server that could not be reached or an answer with
+// no message in it, gets a plain fallback rather than the client's own text.
+// One more copy of the Rental bookings page's function.
+function loadFailure(err) {
+  const sent = err?.data?.error;
+  return typeof sent === "string" && sent.trim()
+    ? sent.trim()
+    : "the server did not respond";
+}
+
+// An item's stored hours ("07:00:00", or "24:00:00" for midnight) as a time
+// field's "HH:MM". A time field cannot hold 24:00, so midnight is 00:00,
+// which the server reads back as midnight for a closing time (migration 025).
+function timeField(stored, fallback) {
+  const minutes = clockMinutes(stored);
+  if (minutes === null) return fallback;
+  if (minutes === 24 * 60) return "00:00";
+  return String(stored).slice(0, 5);
+}
+
 const EMPTY_FORM = {
   item_id: null,
   name: "",
@@ -26,12 +49,17 @@ const EMPTY_FORM = {
   description: "",
   quantity_total: "1",
   fee: "",
+  // The database's own defaults for a new item (migration 025).
+  booking_opens_at: "07:00",
+  booking_closes_at: "17:00",
 };
 
 export default function RentalItemsPage() {
   const { authFetch } = useAuth();
-  const [items, setItems] = useState(null); // null = loading
-  const [listError, setListError] = useState("");
+  const [items, setItems] = useState(null); // null = loading, or a failed load
+  const [listError, setListError] = useState(null); // why the last load failed
+  // Numbers each load, so only the newest one may change the list.
+  const loadSeq = useRef(0);
   const [flash, setFlash] = useState(null);
   const [form, setForm] = useState(null); // null = closed; object = create/edit form
   const [formError, setFormError] = useState("");
@@ -40,20 +68,80 @@ export default function RentalItemsPage() {
   const [stockWarning, setStockWarning] = useState(null);
   const quantityRef = useRef(null);
 
+  // A FAILED LOAD IS NOT AN EMPTY LIST (CLAUDE.md: a list that failed to
+  // load). This used to store [] beside the error, so the server's bare
+  // message sat over "0 rental items" and "No rental items yet." while the
+  // page knew nothing. items now stays null and the error, with Try again,
+  // takes the place of the table. Every load starts from the loading state
+  // (the first open, Refresh, Try again and the reload after a save), and an
+  // older answer that arrives late is dropped.
   const load = useCallback(async () => {
-    setListError("");
+    const seq = ++loadSeq.current;
+    setListError(null);
+    setItems(null);
     try {
       const data = await authFetch("/rental-items/all");
-      setItems(data.rental_items);
+      if (seq === loadSeq.current) setItems(data.rental_items);
     } catch (err) {
-      setListError(err.message);
-      setItems([]);
+      if (seq === loadSeq.current) setListError(loadFailure(err));
     }
   }, [authFetch]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // THE BOOKING RULES (migration 025): how many days ahead a booking may
+  // start, one number for the whole barangay. Each item's hours are on the
+  // item (the form below). `rules` is null while loading or after a failed
+  // load, and a failure is said, never shown as a number.
+  const [rules, setRules] = useState(null);
+  const [rulesError, setRulesError] = useState(null);
+  const [daysAhead, setDaysAhead] = useState("");
+  const [rulesNote, setRulesNote] = useState(null); // { type, text } after a save
+  const [rulesBusy, setRulesBusy] = useState(false);
+  const rulesSeq = useRef(0);
+
+  const loadRules = useCallback(async () => {
+    const seq = ++rulesSeq.current;
+    setRulesError(null);
+    setRules(null);
+    try {
+      const data = await authFetch("/rental-settings");
+      if (seq !== rulesSeq.current) return;
+      if (!Number.isInteger(data?.max_days_ahead)) {
+        setRulesError("the server did not send the limit");
+        return;
+      }
+      setRules(data);
+      setDaysAhead(String(data.max_days_ahead));
+    } catch (err) {
+      if (seq === rulesSeq.current) setRulesError(loadFailure(err));
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    loadRules();
+  }, [loadRules]);
+
+  async function saveRules(e) {
+    e.preventDefault();
+    setRulesNote(null);
+    setRulesBusy(true);
+    try {
+      const data = await authFetch("/rental-settings", {
+        method: "PUT",
+        body: { max_days_ahead: Number(daysAhead) },
+      });
+      setRules({ max_days_ahead: data.max_days_ahead });
+      setDaysAhead(String(data.max_days_ahead));
+      setRulesNote({ type: "success", text: data.message });
+    } catch (err) {
+      setRulesNote({ type: "error", text: err.message });
+    } finally {
+      setRulesBusy(false);
+    }
+  }
 
   function openCreate() {
     setFormError("");
@@ -71,6 +159,8 @@ export default function RentalItemsPage() {
       description: item.description || "",
       quantity_total: String(item.quantity_total),
       fee: String(item.fee),
+      booking_opens_at: timeField(item.booking_opens_at, EMPTY_FORM.booking_opens_at),
+      booking_closes_at: timeField(item.booking_closes_at, EMPTY_FORM.booking_closes_at),
     });
   }
 
@@ -105,6 +195,8 @@ export default function RentalItemsPage() {
         description: form.description,
         quantity_total: Number(form.quantity_total),
         fee: form.fee,
+        booking_opens_at: form.booking_opens_at,
+        booking_closes_at: form.booking_closes_at,
         ...(confirmLower ? { confirm_lower_stock: true } : {}),
       };
       const data = form.item_id
@@ -158,7 +250,67 @@ export default function RentalItemsPage() {
   return (
     <>
       {flash && <div className={`alert ${flash.type}`}>{flash.text}</div>}
-      {listError && <div className="alert error">{listError}</div>}
+
+      {/* The barangay-wide rule, in a small box of its own. The error first,
+          then loading, then the field. */}
+      <section className="pending-card section-card">
+        <h3>Booking rules</h3>
+        {rulesError ? (
+          <>
+            <div className="alert error" role="alert">
+              Could not load the booking rules: {rulesError}
+            </div>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={loadRules}
+            >
+              Try again
+            </button>
+          </>
+        ) : rules === null ? (
+          <p className="muted">Loading the booking rules…</p>
+        ) : (
+          <form onSubmit={saveRules}>
+            {rulesNote && (
+              <div
+                className={`alert ${rulesNote.type}`}
+                role={rulesNote.type === "error" ? "alert" : "status"}
+              >
+                {rulesNote.text}
+              </div>
+            )}
+            <label>
+              Days ahead a booking can be made{" "}
+              <span className="hint">
+                (1 to 366; same-day bookings are allowed)
+              </span>
+              <input
+                name="max_days_ahead"
+                type="number"
+                min="1"
+                max="366"
+                step="1"
+                value={daysAhead}
+                onChange={(e) => {
+                  setDaysAhead(e.target.value);
+                  setRulesNote(null);
+                }}
+                required
+              />
+            </label>
+            <p className="muted small-note">
+              Each item&apos;s opening and closing times are set on the item:
+              press Edit beside it.
+            </p>
+            <div className="actions">
+              <button className="btn" type="submit" disabled={rulesBusy}>
+                {rulesBusy ? "Saving…" : "Save rules"}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
 
       <div className="list-head">
         <h2>
@@ -230,6 +382,27 @@ export default function RentalItemsPage() {
                 required
               />
             </label>
+            {/* The hours this item can be booked in, every day. */}
+            <label>
+              Opens
+              <input
+                name="booking_opens_at"
+                type="time"
+                value={form.booking_opens_at}
+                onChange={handleChange}
+                required
+              />
+            </label>
+            <label>
+              Closes <span className="hint">(12:00 AM means midnight)</span>
+              <input
+                name="booking_closes_at"
+                type="time"
+                value={form.booking_closes_at}
+                onChange={handleChange}
+                required
+              />
+            </label>
           </div>
           <label>
             Description <span className="hint">(optional)</span>
@@ -284,7 +457,19 @@ export default function RentalItemsPage() {
         </form>
       )}
 
-      {items === null ? (
+      {/* The error first, then loading, then empty, then rows: a load that
+          failed shows neither a count nor the empty text. Try again repeats
+          the same load, as Refresh does. */}
+      {listError ? (
+        <>
+          <div className="alert error" role="alert">
+            Could not load the rental items: {listError}
+          </div>
+          <button type="button" className="btn secondary" onClick={load}>
+            Try again
+          </button>
+        </>
+      ) : items === null ? (
         <p className="muted">Loading rental items…</p>
       ) : items.length === 0 ? (
         <div className="empty">
@@ -303,6 +488,7 @@ export default function RentalItemsPage() {
                 <th>Description</th>
                 <th className="num">Quantity</th>
                 <th className="num">Fee</th>
+                <th>Booking hours</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -320,6 +506,7 @@ export default function RentalItemsPage() {
                   <td className="muted">{item.description || "—"}</td>
                   <td className="num">{item.quantity_total}</td>
                   <td className="num">₱{Number(item.fee).toFixed(2)}</td>
+                  <td>{hoursText(item) ?? "—"}</td>
                   <td>
                     {item.is_active ? (
                       <span className="badge">Active</span>
