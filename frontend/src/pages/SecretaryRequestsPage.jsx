@@ -174,6 +174,8 @@ function RequestDetail({ id, canManage, onBack }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [acted, setActed] = useState(false); // tells the list to refresh on back
+  const [fetchingDocument, setFetchingDocument] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +209,25 @@ function RequestDetail({ id, canManage, onBack }) {
       setFlash({ type: "error", text: err.message });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function managePreview() {
+    setFetchingDocument(true);
+
+    try {
+      // fetch document as blob
+      const blob = await authFetch(`/document-requests/${id}/preview`, {
+        responseType: "blob",
+      });
+
+      // turn the blob into a URL
+      const url = URL.createObjectURL(blob);
+      setDocumentUrl(url);
+    } catch (err) {
+      setFlash({ type: "error", text: err.message });
+    } finally {
+      setFetchingDocument(false);
     }
   }
 
@@ -396,25 +417,40 @@ function RequestDetail({ id, canManage, onBack }) {
           )}
 
           {canManage && r.status === "pending" && !rejecting && (
-            <div className="actions">
-              <button
-                className="btn"
-                disabled={busy}
-                onClick={() => decide("approve")}
-              >
-                {busy ? "Working…" : "Approve request"}
-              </button>
-              <button
-                className="btn secondary danger"
-                disabled={busy}
-                onClick={() => setRejecting(true)}
-              >
-                Reject…
-              </button>
-              <button className="preview-btn">
-                <FaRegFilePdf /> Preview Document
-              </button>
-            </div>
+            <>
+              <div className="actions">
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => decide("approve")}
+                >
+                  {busy ? "Working…" : "Approve request"}
+                </button>
+                <button
+                  className="btn secondary danger"
+                  disabled={busy}
+                  onClick={() => setRejecting(true)}
+                >
+                  Reject…
+                </button>
+                <button className="preview-btn" onClick={managePreview}>
+                  <FaRegFilePdf /> Preview Document
+                </button>
+              </div>
+
+              {documentUrl && (
+                <div className="document-preview">
+                  <h4>Document Preview</h4>
+
+                  <iframe
+                    title={`Preview of document request ${id}`}
+                    src={documentUrl}
+                    width="100%"
+                    height="600"
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {canManage && r.status === "pending" && rejecting && (
