@@ -7,12 +7,19 @@ required by the fuzzy name-matching research contribution, Table 20 is a
 new addition required by password reset. Table 21 (`rental_settings`,
 migration 025) is DROPPED by migration 026 and kept below only as a record.
 
-**The ERD and Chapter 3 owe migrations 020, 021 and 025** (CLAUDE.md, "A
+**The ERD and Chapter 3 owe migrations 020, 021, 025 and 027** (CLAUDE.md, "A
 schema change is not finished when the migration is applied"): Table 20
-`password_resets` (020), the unique index on `lower(users.email)` (021), and
+`password_resets` (020), the unique index on `lower(users.email)` (021),
 from 025 the two new columns on Table 13 `rental_items` (`booking_opens_at`,
-`booking_closes_at`). **Table 21 `rental_settings` is owed nothing** once
-migration 026 is applied: it never needs a Chapter 3 table or an ERD entity.
+`booking_closes_at`), and from 027 `rental_items.funeral_eligible` and
+`rental_requests.decline_reason`, `purpose_type` and `requested_at`, with
+Table 14's two new statuses (`pending`, `declined`). **Table 21
+`rental_settings` is owed nothing** once migration 026 is applied: it never
+needs a Chapter 3 table or an ERD entity.
+
+**Migration 028 is owed** once the code that calls `place_rental_booking`
+is live: it drops migration 024's `create_rental_booking`, which nothing in
+that code calls (see Table 14's notes).
 
 ## Type conventions (MySQL → PostgreSQL)
 
@@ -253,6 +260,7 @@ Stores the barangay-owned items and facilities available for rental, along with 
 | fee | numeric(10,2) | | No | Rental fee per unit per booking (facilities are single-unit, so effectively per booking). Added in migration 009. |
 | booking_opens_at | time | | No | Earliest time of day a booking of this item may start, every day. Default `07:00`. Added in migration 025. |
 | booking_closes_at | time | | No | Latest time of day a booking of this item may end, every day. Default `17:00`; `24:00:00` means midnight (a booking may then end at 00:00 of the next day). CHECK `rental_items_booking_hours_order`: `booking_opens_at < booking_closes_at`. Added in migration 025. |
+| funeral_eligible | boolean | | No | The guard on the funeral waiver: whether this item's fee may be waived for a funeral (chairs, tables and tents), set by the Secretary. `approve_rental_booking` refuses a waiver for an unmarked item (`FUNERAL_NOT_ALLOWED`), as `place_rental_booking` refuses a `funeral` booking. Default `false`; migration 027 marked no item. CHECK `rental_items_funeral_not_facility`: never true on a facility. Added in migration 027. |
 
 **Notes:**
 - The hours are enforced by the booking routes (`POST /api/rental-requests` and `PUT /api/rental-requests/:id`), not by migration 024's availability functions; bookings stored before a change of hours are not checked again. Every item had 07:00 to 17:00 when the columns were added.
@@ -269,8 +277,8 @@ Stores rental and booking requests for barangay items and facilities, including 
 | start_datetime | timestamptz | | No | Start date and time of the rental period. |
 | end_datetime | timestamptz | | No | End date and time of the rental period. |
 | purpose | text | | No | Intended use or reason for the rental request. |
-| status | varchar(50) | | No | Current status. Self-service, so no pending/approved: `confirmed`, `cancelled`, `returned`, `returned_late`, `returned_with_issue` (see `constants/rentals.js`). `completed` (facilities) and `overdue` (physical items) are derived at display, never stored. |
-| processed_by_user_id | bigint | FK → users | Yes | Secretary who cancelled the booking; null otherwise, including a booking the resident cancelled online themselves. An edit does not write it. |
+| status | varchar(50) | | No | Current status: `pending` (a request waiting for the Secretary; holds nothing, has no charge), `confirmed` (approved; shown as "Approved" once the approval step is switched on), `declined`, `cancelled`, `returned`, `returned_late`, `returned_with_issue` (see `constants/rentals.js`). `pending` and `declined` since migration 027; until the batch that switches the approval on, every booking is still stored `confirmed` at once. `completed` (facilities) and `overdue` (physical items) are derived at display from a confirmed booking past its end, and `expired` from a pending request past its start; never stored. No CHECK constraint on this column. |
+| processed_by_user_id | bigint | FK → users | Yes | Secretary who approved, declined or cancelled the booking (the last of these); null otherwise, including a booking the resident cancelled online themselves. An edit does not write it. |
 | return_note | text | | Yes | Optional note recorded with a return (e.g. damage). Added in migration 011. |
 | returned_at | timestamptz | | Yes | When Staff recorded the return; null until returned. Added in migration 011. |
 | returned_by_user_id | bigint | FK → users | Yes | Staff user who recorded the return; null until returned. Added in migration 011. |
@@ -278,6 +286,15 @@ Stores rental and booking requests for barangay items and facilities, including 
 | outside_borrower_name | text | | Yes | Name of a borrower from another barangay, who has no resident record; set only when `resident_id` is null. The API limits it to 200 characters. Added in migration 022. |
 | outside_borrower_contact | text | | Yes | That borrower's contact number; set only when `resident_id` is null. The API requires a Philippine mobile number (`09XXXXXXXXX`, `639XXXXXXXXX` or `+639XXXXXXXXX`, at most 50 characters). Added in migration 022. |
 | cancellation_reason | text | | Yes | Why the booking was cancelled: required when the Secretary cancels, optional when a resident cancels their own booking, and sent to the borrower in the cancellation notice. Null when none was given, and on every booking cancelled before migration 023. CHECK `rental_requests_cancellation_reason_length`: null, or 3 to 300 characters after trimming. Added in migration 023. |
+| decline_reason | text | | Yes | Why the Secretary declined a pending request: required, sent to the borrower in the decline notice, never copied into the activity log. Null on every booking not declined. CHECK `rental_requests_decline_reason_length`: null, or 3 to 300 characters after trimming. Added in migration 027. |
+| purpose_type | varchar(20) | | No | `general` or `funeral`: `funeral` means the fee was waived for a funeral, set by the Secretary's waiver at approval (`approve_rental_booking` with `p_waive_for_funeral`), never by the resident. Default `general`, and every booking before migration 027 reads `general`. Only for an item marked `funeral_eligible` and a booking with a `resident_id` (residents only). CHECK `rental_requests_purpose_type_check`. Added in migration 027. |
+| requested_at | timestamptz | | Yes | When the request was made: set to `now()` by `place_rental_booking`. NULL on every booking made before migration 027 (no column stored it, and none was backfilled), and the API leaves the key out rather than send null. Added in migration 027. |
+
+**Notes (migration 027, the approval step):**
+- `rental_holds()` holds nothing for a `pending` or `declined` booking, as for a `cancelled` one; every other status is held as migration 024 defined.
+- `place_rental_booking(...)` inserts a booking with the status it is given (`pending` or `confirmed`) and its `purpose_type`, under the same item-row lock and checks as 024's `create_rental_booking`; a request for a slot an approved booking holds is refused at once. A `funeral` booking is refused for an unmarked item (`FUNERAL_NOT_ALLOWED`) and for a guest (`FUNERAL_RESIDENTS_ONLY`). `create_rental_booking` stays until migration 028 drops it.
+- `approve_rental_booking(request, processed_by, amount, charge_user, waive_for_funeral boolean)` locks the item then the booking, refuses `BOOKING_NOT_FOUND`, `BOOKING_NOT_PENDING`, `BOOKING_EXPIRED`, `ITEM_INACTIVE`, then, only when waiving, `FUNERAL_NOT_ALLOWED` (item not `funeral_eligible`) and `FUNERAL_RESIDENTS_ONLY` (no `resident_id`), then `RESIDENT_ARCHIVED` or the slot refusal, and otherwise sets `confirmed` (and `purpose_type = 'funeral'` when waiving) and inserts the `RENTAL` charge (Table 15) in the same transaction, `PAID` when the amount is 0. A waiver with an amount other than 0, or a NULL flag, is raised.
+- `update_rental_booking_time(...)` also moves a `pending` request that has not started.
 
 ---
 

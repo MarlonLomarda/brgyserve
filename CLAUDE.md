@@ -449,7 +449,7 @@ Moved: **read `docs/modules/document-requests.md` BEFORE changing Document Reque
 
 ## Facility Rentals
 
-**Read `docs/modules/rental-bookings.md` BEFORE changing the Rental bookings list.**
+**Read `docs/modules/rental-bookings.md` BEFORE changing the Rental bookings list.** **Approval (migration 027) is built but OFF: its rules, the funeral fee (design C) and deploy order are there.**
 
 Residents book barangay facilities and equipment **self-service, with no approval step**: the database checks the slot at submission and the booking is **CONFIRMED instantly** if the slot and units are free, or refused with a reason. The Secretary manages bookings afterwards (view, edit, cancel); Staff have exactly one write action, marking returns; the Punong Barangay is view-only.
 
