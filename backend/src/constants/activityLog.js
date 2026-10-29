@@ -12,6 +12,10 @@ const ACTIONS = {
   UNARCHIVE: 'UNARCHIVE',
   APPROVE: 'APPROVE',
   REJECT: 'REJECT',
+  // The Secretary declining a pending rental request (migration 027). Its
+  // own code, not REJECT: the screens say "Declined". The row holds
+  // reason_given, never the reason's words.
+  DECLINE: 'DECLINE',
   UNREJECT: 'UNREJECT',
   LINK: 'LINK',
   ACTIVATE: 'ACTIVATE',

@@ -7,6 +7,9 @@ const {
   RENTAL_STATUS,
   RETURN_OUTCOMES,
   STORED_RENTAL_STATUSES,
+  PURPOSE_TYPE,
+  DECLINE_REASON_MIN,
+  DECLINE_REASON_MAX,
 } = require('../constants/rentals');
 const { CHARGE_STATUS, CHARGE_TYPE, PAYMENT_METHOD } = require('../constants/charges');
 const { notify } = require('../services/notifications');
@@ -48,9 +51,15 @@ const RENTAL_FIELDS =
 // unlike that file, this list has ONE projection for all three roles, so
 // Staff receive it here — they already receive the requester's username,
 // email and profile name from this same constant.
+//
+// Migration 027 adds decline_reason, purpose_type and requested_at, when the
+// request was made. requested_at is NULL on every booking made before 027
+// (nothing stored it), so withDerived() drops the key when it is NULL: an
+// unknown time is absent, never null (CLAUDE.md, a withheld field is absent).
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   return_note, returned_at, cancellation_reason,
+  decline_reason, purpose_type, requested_at,
   resident_id, outside_borrower_name, outside_borrower_contact,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available,
     booking_opens_at, booking_closes_at ),
@@ -263,17 +272,32 @@ const isReturnable = (type) => RETURNABLE_TYPES.includes(type);
 
 // Derived display status (stage 5) — NEVER stored. A booking past its end that
 // is still 'confirmed' is either a facility that auto-completes (no physical
-// return) or a physical item that is overdue until Staff mark it returned.
-// Everything else (cancelled, the return outcomes, still-upcoming confirmed)
-// shows its stored status. Computed here so the time-comparison lives in one
-// place; every management/mine response carries `derived_status`.
+// return) or a physical item that is overdue until Staff mark it returned. A
+// request still 'pending' once its START has passed is 'expired' (migration
+// 027): nobody approved it in time, and it can no longer be approved.
+// Everything else (cancelled, declined, the return outcomes, a pending
+// request still ahead, still-upcoming confirmed) shows its stored status.
+// Computed here so the time-comparison lives in one place; every
+// management/mine response carries `derived_status`.
 function deriveStatus(row) {
   if (!row) return row;
+  if (row.status === RENTAL_STATUS.PENDING) {
+    return new Date(row.start_datetime) > new Date() ? RENTAL_STATUS.PENDING : RENTAL_STATUS.EXPIRED;
+  }
   if (row.status !== RENTAL_STATUS.CONFIRMED) return row.status;
   if (new Date(row.end_datetime) >= new Date()) return RENTAL_STATUS.CONFIRMED;
   return isReturnable(row.rental_items?.type) ? RENTAL_STATUS.OVERDUE : RENTAL_STATUS.COMPLETED;
 }
-const withDerived = (row) => (row ? { ...row, derived_status: deriveStatus(row) } : row);
+// A requested_at that is NULL (every booking made before migration 027;
+// nothing stored it) is left out, never sent as null: the time is unknown,
+// and null would read as a value (CLAUDE.md, a withheld field is absent).
+// Only the Secretary's projection, MANAGE_FIELDS, reads the column.
+function withDerived(row) {
+  if (!row) return row;
+  const out = { ...row, derived_status: deriveStatus(row) };
+  if (out.requested_at === null) delete out.requested_at;
+  return out;
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -427,6 +451,12 @@ function refusalOf(result, item) {
       return { status: 404, error: ITEM_NOT_FOUND };
     case 'ITEM_INACTIVE':
       return { status: 400, error: ITEM_INACTIVE };
+    // A funeral booking placed by the Secretary's walk-in (a later batch;
+    // POST / sends 'general' today, so nothing reaches these yet).
+    case 'FUNERAL_NOT_ALLOWED':
+      return { status: 400, error: `The ${name} is not marked for funeral use, so it cannot be booked free for a funeral.` };
+    case 'FUNERAL_RESIDENTS_ONLY':
+      return { status: 400, error: 'A funeral fee can be waived only for a barangay resident, so this booking cannot be free.' };
     case 'BOOKING_NOT_FOUND':
       return { status: 404, error: 'Booking not found' };
     case 'BOOKING_STARTED':
@@ -475,12 +505,15 @@ const RENTAL_COLUMNS = [
 ];
 
 // POST /api/rental-requests — a resident books for themselves, or the
-// Secretary encodes a WALK-IN. SELF-SERVICE either way: the booking is checked
-// and written in one call to create_rental_booking (migration 024), confirmed
-// at once when the slot is free, and because both paths go through this ONE
-// handler a walk-in is checked against exactly the availability rules a
-// resident's own booking is — there is no second code path that could skip
-// them.
+// Secretary encodes a WALK-IN. The booking is checked and written in one call
+// to place_rental_booking (migration 027; it replaces 024's
+// create_rental_booking, which stays in the database until migration 028 for
+// the code that ran before), CONFIRMED at once when the slot is free, for
+// both kinds as before: the approval step (a resident's request stored
+// 'pending') is built but not yet switched on. Because both paths go through
+// this ONE handler a walk-in is checked against exactly the availability
+// rules a resident's own booking is — there is no second code path that
+// could skip them.
 //
 // requested_by_user_id records WHO FILED IT; who it is FOR is resident_id or
 // the outside_borrower_* pair — see resolveBorrower().
@@ -523,7 +556,7 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     }
   }
 
-  const result = await callBookingFunction('create_rental_booking', {
+  const result = await callBookingFunction('place_rental_booking', {
     p_item_id: itemId,
     p_requested_by_user_id: req.user.user_id,
     // Exactly one of the two borrower shapes, matching the CHECK from
@@ -536,6 +569,10 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     p_start: startIso,
     p_end: endIso,
     p_purpose: purpose,
+    // Until the approval batches: every booking is general and confirmed at
+    // once, exactly as create_rental_booking stored it.
+    p_purpose_type: PURPOSE_TYPE.GENERAL,
+    p_status: RENTAL_STATUS.CONFIRMED,
   });
   if (!result?.ok) {
     const refused = refusalOf(result ?? {}, item);
@@ -815,14 +852,19 @@ const RESIDENT_CANCEL_HOURS = 24;
 // and behind the can_cancel_online / cancel_online_note GET /mine sends, so
 // the button My rentals draws and the answer it gets cannot disagree. Checked
 // in this order: made at the hall, under 24 hours, paid. Whether the booking
-// has started at all is cancelBooking()'s hasNotStarted(), which the route
-// reaches next and the list reads first. The booking needs
+// has started at all is cancelBooking()'s isCancellable(), which the route
+// reaches next and the list reads first. The booking needs status,
 // requested_by_user_id, start_datetime and its charge.
+//
+// The 24 hours apply to a CONFIRMED booking only (migration 027): a pending
+// request holds nothing and has no charge, so withdrawing it frees nothing
+// and voids nothing, and it may be cancelled any time before it starts.
 function onlineCancelRefusal(booking, userId) {
   if (booking.requested_by_user_id !== userId) {
     return 'This booking was made at the barangay hall, so it can only be changed there.';
   }
-  if (new Date(booking.start_datetime) - Date.now() < RESIDENT_CANCEL_HOURS * 3600 * 1000) {
+  if (booking.status !== RENTAL_STATUS.PENDING
+    && new Date(booking.start_datetime) - Date.now() < RESIDENT_CANCEL_HOURS * 3600 * 1000) {
     return 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.';
   }
   const charge = chargeOf(booking);
@@ -833,11 +875,12 @@ function onlineCancelRefusal(booking, userId) {
 }
 
 // What My rentals is told about cancelling a booking online. A booking that
-// has started, or is no longer confirmed (cancelled, returned), needs no
-// button and no note: both are false and null. Otherwise the button shows
-// exactly when the route would accept, and the note is the route's sentence.
+// has started, or is neither confirmed nor pending (cancelled, declined,
+// returned), needs no button and no note: both are false and null. Otherwise
+// the button shows exactly when the route would accept, and the note is the
+// route's sentence.
 function onlineCancelView(booking, userId) {
-  if (!hasNotStarted(booking)) return { can_cancel_online: false, cancel_online_note: null };
+  if (!isCancellable(booking)) return { can_cancel_online: false, cancel_online_note: null };
   const refusal = onlineCancelRefusal(booking, userId);
   return { can_cancel_online: refusal === null, cancel_online_note: refusal };
 }
@@ -934,10 +977,19 @@ const VIEW_ROLES = ['secretary', 'staff', 'punong_barangay'];
 
 // GET /api/rental-requests?status=confirmed — all bookings across residents,
 // optionally filtered, newest-scheduled first. Besides the stored statuses,
-// two VIRTUAL filters are derived from confirmed + past-end bookings:
-// 'overdue' (physical items awaiting return) and 'completed' (facilities that
-// auto-completed). 'all' or omitted = everything.
-const VIRTUAL_FILTERS = [RENTAL_STATUS.OVERDUE, RENTAL_STATUS.COMPLETED];
+// three VIRTUAL filters are derived: 'overdue' (physical items awaiting
+// return) and 'completed' (facilities that auto-completed), from confirmed +
+// past-end bookings, and 'expired' (migration 027), from pending + past-start
+// requests. A stored filter stays a stored filter: ?status=pending lists
+// every booking stored pending, expired ones included, as ?status=confirmed
+// lists overdue ones. 'all' or omitted = everything.
+const VIRTUAL_FILTERS = [RENTAL_STATUS.OVERDUE, RENTAL_STATUS.COMPLETED, RENTAL_STATUS.EXPIRED];
+// The stored status each virtual filter is derived from.
+const VIRTUAL_SOURCE = {
+  [RENTAL_STATUS.OVERDUE]: RENTAL_STATUS.CONFIRMED,
+  [RENTAL_STATUS.COMPLETED]: RENTAL_STATUS.CONFIRMED,
+  [RENTAL_STATUS.EXPIRED]: RENTAL_STATUS.PENDING,
+};
 
 router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   const status = req.query.status;
@@ -951,14 +1003,15 @@ router.get('/', requireRole(...VIEW_ROLES), async (req, res) => {
   if (status && status !== 'all' && !isVirtual) {
     if (!STORED_RENTAL_STATUSES.includes(status)) {
       return res.status(400).json({
-        error: `Unknown status '${status}' (expected one of: ${STORED_RENTAL_STATUSES.join(', ')}, overdue, completed, or 'all')`,
+        error: `Unknown status '${status}' (expected one of: ${STORED_RENTAL_STATUSES.join(', ')}, ${VIRTUAL_FILTERS.join(', ')}, or 'all')`,
       });
     }
     query = query.eq('status', status);
   } else if (isVirtual) {
-    // overdue/completed are derived from confirmed bookings past their end —
-    // fetch confirmed, then keep the ones whose derived status matches.
-    query = query.eq('status', RENTAL_STATUS.CONFIRMED);
+    // overdue/completed are derived from confirmed bookings past their end,
+    // expired from pending requests past their start — fetch the stored
+    // status, then keep the ones whose derived status matches.
+    query = query.eq('status', VIRTUAL_SOURCE[status]);
   }
 
   const { data, error } = await query;
@@ -998,8 +1051,22 @@ router.get('/:id', requireRole(...VIEW_ROLES), async (req, res) => {
 // ahead. The one rule behind both Secretary actions, Edit and Cancel — an
 // Overdue or Completed booking was used, so neither applies to it. Read from
 // the STORED start, never from the new values an edit asks for.
-const hasNotStarted = (booking) =>
-  booking.status === RENTAL_STATUS.CONFIRMED && new Date(booking.start_datetime) > new Date();
+//
+// Since migration 027 it is ONE of three rules, because a pending request
+// (the approval step) has not started either but is not a booking yet:
+//   hasNotStarted   confirmed, start ahead: the Secretary's Cancel, Mark
+//                   returned's "not yet", and the lists' not_started flag
+//   isEditable      confirmed OR pending, start ahead: Edit (the Secretary
+//                   may move a request before deciding it)
+//   isCancellable   confirmed OR pending, start ahead: what cancelBooking()
+//                   re-checks, so a resident can withdraw a pending request;
+//                   the Secretary's Cancel refuses a pending one before it
+//                   gets there (a request is declined, not cancelled)
+const startAhead = (booking) => new Date(booking.start_datetime) > new Date();
+const hasNotStarted = (booking) => booking.status === RENTAL_STATUS.CONFIRMED && startAhead(booking);
+const EDITABLE_STATUSES = [RENTAL_STATUS.CONFIRMED, RENTAL_STATUS.PENDING];
+const isEditable = (booking) => EDITABLE_STATUSES.includes(booking.status) && startAhead(booking);
+const isCancellable = isEditable;
 
 // The Secretary's reads (GET / and GET /:id) carry not_started, the same
 // hasNotStarted() Edit and Cancel apply, so Rental bookings draws those two
@@ -1024,19 +1091,20 @@ const REASON_MAX = 300;
 
 // A cancellation reason: trimmed, and counted as Postgres counts characters
 // (code points, not UTF-16 units) so it can never fail the CHECK migration 023
-// put on rental_requests.cancellation_reason. Returns { reason } — null when
+// put on rental_requests.cancellation_reason (or, with the decline limits,
+// the one migration 027 put on decline_reason). Returns { reason } — null when
 // none was given and none is required — or { error }.
-function parseReason(raw, { required }) {
+function parseReason(raw, { required, min = REASON_MIN, max = REASON_MAX }) {
   if (raw !== undefined && raw !== null && typeof raw !== 'string') {
     return { error: 'The reason must be text.' };
   }
   const reason = String(raw ?? '').trim();
   if (!reason) {
-    return required ? { error: `A reason is required (${REASON_MIN} to ${REASON_MAX} characters).` } : { reason: null };
+    return required ? { error: `A reason is required (${min} to ${max} characters).` } : { reason: null };
   }
   const length = [...reason].length;
-  if (length < REASON_MIN || length > REASON_MAX) {
-    return { error: `The reason must be ${REASON_MIN} to ${REASON_MAX} characters.` };
+  if (length < min || length > max) {
+    return { error: `The reason must be ${min} to ${max} characters.` };
   }
   return { reason };
 }
@@ -1059,15 +1127,16 @@ const asSentence = (text) => (/[.!?]$/.test(text) ? text : `${text}.`);
 // "HTTP 400: Checkout session is already paid", short enough for a log row.
 const failureReason = (err) => `${err?.status ? `HTTP ${err.status}: ` : ''}${err?.message || 'unknown error'}`.slice(0, 120);
 
-// Puts a just-cancelled booking back to confirmed, for when its charge could
-// not be voided. Guarded on cancelled so it can only undo this cancel. True
-// when the booking is confirmed again.
+// Puts a just-cancelled booking back to the status it had (confirmed, or
+// pending since migration 027), for when its charge could not be voided.
+// Guarded on cancelled so it can only undo this cancel. True when the booking
+// has its old status again.
 async function revertCancel(booking) {
   try {
     const { data, error } = await supabase
       .from('rental_requests')
       .update({
-        status: RENTAL_STATUS.CONFIRMED,
+        status: booking.status,
         processed_by_user_id: booking.processed_by_user_id ?? null,
         cancellation_reason: null,
       })
@@ -1082,9 +1151,12 @@ async function revertCancel(booking) {
 }
 
 // Cancels a booking loaded with CANCEL_FIELDS. Returns { status, body } for
-// the route to send. supabase-js has no transactions, so the steps run in an
-// order that can be undone:
-//   1. the booking -> cancelled, guarded on confirmed;
+// the route to send. A booking stored confirmed, or since migration 027
+// pending (a request has no charge, so step 2 finds nothing to void), and
+// not started (isCancellable). supabase-js has no transactions, so the steps
+// run in an order that can be undone:
+//   1. the booking -> cancelled, guarded on the status it was read with (so
+//      a request approved meanwhile is not cancelled behind the approval);
 //   2. an UNPAID charge -> VOID. A PAID charge above PHP 0 STAYS PAID — it
 //      records money actually received, and the system never rewrites money
 //      or refunds; the borrower is told a refund is due. No charge, or a PHP 0
@@ -1100,7 +1172,7 @@ async function revertCancel(booking) {
 //      in the notification.
 async function cancelBooking(booking, { user, processedBy, reason, notifyBorrower, responseFields, message }) {
   const id = booking.request_id;
-  if (!hasNotStarted(booking)) {
+  if (!isCancellable(booking)) {
     return { status: 409, body: { error: 'Only a booking that has not started can be cancelled.' } };
   }
   const charge = chargeOf(booking);
@@ -1109,7 +1181,7 @@ async function cancelBooking(booking, { user, processedBy, reason, notifyBorrowe
     .from('rental_requests')
     .update({ status: RENTAL_STATUS.CANCELLED, processed_by_user_id: processedBy, cancellation_reason: reason })
     .eq('request_id', id)
-    .eq('status', RENTAL_STATUS.CONFIRMED)
+    .eq('status', booking.status)
     .select('request_id')
     .maybeSingle();
   if (error) {
@@ -1193,7 +1265,7 @@ async function cancelBooking(booking, { user, processedBy, reason, notifyBorrowe
     action: ACTIONS.CANCEL,
     table: 'rental_requests',
     recordId: id,
-    before: { status: RENTAL_STATUS.CONFIRMED },
+    before: { status: booking.status },
     after: {
       status: RENTAL_STATUS.CANCELLED,
       charge_outcome: chargeOutcome,
@@ -1246,7 +1318,8 @@ router.put('/:id', requireRole('secretary'), async (req, res) => {
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
-  if (!hasNotStarted(booking)) {
+  // A confirmed booking or a pending request (migration 027), not started.
+  if (!isEditable(booking)) {
     return res.status(409).json({ error: NOT_STARTED_EDIT });
   }
   // The Edit panel still sends the quantity it shows; the same number is
@@ -1347,6 +1420,12 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
   if (!booking) {
     return res.status(404).json({ error: 'Booking not found' });
   }
+  // A pending request is the Secretary's to decline, with a reason the
+  // resident is sent, never to cancel: cancelBooking() would accept it,
+  // because the resident's own cancel may withdraw one.
+  if (booking.status === RENTAL_STATUS.PENDING) {
+    return res.status(409).json({ error: 'A pending request is declined, not cancelled.' });
+  }
 
   const result = await cancelBooking(booking, {
     user: req.user,
@@ -1357,6 +1436,243 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
     message: 'Booking cancelled — the slot has been freed',
   });
   res.status(result.status).json(result.body);
+});
+
+// ---------------------------------------------------------------------------
+// Approval (migration 027) — the Secretary approves or declines a PENDING
+// request. Built in batch R2a and dormant until a later batch makes
+// residents' bookings pending: today POST / stores every booking confirmed,
+// so nothing reaches these routes from a screen. Staff and the Punong
+// Barangay stay read-only.
+// ---------------------------------------------------------------------------
+
+// What both decisions read about the request: who it is for (to reach them),
+// its slot and item (for the notice, the fee and the sentences).
+const DECIDE_FIELDS =
+  'request_id, status, item_id, quantity_requested, start_datetime, end_datetime, purpose_type, resident_id, outside_borrower_name, outside_borrower_contact, rental_items ( name, fee ), resident_records ( contact_number )';
+
+// approve_rental_booking's refusals, as the Secretary is told them. The slot
+// refusals are worded for the one deciding, not for a booker ("please pick a
+// different time" is not hers to do); the rest go through refusalOf(), and
+// anything it does not know is thrown, never answered with a made-up
+// sentence.
+function approvalRefusal(result, item) {
+  const name = item?.name ?? 'item';
+  switch (result.code) {
+    case 'BOOKING_NOT_PENDING':
+      return { status: 409, error: `Only a pending request can be approved — this booking is already '${result.status}'.` };
+    case 'BOOKING_EXPIRED':
+      return { status: 409, error: "This request's start time has passed, so it can no longer be approved." };
+    case 'ITEM_INACTIVE':
+      return { status: 409, error: `The ${name} has been deactivated, so this request cannot be approved.` };
+    case 'RESIDENT_ARCHIVED':
+      return { status: 409, error: "The resident's record has been archived, so this request cannot be approved." };
+    // The funeral waiver's two rules (design C), checked by the function
+    // under the item lock only when the Secretary waives.
+    case 'FUNERAL_NOT_ALLOWED':
+      return { status: 409, error: `The ${name} is not marked for funeral use, so its fee cannot be waived.` };
+    case 'FUNERAL_RESIDENTS_ONLY':
+      return { status: 409, error: 'A funeral fee can be waived only for a barangay resident, so this request cannot be waived.' };
+    case 'FACILITY_TAKEN': {
+      const first = Array.isArray(result.clashes) ? result.clashes[0] : null;
+      if (first) {
+        return {
+          status: 409,
+          error: `The ${name} is already booked from ${timeFmt.format(new Date(first.start))} to ${timeFmt.format(new Date(first.end))} on that date, so this request cannot be approved.`,
+        };
+      }
+      break;
+    }
+    case 'NOT_ENOUGH_LEFT': {
+      const { left, stuck, resting } = result;
+      const parts = [
+        `Only ${left} of ${result.quantity_available} ${name} ${isOrAre(left)} free for that time; this request asks for ${result.requested}, so it cannot be approved.`,
+      ];
+      if (stuck > 0) parts.push(`${stuck} ${isOrAre(stuck)} overdue and not yet returned.`);
+      if (resting > 0) parts.push(`${resting} ${isOrAre(resting)} resting for 24 hours after an earlier booking.`);
+      return { status: 409, error: parts.join(' ') };
+    }
+    default:
+      return refusalOf(result, item);
+  }
+  throw new Error(`Unrecognised approval refusal: ${result.code}`);
+}
+
+// "2x Tent on Oct 30, 2026, 8:00 AM to 10:00 AM" — a request in a notice.
+const requestText = (booking) =>
+  `${booking.quantity_requested > 1 ? `${booking.quantity_requested}x ` : ''}${booking.rental_items?.name || 'a rental item'} on ${scheduleText(booking.start_datetime, booking.end_datetime)}`;
+
+// POST /api/rental-requests/:id/approve — the Secretary approves a pending
+// request. The amount is worked out HERE (fee x quantity, as POST / bills a
+// booking today; batch R3's pricing rules will change this one number) and
+// approve_rental_booking (migration 027) does the rest in ONE transaction:
+// under the item's row lock it re-checks the request (still pending, start
+// still ahead, item active, resident not archived, slot still free), sets it
+// confirmed and inserts its RENTAL charge, PAID when the amount is 0. A
+// refused approval changed nothing. The charge goes on the BORROWER's
+// account, as on POST /: never the Secretary's.
+//
+// The funeral waiver (design C, 29 Oct 2026): `waive_for_funeral: true` in
+// the body is the Secretary deciding, from the purpose the resident wrote,
+// that the fee is waived for a funeral. The amount is then 0 and the
+// function refuses an item not marked funeral_eligible and a guest's
+// request; it stores purpose_type 'funeral'. Absent means false; any other
+// value is a 400. The notice never names the reason.
+router.post('/:id/approve', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+  const waive = req.body?.waive_for_funeral;
+  if (waive !== undefined && typeof waive !== 'boolean') {
+    return res.status(400).json({ error: 'waive_for_funeral must be true or false' });
+  }
+  const waiveForFuneral = waive === true;
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select(DECIDE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+
+  const isGuest = Boolean(booking.outside_borrower_name);
+  const amount = waiveForFuneral ? 0 : rentalAmount(booking.rental_items ?? { fee: 0 }, booking.quantity_requested);
+  const chargeUserId = isGuest ? null : await accountOfResident(booking.resident_id);
+
+  const result = await callBookingFunction('approve_rental_booking', {
+    p_request_id: id,
+    p_processed_by: req.user.user_id,
+    p_amount: amount,
+    p_charge_user_id: chargeUserId,
+    p_waive_for_funeral: waiveForFuneral,
+  });
+  if (!result?.ok) {
+    const refused = approvalRefusal(result ?? {}, booking.rental_items);
+    return res.status(refused.status).json({ error: refused.error });
+  }
+  const charged = Number(result.charge?.amount ?? amount);
+
+  // Recorded, not sent; after the approval and its charge are committed, and
+  // notify() never throws. "PHP", "-" and "x": inside the GSM alphabet.
+  const target = await borrowerNotifyTarget(booking);
+  await notify({
+    userId: target.userId,
+    destination: target.destination,
+    relatedType: RELATED_TYPE.RENTAL_REQUEST,
+    relatedTo: id,
+    message: charged > 0
+      ? `BrgyServe: your booking of ${requestText(booking)} has been APPROVED. Please pay PHP ${charged.toFixed(2)} under My rentals or at the barangay hall.`
+      : `BrgyServe: your booking of ${requestText(booking)} has been APPROVED. No fee is required.`,
+  });
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.APPROVE,
+    table: 'rental_requests',
+    recordId: id,
+    before: { status: RENTAL_STATUS.PENDING },
+    // fee_waived is a code, never the purpose's words.
+    after: {
+      status: RENTAL_STATUS.CONFIRMED,
+      charge_id: result.charge?.charge_id ?? null,
+      ...(result.waived === true ? { fee_waived: PURPOSE_TYPE.FUNERAL } : {}),
+    },
+  });
+
+  // Re-read in the Secretary's projection, never the function's row as it is.
+  const { data: fresh } = await supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
+  res.json({ message: 'Booking approved', request: withManaged(fresh) });
+});
+
+// POST /api/rental-requests/:id/decline — the Secretary declines a pending
+// request, with a reason (3 to 300 characters, the CHECK migration 027 put on
+// decline_reason), which the borrower is sent. A request has no charge and
+// holds nothing, so there is nothing to void or free: one guarded UPDATE,
+// WHERE status = 'pending' AND the start still ahead, as document requests
+// decide (documentRequests.js), so a request approved, cancelled or expired
+// meanwhile is not declined behind it. The reason's text is never logged,
+// only that one was given.
+router.post('/:id/decline', requireRole('secretary'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid booking id' });
+  }
+  const parsed = parseReason(req.body?.reason, { required: true, min: DECLINE_REASON_MIN, max: DECLINE_REASON_MAX });
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const { data: booking, error: loadError } = await supabase
+    .from('rental_requests')
+    .select(DECIDE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
+  if (loadError) {
+    throw new Error(`Failed to load booking: ${loadError.message}`);
+  }
+  if (!booking) {
+    return res.status(404).json({ error: 'Booking not found' });
+  }
+  if (booking.status !== RENTAL_STATUS.PENDING) {
+    return res.status(409).json({ error: `Only a pending request can be declined — this booking is already '${booking.status}'.` });
+  }
+  if (!startAhead(booking)) {
+    return res.status(409).json({ error: "This request's start time has passed, so it has expired and cannot be declined." });
+  }
+
+  const { data: declined, error } = await supabase
+    .from('rental_requests')
+    .update({
+      status: RENTAL_STATUS.DECLINED,
+      decline_reason: parsed.reason,
+      processed_by_user_id: req.user.user_id,
+    })
+    .eq('request_id', id)
+    .eq('status', RENTAL_STATUS.PENDING)
+    .gt('start_datetime', new Date().toISOString())
+    .select('request_id')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to decline booking: ${error.message}`);
+  }
+  if (!declined) {
+    return res.status(409).json({ error: 'Booking status just changed — refresh and try again' });
+  }
+
+  const target = await borrowerNotifyTarget(booking);
+  await notify({
+    userId: target.userId,
+    destination: target.destination,
+    relatedType: RELATED_TYPE.RENTAL_REQUEST,
+    relatedTo: id,
+    message: `BrgyServe: your booking request for ${booking.rental_items?.name || 'a rental item'} on ${dateFmt.format(new Date(booking.start_datetime))} was declined. Reason: ${asSentence(parsed.reason)}`,
+  });
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.DECLINE,
+    table: 'rental_requests',
+    recordId: id,
+    before: { status: RENTAL_STATUS.PENDING },
+    after: { status: RENTAL_STATUS.DECLINED, reason_given: true },
+  });
+
+  const { data: fresh } = await supabase
+    .from('rental_requests')
+    .select(MANAGE_FIELDS)
+    .eq('request_id', id)
+    .maybeSingle();
+  res.json({ message: 'Request declined', request: withManaged(fresh) });
 });
 
 // ---------------------------------------------------------------------------

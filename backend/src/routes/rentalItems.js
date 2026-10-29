@@ -11,8 +11,13 @@ const router = express.Router();
 const MAX_FEE = 99999999.99; // numeric(10,2) ceiling
 const MAX_QUANTITY = 100000;
 
+// funeral_eligible (migration 027): the Secretary marks the items a funeral
+// may be booked for (chairs, tables, tents). Never a facility: the database
+// CHECKs it too. The booking forms' active list (GET /) does not carry it yet.
 const ITEM_FIELDS =
-  'item_id, name, type, description, quantity_total, quantity_available, fee, is_active, booking_opens_at, booking_closes_at';
+  'item_id, name, type, description, quantity_total, quantity_available, fee, is_active, booking_opens_at, booking_closes_at, funeral_eligible';
+
+const FUNERAL_FACILITY = 'A facility cannot be marked for funeral use.';
 
 // Returns the fee as a number rounded to centavos, or null if invalid.
 function parseFee(fee) {
@@ -49,12 +54,21 @@ function validateBody(body) {
   const hours = parseHours(body);
   if (hours.error) return { error: hours.error };
 
+  // Optional: a body without it leaves it as it is (a new item takes the
+  // database's false). A boolean only, never "true" or 1.
+  const funeral = {};
+  if (body?.funeral_eligible !== undefined) {
+    if (typeof body.funeral_eligible !== 'boolean') return { error: 'funeral_eligible must be true or false' };
+    if (body.funeral_eligible && type === ITEM_TYPE.FACILITY) return { error: FUNERAL_FACILITY };
+    funeral.funeral_eligible = body.funeral_eligible;
+  }
+
   // quantity_available mirrors quantity_total for now: a single number cannot
   // express per-time-slot availability, so the stage-2 conflict check derives
   // free units per slot from approved bookings against quantity_available.
   // Keeping the columns separate lets damaged/retired stock lower it later.
   return {
-    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee, ...hours.value },
+    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee, ...hours.value, ...funeral },
   };
 }
 
@@ -198,6 +212,11 @@ router.put('/:id', async (req, res) => {
     .maybeSingle();
   if (beforeError) throw new Error(`Failed to load rental item: ${beforeError.message}`);
   if (!before) return res.status(404).json({ error: 'Rental item not found' });
+  // An item marked for funeral use turned into a facility, with the mark left
+  // as it is: the database's CHECK would refuse it as a 500.
+  if ((value.funeral_eligible ?? before.funeral_eligible) && value.type === ITEM_TYPE.FACILITY) {
+    return res.status(400).json({ error: FUNERAL_FACILITY });
+  }
 
   // Lowering the stock below what bookings already hold: WARN, THEN ALLOW
   // (step C3). Existing bookings stay; new ones are refused by the database's

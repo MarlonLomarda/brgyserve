@@ -28,6 +28,8 @@ export const ACTION_META = {
   UNARCHIVE: { label: 'Unarchived', className: 'status-approved' },
   APPROVE: { label: 'Approved', className: 'status-approved' },
   REJECT: { label: 'Rejected', className: 'status-rejected' },
+  // The Secretary declining a pending rental request (migration 027).
+  DECLINE: { label: 'Declined', className: 'status-rejected' },
   UNREJECT: { label: 'Rejection lifted', className: 'status-approved' },
   LINK: { label: 'Linked', className: 'status-approved' },
   ACTIVATE: { label: 'Activated', className: 'status-approved' },
@@ -155,6 +157,10 @@ const FIELD_LABELS = {
   // changed since step O43; kept for the rows already in the log).
   booking_opens_at: 'Booking opens',
   booking_closes_at: 'Booking closes',
+  // Migration 027: the items a funeral may be booked for, and an approved
+  // booking's charge.
+  funeral_eligible: 'Funeral use allowed',
+  charge_id: 'Charge',
   max_days_ahead: 'Days ahead a booking can be made',
   masterlist_registered_on: 'Masterlist registration date',
   educational_attainment: 'Educational attainment',
@@ -174,6 +180,9 @@ const FIELD_LABELS = {
   session_expire_failure: 'GCash checkout error',
   reason_given: 'Reason given',
   gateway_payment_id: 'PayMongo payment',
+  // An approval whose fee the Secretary waived (design C): the code
+  // 'funeral', never the purpose's words.
+  fee_waived: 'Fee waived',
 };
 
 function humanize(key) {
@@ -442,6 +451,21 @@ function actionSummary(row, before, after, withheld) {
     case 'REJECT':
       if (t === 'users') return `Registration rejected: ${rejectionReasonLabel(after.rejection_reason)}`;
       return transition(t, before.status, after.status);
+    // A rental request decided (migration 027): "Pending to Confirmed,
+    // charge #12"; "Pending to Confirmed, fee waived (funeral), charge #12";
+    // "Pending to Declined, reason given". The reason's words are never in
+    // the log.
+    case 'APPROVE':
+      if (t === 'rental_requests') {
+        return [
+          transition(t, before.status, after.status),
+          after.fee_waived === 'funeral' && 'fee waived (funeral)',
+          after.charge_id && `charge #${after.charge_id}`,
+        ];
+      }
+      return otherSummary(t, before, after);
+    case 'DECLINE':
+      return [transition(t, before.status, after.status), after.reason_given ? 'reason given' : 'no reason given'];
     case 'UNREJECT':
       return before.rejection_reason
         ? `Rejection lifted (was: ${rejectionReasonLabel(before.rejection_reason)})`
