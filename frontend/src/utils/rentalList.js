@@ -61,10 +61,30 @@
 // the tab counts and the heading follow it as they follow Item. The Item
 // choices stay every item the rows hold: a Type and an Item that disagree
 // (Facility and Tent) show nothing, with the filters' own empty text.
+//
+// APPROVAL (29 Oct 2026, batch R2b). Two more tabs: Pending first, the
+// requests waiting for the Secretary, and Not approved, after Returned, the
+// declined and the expired ones. The Secretary opens on Pending. A pending
+// request's row says when it was asked for (requestedText) and whether
+// another waiting request for the same item meets it in time (overlapNote),
+// and the Pending tab lists the oldest request first (pendingOrder). On this
+// page a booking stored confirmed reads "Approved" (statusBadge).
+//
+// A SHORTER PENDING ROW (29 Oct 2026, after batch R2b). The row's requested
+// line drops the year, "Requested Oct 29, 2:46 PM" (requestedLine), and its
+// overlap note names the other request, "Overlaps #126, requested later"
+// (overlapParts); a request not approved shows no payment marker
+// (showsPayment). The Approve panel keeps the year (requestedText); since the
+// walkthrough both panels use the row's overlap words, and overlapNote, R2b's
+// counting words about the same requests (overlappingRequests), is used by no
+// screen.
+import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
+  APPROVED_LABEL,
   displayStatus,
   formatSchedule,
   ITEM_TYPE_LABELS,
+  rentalMeta,
 } from "../constants/rentals";
 import { ANY, backwards, manilaDay } from "./chargeFilters";
 import { matchesTerms, normalise, searchTerms } from "./chargeSearch";
@@ -92,12 +112,18 @@ export { matchesPayment, paymentMarker, paymentOptions };
 
 export const ALL = "all";
 
-// The status tabs, in order, and the statuses each holds. Upcoming is a
-// confirmed booking whose end is still ahead, begun or not (derived_status
-// "confirmed", whose badge reads Confirmed). Returned holds the three return
-// outcomes, which their badges tell apart. A status outside these seven is
-// in All only.
+// The status tabs, in order, and the statuses each holds. Pending is a
+// request still waiting for the Secretary (derived_status "pending": stored
+// pending, its start ahead). Upcoming is a confirmed booking whose end is
+// still ahead, begun or not (derived_status "confirmed", whose badge reads
+// Approved on this page). Returned holds the three return outcomes, which
+// their badges tell apart. Not approved holds the declined requests and the
+// expired ones (stored pending, their start passed, derived "expired");
+// their badges tell those apart too, and its headings and empty text say
+// "declined or expired" (`words`), as "not approved bookings" would not read.
+// A status outside these ten is in All only.
 const STATUS_TABS = [
+  { key: "pending", label: "Pending", statuses: ["pending"] },
   { key: "upcoming", label: "Upcoming", statuses: ["confirmed"] },
   { key: "overdue", label: "Overdue", statuses: ["overdue"] },
   { key: "completed", label: "Completed", statuses: ["completed"] },
@@ -105,6 +131,12 @@ const STATUS_TABS = [
     key: "returned",
     label: "Returned",
     statuses: ["returned", "returned_late", "returned_with_issue"],
+  },
+  {
+    key: "not_approved",
+    label: "Not approved",
+    words: "declined or expired",
+    statuses: ["declined", "expired"],
   },
   { key: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
 ];
@@ -135,29 +167,260 @@ export function tabCounts(bookings) {
 }
 
 // A tab as the headings and the empty text say it, lower case with a space
-// after it ("overdue "), and nothing for All.
+// after it ("overdue ", "declined or expired "), and nothing for All.
 function tabWords(tab) {
-  const label = RENTAL_TABS.find((t) => t.key === tab)?.label;
-  return tab === ALL || !label ? "" : `${label.toLowerCase()} `;
+  const found = STATUS_TABS.find((t) => t.key === tab);
+  if (tab === ALL || !found) return "";
+  return `${found.words || found.label.toLowerCase()} `;
 }
 
 // The heading over a tab's rows: "7 overdue bookings", "1 overdue booking",
-// "0 upcoming bookings", "28 bookings" on All.
+// "0 upcoming bookings", "2 declined or expired bookings", "28 bookings" on
+// All.
 export function tabHeading(tab, count) {
   return `${count.toLocaleString("en-US")} ${tabWords(tab)}booking${count === 1 ? "" : "s"}`;
 }
 
 // What takes the place of the rows when a tab holds none: "No upcoming
-// bookings.", "No bookings." on All.
+// bookings.", "No pending bookings.", "No bookings." on All.
 export function emptyText(tab) {
   return `No ${tabWords(tab)}bookings.`;
 }
 
 // The tab the page opens on. Staff, who mark items returned (canReturn), open
-// on Overdue, as the select they had did; the Secretary and the Punong
-// Barangay on Upcoming, even while it is empty.
-export function openingTab(canReturn) {
-  return canReturn ? "overdue" : "upcoming";
+// on Overdue, as the select they had did; the Secretary, who decides the
+// requests (canManage), on Pending (batch R2b); the Punong Barangay on
+// Upcoming. Each even while it is empty.
+export function openingTab(canReturn, canManage) {
+  if (canReturn) return "overdue";
+  return canManage ? "pending" : "upcoming";
+}
+
+// When a request was made, as a time, or null when the booking carries none:
+// every booking made before migration 027 has no requested_at (nothing stored
+// it), and the server leaves the key out rather than send null.
+function requestedTime(booking) {
+  if (!booking?.requested_at) return null;
+  const time = Date.parse(booking.requested_at);
+  return Number.isNaN(time) ? null : time;
+}
+
+// THE PENDING TAB'S ORDER (batch R2b): the oldest request first, the order the
+// Secretary decides them in; a request with no request time last (none can
+// be made without one: place_rental_booking sets it); and among requests made
+// at the same moment, or with no time, the lower booking number first. A
+// total order, as orderBookings' is, so the pager never shows a row twice or
+// leaves one out. A new array: the list given is left as it is. Only the
+// Pending tab reads it; every other tab keeps the list's one order.
+export function pendingOrder(bookings) {
+  return [...bookings].sort((a, b) => {
+    const ta = requestedTime(a);
+    const tb = requestedTime(b);
+    if (ta !== tb) {
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return ta - tb;
+    }
+    return a.request_id - b.request_id;
+  });
+}
+
+// A request the Secretary can still decide, as the server says: its
+// derived_status is "pending" (stored pending and its start ahead, by the
+// server's clock), so never an expired one. Its row offers Approve, Decline
+// and Edit.
+export function isDecidable(booking) {
+  return displayStatus(booking) === "pending";
+}
+
+// The status badge as this page words it, { label, className }: a booking
+// stored confirmed reads "Approved" here (APPROVED_LABEL, batch R2b), the
+// Secretary's approval; every other status as RENTAL_META words it ("Pending",
+// "Declined", "Expired", "Overdue"…). The resident's pages keep "Confirmed"
+// until batch R2c.
+export function statusBadge(booking) {
+  const status = displayStatus(booking);
+  const meta = rentalMeta(status);
+  return status === "confirmed" ? { ...meta, label: APPROVED_LABEL } : meta;
+}
+
+// "Requested Oct 28, 2026, 7:45 PM": when the request was made, in
+// formatDate's words (the returned-by note's), as { label, at }, the two
+// halves the row draws as two spans. null when the booking has no
+// requested_at: the row and the Approve panel then show NOTHING, no dash and
+// no "unknown" (CLAUDE.md: an unknown field is absent, never a false word).
+export function requestedText(booking) {
+  if (requestedTime(booking) === null) return null;
+  return { label: "Requested", at: formatDate(booking.requested_at) };
+}
+
+// The row's requested line: "Requested Oct 29, 2:46 PM", formatDate's words
+// without the year, which a waiting request does not need (its start was at
+// most 31 days ahead when it was made or last moved, so it was asked for
+// weeks ago, never a year). The row draws it on one line. The Approve panel
+// keeps the year (requestedText). null when the booking has no
+// requested_at: the row then shows nothing, as before.
+export function requestedLine(booking) {
+  if (requestedTime(booking) === null) return null;
+  const at = new Date(booking.requested_at).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Requested ${at}`;
+}
+
+// THE OVERLAPPING REQUESTS (batch R2b): advice for the Secretary, never a
+// rule, and nothing reads them to block or disable anything. The other
+// requests still waiting (derived pending) for the same item whose booked
+// time meets this one's (each starts before the other ends). Deliberately NOT
+// the availability rule: no 24-hour rest and no quantities, which are the
+// database's (rental_holds, migration 027), and Approve asks it. Read from
+// the whole list loaded, so a search, a filter, a tab or a page never hides
+// an overlap. null when this is not a waiting request, or nothing overlaps
+// it. The row and both panels word them with overlapParts; overlapNote is
+// R2b's counting words, used by no screen now.
+function overlappingRequests(booking, bookings) {
+  if (!isDecidable(booking)) return null;
+  const item = booking.rental_items?.item_id;
+  const start = Date.parse(booking.start_datetime);
+  const end = Date.parse(booking.end_datetime);
+  if (item === undefined || item === null) return null;
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  const others = bookings.filter(
+    (b) =>
+      b.request_id !== booking.request_id &&
+      isDecidable(b) &&
+      b.rental_items?.item_id === item &&
+      Date.parse(b.start_datetime) < end &&
+      Date.parse(b.end_datetime) > start,
+  );
+  return others.length === 0 ? null : others;
+}
+
+// Whether another request was asked for before this one, "earlier", or after
+// it, "later", by requested_at, ties by booking number (the lower first, as
+// in pendingOrder); null where either has no time: no order is claimed.
+function requestOrder(other, booking) {
+  const mine = requestedTime(booking);
+  const theirs = requestedTime(other);
+  if (mine === null || theirs === null) return null;
+  const first =
+    theirs < mine || (theirs === mine && other.request_id < booking.request_id);
+  return first ? "earlier" : "later";
+}
+
+// THE OVERLAP NOTE in R2b's counting words, how many and when they were asked
+// for. No screen uses it since both panels took the row's words
+// (overlapParts); it is kept, and test:auth's R2b checks still cover it:
+//   "Another request for this item overlaps this one (requested earlier)"
+//   "2 other requests for this item overlap this one (both requested later)"
+//   "3 other requests … (1 requested earlier, 2 later)"
+export function overlapNote(booking, bookings) {
+  const others = overlappingRequests(booking, bookings);
+  if (!others) return null;
+  let earlier = 0;
+  let later = 0;
+  for (const other of others) {
+    const order = requestOrder(other, booking);
+    if (order === "earlier") earlier += 1;
+    if (order === "later") later += 1;
+  }
+  const n = others.length;
+  const lead =
+    n === 1
+      ? "Another request for this item overlaps this one"
+      : `${n.toLocaleString("en-US")} other requests for this item overlap this one`;
+  const all = n === 2 ? "both" : "all";
+  let when = null;
+  if (n === 1) {
+    if (earlier) when = "requested earlier";
+    else if (later) when = "requested later";
+  } else if (earlier === n) when = `${all} requested earlier`;
+  else if (later === n) when = `${all} requested later`;
+  else if (earlier && later) {
+    when = `${earlier} requested earlier, ${later} later`;
+  } else if (earlier) when = `${earlier} requested earlier`;
+  else if (later) when = `${later} requested later`;
+  return when ? `${lead} (${when})` : lead;
+}
+
+// THE OVERLAP NOTE as the row and both panels word it: one line that NAMES
+// the other request, so its "earlier" or "later" plainly describes that one
+// and not this row: "Overlaps #126, requested later" (#126 was asked for after this
+// one), "Overlaps #125, requested earlier". With more than one, the first of
+// them in the Pending tab's order is named and the rest counted: "Overlaps
+// #125, requested earlier, and 2 more". With no order to claim, "Overlaps
+// #126" ("… and 1 more"). As its parts, the places the row may break the
+// line: ["Overlaps #126,", "requested later"]. null as for overlapNote.
+export function overlapParts(booking, bookings) {
+  const others = overlappingRequests(booking, bookings);
+  if (!others) return null;
+  const [named] = pendingOrder(others);
+  const order = requestOrder(named, booking);
+  const more = others.length - 1;
+  const parts = [`Overlaps ${bookingNumber(named)}`];
+  if (order) {
+    parts[0] += ",";
+    parts.push(`requested ${order}${more ? "," : ""}`);
+  }
+  if (more) parts.push(`and ${more.toLocaleString("en-US")} more`);
+  return parts;
+}
+
+// Whether a row shows its payment marker. Not on a request that was never
+// approved, waiting, declined or expired, while it has no charge: it gets one
+// only when it is approved, so "Not billed" there said nothing. Every other
+// row shows the marker as before, a booking cancelled before rentals were
+// billed ("Not billed") among them, and so does any row with a charge.
+export function showsPayment(booking) {
+  return (
+    !!chargeOf(booking) ||
+    !["pending", "declined", "expired"].includes(displayStatus(booking))
+  );
+}
+
+// "Free for funeral" is offered only where the Secretary can give the waiver
+// (design C, docs/modules/rental-bookings.md): a request still waiting, for
+// an item marked funeral_eligible, booked for a barangay resident (a resident
+// record, never a guest from another barangay). The server checks the mark
+// and the borrower again when she approves, under the item's lock.
+export function funeralWaivable(booking) {
+  return (
+    isDecidable(booking) &&
+    booking.rental_items?.funeral_eligible === true &&
+    booking.resident_id !== null &&
+    booking.resident_id !== undefined &&
+    !isGuest(booking)
+  );
+}
+
+// The Approve panel's fee line, after "Fee if approved: ": the server's own
+// fee_if_approved (routes/rentalRequests.js, the number the approve route
+// charges), "PHP 150.00", or "PHP 0.00, free for funeral" with the waiver
+// ticked. null when the booking carries no fee_if_approved: the panel then
+// shows no fee line, never a fee worked out here.
+export function feeLine(booking, waived) {
+  if (waived) return "PHP 0.00, free for funeral";
+  const raw = booking?.fee_if_approved;
+  // Number(null) and Number("") are 0: never read as "PHP 0.00".
+  if (raw === undefined || raw === null || raw === "") return null;
+  const fee = Number(raw);
+  return Number.isFinite(fee) ? `PHP ${fee.toFixed(2)}` : null;
+}
+
+// The message after an approval, from the charge the server's answer carries:
+// "Booking approved. A charge of PHP 5.00 was created.", or "Booking approved.
+// No fee is due." for a charge of PHP 0 (a free item, or the funeral waiver).
+// "Booking approved." alone when the answer carries no charge to read.
+export function approvedMessage(request) {
+  const charge = chargeOf(request);
+  const amount = Number(charge?.amount);
+  if (!charge || !Number.isFinite(amount)) return "Booking approved.";
+  return amount > 0
+    ? `Booking approved. A charge of PHP ${amount.toFixed(2)} was created.`
+    : "Booking approved. No fee is due.";
 }
 
 // THE LIST'S ONE ORDER. The route sends the bookings newest start first

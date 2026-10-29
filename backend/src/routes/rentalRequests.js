@@ -56,13 +56,15 @@ const RENTAL_FIELDS =
 // request was made. requested_at is NULL on every booking made before 027
 // (nothing stored it), so withDerived() drops the key when it is NULL: an
 // unknown time is absent, never null (CLAUDE.md, a withheld field is absent).
+// The item's funeral_eligible (027) is read too: the Approve panel offers
+// "Free for funeral" only on an item marked for it (batch R2b).
 const MANAGE_FIELDS = `
   request_id, quantity_requested, start_datetime, end_datetime, purpose, status,
   return_note, returned_at, cancellation_reason,
   decline_reason, purpose_type, requested_at,
   resident_id, outside_borrower_name, outside_borrower_contact,
   rental_items ( item_id, name, type, fee, quantity_total, quantity_available,
-    booking_opens_at, booking_closes_at ),
+    booking_opens_at, booking_closes_at, funeral_eligible ),
   resident_records ( resident_id, first_name, middle_name, last_name, suffix,
     account:profiles ( ...users ( username ) ) ),
   requester:users!rental_requests_requested_by_user_id_fkey ( user_id, username, email,
@@ -265,6 +267,15 @@ async function borrowerNotifyTarget(booking) {
 // the booking screen shows as "estimated fee", so the charge always matches
 // what the resident saw. Rounded to centavos.
 const rentalAmount = (item, quantity) => Math.round(Number(item.fee) * quantity * 100) / 100;
+
+// WHAT APPROVING A REQUEST WILL CHARGE, worked out in ONE place: the approve
+// route charges it (unless the Secretary waives the fee for a funeral) and
+// the Secretary's list shows it as fee_if_approved (withManaged, below), so
+// the number on the Approve panel and the charge cannot be worked out two
+// ways. Fee x quantity, rentalAmount() as POST / bills a booking; batch R3's
+// pricing changes this one function. A booking read without its item counts
+// as PHP 0, as the approve route always did.
+const feeIfApproved = (booking) => rentalAmount(booking.rental_items ?? { fee: 0 }, booking.quantity_requested);
 
 const chargeOf = (row) => (Array.isArray(row?.charges) ? row.charges[0] || null : row?.charges || null);
 
@@ -1072,7 +1083,18 @@ const isCancellable = isEditable;
 // hasNotStarted() Edit and Cancel apply, so Rental bookings draws those two
 // buttons from the server's answer rather than from the PC's clock. The
 // server still decides again on every Edit and Cancel.
-const withManaged = (row) => (row ? { ...withDerived(row), not_started: hasNotStarted(row) } : row);
+//
+// A request still waiting for the Secretary (derived 'pending': stored
+// pending, its start ahead) also carries fee_if_approved, what approving it
+// would charge, from the approve route's own feeIfApproved() (batch R2b). Every
+// other row leaves the key OUT, never null: it has nothing to approve
+// (CLAUDE.md, a derived value with nothing to derive from is absent).
+const withManaged = (row) => {
+  if (!row) return row;
+  const out = { ...withDerived(row), not_started: hasNotStarted(row) };
+  if (out.derived_status === RENTAL_STATUS.PENDING) out.fee_if_approved = feeIfApproved(row);
+  return out;
+};
 
 // "Oct 30, 2026, 8:00 AM to 10:00 AM" — a booking's slot in a notification,
 // the same words the CONFIRMED message uses.
@@ -1503,8 +1525,9 @@ const requestText = (booking) =>
   `${booking.quantity_requested > 1 ? `${booking.quantity_requested}x ` : ''}${booking.rental_items?.name || 'a rental item'} on ${scheduleText(booking.start_datetime, booking.end_datetime)}`;
 
 // POST /api/rental-requests/:id/approve — the Secretary approves a pending
-// request. The amount is worked out HERE (fee x quantity, as POST / bills a
-// booking today; batch R3's pricing rules will change this one number) and
+// request. The amount is worked out HERE, by feeIfApproved() (fee x quantity,
+// as POST / bills a booking today; batch R3's pricing rules will change that
+// one function), the same function the list's fee_if_approved comes from, and
 // approve_rental_booking (migration 027) does the rest in ONE transaction:
 // under the item's row lock it re-checks the request (still pending, start
 // still ahead, item active, resident not archived, slot still free), sets it
@@ -1542,7 +1565,8 @@ router.post('/:id/approve', requireRole('secretary'), async (req, res) => {
   }
 
   const isGuest = Boolean(booking.outside_borrower_name);
-  const amount = waiveForFuneral ? 0 : rentalAmount(booking.rental_items ?? { fee: 0 }, booking.quantity_requested);
+  // The list's fee_if_approved is this same function's answer.
+  const amount = waiveForFuneral ? 0 : feeIfApproved(booking);
   const chargeUserId = isGuest ? null : await accountOfResident(booking.resident_id);
 
   const result = await callBookingFunction('approve_rental_booking', {

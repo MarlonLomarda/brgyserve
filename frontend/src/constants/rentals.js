@@ -6,8 +6,9 @@
 // Since migration 027 a booking can wait for the Secretary's approval:
 // pending, then confirmed or declined, and a pending request whose start has
 // passed is derived 'expired'. No booking is stored pending yet (the batch
-// that switches the approval on comes later), so no screen shows these three
-// today; the Activity Log reads them through this table.
+// that switches the approval on comes later); the Activity Log reads these
+// three through this table, and since batch R2b the Rental bookings list
+// (Pending and Not approved tabs) does too.
 export const RENTAL_META = {
   pending: { label: 'Pending', className: 'status-pending' },
   confirmed: { label: 'Confirmed', className: 'status-approved' },
@@ -21,10 +22,11 @@ export const RENTAL_META = {
   cancelled: { label: 'Cancelled', className: 'status-cancelled' },
 };
 
-// The word a confirmed booking will be shown with once the approval step is
-// switched on: "Approved". The stored status stays 'confirmed'. NOT used by
-// any screen yet; the batch that switches the approval on puts it in
-// RENTAL_META.confirmed.
+// The word a confirmed booking is shown with once the approval step is
+// switched on: "Approved". The stored status stays 'confirmed'. Since batch
+// R2b the Rental bookings list uses it (statusBadge in utils/rentalList.js);
+// the resident's pages keep RENTAL_META's "Confirmed" until the batch that
+// switches the approval on (R2c) puts it in RENTAL_META.confirmed.
 export const APPROVED_LABEL = 'Approved';
 
 export function rentalMeta(status) {

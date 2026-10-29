@@ -1,20 +1,23 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
+import {
+  ApproveBookingPanel,
+  DeclineBookingPanel,
+} from "../components/BookingDecisionPanel";
 import CancelBookingPanel from "../components/CancelBookingPanel";
 import RentalAvailability from "../components/RentalAvailability";
 import ResidentPicker from "../components/ResidentPicker";
+import RowActionsMenu from "../components/RowActionsMenu";
 import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
   RETURN_OUTCOMES,
-  displayStatus,
   formatSchedule,
   isReturnable,
-  rentalMeta,
 } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
 import useRentalSettings from "../hooks/useRentalSettings";
@@ -39,12 +42,14 @@ import {
 import {
   accountHandle,
   ANY_ITEM,
+  approvedMessage,
   bookedForName,
   bookingNumber,
   emptyText,
   filterCount,
   filtersNoMatchText,
   inTab,
+  isDecidable,
   isGuest,
   itemOptions,
   matchesItem,
@@ -55,14 +60,19 @@ import {
   noMatchText,
   openingTab,
   orderBookings,
+  overlapParts,
   paymentMarker,
   paymentOptions,
+  pendingOrder,
   RENTAL_TABS,
+  requestedLine,
   scheduleParts,
   searchHeading,
   searchPlaceholder,
+  showsPayment,
   STARTS_OPTIONS,
   startsRange,
+  statusBadge,
   tabCounts,
   tabHeading,
   TYPE_OPTIONS,
@@ -174,6 +184,30 @@ import {
 // filters treat it as they treat Item. The walk-in form splits its dropdown
 // with a Facility | Item toggle, as Book a rental's tabs do
 // (utils/bookingKinds.js). The Edit panel is unchanged: its item is fixed.
+//
+// APPROVAL (29 Oct 2026, batch R2b). Eight tabs: Pending, the requests
+// waiting for the Secretary, first and oldest request first; Not approved,
+// the declined and the expired, after Returned. The Secretary opens on
+// Pending, the Punong Barangay on Upcoming, Staff on Overdue. A booking stored
+// confirmed reads "Approved" here. A pending request's row says when it was
+// requested and whether another waiting request for the item overlaps it
+// (advice only), and for the Secretary carries Approve, Decline and Edit, never
+// Cancel (the server declines a request, never cancels it). Approve and
+// Decline open a panel over the list (components/BookingDecisionPanel.jsx,
+// the Payments View panel's pattern); a decision moves the focus to its
+// message, and a refusal is shown in the panel in the server's words, the
+// list loading again when it closes. Staff and the Punong Barangay see the
+// same tabs and rows, with no decision buttons.
+//
+// A SHORTER PENDING ROW (29 Oct 2026, after batch R2b). A pending request's
+// three buttons are one three-dot button whose menu holds Approve, Decline
+// and Edit (components/RowActionsMenu.jsx); every other row keeps its
+// buttons. "Requested Oct 29, 2:46 PM" is a line under the booking number,
+// the overlap note a line under the schedule naming the other request
+// ("Overlaps #126, requested later"), and the Status cell holds the badge:
+// a request not approved has no payment marker. When a panel opened from
+// the menu closes without a decision, the focus goes back to that row's
+// three-dot button (after Edit, once the list is drawn again).
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -1058,8 +1092,9 @@ export default function RentalBookingsPage({
   canReturn = false,
 }) {
   const { authFetch } = useAuth();
-  // The chosen status tab: Overdue for Staff, Upcoming for the others.
-  const [tab, setTab] = useState(() => openingTab(canReturn));
+  // The chosen status tab: Overdue for Staff, Pending for the Secretary,
+  // Upcoming for the Punong Barangay.
+  const [tab, setTab] = useState(() => openingTab(canReturn, canManage));
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
@@ -1069,6 +1104,16 @@ export default function RentalBookingsPage({
   const refocusId = useRef(null); // whose Cancel button gets the focus back
   const flashRef = useRef(null);
   const focusFlash = useRef(false); // a cancel went through: focus its message
+  // The Approve or Decline panel open over the list: { kind, booking,
+  // overlap }, the request and its overlap note as they were when it was
+  // chosen. The button that opened it (the row's three-dot button), for the
+  // focus to go back to.
+  const [deciding, setDeciding] = useState(null);
+  const decisionOpener = useRef(null);
+  // Whose three-dot button gets the focus once the list is drawn again: after
+  // a refused decision (the list loads again) and after the Edit panel opened
+  // from the menu (it takes the list's place, which loads again after a save).
+  const menuRefocus = useRef(null);
   const [encoding, setEncoding] = useState(false); // walk-in panel open
   // The search, as typed. Here rather than in the box, so it outlives the list
   // while the Edit, Mark returned or walk-in panel takes its place.
@@ -1155,10 +1200,10 @@ export default function RentalBookingsPage({
   }
 
   // After the panel closes, back to the row's Cancel button once it is drawn
-  // again (after the reload, when there was one); after a cancel, to the
-  // success message.
+  // again (after the reload, when there was one); after a cancel, or an
+  // approval or a decline, to the success message.
   useEffect(() => {
-    if (cancelling) return;
+    if (cancelling || deciding) return;
     if (refocusId.current !== null) {
       const button = document.querySelector(`[data-cancel-for="${refocusId.current}"]`);
       if (button) {
@@ -1169,7 +1214,88 @@ export default function RentalBookingsPage({
       flashRef.current.focus();
       focusFlash.current = false;
     }
-  }, [cancelling, requests, flash]);
+  }, [cancelling, deciding, requests, flash]);
+
+  // APPROVE AND DECLINE (batch R2b). Each opens its panel over the list, the
+  // request as its row showed it; the page's message is cleared, as Cancel
+  // clears it.
+  function openDecision(kind, booking, opener) {
+    decisionOpener.current = opener;
+    setFlash(null);
+    // Both panels' overlap line is the row's own words, from the same helper
+    // (overlapParts), so the row and the two panels cannot disagree:
+    // "Overlaps #126, requested later".
+    setDeciding({
+      kind,
+      booking,
+      overlap: overlapParts(booking, requests ?? [])?.join(" ") ?? null,
+    });
+  }
+
+  // Every close route (Escape, Close, the backdrop) ends here, never while a
+  // request is out (the panel refuses first). Focus goes back to the button
+  // that opened it. After a refusal the list loads again, as after a refused
+  // cancel, and the focus goes to that row's three-dot button once it is
+  // drawn again, if the request still has one (the effect below).
+  function closeDecision(refused) {
+    if (!deciding) return;
+    const { booking } = deciding;
+    setDeciding(null);
+    if (refused) {
+      menuRefocus.current = booking.request_id;
+      load();
+    } else {
+      decisionOpener.current?.focus();
+    }
+  }
+
+  // Edit chosen from a request's menu: the Edit panel takes the list's place,
+  // as from a booking's Edit button, and when it closes the focus goes back
+  // to the row's three-dot button (the effect below).
+  function editFromMenu(booking) {
+    menuRefocus.current = booking.request_id;
+    setEditing(booking);
+  }
+
+  // A decision that went through: the panel closes, its message shows and
+  // takes the focus (the effect above), and the list loads again, the chosen
+  // tab kept; the request leaves Pending.
+  function decided(text) {
+    setDeciding(null);
+    focusFlash.current = true;
+    setFlash({ type: "success", text });
+    load();
+  }
+
+  async function sendApprove(booking, waive) {
+    const data = await authFetch(
+      `/rental-requests/${booking.request_id}/approve`,
+      { method: "POST", body: waive ? { waive_for_funeral: true } : {} },
+    );
+    decided(approvedMessage(data.request));
+  }
+
+  async function sendDecline(booking, reason) {
+    await authFetch(`/rental-requests/${booking.request_id}/decline`, {
+      method: "POST",
+      body: { reason },
+    });
+    decided("Request declined.");
+  }
+
+  // After a refused decision's reload, and after the Edit panel opened from
+  // the menu closes (Back, or a save and its reload): the focus to the row's
+  // three-dot button once the list is drawn again. If the request no longer
+  // has one (approved or expired meanwhile), or the reload failed, it is let
+  // go rather than kept for a later load.
+  useEffect(() => {
+    const id = menuRefocus.current;
+    if (id === null || deciding || editing) return;
+    if (requests === null && !loadError) return;
+    menuRefocus.current = null;
+    if (requests === null) return;
+    document.querySelector(`[data-actions-for="${id}"]`)?.focus();
+  }, [deciding, editing, requests, loadError]);
 
   // The search runs over the whole list, then the filters over what it
   // leaves, then the tabs split what matches. The tab counts come from every
@@ -1204,7 +1330,10 @@ export default function RentalBookingsPage({
       matchesStarts(r, range),
   );
   const counts = requests === null ? null : tabCounts(matching);
-  const shown = matching.filter((r) => inTab(r, tab));
+  // The Pending tab lists the oldest request first (pendingOrder); every
+  // other tab keeps the list's one order.
+  const inChosenTab = matching.filter((r) => inTab(r, tab));
+  const shown = tab === "pending" ? pendingOrder(inChosenTab) : inChosenTab;
   // One page of the tab's matches (utils/paging.js). Only the rows drawn are
   // a page: the heading and the counts still count every match.
   const paging = pageOf(shown.length, page, pageSize);
@@ -1518,9 +1647,17 @@ export default function RentalBookingsPage({
                 </thead>
                 <tbody>
                   {rows.map((r) => {
-                    const meta = rentalMeta(displayStatus(r));
+                    const meta = statusBadge(r);
                     const returnable = isReturnable(r.rental_items?.type);
                     const schedule = scheduleParts(r);
+                    // A request still waiting: when it was asked for, and
+                    // any other waiting request for the item it overlaps,
+                    // read from the whole list loaded (utils/rentalList.js).
+                    const decidable = isDecidable(r);
+                    const requested = decidable ? requestedLine(r) : null;
+                    const overlap = decidable
+                      ? overlapParts(r, requests)
+                      : null;
                     return (
                       <tr key={r.request_id}>
                         <td>
@@ -1538,6 +1675,18 @@ export default function RentalBookingsPage({
                           >
                             {bookingNumber(r)}
                           </div>
+                          {/* When a waiting request was made, "Requested
+                              Oct 29, 2:46 PM", one line under its number;
+                              nothing when it has no request time. On a phone
+                              card it is labelled "Request" (index.css). */}
+                          {requested && (
+                            <div
+                              className="muted small-note rental-bookings-request"
+                              data-label="Request"
+                            >
+                              {requested}
+                            </div>
+                          )}
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>
                         <td data-label="Schedule">
@@ -1553,6 +1702,22 @@ export default function RentalBookingsPage({
                           ) : (
                             "—"
                           )}
+                          {/* The overlap note under the time it is about,
+                              naming the other request: "Overlaps #126,
+                              requested later". Each part never breaks, so a
+                              narrow cell breaks the line between them. */}
+                          {overlap && (
+                            <div className="muted reason-note rental-bookings-overlap">
+                              {overlap.map((part, i) => (
+                                <Fragment key={part}>
+                                  {i > 0 && " "}
+                                  <span className="rental-bookings-overlap-part">
+                                    {part}
+                                  </span>
+                                </Fragment>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="num" data-label="Qty">
                           {r.quantity_requested}
@@ -1564,7 +1729,9 @@ export default function RentalBookingsPage({
                           <span className={`badge ${meta.className}`}>
                             {meta.label}
                           </span>
-                          <PaymentMarker booking={r} />
+                          {/* No marker on a request not approved (waiting,
+                              declined, expired) while it has no charge. */}
+                          {showsPayment(r) && <PaymentMarker booking={r} />}
                           {r.returned_at && r.returned_by?.username && (
                             <ReturnedBy booking={r} />
                           )}
@@ -1579,9 +1746,43 @@ export default function RentalBookingsPage({
                                 Reason: {r.cancellation_reason}
                               </div>
                             )}
+                          {r.status === "declined" && r.decline_reason && (
+                            <div className="muted reason-note">
+                              Reason: {r.decline_reason}
+                            </div>
+                          )}
                         </td>
                         {(canManage || canReturn) && (
                           <td className="row-actions">
+                            {/* A request the server says is still waiting
+                                (derived pending): one three-dot button
+                                whose menu holds Approve, Decline and Edit,
+                                never Cancel, which the server refuses on a
+                                request. An expired or declined one has
+                                none. */}
+                            {canManage && decidable && (
+                              <RowActionsMenu
+                                label={`Actions for booking ${bookingNumber(r)}`}
+                                actionsFor={r.request_id}
+                                items={[
+                                  {
+                                    label: "Approve",
+                                    onSelect: (button) =>
+                                      openDecision("approve", r, button),
+                                  },
+                                  {
+                                    label: "Decline",
+                                    danger: true,
+                                    onSelect: (button) =>
+                                      openDecision("decline", r, button),
+                                  },
+                                  {
+                                    label: "Edit",
+                                    onSelect: () => editFromMenu(r),
+                                  },
+                                ]}
+                              />
+                            )}
                             {/* Edit and Cancel only where the server says the
                                 booking has not started (not_started: stored
                                 confirmed and its start ahead, the rule both
@@ -1642,6 +1843,28 @@ export default function RentalBookingsPage({
             />
           )}
         </>
+      )}
+
+      {/* The Secretary's decision on a waiting request, over the list, at
+          z-index 50 (components/BookingDecisionPanel.jsx). Keyed by the
+          request, so a panel opened for another starts afresh. */}
+      {deciding?.kind === "approve" && (
+        <ApproveBookingPanel
+          key={deciding.booking.request_id}
+          booking={deciding.booking}
+          overlap={deciding.overlap}
+          onApprove={(waive) => sendApprove(deciding.booking, waive)}
+          onClose={closeDecision}
+        />
+      )}
+      {deciding?.kind === "decline" && (
+        <DeclineBookingPanel
+          key={deciding.booking.request_id}
+          booking={deciding.booking}
+          overlap={deciding.overlap}
+          onDecline={(reason) => sendDecline(deciding.booking, reason)}
+          onClose={closeDecision}
+        />
       )}
     </>
   );
