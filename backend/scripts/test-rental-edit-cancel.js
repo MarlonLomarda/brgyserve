@@ -18,13 +18,36 @@
 //   - A payment the webhook receives for a VOID charge writes one activity log
 //     row, and nothing else.
 //
+// Since step R1 (28 Oct 2026), migration 025: the booking rules. Each item
+// can be booked only within its own hours, a booking may start no more than
+// 31 days after today in Manila, and an end at 00:00 is midnight at the end
+// of the date, allowed only for an item that closes at 24:00. Checked by the
+// ROUTE on a booking, a walk-in and an edit; stored bookings are not checked
+// again. And GET /api/rental-settings.
+//
+// Since step O43 (28 Oct 2026) the 31 is a constant in the code
+// (MAX_DAYS_AHEAD, constants/rentalBookingRules.js): PUT /api/rental-settings
+// is gone and nothing reads the rental_settings table, which migration 026
+// drops. The fake database here holds no such table, so a read of it throws.
+//
+// And since step C1b (26 Oct 2026), migration 024: the database decides
+// whether a slot is free. POST / books through place_rental_booking (027), PUT /:id
+// moves a booking through update_rental_booking_time, and GET /availability
+// reads rental_availability. The rule itself (the 24-hour rest, stuck items,
+// the row lock) is proven against Postgres by the SQL test; here supabase.rpc
+// is faked too, and the checks are about what each ROUTE does with each
+// answer: the arguments it sends, the status and words it gives each refusal,
+// the charge, notification and log around a booking, and what it never sends
+// back.
+//
 // Makes NO network calls and touches NO database: the Supabase URL and key are
 // dead values set before anything loads, fetch records its call and throws,
-// and supabase.from is replaced by in-memory tables built fresh for every
-// call. The real handlers run, taken from router.stack past the router-level
-// authenticate, with req.user supplied. PayMongo's expire call is replaced on
-// the module object, except in the one check that lets the real client reach
-// the dead fetch to prove which url and method it would use.
+// and supabase.from and supabase.rpc are replaced by in-memory tables built
+// fresh for every call. The real handlers run, taken from router.stack past
+// the router-level authenticate, with req.user supplied (GET /availability
+// runs its whole route chain, role guard included). PayMongo's expire call is
+// replaced on the module object, except in the one check that lets the real
+// client reach the dead fetch to prove which url and method it would use.
 // ===========================================================================
 process.env.SUPABASE_URL = 'http://127.0.0.1:9';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'rentals-test-no-network';
@@ -41,9 +64,16 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const supabase = require('../src/config/supabase');
 const paymongo = require('../src/services/paymongo');
 const rentals = require('../src/routes/rentalRequests');
+const rentalItems = require('../src/routes/rentalItems');
+const rentalSettings = require('../src/routes/rentalSettings');
+const reports = require('../src/routes/reports');
+const residentRecords = require('../src/routes/residentRecords');
+const RULES = require('../src/constants/rentalBookingRules');
 const { webhookHandler } = require('../src/routes/payments');
 
 let pass = 0;
@@ -103,6 +133,9 @@ function freshDb() {
     calls: [],
     failWhen: null,
     afterUpdate: null,
+    rpcCalls: [],
+    rpcAnswer: {},
+    rpcError: null,
     users: [SEC, RES_A, RES_B, RES_UNLINKED].map((u) => ({ ...u, email: null })),
     profiles: [
       { user_id: SEC.user_id, resident_id: null },
@@ -114,9 +147,13 @@ function freshDb() {
       { resident_id: 9101, first_name: 'Ana', middle_name: null, last_name: 'Probe', suffix: null, contact_number: '09170000001', is_archived: false },
       { resident_id: 9102, first_name: 'Ben', middle_name: null, last_name: 'Probe', suffix: null, contact_number: '09170000002', is_archived: false },
     ],
+    // Hours as PostgREST sends a `time` (migration 025): the court until
+    // midnight, the chairs the default 07:00 to 17:00.
     rental_items: [
-      { item_id: 801, name: 'Covered Court', type: 'facility', fee: 500, quantity_total: 1, quantity_available: 1, is_active: true },
-      { item_id: 802, name: 'Monobloc Chair', type: 'furniture', fee: 5, quantity_total: 100, quantity_available: 100, is_active: true },
+      { item_id: 801, name: 'Covered Court', type: 'facility', fee: 500, quantity_total: 1, quantity_available: 1, is_active: true,
+        booking_opens_at: '07:00:00', booking_closes_at: '24:00:00' },
+      { item_id: 802, name: 'Monobloc Chair', type: 'furniture', fee: 5, quantity_total: 100, quantity_available: 100, is_active: true,
+        booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' },
     ],
     rental_requests: [
       booking(601),
@@ -223,7 +260,9 @@ function fakeFrom(db) {
       if (op === 'neq') return row[c] !== v;
       if (op === 'lt') return cmp(row[c], v) < 0;
       if (op === 'gt') return cmp(row[c], v) > 0;
+      if (op === 'gte') return cmp(row[c], v) >= 0;
       if (op === 'in') return v.includes(row[c]);
+      if (op === 'ilike') return String(row[c]).toLowerCase() === String(v).toLowerCase();
       throw new Error(`unmodelled filter ${op}`);
     });
     const run = () => {
@@ -234,10 +273,19 @@ function fakeFrom(db) {
       }
       if (q.op === 'insert') {
         db.calls.push({ table, op: 'insert', rows: q.rows });
-        db[table].push(...[].concat(q.rows).map((r) => structuredClone(r)));
-        return { data: null, error: null };
+        const added = [].concat(q.rows).map((r) => structuredClone(r));
+        // rental_items' create reads its new row back (.insert().select());
+        // the fake gives it the next id. Nothing else here reads an insert.
+        if (q.returning && table === 'rental_items') {
+          for (const row of added) row.item_id = Math.max(...db.rental_items.map((i) => i.item_id)) + 1;
+        }
+        db[table].push(...added);
+        if (!q.returning) return { data: null, error: null };
+        const out = added.map((row) => shape(db, table, row, q.sel));
+        return { data: q.single ? out[0] : out, error: null };
       }
       const rows = db[table].filter(matches);
+      if (q.op === 'select') db.calls.push({ table, op: 'select', filters: q.filters });
       if (q.op === 'update') {
         db.calls.push({ table, op: 'update', patch: q.patch, filters: q.filters });
         for (const row of rows) Object.assign(row, q.patch);
@@ -253,12 +301,14 @@ function fakeFrom(db) {
       return { data: out[0] ?? null, error: null };
     };
     const b = {
-      select(sel) { q.sel = sel ?? '*'; return b; },
+      select(sel) { q.sel = sel ?? '*'; if (q.op === 'insert') q.returning = true; return b; },
       eq(c, v) { q.filters.push(['eq', c, v]); return b; },
       neq(c, v) { q.filters.push(['neq', c, v]); return b; },
       lt(c, v) { q.filters.push(['lt', c, v]); return b; },
       gt(c, v) { q.filters.push(['gt', c, v]); return b; },
+      gte(c, v) { q.filters.push(['gte', c, v]); return b; },
       in(c, v) { q.filters.push(['in', c, v]); return b; },
+      ilike(c, v) { q.filters.push(['ilike', c, v]); return b; },
       order() { return b; },
       update(patch) { q.op = 'update'; q.patch = patch; return b; },
       insert(rows) { q.op = 'insert'; q.rows = rows; return b; },
@@ -271,21 +321,123 @@ function fakeFrom(db) {
   };
 }
 
+// --- migration 024's functions, faked ------------------------------------------
+// The real rule (the 24-hour rest, stuck items, the item row lock) is proven
+// against Postgres by the SQL test. These only answer, so the checks are about
+// what the ROUTE does with each answer. db.rpcAnswer[name] replaces a
+// function's answer: a value is sent as it is, a function is asked
+// (args, db). Unscripted, each does what the real one does when the slot is
+// free; db.rpcError makes the call itself fail.
+//
+// Since migration 027 (batch R2a): POST / books through place_rental_booking
+// (create_rental_booking's insert, with the status and purpose type it is
+// given), update_rental_booking_time also moves a pending request, and
+// approve_rental_booking confirms a pending request and writes its charge in
+// one step. The real approval rule (the lock, expiry, an inactive item, an
+// archived resident, the slot) is proven by test-027-in-transaction.sql.
+const RPC_DEFAULTS = {
+  place_rental_booking(a, db) {
+    const row = {
+      request_id: Math.max(...db.rental_requests.map((r) => r.request_id)) + 1,
+      item_id: a.p_item_id, requested_by_user_id: a.p_requested_by_user_id, resident_id: a.p_resident_id,
+      outside_borrower_name: a.p_outside_borrower_name, outside_borrower_contact: a.p_outside_borrower_contact,
+      quantity_requested: a.p_quantity, start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose,
+      status: a.p_status, purpose_type: a.p_purpose_type, requested_at: iso(NOW),
+      processed_by_user_id: null, cancellation_reason: null, decline_reason: null,
+      return_note: null, returned_at: null, returned_by_user_id: null,
+    };
+    db.rental_requests.push(row);
+    // The whole new row, as to_jsonb sends it: contact and purpose included.
+    return { ok: true, request: { ...row } };
+  },
+  approve_rental_booking(a, db) {
+    const row = db.rental_requests.find((r) => r.request_id === a.p_request_id);
+    if (!row) return { ok: false, code: 'BOOKING_NOT_FOUND' };
+    if (row.status !== 'pending') return { ok: false, code: 'BOOKING_NOT_PENDING', status: row.status };
+    if (Date.parse(row.start_datetime) <= Date.now()) return { ok: false, code: 'BOOKING_EXPIRED' };
+    // The funeral waiver's two rules (design C), as the function checks them.
+    if (a.p_waive_for_funeral) {
+      if (!db.rental_items.find((i) => i.item_id === row.item_id)?.funeral_eligible) return { ok: false, code: 'FUNERAL_NOT_ALLOWED' };
+      if (row.resident_id === null) return { ok: false, code: 'FUNERAL_RESIDENTS_ONLY' };
+    }
+    Object.assign(row, { status: 'confirmed', processed_by_user_id: a.p_processed_by });
+    if (a.p_waive_for_funeral) row.purpose_type = 'funeral';
+    const charge = {
+      charge_id: Math.max(...db.charges.map((c) => c.charge_id)) + 1, charge_type: 'RENTAL', amount: a.p_amount,
+      status: a.p_amount > 0 ? 'UNPAID' : 'PAID', user_id: a.p_charge_user_id, rental_request_id: row.request_id,
+      document_request_id: null, household_id: null, paymongo_session_id: null, paymongo_payment_id: null,
+      declared_method: null, declared_reference: null, declared_at: null, created_at: iso(NOW),
+    };
+    db.charges.push(charge);
+    return { ok: true, before: { status: 'pending' }, request: { ...row },
+      charge: { charge_id: charge.charge_id, amount: charge.amount, status: charge.status },
+      waived: a.p_waive_for_funeral === true };
+  },
+  update_rental_booking_time(a, db) {
+    const row = db.rental_requests.find((r) => r.request_id === a.p_request_id);
+    if (!row) return { ok: false, code: 'BOOKING_NOT_FOUND' };
+    if (!['confirmed', 'pending'].includes(row.status) || Date.parse(row.start_datetime) <= Date.now()) {
+      return { ok: false, code: 'BOOKING_STARTED', status: row.status };
+    }
+    const before = { start_datetime: row.start_datetime, end_datetime: row.end_datetime, purpose: row.purpose };
+    Object.assign(row, { start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose });
+    return { ok: true, before, request: { ...row } };
+  },
+  rental_availability() {
+    return { ok: true, item_type: 'furniture', total: 100, used: 0, booked: 0, stuck: 0, resting: 0, left: 100 };
+  },
+};
+
+function fakeRpc(db) {
+  return async (name, args) => {
+    db.rpcCalls.push({ name, args: structuredClone(args) });
+    if (db.rpcError) return { data: null, error: db.rpcError };
+    const scripted = db.rpcAnswer[name];
+    if (scripted !== undefined) {
+      return { data: typeof scripted === 'function' ? scripted(args, db) : structuredClone(scripted), error: null };
+    }
+    if (!RPC_DEFAULTS[name]) return { data: null, error: { message: `Could not find the function public.${name}` } };
+    return { data: RPC_DEFAULTS[name](args, db), error: null };
+  };
+}
+
 // --- calling the real handlers -------------------------------------------------
-const handlerFor = (router, method, routePath) => {
+const routeLayer = (router, method, routePath) => {
   const layer = router.stack.find((l) => l.route?.path === routePath && l.route.methods[method]);
   if (!layer) throw new Error(`no ${method.toUpperCase()} ${routePath} on the router`);
+  return layer;
+};
+const handlerFor = (router, method, routePath) => {
+  const layer = routeLayer(router, method, routePath);
   return layer.route.stack[layer.route.stack.length - 1].handle;
+};
+// The route's whole own chain, its role guard first, then the handler. A guard
+// calls next() without returning it, so every step's promise is kept and
+// awaited: otherwise the handler would still be running into the next call's
+// tables.
+const chainFor = (router, method, routePath) => {
+  const handles = routeLayer(router, method, routePath).route.stack.map((s) => s.handle);
+  return async (req, res) => {
+    const running = [];
+    let i = 0;
+    const next = () => {
+      const h = handles[i++];
+      if (h) running.push(h(req, res, next));
+    };
+    next();
+    for (let k = 0; k < running.length; k += 1) await running[k];
+  };
 };
 
 const realExpire = paymongo.expireCheckoutSession;
 
 // Runs one request against fresh tables. `setup(db)` adjusts them first;
 // `expire` stands in for PayMongo's expire call ('real' leaves the client alone).
-async function call({ method, path, user, id, body = {}, setup, expire, req: extraReq }) {
+async function call({ method, path, user, id, body = {}, query = {}, chain = false, setup, expire, req: extraReq, router = rentals }) {
   const db = freshDb();
   if (setup) setup(db);
   supabase.from = fakeFrom(db);
+  supabase.rpc = fakeRpc(db);
   const expireCalls = [];
   if (expire !== 'real') {
     paymongo.expireCheckoutSession = async (sessionId) => {
@@ -306,7 +458,7 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
   const netBefore = netCalls.length;
   let res;
   try {
-    const handler = handlerFor(rentals, method, path);
+    const handler = chain ? chainFor(router, method, path) : handlerFor(router, method, path);
     res = await new Promise((resolve, reject) => {
       let done = false;
       const resObj = {
@@ -314,7 +466,7 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
         status(c) { this.statusCode = c; return this; },
         json(b) { done = true; resolve({ status: this.statusCode, body: b }); return this; },
       };
-      const req = { user, params: { id: String(id) }, body, query: {}, headers: {}, ...extraReq };
+      const req = { user, params: { id: String(id) }, body, query, headers: {}, ...extraReq };
       Promise.resolve(handler(req, resObj)).then(() => { if (!done) resolve({ status: 'no response', body: null }); }, reject);
     });
   } catch (e) {
@@ -327,7 +479,8 @@ async function call({ method, path, user, id, body = {}, setup, expire, req: ext
   }
   const booking = (n) => db.rental_requests.find((r) => r.request_id === n);
   const chargeOfBooking = (n) => db.charges.find((c) => c.rental_request_id === n);
-  return { ...res, db, booking, chargeOfBooking, expireCalls, consoleSeen, net: netCalls.slice(netBefore) };
+  const rpcCalls = () => db.rpcCalls;
+  return { ...res, db, booking, chargeOfBooking, rpcCalls, expireCalls, consoleSeen, net: netCalls.slice(netBefore) };
 }
 
 const said = (r) => `${r.status} ${r.body?.error || r.body?.message || ''}`.trim();
@@ -346,8 +499,160 @@ const PAID_HALL = 'A paid booking can only be cancelled at the barangay hall, so
 const WALK_IN_HALL = 'This booking was made at the barangay hall, so it can only be changed there.';
 const REASON = 'Hall needed for an emergency meeting';
 
+// The route's words for each refusal (parseBookingBody's and the old JS
+// conflict check's sentences, kept since migration 024 took over the check).
+const END_NOT_AFTER = 'End time must be after the start time (bookings run within one day)';
+const PAST_START = 'The booking must start in the future';
+const BELOW_ONE = 'quantity_requested must be a whole number of at least 1';
+const ITEM_GONE = 'Rental item not found';
+const ITEM_OFF = 'That item is not currently available for rental';
+// Postgres's own timestamptz text, as the functions' jsonb carries it.
+const pgTime = (isoText) => isoText.replace(/\.\d{3}Z$/, '+00:00');
+const sortedJson = (o) => JSON.stringify(Object.keys(o ?? {}).sort().reduce((acc, k) => ({ ...acc, [k]: o[k] }), {}));
+// RENTAL_FIELDS' columns plus derived_status: what POST / answers with.
+const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_datetime', 'purpose', 'quantity_requested',
+  'rental_items', 'request_id', 'return_note', 'returned_at', 'start_datetime', 'status'];
+
 (async () => {
   console.log('Rental Edit and Cancel — real handlers, fake tables, no network');
+
+  // ==================================================================== Book
+  section('POST / — booking through place_rental_booking (migrations 024, 027)');
+  const BOOK_DAY = dayAhead(5);
+  const bookStart = manilaIso(BOOK_DAY, '08:00');
+  const bookEnd = manilaIso(BOOK_DAY, '10:00');
+  const bookBody = (extra = {}) => ({
+    item_id: 802, date: BOOK_DAY, start_time: '08:00', end_time: '10:00', purpose: 'Birthday party', quantity_requested: 3, ...extra,
+  });
+  const book = (user, body, opts = {}) => call({ method: 'post', path: '/', user, id: '', body, ...opts });
+  const NEW_ID = 622;
+  const nothingWritten = (res) => !res.db.calls.some((c) => c.op === 'insert' || c.op === 'update' || c.op === 'delete')
+    && res.db.notifications.length === 0 && res.db.activity_logs.length === 0
+    && res.db.rental_requests.length === freshDb().rental_requests.length;
+  const overlapQuery = (res) => res.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'select'
+    && c.filters.some(([op]) => op === 'lt' || op === 'gt'));
+
+  let r = await book(RES_A, bookBody());
+  check('A resident\'s booking calls place_rental_booking once, confirmed and general as before, with their own record and account',
+    r.rpcCalls().length === 1 && r.rpcCalls()[0].name === 'place_rental_booking'
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({
+        p_item_id: 802, p_requested_by_user_id: RES_A.user_id, p_resident_id: 9101,
+        p_outside_borrower_name: null, p_outside_borrower_contact: null,
+        p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party', p_purpose_type: 'general', p_status: 'confirmed',
+      }), JSON.stringify(r.rpcCalls()));
+  check('  answers 201 "Booking confirmed: …"', r.status === 201 && /^Booking confirmed: Monobloc Chair on /.test(r.body?.message || ''), said(r));
+  check('  the route inserts no booking itself and runs no overlap query of its own (the function does both)',
+    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'insert') && !overlapQuery(r),
+    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => c.op)));
+  check('  and deletes nothing afterwards (no post-insert race guard)', !r.db.calls.some((c) => c.op === 'delete')
+    && r.booking(NEW_ID)?.status === 'confirmed');
+  const newCharge = r.chargeOfBooking(NEW_ID);
+  check('  one RENTAL charge, UNPAID, fee x quantity (PHP 15), on the resident\'s account',
+    newCharge?.charge_type === 'RENTAL' && newCharge?.amount === 15 && newCharge?.status === 'UNPAID'
+      && newCharge?.user_id === RES_A.user_id, JSON.stringify(newCharge));
+  const bookNote = r.db.notifications;
+  check('  the borrower is notified once, in today\'s words, to their account and number',
+    bookNote.length === 1 && bookNote[0].user_id === RES_A.user_id && bookNote[0].destination === '09170000001'
+      && bookNote[0].message === `BrgyServe: your booking is CONFIRMED - 3x Monobloc Chair on ${dateFmt.format(new Date(bookStart))}, ${timeFmt.format(new Date(bookStart))} to ${timeFmt.format(new Date(bookEnd))}.`,
+    bookNote[0]?.message || '(none)');
+  check('  one CREATE row by the resident, with no purpose in it',
+    r.db.activity_logs.length === 1 && r.db.activity_logs[0].action === 'CREATE' && r.db.activity_logs[0].record_id === NEW_ID
+      && r.db.activity_logs[0].user_id === RES_A.user_id && sortedJson(r.db.activity_logs[0].new_value) === sortedJson({
+      item_id: 802, resident_id: 9101, guest: false, walk_in: false, quantity_requested: 3,
+      start_datetime: bookStart, end_datetime: bookEnd, status: 'confirmed' }), JSON.stringify(r.db.activity_logs[0]?.new_value));
+  check('  the answer is the booking re-read with RENTAL_FIELDS (and derived_status), never the function\'s row',
+    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS)
+      && r.body.request.request_id === NEW_ID && Array.isArray(r.body.request.charges) && r.body.request.charges.length === 1,
+    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()));
+
+  r = await book(SEC, bookBody({ outside_borrower_name: '  Pedro Guest ', outside_borrower_contact: '09179990000' }));
+  check('A guest walk-in calls the function with the guest\'s name and number, no resident, filed by the Secretary',
+    r.status === 201 && sortedJson(r.rpcCalls()[0]?.args) === sortedJson({
+      p_item_id: 802, p_requested_by_user_id: SEC.user_id, p_resident_id: null,
+      p_outside_borrower_name: 'Pedro Guest', p_outside_borrower_contact: '09179990000',
+      p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party', p_purpose_type: 'general', p_status: 'confirmed',
+    }), `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the answer carries no contact number, no outside_borrower_* key and no requester column',
+    !JSON.stringify(r.body).includes('09179990000') && !/outside_borrower|requested_by_user_id|processed_by_user_id/.test(JSON.stringify(r.body)),
+    JSON.stringify(r.body));
+  check('  the charge has no account, and the guest\'s number gets the notice',
+    r.chargeOfBooking(NEW_ID)?.user_id === null && r.db.notifications[0]?.destination === '09179990000');
+
+  r = await book(SEC, bookBody({ resident_id: 9102 }));
+  check('A walk-in for a registered resident calls the function with that resident, filed by the Secretary',
+    r.status === 201 && r.rpcCalls()[0]?.args?.p_resident_id === 9102 && r.rpcCalls()[0]?.args?.p_requested_by_user_id === SEC.user_id
+      && r.rpcCalls()[0]?.args?.p_outside_borrower_name === null, `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the charge goes on resident B\'s account, never the Secretary\'s', r.chargeOfBooking(NEW_ID)?.user_id === RES_B.user_id,
+    JSON.stringify(r.chargeOfBooking(NEW_ID)));
+
+  r = await book(RES_A, bookBody({ quantity_requested: 0 }));
+  check('Body validation still runs first: quantity 0 is a 400 and the function is never called',
+    r.status === 400 && r.body?.error === BELOW_ONE && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_A, bookBody({ start_time: '10:00', end_time: '09:00' }));
+  check('  and so does an end before the start', r.status === 400 && r.body?.error === END_NOT_AFTER && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_UNLINKED, bookBody());
+  check('  and so does who the borrower is (an account with no record: 409, no call)', r.status === 409 && r.rpcCalls().length === 0, said(r));
+
+  const chargeFails = (db) => { db.failWhen = ({ table, op }) => (table === 'charges' && op === 'insert' ? { message: 'forced charge failure' } : null); };
+  r = await book(RES_A, bookBody(), { setup: chargeFails });
+  check('If the charge cannot be created, the booking the function made is deleted and the error is today\'s',
+    r.status === 'threw' && /^Booking reverted — failed to create its charge: forced charge failure/.test(r.body?.error || '')
+      && !r.booking(NEW_ID) && r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'delete'),
+    `${said(r)}; booking ${JSON.stringify(r.booking(NEW_ID) ?? null)}`);
+  check('  nobody is notified and nothing is logged', r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  r = await book(SEC, bookBody({ outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000' }), {
+    setup: (db) => { db.failWhen = ({ table, op }) => (table === 'rental_requests' && op === 'select' ? { message: 'forced read failure' } : null); },
+  });
+  check('If the re-read fails, the answer is still 201 and still carries only RENTAL_FIELDS\' columns, never the contact',
+    r.status === 201 && !JSON.stringify(r.body).includes('09179990000')
+      && JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS),
+    `${said(r)}; ${JSON.stringify(r.body?.request)}`);
+
+  // Each coded refusal: today's status and words, and nothing written.
+  const clashA = { start: pgTime(manilaIso(BOOK_DAY, '08:00')), end: pgTime(manilaIso(BOOK_DAY, '10:00')) };
+  const clashB = { start: pgTime(manilaIso(BOOK_DAY, '13:00')), end: pgTime(manilaIso(BOOK_DAY, '15:00')) };
+  const notEnough = (extra) => ({ ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 97, left: 3, requested: 10,
+    stuck: 0, resting: 0, ...extra });
+  const ONLY3 = 'Only 3 of 100 Monobloc Chair are available for that time — you asked for 10.';
+  const REFUSALS = [
+    ['TIME_INVALID, end not after start', 802, { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }, 400, END_NOT_AFTER],
+    ['TIME_INVALID, start not in the future', 802, { ok: false, code: 'TIME_INVALID', reason: 'START_NOT_IN_FUTURE' }, 400, PAST_START],
+    ['QUANTITY_INVALID BELOW_ONE', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'BELOW_ONE', requested: 0 }, 400, BELOW_ONE],
+    ['QUANTITY_INVALID FACILITY_WHOLE', 801, { ok: false, code: 'QUANTITY_INVALID', reason: 'FACILITY_WHOLE', requested: 2 }, 400,
+      'The Covered Court is booked as a whole — quantity must be 1'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 120,
+      quantity_available: 100 }, 400, 'Only 100 units of Monobloc Chair exist — you asked for 120'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST, one unit', 802, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 2,
+      quantity_available: 1 }, 400, 'Only 1 unit of Monobloc Chair exists — you asked for 2'],
+    ['ITEM_NOT_FOUND', 999, { ok: false, code: 'ITEM_NOT_FOUND' }, 404, ITEM_GONE],
+    ['ITEM_INACTIVE', 802, { ok: false, code: 'ITEM_INACTIVE' }, 400, ITEM_OFF],
+    ['FACILITY_TAKEN (the first clash, in Manila time)', 801, { ok: false, code: 'FACILITY_TAKEN', clashes: [clashA, clashB] }, 409,
+      `The Covered Court is already booked from ${timeFmt.format(new Date(clashA.start))} to ${timeFmt.format(new Date(clashA.end))} on that date — please pick a different time.`],
+    ['NOT_ENOUGH_LEFT', 802, notEnough(), 409, ONLY3],
+    ['NOT_ENOUGH_LEFT, one left', 802, notEnough({ left: 1, used: 99 }), 409,
+      'Only 1 of 100 Monobloc Chair is available for that time — you asked for 10.'],
+    ['NOT_ENOUGH_LEFT with 5 stuck', 802, notEnough({ stuck: 5 }), 409, `${ONLY3} 5 are overdue and not yet returned.`],
+    ['NOT_ENOUGH_LEFT with 2 resting', 802, notEnough({ resting: 2 }), 409, `${ONLY3} 2 are resting for 24 hours after an earlier booking.`],
+    ['NOT_ENOUGH_LEFT with 1 stuck and 1 resting', 802, notEnough({ stuck: 1, resting: 1 }), 409,
+      `${ONLY3} 1 is overdue and not yet returned. 1 is resting for 24 hours after an earlier booking.`],
+  ];
+  for (const [what, itemId, answer, status, words] of REFUSALS) {
+    r = await book(RES_A, bookBody({ item_id: itemId, quantity_requested: itemId === 801 ? 1 : 3 }),
+      { setup: (db) => { db.rpcAnswer.place_rental_booking = answer; } });
+    check(`${what}: ${status} "${words.length > 70 ? `${words.slice(0, 70)}…` : words}"`, r.status === status && r.body?.error === words, said(r));
+    check('  no charge, no notification, no log, no booking', nothingWritten(r), JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+  }
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.place_rental_booking = notEnough({ stuck: 0, resting: 0 }); } });
+  check('No add-on when stuck and resting are 0', r.body?.error === ONLY3, said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.place_rental_booking = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('An unknown refusal code is a 500, never a made-up sentence, and nothing is written', r.status === 'threw'
+    && /SOMETHING_NEW/.test(r.body?.error || '') && nothingWritten(r), said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcAnswer.place_rental_booking = { ok: false, code: 'TIME_INVALID', reason: 'NEW_REASON' }; } });
+  check('  and so is a TIME_INVALID with an unknown reason', r.status === 'threw' && nothingWritten(r), said(r));
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('A failed call to the function is a 500 and nothing is written', r.status === 'threw' && /function exploded/.test(r.body?.error || '')
+    && nothingWritten(r), said(r));
 
   // ======================================================================== Edit
   section('PUT /:id — Secretary Edit');
@@ -359,7 +664,7 @@ const REASON = 'Hall needed for an emergency meeting';
     check(`  ${what} is left as it was`, r.booking(id).start_datetime === freshDb().rental_requests.find((b) => b.request_id === id).start_datetime);
   }
 
-  let r = await edit(601, editBody({ quantity_requested: 12 }));
+  r = await edit(601, editBody({ quantity_requested: 12 }));
   check('Edit refuses a changed quantity with the cancel-and-book-again 400', r.status === 400 && r.body?.error === QUANTITY_FIXED, said(r));
   check('  the booking keeps its quantity and schedule', r.booking(601).quantity_requested === 10 && r.booking(601).start_datetime === at(72));
 
@@ -389,6 +694,37 @@ const REASON = 'Hall needed for an emergency meeting';
     sameJson(editLog[0]?.old_value, { start_datetime: at(72), end_datetime: at(75) })
       && sameJson(editLog[0]?.new_value, { start_datetime: newStart, end_datetime: newEnd }),
     JSON.stringify([editLog[0]?.old_value, editLog[0]?.new_value]));
+  check('  the move goes through update_rental_booking_time, once, with the booking, the new times and the purpose',
+    r.rpcCalls().length === 1 && r.rpcCalls()[0].name === 'update_rental_booking_time'
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({ p_request_id: 601, p_start: newStart, p_end: newEnd, p_purpose: 'Family reunion' }),
+    JSON.stringify(r.rpcCalls()));
+  check('  the route updates no booking row itself and runs no overlap query of its own',
+    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update') && !overlapQuery(r),
+    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => c.op)));
+  check('  the answer is the booking re-read with MANAGE_FIELDS (derived_status, its item), never the function\'s row',
+    r.body?.request?.request_id === 601 && r.body.request.derived_status === 'confirmed' && r.body.request.rental_items?.name === 'Monobloc Chair'
+      && !('requested_by_user_id' in r.body.request) && !('processed_by_user_id' in r.body.request),
+    JSON.stringify(Object.keys(r.body?.request ?? {})));
+
+  // The function's `before` is the row as it was under the lock, so the
+  // notification and the diff come from it, not from the route's earlier read.
+  const viaBefore = (before) => (db) => {
+    db.rpcAnswer.update_rental_booking_time = (a) => {
+      const row = db.rental_requests.find((b) => b.request_id === 601);
+      Object.assign(row, { start_datetime: a.p_start, end_datetime: a.p_end, purpose: a.p_purpose });
+      return { ok: true, before, request: { ...row } };
+    };
+  };
+  r = await edit(601, editBody(), { setup: viaBefore({ start_datetime: newStart, end_datetime: newEnd, purpose: 'Old purpose' }) });
+  check('Edit diffs against the function\'s before: only the purpose changed there, so only the purpose is logged',
+    r.status === 200 && r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { purpose: 'Old purpose' })
+      && sameJson(r.db.activity_logs[0].new_value, { purpose: 'Family reunion' }),
+    JSON.stringify(r.db.activity_logs.map((l) => [l.old_value, l.new_value])));
+  check('  and the borrower is told', r.db.notifications.length === 1, `${r.db.notifications.length}`);
+  r = await edit(601, editBody(), { setup: viaBefore({ start_datetime: newStart, end_datetime: newEnd, purpose: 'Family reunion' }) });
+  check('  when the function\'s before already equals the new values, nothing is notified or logged (the route\'s own read differs)',
+    r.status === 200 && r.db.notifications.length === 0 && r.db.activity_logs.length === 0,
+    `${r.db.notifications.length} notification(s), ${r.db.activity_logs.length} log row(s)`);
 
   r = await edit(601, editBody({ quantity_requested: undefined }));
   check('Edit with no quantity in the body keeps the stored quantity (not 1)', r.status === 200 && r.booking(601).quantity_requested === 10,
@@ -412,25 +748,62 @@ const REASON = 'Hall needed for an emergency meeting';
   check('Edit that changes nothing sends no notification and logs nothing', r.status === 200 && r.db.notifications.length === 0
     && r.db.activity_logs.length === 0, `${said(r)}; ${r.db.notifications.length} notification(s)`);
 
-  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '12:30', end_time: '13:30', quantity_requested: 1 }));
-  check('Edit still refuses a clash with another booking', r.status === 409 && /already booked/.test(r.body?.error || ''), said(r));
-  check('  the booking keeps its slot, nobody is notified', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
-    && r.db.notifications.length === 0);
-
-  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '15:00', end_time: '16:00', quantity_requested: 1, purpose: 'Basketball' }), {
-    setup: (db) => {
-      db.afterUpdate = ({ table, patch }) => {
-        if (table !== 'rental_requests' || patch.start_datetime !== manilaIso(CLASH_DAY, '15:00')) return;
-        db.afterUpdate = null;
-        db.rental_requests.push({ ...db.rental_requests.find((b) => b.request_id === 621), request_id: 699,
-          start_datetime: manilaIso(CLASH_DAY, '15:00'), end_datetime: manilaIso(CLASH_DAY, '17:00') });
-      };
-    },
+  // A clash with another booking: the function finds it (#621 on the court)
+  // and the route says so in today's words. Before migration 024 the route
+  // found it itself; the intent, a clash refused and nothing moved, is kept.
+  const clash621 = { start: pgTime(manilaIso(CLASH_DAY, '12:00')), end: pgTime(manilaIso(CLASH_DAY, '14:00')) };
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '12:30', end_time: '13:30', quantity_requested: 1 }), {
+    setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'FACILITY_TAKEN', clashes: [clash621] }; },
   });
-  check('Edit that loses a race after its update answers 409', r.status === 409, said(r));
-  check('  and puts the date, times and purpose back', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
-    && r.booking(620).end_datetime === manilaIso(CLASH_DAY, '10:00') && r.booking(620).purpose === 'Family reunion');
+  check('Edit still refuses a clash with another booking, in today\'s words',
+    r.status === 409 && r.body?.error === `The Covered Court is already booked from ${timeFmt.format(new Date(clash621.start))} to ${timeFmt.format(new Date(clash621.end))} on that date — please pick a different time.`,
+    said(r));
+  check('  the booking keeps its slot, nobody is notified, nothing is logged', r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00')
+    && r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  // A race lost: before migration 024 the route updated, re-checked, and put
+  // the old values back on a clash. Now the check and the update are one
+  // locked call, so a refusal means nothing moved, and the route has nothing
+  // to put back: it writes no booking row at all.
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '15:00', end_time: '16:00', quantity_requested: 1, purpose: 'Basketball' }), {
+    setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'FACILITY_TAKEN', clashes: [clash621] }; },
+  });
+  check('Edit refused by the function writes no booking row itself (nothing to revert) and keeps date, times and purpose',
+    r.status === 409 && !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update')
+      && r.booking(620).start_datetime === manilaIso(CLASH_DAY, '08:00') && r.booking(620).end_datetime === manilaIso(CLASH_DAY, '10:00')
+      && r.booking(620).purpose === 'Family reunion', said(r));
   check('  nobody is notified and nothing is logged', r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+
+  // The function's own refusals, each in today's words; nothing is written.
+  const EDIT_REFUSALS = [
+    ['BOOKING_NOT_FOUND (gone under the lock)', { ok: false, code: 'BOOKING_NOT_FOUND' }, 404, 'Booking not found'],
+    ['BOOKING_STARTED (started or cancelled under the lock)', { ok: false, code: 'BOOKING_STARTED', status: 'cancelled' }, 409, NOT_STARTED_EDIT],
+    ['TIME_INVALID, end not after start', { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }, 400, END_NOT_AFTER],
+    ['TIME_INVALID, start not in the future', { ok: false, code: 'TIME_INVALID', reason: 'START_NOT_IN_FUTURE' }, 400, PAST_START],
+    ['QUANTITY_INVALID MORE_THAN_EXIST (the item\'s stock lowered)', { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST',
+      requested: 10, quantity_available: 5 }, 400, 'Only 5 units of Monobloc Chair exist — you asked for 10'],
+    ['NOT_ENOUGH_LEFT with 2 stuck', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
+      stuck: 2, resting: 0 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 2 are overdue and not yet returned.'],
+    ['NOT_ENOUGH_LEFT with 3 resting', { ok: false, code: 'NOT_ENOUGH_LEFT', quantity_available: 100, used: 95, left: 5, requested: 10,
+      stuck: 0, resting: 3 }, 409, 'Only 5 of 100 Monobloc Chair are available for that time — you asked for 10. 3 are resting for 24 hours after an earlier booking.'],
+  ];
+  for (const [what, answer, status, words] of EDIT_REFUSALS) {
+    r = await edit(601, editBody(), { setup: (db) => { db.rpcAnswer.update_rental_booking_time = answer; } });
+    check(`Edit, ${what}: ${status} "${words.length > 60 ? `${words.slice(0, 60)}…` : words}"`, r.status === status && r.body?.error === words, said(r));
+    check('  the booking is as it was, nobody notified, nothing logged', r.booking(601).start_datetime === at(72)
+      && !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'update')
+      && r.db.notifications.length === 0 && r.db.activity_logs.length === 0);
+  }
+  r = await edit(601, editBody(), {
+    setup: (db) => { db.rental_items.find((i) => i.item_id === 802).quantity_available = 5; },
+  });
+  check('Edit applies no quantity rule of its own: with the stock lowered below the booking, the function\'s answer stands (here, ok)',
+    r.status === 200 && r.rpcCalls().length === 1, said(r));
+  r = await edit(601, editBody(), { setup: (db) => { db.rpcAnswer.update_rental_booking_time = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('Edit: an unknown refusal code is a 500 and nothing is written', r.status === 'threw' && r.db.notifications.length === 0
+    && r.db.activity_logs.length === 0, said(r));
+  r = await edit(601, editBody(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('Edit: a failed call to the function is a 500', r.status === 'threw' && /function exploded/.test(r.body?.error || ''), said(r));
 
   // ============================================================ Secretary cancel
   section('POST /:id/cancel — Secretary Cancel');
@@ -684,6 +1057,411 @@ const REASON = 'Hall needed for an emergency meeting';
     && r.body?.request?.cancellation_reason === null, JSON.stringify(r.body?.request && {
     not_started: r.body.request.not_started, reason: r.body.request.cancellation_reason }));
 
+  // ============================================================ availability
+  // What the booking forms ask before a booking (step C1b): numbers from
+  // rental_availability, and nothing about any booking but its times.
+  section('GET /availability — what is free, before booking');
+  const ask = (user, query, opts = {}) => call({ method: 'get', path: '/availability', user, id: '', query, chain: true, ...opts });
+  const AV_DAY = dayAhead(5);
+  const avQuery = (extra = {}) => ({ item_id: '801', date: AV_DAY, start_time: '08:00', end_time: '10:00', ...extra });
+  const STAFF = { user_id: 7201, username: 'rentals_probe_staff', role: 'staff' };
+  const TREASURER = { user_id: 7202, username: 'rentals_probe_treasurer', role: 'treasurer' };
+  const PB = { user_id: 7203, username: 'rentals_probe_pb', role: 'punong_barangay' };
+  for (const user of [TREASURER, STAFF, PB]) {
+    r = await ask(user, avQuery());
+    check(`${user.role} is refused with 403 and the function is never called`, r.status === 403 && r.rpcCalls().length === 0, said(r));
+  }
+  for (const user of [RES_A, SEC]) {
+    r = await ask(user, avQuery());
+    check(`${user.role} gets 200`, r.status === 200 && r.rpcCalls().length === 1, said(r));
+  }
+
+  r = await ask(RES_A, avQuery());
+  check('The date and times are read as Manila time, as POST reads them, and only the item and the two times are sent',
+    sortedJson(r.rpcCalls()[0]?.args) === sortedJson({ p_item_id: 801, p_start: manilaIso(AV_DAY, '08:00'), p_end: manilaIso(AV_DAY, '10:00') }),
+    JSON.stringify(r.rpcCalls()[0]?.args));
+  check('  the route reads no booking itself (the function decides)', !r.db.calls.some((c) => c.table === 'rental_requests'),
+    JSON.stringify(r.db.calls.map((c) => `${c.op} ${c.table}`)));
+  r = await ask(SEC, avQuery());
+  check('  the Secretary asking with no exclude_request_id sends none either', !('p_exclude_request_id' in (r.rpcCalls()[0]?.args ?? {}))
+    && r.status === 200, JSON.stringify(r.rpcCalls()[0]?.args));
+
+  // The Edit panel's question (step C3): the same, with the booking being
+  // edited left out of the count. The Secretary's alone.
+  const EXCLUDE_RESIDENT = 'Only the Secretary can leave a booking out of the count.';
+  const EXCLUDE_BAD = 'exclude_request_id must be a whole number above 0';
+  r = await ask(SEC, avQuery({ exclude_request_id: '601' }));
+  check('The Secretary\'s exclude_request_id=601 is passed to rental_availability as p_exclude_request_id 601, with the item and times',
+    r.status === 200 && sortedJson(r.rpcCalls()[0]?.args) === sortedJson({ p_item_id: 801, p_start: manilaIso(AV_DAY, '08:00'),
+      p_end: manilaIso(AV_DAY, '10:00'), p_exclude_request_id: 601 }), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  the answer carries the same keys as without it, nothing added',
+    JSON.stringify(Object.keys(r.body ?? {}).sort()) === JSON.stringify(['booked', 'item_type', 'left', 'ok', 'resting', 'stuck', 'total', 'used']),
+    JSON.stringify(r.body));
+  for (const user of [RES_A, RES_UNLINKED]) {
+    r = await ask(user, avQuery({ exclude_request_id: '601' }));
+    check(`A resident (${user.username}) sending exclude_request_id: 400 "${EXCLUDE_RESIDENT}", function not called`,
+      r.status === 400 && r.body?.error === EXCLUDE_RESIDENT && r.rpcCalls().length === 0, said(r));
+  }
+  for (const bad of ['abc', '0', '-3', '1.5', '', '601abc', ' ']) {
+    r = await ask(SEC, avQuery({ exclude_request_id: bad }));
+    check(`The Secretary's exclude_request_id ${JSON.stringify(bad)}: 400 "${EXCLUDE_BAD}", function not called`,
+      r.status === 400 && r.body?.error === EXCLUDE_BAD && r.rpcCalls().length === 0, said(r));
+  }
+  r = await ask(SEC, avQuery({ item_id: '802', exclude_request_id: '601' }),
+    { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('An inactive item with exclude_request_id (Edit of a booking of a since-deactivated item): asked, 200',
+    r.status === 200 && r.rpcCalls().length === 1 && r.rpcCalls()[0]?.args?.p_exclude_request_id === 601, said(r));
+
+  const AV_BAD = [
+    ['no item_id', { item_id: undefined }, 'An item_id is required'],
+    ['a date not YYYY-MM-DD', { date: '11/02/2026' }, 'date must be in YYYY-MM-DD format'],
+    ['a time not HH:MM', { start_time: '8am' }, 'start_time and end_time must be in HH:MM (24-hour) format'],
+    ['an end not after the start', { start_time: '10:00', end_time: '10:00' }, END_NOT_AFTER],
+    ['a date that does not exist', { date: '2026-13-45' }, 'Invalid date or time'],
+  ];
+  for (const [what, extra, words] of AV_BAD) {
+    r = await ask(RES_A, avQuery(extra));
+    check(`${what}: 400 "${words}", function not called`, r.status === 400 && r.body?.error === words && r.rpcCalls().length === 0, said(r));
+  }
+  r = await ask(RES_A, avQuery({ item_id: '999' }));
+  check('An unknown item: 404 "Rental item not found", function not called', r.status === 404 && r.body?.error === ITEM_GONE
+    && r.rpcCalls().length === 0, said(r));
+  r = await ask(RES_A, avQuery({ item_id: '802' }), { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('An inactive item: 400 in POST\'s words, function not called', r.status === 400 && r.body?.error === ITEM_OFF
+    && r.rpcCalls().length === 0, said(r));
+  r = await ask(RES_A, avQuery({ date: '2020-01-06' }));
+  check('A start already past may still be asked about (it shows what is taken)', r.status === 200 && r.rpcCalls().length === 1, said(r));
+
+  const LEAKY = {
+    ok: true, item_type: 'facility', total: 1, used: 1, booked: 1, stuck: 0, resting: 0, left: 0,
+    taken: [{ start: clashA.start, end: clashA.end, request_id: 620, purpose: 'Family reunion', name: 'Ana Probe', contact: '09170000001' }],
+    names: ['Ana Probe'], contact: '09170000001', request_ids: [620], purpose: 'Family reunion',
+  };
+  r = await ask(SEC, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = LEAKY; } });
+  check('A facility answer carries exactly ok, item_type, total, used, booked, stuck, resting, left and taken',
+    r.status === 200 && JSON.stringify(Object.keys(r.body ?? {}).sort())
+      === JSON.stringify(['booked', 'item_type', 'left', 'ok', 'resting', 'stuck', 'taken', 'total', 'used']), JSON.stringify(r.body));
+  check('  each taken entry is { start, end } only', JSON.stringify(r.body?.taken) === JSON.stringify([{ start: clashA.start, end: clashA.end }]),
+    JSON.stringify(r.body?.taken));
+  check('  no name, account, purpose, contact or booking id anywhere in it',
+    !/Ana|Probe|0917|reunion|request_id|620/.test(JSON.stringify(r.body)), JSON.stringify(r.body));
+  check('  the numbers are the function\'s', r.body?.total === 1 && r.body?.used === 1 && r.body?.left === 0 && r.body?.ok === true);
+  r = await ask(RES_A, avQuery({ item_id: '802' }), {
+    setup: (db) => { db.rpcAnswer.rental_availability = { ok: true, item_type: 'furniture', total: 100, used: 40, booked: 25, stuck: 10,
+      resting: 5, left: 60, names: ['Ana Probe'] }; },
+  });
+  check('An item answer carries the eight numbers and words, no taken, nothing else',
+    r.status === 200 && JSON.stringify(r.body) === JSON.stringify({ ok: true, item_type: 'furniture', total: 100, used: 40, booked: 25,
+      stuck: 10, resting: 5, left: 60 }), JSON.stringify(r.body));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'TIME_INVALID', reason: 'END_NOT_AFTER_START' }; } });
+  check('The function refusing the times: 400 with its code', r.status === 400 && r.body?.code === 'TIME_INVALID'
+    && r.body?.error === END_NOT_AFTER, said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'ITEM_NOT_FOUND' }; } });
+  check('The function not finding the item: 404', r.status === 404 && r.body?.error === ITEM_GONE, said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcAnswer.rental_availability = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('An unknown code: 500', r.status === 'threw', said(r));
+  r = await ask(RES_A, avQuery(), { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('A failed call: 500', r.status === 'threw' && /function exploded/.test(r.body?.error || ''), said(r));
+  r = await ask(RES_A, avQuery());
+  check('Asking writes nothing', !r.db.calls.some((c) => c.op !== 'select') && r.db.notifications.length === 0
+    && r.db.activity_logs.length === 0, JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+
+  // ================================================================ stock warning
+  // Rental items edit (step C3, O4): lowering an item's total below what its
+  // upcoming and overdue bookings hold is WARNED, then allowed. The route
+  // counts plain facts (no overlap rule): the item's confirmed bookings that
+  // are upcoming or overdue-unreturned, their units and the largest one.
+  section('PUT /api/rental-items/:id — the warning when stock is lowered below booked');
+  const STOCK_BELOW = 'STOCK_BELOW_BOOKED';
+  // Tent, equipment, 20 units. 701 +72h x5, 702 +96h x4, 703 overdue x3 (all
+  // counted: 3 bookings, 12 units, largest 5); 704 cancelled x8 and 705
+  // returned x9 are not. Bookings keep the borrower's name and purpose, which
+  // the answer must never carry.
+  const withTent = (db) => {
+    db.rental_items.push({ item_id: 803, name: 'Tent', type: 'equipment', description: 'Big tent', fee: 100,
+      quantity_total: 20, quantity_available: 20, is_active: true });
+    const tent = (id, extra) => ({ ...structuredClone(db.rental_requests[0]), request_id: id, item_id: 803, ...extra });
+    db.rental_requests.push(
+      tent(701, { quantity_requested: 5, start_datetime: at(72), end_datetime: at(75) }),
+      tent(702, { quantity_requested: 4, start_datetime: at(96), end_datetime: at(99) }),
+      tent(703, { quantity_requested: 3, start_datetime: at(-30), end_datetime: at(-26) }),
+      tent(704, { quantity_requested: 8, status: 'cancelled' }),
+      tent(705, { quantity_requested: 9, start_datetime: at(-50), end_datetime: at(-48), status: 'returned', returned_at: at(-47) }),
+    );
+  };
+  const itemBody = (qty, extra = {}) => ({ name: 'Tent', type: 'equipment', description: 'Big tent', quantity_total: qty, fee: 100, ...extra });
+  const editItem = (body, opts = {}) => call({ method: 'put', path: '/:id', user: SEC, id: 803, body, router: rentalItems,
+    setup: (db) => { withTent(db); opts.setup?.(db); } });
+  const tentOf = (res) => res.db.rental_items.find((i) => i.item_id === 803);
+  const tentBookings = (res) => JSON.stringify(res.db.rental_requests.filter((b) => b.item_id === 803));
+  const untouched = (() => { const db = freshDb(); withTent(db); return JSON.stringify(db.rental_requests.filter((b) => b.item_id === 803)); })();
+  const onlyTent = (...ids) => (db) => { db.rental_requests = db.rental_requests.filter((b) => b.item_id !== 803 || ids.includes(b.request_id)); };
+
+  r = await editItem(itemBody(25));
+  check('Raising the total (20 to 25): 200, saved, no warning', r.status === 200 && tentOf(r).quantity_total === 25
+    && r.body?.code === undefined, said(r));
+  check('  quantity_available follows it, as today (25)', tentOf(r).quantity_available === 25, String(tentOf(r).quantity_available));
+  r = await editItem(itemBody(20));
+  check('Keeping the total (20 to 20): 200, no warning', r.status === 200 && tentOf(r).quantity_total === 20 && r.body?.code === undefined, said(r));
+  r = await editItem(itemBody(12));
+  check('Lowering to exactly the booked units (20 to 12): 200, no warning', r.status === 200 && tentOf(r).quantity_total === 12, said(r));
+  r = await editItem(itemBody(11));
+  check(`Lowering below the booked units (20 to 11): 409 with code ${STOCK_BELOW}`, r.status === 409 && r.body?.code === STOCK_BELOW, said(r));
+  check('  carrying the numbers: 3 bookings, 12 units, the largest 5, the new total 11',
+    r.body?.bookings === 3 && r.body?.units === 12 && r.body?.largest === 5 && r.body?.new_total === 11, JSON.stringify(r.body));
+  check('  and nothing else: error, code, bookings, units, largest, new_total',
+    JSON.stringify(Object.keys(r.body ?? {}).sort()) === JSON.stringify(['bookings', 'code', 'error', 'largest', 'new_total', 'units']),
+    JSON.stringify(r.body));
+  check('  no name, account, contact, purpose or booking id in it',
+    !/Ana|Probe|0917|reunion|rentals_probe|70[1-5]|request_id/.test(JSON.stringify(r.body)), JSON.stringify(r.body));
+  check('  nothing saved: the total is still 20, quantity_available 20, no update sent, no log row',
+    tentOf(r).quantity_total === 20 && tentOf(r).quantity_available === 20
+      && !r.db.calls.some((c) => c.op === 'update') && r.db.activity_logs.length === 0, JSON.stringify(tentOf(r)));
+  r = await editItem(itemBody(4));
+  check('Lowering below the largest single booking (20 to 4): 409 with the same numbers and new_total 4',
+    r.status === 409 && r.body?.code === STOCK_BELOW && r.body?.largest === 5 && r.body?.new_total === 4, said(r));
+  r = await editItem(itemBody(4, { confirm_lower_stock: 'true' }));
+  check('confirm_lower_stock "true" (a string, not true) is not the flag: still 409', r.status === 409 && r.body?.code === STOCK_BELOW, said(r));
+  r = await editItem(itemBody(4, { confirm_lower_stock: true }));
+  check('With confirm_lower_stock: true it saves exactly as today: 200, total 4, quantity_available 4',
+    r.status === 200 && tentOf(r).quantity_total === 4 && tentOf(r).quantity_available === 4 && r.body?.rental_item?.quantity_total === 4, said(r));
+  check('  the bookings are untouched (all five, byte for byte)', tentBookings(r) === untouched);
+  const tentLog = r.db.activity_logs;
+  check('  logged as today: one UPDATE on rental_items #803 with the changed quantity only, no flag, no booking facts',
+    tentLog.length === 1 && tentLog[0].action === 'UPDATE' && tentLog[0].table_name === 'rental_items' && tentLog[0].record_id === 803
+      && sameJson(tentLog[0].old_value, { quantity_total: 20, quantity_available: 20 })
+      && sameJson(tentLog[0].new_value, { quantity_total: 4, quantity_available: 4 }),
+    JSON.stringify(tentLog.map((l) => [l.action, l.old_value, l.new_value])));
+  r = await editItem(itemBody(25, { confirm_lower_stock: true }));
+  check('The flag on a raise changes nothing: 200, total 25', r.status === 200 && tentOf(r).quantity_total === 25, said(r));
+  r = await editItem(itemBody(3), { setup: onlyTent(703) });
+  check('An overdue booking alone still counts (only 703, 3 units): lowering to 3 saves', r.status === 200, said(r));
+  r = await editItem(itemBody(2), { setup: onlyTent(703) });
+  check('  and lowering to 2 warns: 409, 1 booking, 3 units', r.status === 409 && r.body?.bookings === 1 && r.body?.units === 3, said(r));
+  r = await editItem(itemBody(2), { setup: onlyTent(704, 705) });
+  check('Only cancelled and returned bookings: lowering to 2 saves with no warning', r.status === 200 && tentOf(r).quantity_total === 2, said(r));
+  r = await editItem(itemBody(11), { setup: (db) => { db.failWhen = ({ table, op }) => (table === 'rental_requests' && op === 'select'
+    ? { message: 'bookings read failed' } : null); } });
+  check('A failed bookings read is a 500 and saves nothing (never a silent "no warning")',
+    r.status === 'threw' && tentOf(r).quantity_total === 20, said(r));
+
+  // ============================================================ booking rules
+  // Step R1 (28 Oct 2026), migration 025: the item's hours, how far ahead,
+  // and an end at midnight. The route checks them before the function is
+  // asked, on a resident's booking, a walk-in and an edit alike.
+  section('Booking rules — the item\'s hours and how far ahead (migration 025)');
+  const CHAIR_HOURS = 'The Monobloc Chair can be booked from 7:00 AM to 5:00 PM.';
+  const COURT_HOURS = 'The Covered Court can be booked from 7:00 AM to 12:00 midnight.';
+  const AHEAD_31 = 'Bookings can be made up to 31 days ahead.';
+  const RULE_DAY = dayAhead(5);
+  const nextMidnight = (day) => new Date(Date.parse(`${day}T00:00:00+08:00`) + 24 * HOUR).toISOString();
+  const ruleBody = (extra = {}) => ({
+    item_id: 802, date: RULE_DAY, start_time: '08:00', end_time: '10:00', purpose: 'Birthday party', quantity_requested: 3, ...extra,
+  });
+  const refusedUnasked = (res, words) => res.status === 400 && res.body?.error === words && res.rpcCalls().length === 0
+    && nothingWritten(res);
+
+  r = await book(RES_A, ruleBody({ start_time: '07:00', end_time: '17:00' }));
+  check('Chairs (7:00 AM to 5:00 PM), booked from 07:00 to 17:00 exactly: 201, the function is asked',
+    r.status === 201 && r.rpcCalls().length === 1, said(r));
+  for (const [what, times] of [['06:59 to 10:00', { start_time: '06:59', end_time: '10:00' }],
+    ['16:00 to 17:01', { start_time: '16:00', end_time: '17:01' }],
+    ['05:00 to 06:00, wholly before', { start_time: '05:00', end_time: '06:00' }],
+    ['17:00 to 18:00, wholly after', { start_time: '17:00', end_time: '18:00' }]]) {
+    r = await book(RES_A, ruleBody(times));
+    check(`Chairs ${what}: 400 "${CHAIR_HOURS}", the function never asked, nothing written`, refusedUnasked(r, CHAIR_HOURS), said(r));
+  }
+  r = await book(RES_A, ruleBody({ start_time: '16:00', end_time: '00:00' }));
+  check('Chairs until 00:00 (midnight): refused in the chairs\' hours, since they close at 5:00 PM', refusedUnasked(r, CHAIR_HOURS), said(r));
+
+  const courtBody = (extra) => ruleBody({ item_id: 801, quantity_requested: 1, ...extra });
+  r = await book(RES_A, courtBody({ start_time: '22:00', end_time: '00:00' }));
+  check('The court (closes 24:00) from 22:00 to 00:00: 201, and the end sent is midnight at the END of the date, 00:00 of the next day',
+    r.status === 201 && r.rpcCalls()[0]?.args?.p_start === manilaIso(RULE_DAY, '22:00')
+      && r.rpcCalls()[0]?.args?.p_end === nextMidnight(RULE_DAY), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  r = await book(RES_A, courtBody({ start_time: '22:00', end_time: '24:00' }));
+  check('  an end of "24:00" is the same midnight', r.status === 201 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(RULE_DAY), said(r));
+  r = await book(RES_A, courtBody({ start_time: '24:00', end_time: '00:00' }));
+  check('  but a START of "24:00" is a format error, as before', r.status === 400
+    && r.body?.error === 'start_time and end_time must be in HH:MM (24-hour) format' && r.rpcCalls().length === 0, said(r));
+  r = await book(RES_A, courtBody({ start_time: '00:00', end_time: '00:00' }));
+  check('  00:00 to 00:00 is the whole day, refused in the court\'s hours (it opens at 7:00 AM)', refusedUnasked(r, COURT_HOURS), said(r));
+  r = await book(RES_A, courtBody({ start_time: '06:30', end_time: '08:00' }));
+  check('The court from 06:30: 400 "The Covered Court can be booked from 7:00 AM to 12:00 midnight."', refusedUnasked(r, COURT_HOURS), said(r));
+
+  r = await book(RES_A, ruleBody({ date: dayAhead(31) }));
+  check('31 days ahead (the limit, today in Manila + 31): 201', r.status === 201 && r.rpcCalls().length === 1, said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(32) }));
+  check(`32 days ahead: 400 "${AHEAD_31}", the function never asked`, refusedUnasked(r, AHEAD_31), said(r));
+  r = await book(RES_A, ruleBody({ date: dayAhead(32), start_time: '05:00' }));
+  check('  too far ahead AND outside the hours: the days-ahead sentence first', refusedUnasked(r, AHEAD_31), said(r));
+  // Step O43: the limit is a constant in the code, never read from a table.
+  check('The limit is MAX_DAYS_AHEAD = 31 in constants/rentalBookingRules.js (step O43)', RULES.MAX_DAYS_AHEAD === 31,
+    String(RULES.MAX_DAYS_AHEAD));
+  r = await book(RES_A, ruleBody({ date: dayAhead(31) }));
+  check('  a booking reads no rental_settings table (this fake has none, so a read would throw)', r.status === 201
+    && !r.db.calls.some((c) => c.table === 'rental_settings'), JSON.stringify(r.db.calls.map((c) => c.table)));
+  r = await edit(601, editBody({ date: dayAhead(31) }));
+  check('  nor does an edit (31 days ahead: 200)', r.status === 200 && !r.db.calls.some((c) => c.table === 'rental_settings'), said(r));
+  const SRC = path.join(__dirname, '..', 'src');
+  const srcFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true })
+    .flatMap((d) => (d.isDirectory() ? srcFiles(path.join(dir, d.name)) : d.name.endsWith('.js') ? [path.join(dir, d.name)] : []));
+  const readers = srcFiles(SRC).filter((f) => /\.from\(\s*['"`]rental_settings['"`]/.test(fs.readFileSync(f, 'utf8')))
+    .map((f) => path.relative(SRC, f));
+  check('No file under backend/src reads the rental_settings table (no .from("rental_settings"))', readers.length === 0, readers.join(', '));
+
+  // Same day: the court open all day, a start a few minutes from now.
+  const soon = new Date(NOW + 10 * 60000);
+  const soonDay = manilaDay.format(soon);
+  const soonTime = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(soon);
+  const allDay = (db) => { Object.assign(db.rental_items.find((i) => i.item_id === 801), { booking_opens_at: '00:00:00' }); };
+  r = await book(RES_A, courtBody({ date: soonDay, start_time: soonTime, end_time: '00:00' }), { setup: allDay });
+  // (Within ten minutes of midnight in Manila, "soon" is already tomorrow;
+  // the label prints the day used.)
+  check(`Same day still works: today in Manila (${soonDay}), from ${soonTime} to midnight, the court open 00:00 to 24:00: 201`,
+    r.status === 201, said(r));
+  r = await book(RES_A, courtBody({ date: manilaDay.format(new Date(NOW)), start_time: '00:00', end_time: '00:01' }), { setup: allDay });
+  check('  and a start already past today is still "The booking must start in the future"', r.status === 400
+    && r.body?.error === PAST_START && r.rpcCalls().length === 0, said(r));
+
+  r = await book(SEC, ruleBody({ start_time: '18:00', end_time: '19:00', outside_borrower_name: 'Pedro Guest',
+    outside_borrower_contact: '09179990000' }));
+  check('A guest walk-in obeys the hours: 400, the function never asked', refusedUnasked(r, CHAIR_HOURS), said(r));
+  r = await book(SEC, ruleBody({ resident_id: 9102, date: dayAhead(40) }));
+  check('A resident walk-in obeys the days ahead: 400', refusedUnasked(r, AHEAD_31), said(r));
+
+  r = await book(RES_A, ruleBody({ start_time: '05:00' }), { setup: (db) => {
+    db.rental_items.find((i) => i.item_id === 802).is_active = false;
+    db.rpcAnswer.place_rental_booking = { ok: false, code: 'ITEM_INACTIVE' };
+  } });
+  check('An inactive item outside its hours is refused as inactive, as before (the rules are not asked first)',
+    r.status === 400 && r.body?.error === ITEM_OFF && r.rpcCalls().length === 1, said(r));
+  r = await book(RES_A, ruleBody({ item_id: 999, start_time: '05:00' }), { setup: (db) => { db.rpcAnswer.place_rental_booking = { ok: false, code: 'ITEM_NOT_FOUND' }; } });
+  check('  and an unknown item is still 404 "Rental item not found"', r.status === 404 && r.body?.error === ITEM_GONE, said(r));
+
+  r = await book(RES_A, ruleBody(), { setup: (db) => { delete db.rental_items.find((i) => i.item_id === 802).booking_closes_at; } });
+  check('An item read with no hours is a 500, never treated as open all day, and nothing is written', r.status === 'threw'
+    && r.rpcCalls().length === 0 && nothingWritten(r), said(r));
+
+  // The Secretary's edit: the new time obeys the rules; the stored one is not checked.
+  r = await edit(601, editBody({ start_time: '06:00', end_time: '08:00' }));
+  check('Edit to 06:00: 400 in the chairs\' hours, update_rental_booking_time never asked', refusedUnasked(r, CHAIR_HOURS), said(r));
+  r = await edit(601, editBody({ date: dayAhead(32) }));
+  check('Edit to 32 days ahead: 400, never asked', refusedUnasked(r, AHEAD_31), said(r));
+  r = await edit(601, editBody({ start_time: '16:00', end_time: '17:00' }));
+  check('Edit to 16:00-17:00: 200, moved', r.status === 200 && r.rpcCalls()[0]?.name === 'update_rental_booking_time', said(r));
+  r = await edit(620, editBody({ date: CLASH_DAY, start_time: '22:00', end_time: '00:00', quantity_requested: 1 }));
+  check('Edit of a court booking to 22:00 until midnight: 200, the end is 00:00 of the next day',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(CLASH_DAY), `${said(r)} ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  r = await edit(601, editBody({ start_time: '06:00' }), { setup: (db) => { db.rental_items.find((i) => i.item_id === 802).is_active = false; } });
+  check('Edit of a booking of a since-deactivated item still obeys its hours', refusedUnasked(r, CHAIR_HOURS), said(r));
+
+  // Stored bookings are not checked again: 605 sits at 03:00-04:00, outside
+  // the chairs' hours, and every other route still serves it.
+  const outOfHours = (db) => { Object.assign(db.rental_requests.find((b) => b.request_id === 605), {
+    start_datetime: manilaIso(dayAhead(3), '03:00'), end_datetime: manilaIso(dayAhead(3), '04:00') }); };
+  r = await call({ method: 'post', path: '/:id/cancel', user: SEC, id: 605, body: { reason: REASON }, setup: outOfHours });
+  check('A stored booking outside its item\'s hours can still be cancelled by the Secretary (200)',
+    r.status === 200 && r.booking(605).status === 'cancelled', said(r));
+  r = await call({ method: 'get', path: '/mine', user: RES_B, id: '', setup: outOfHours });
+  check('  and is still listed for its resident, untouched', r.status === 200
+    && JSON.stringify(r.body).includes(manilaIso(dayAhead(3), '03:00').slice(0, 16)), said(r));
+  check('  reading it never asks for the rules', !r.db.calls.some((c) => c.table === 'rental_settings'),
+    JSON.stringify(r.db.calls.map((c) => c.table)));
+  r = await book(RES_A, ruleBody(), { setup: outOfHours });
+  check('  and a new booking does not check it (201)', r.status === 201, said(r));
+
+  r = await ask(RES_A, avQuery({ start_time: '22:00', end_time: '00:00' }));
+  check('GET /availability reads an end of 00:00 as midnight too (the function is asked about the next day\'s 00:00)',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_end === nextMidnight(AV_DAY), JSON.stringify(r.rpcCalls()[0]?.args));
+
+  // The Edit panel shows the item's hours and holds its fields to them (P29),
+  // so the Secretary's list carries them on each booking's item.
+  const manageFields = (/const MANAGE_FIELDS = `([\s\S]*?)`;/.exec(fs.readFileSync(path.join(SRC, 'routes', 'rentalRequests.js'), 'utf8')) || [])[1] || '';
+  const itemEmbed = (/rental_items \(([^)]*)\)/.exec(manageFields) || [])[1] || '';
+  check('MANAGE_FIELDS (GET /, GET /:id, the answer to an edit) gives each booking\'s item its booking_opens_at and booking_closes_at',
+    /\bbooking_opens_at\b/.test(itemEmbed) && /\bbooking_closes_at\b/.test(itemEmbed), itemEmbed.replace(/\s+/g, ' ').trim());
+
+  // ======================================================= the items' hours
+  section('PUT/POST /api/rental-items — an item\'s hours');
+  const hoursOf = (res, id) => { const i = res.db.rental_items.find((x) => x.item_id === id); return [i?.booking_opens_at, i?.booking_closes_at]; };
+  const itemPut = (id, body) => call({ method: 'put', path: '/:id', user: SEC, id, body, router: rentalItems });
+  const courtItem = (extra = {}) => ({ name: 'Covered Court', type: 'facility', description: '', quantity_total: 1, fee: 500, ...extra });
+  r = await itemPut(801, courtItem({ booking_opens_at: '06:00', booking_closes_at: '00:00' }));
+  check('Closes "00:00" is saved as midnight, 24:00:00 (opens 06:00)', r.status === 200
+    && JSON.stringify(hoursOf(r, 801)) === JSON.stringify(['06:00:00', '24:00:00']), `${said(r)} ${JSON.stringify(hoursOf(r, 801))}`);
+  check('  logged as an UPDATE on rental_items with the opening only (the close was already midnight)',
+    r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { booking_opens_at: '07:00:00' })
+      && sameJson(r.db.activity_logs[0].new_value, { booking_opens_at: '06:00:00' }),
+    JSON.stringify(r.db.activity_logs.map((l) => [l.old_value, l.new_value])));
+  r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 5,
+    booking_opens_at: '08:00', booking_closes_at: '24:00' });
+  check('Closes "24:00" is accepted too', r.status === 200 && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['08:00:00', '24:00:00']), said(r));
+  const HOURS_BAD = [
+    ['an opening after the close', { booking_opens_at: '18:00', booking_closes_at: '17:00' }, 'The opening time must be before the closing time'],
+    ['an opening equal to the close', { booking_opens_at: '17:00', booking_closes_at: '17:00' }, 'The opening time must be before the closing time'],
+    ['only the opening', { booking_opens_at: '08:00' }, 'booking_opens_at and booking_closes_at must be sent together'],
+    ['only the close', { booking_closes_at: '20:00' }, 'booking_opens_at and booking_closes_at must be sent together'],
+    ['an opening of 24:00', { booking_opens_at: '24:00', booking_closes_at: '24:00' }, 'booking_opens_at must be a time in HH:MM (24-hour) format'],
+    ['an opening of "7am"', { booking_opens_at: '7am', booking_closes_at: '17:00' }, 'booking_opens_at must be a time in HH:MM (24-hour) format'],
+    ['a close of 25:00', { booking_opens_at: '07:00', booking_closes_at: '25:00' },
+      'booking_closes_at must be a time in HH:MM (24-hour) format, or 24:00 for midnight'],
+  ];
+  for (const [what, hours, words] of HOURS_BAD) {
+    r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 5, ...hours });
+    check(`${what}: 400 "${words}", nothing saved`, r.status === 400 && r.body?.error === words
+      && !r.db.calls.some((c) => c.op === 'update') && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['07:00:00', '17:00:00']), said(r));
+  }
+  r = await itemPut(802, { name: 'Monobloc Chair', type: 'furniture', quantity_total: 100, fee: 6 });
+  check('A save with neither leaves the hours as they are', r.status === 200
+    && JSON.stringify(hoursOf(r, 802)) === JSON.stringify(['07:00:00', '17:00:00']), said(r));
+  r = await call({ method: 'post', path: '/', user: SEC, id: '', router: rentalItems,
+    body: { name: 'Stage', type: 'facility', quantity_total: 1, fee: 0, booking_opens_at: '09:00', booking_closes_at: '21:30' } });
+  check('A new item is created with its hours', r.status === 201
+    && JSON.stringify(r.db.rental_items.find((i) => i.name === 'Stage') && [r.db.rental_items.find((i) => i.name === 'Stage').booking_opens_at,
+      r.db.rental_items.find((i) => i.name === 'Stage').booking_closes_at]) === JSON.stringify(['09:00:00', '21:30:00']), said(r));
+  r = await call({ method: 'get', path: '/', user: RES_A, id: '', router: rentalItems });
+  check('GET /api/rental-items (what residents see) carries each item\'s hours', r.status === 200
+    && r.body?.rental_items?.length === 2 && r.body.rental_items.every((i) => i.booking_opens_at && i.booking_closes_at),
+    JSON.stringify(r.body?.rental_items?.map((i) => [i.name, i.booking_opens_at, i.booking_closes_at])));
+
+  // ===================================================== /api/rental-settings
+  // Step O43: GET answers the constant and reads no table; PUT is gone (the
+  // Secretary no longer changes the limit). The checks of PUT's roles, its
+  // saving, its log row and its 400s were deleted with the route.
+  section('GET /api/rental-settings — how far ahead, a constant');
+  const settings = (method, user, body = {}, opts = {}) => call({ method, path: '/', user, id: '', body, chain: true, router: rentalSettings, ...opts });
+  for (const user of [RES_A, SEC, STAFF, TREASURER, PB]) {
+    r = await settings('get', user);
+    check(`GET as ${user.role}: 200 { max_days_ahead: 31 }, no table read`, r.status === 200 && sameJson(r.body, { max_days_ahead: 31 })
+      && r.db.calls.length === 0, said(r));
+  }
+  const settingsRoutes = rentalSettings.stack.filter((l) => l.route).map((l) => `${Object.keys(l.route.methods).join(',').toUpperCase()} ${l.route.path}`);
+  check('routes/rentalSettings.js has GET / and nothing else: PUT /api/rental-settings is gone', sameJson(settingsRoutes, ['GET /']),
+    JSON.stringify(settingsRoutes));
+
+  // ================================================================ return
+  // Mark returned (step C3, O7): never for a booking that has not started.
+  section('POST /:id/return — not before the booking starts');
+  const STAFF_RET = { user_id: 7201, username: 'rentals_probe_staff', role: 'staff' };
+  const NOT_STARTED_RETURN = 'This booking has not started yet.';
+  const markReturned = (id, outcome = 'returned') => call({ method: 'post', path: '/:id/return', user: STAFF_RET, id, body: { outcome } });
+  r = await markReturned(601);
+  check(`A booking that starts in 72 hours: 409 "${NOT_STARTED_RETURN}"`, r.status === 409 && r.body?.error === NOT_STARTED_RETURN, said(r));
+  check('  nothing changed: still confirmed, no returned_at, no notification, no log row',
+    r.booking(601).status === 'confirmed' && r.booking(601).returned_at === null && r.db.notifications.length === 0
+      && r.db.activity_logs.length === 0 && !r.db.calls.some((c) => c.op === 'update'), JSON.stringify(r.booking(601)));
+  r = await markReturned(607);
+  check('A booking that started an hour ago (not overdue): 200, returned, as today', r.status === 200 && r.booking(607).status === 'returned'
+    && r.db.notifications.length === 1 && r.db.activity_logs.length === 1, said(r));
+  r = await markReturned(608, 'returned_late');
+  check('An overdue booking: 200, returned late, as today', r.status === 200 && r.booking(608).status === 'returned_late'
+    && r.db.notifications.length === 1 && r.db.activity_logs.length === 1, said(r));
+  check('  no charge is touched by a return', sameJson(r.db.charges, freshDb().charges));
+  r = await markReturned(610);
+  check('A cancelled booking is still refused as before (409, "Only confirmed bookings…")', r.status === 409
+    && /Only confirmed bookings can be marked returned/.test(r.body?.error || ''), said(r));
+
   // ======================================================================= webhook
   section('the PayMongo webhook — a payment for a cancelled booking');
   const signed = (event) => {
@@ -738,6 +1516,434 @@ const REASON = 'Hall needed for an emergency meeting';
     && r.db.payments.length === 1 && r.db.charges.find((c) => c.charge_id === 1605).status === 'PAID', `${r.status} ${JSON.stringify(r.body)}`);
   check('  with its notification and no activity row', r.db.notifications.length === 1 && r.db.activity_logs.length === 0,
     `${r.db.notifications.length} notification(s), ${r.db.activity_logs.length} log row(s)`);
+
+  // ================================================================ approval
+  // Migration 027, batch R2a (28 Oct 2026): a booking can wait as PENDING
+  // until the Secretary approves or declines it. Built and dormant: POST /
+  // still stores every booking confirmed (the POST section above). These run
+  // the new routes and the changed rules against pending rows put straight
+  // into the fake tables.
+  //   630 A online, chairs x10, +72h, pending      634 A online, court, +96h, pending
+  //   631 B online, chairs x10, +72h, pending      635 a guest, chairs x2, +72h, pending
+  //   632 A online, started an hour ago, pending   636 A online, a PHP 0 mat, +72h, pending
+  //   633 A online, +72h, declined with a reason   637 A online, chairs, starts in 2 hours, pending
+  section('Approval (migration 027) — pending, approve, decline');
+  const DECLINED_WHY = 'The hall is closed for repairs';
+  const withPending = (db) => {
+    db.rental_items.push({ item_id: 804, name: 'Rubber Mat', type: 'equipment', fee: 0, quantity_total: 10, quantity_available: 10,
+      is_active: true, booking_opens_at: '07:00:00', booking_closes_at: '17:00:00' });
+    const p = (id, extra) => ({
+      request_id: id, item_id: 802, requested_by_user_id: RES_A.user_id, resident_id: 9101,
+      outside_borrower_name: null, outside_borrower_contact: null,
+      quantity_requested: 10, start_datetime: at(72), end_datetime: at(75), purpose: 'Family reunion',
+      status: 'pending', purpose_type: 'general', requested_at: at(-2), decline_reason: null,
+      processed_by_user_id: null, cancellation_reason: null, return_note: null, returned_at: null, returned_by_user_id: null, ...extra,
+    });
+    db.rental_requests.push(
+      p(630),
+      p(631, { requested_by_user_id: RES_B.user_id, resident_id: 9102 }),
+      p(632, { start_datetime: at(-1), end_datetime: at(2) }),
+      p(633, { status: 'declined', decline_reason: DECLINED_WHY, processed_by_user_id: SEC.user_id }),
+      p(634, { item_id: 801, quantity_requested: 1, start_datetime: at(96), end_datetime: at(98) }),
+      p(635, { requested_by_user_id: SEC.user_id, resident_id: null, quantity_requested: 2,
+        outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000' }),
+      p(636, { item_id: 804, quantity_requested: 3 }),
+      p(637, { start_datetime: at(2), end_datetime: at(4) }),
+    );
+  };
+  const both = (...fns) => (db) => fns.forEach((f) => f && f(db));
+  const approve = (id, opts = {}) => call({ method: 'post', path: '/:id/approve', user: SEC, id, ...opts, setup: both(withPending, opts.setup) });
+  const decline = (id, body, opts = {}) => call({ method: 'post', path: '/:id/decline', user: SEC, id, body, ...opts, setup: both(withPending, opts.setup) });
+  const nothingDecided = (res, id) => res.booking(id)?.status === 'pending' && !res.chargeOfBooking(id)
+    && res.db.notifications.length === 0 && res.db.activity_logs.length === 0
+    && !res.db.calls.some((c) => c.op !== 'select');
+
+  // -- approve -----------------------------------------------------------------
+  r = await approve(630);
+  check('Approve: 200 "Booking approved", one call to approve_rental_booking with the amount worked out here (10 x PHP 5) and the borrower\'s account',
+    r.status === 200 && r.body?.message === 'Booking approved' && r.rpcCalls().length === 1
+      && r.rpcCalls()[0].name === 'approve_rental_booking'
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({ p_request_id: 630, p_processed_by: SEC.user_id, p_amount: 50, p_charge_user_id: RES_A.user_id,
+        p_waive_for_funeral: false }),
+    `${said(r)}; ${JSON.stringify(r.rpcCalls())}`);
+  check('  the booking is confirmed and has one RENTAL charge, UNPAID PHP 50, on the resident\'s account (never the Secretary\'s)',
+    r.booking(630)?.status === 'confirmed' && r.chargeOfBooking(630)?.amount === 50 && r.chargeOfBooking(630)?.status === 'UNPAID'
+      && r.chargeOfBooking(630)?.user_id === RES_A.user_id, JSON.stringify(r.chargeOfBooking(630)));
+  check('  the route itself writes no charge and no booking (the function does both, in one transaction)',
+    !r.db.calls.some((c) => (c.table === 'charges' && c.op === 'insert') || (c.table === 'rental_requests' && c.op !== 'select')),
+    JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+  const approvedNote = r.db.notifications;
+  check('  the borrower is notified once, to their account and record number, in the approved words',
+    approvedNote.length === 1 && approvedNote[0].user_id === RES_A.user_id && approvedNote[0].destination === '09170000001'
+      && approvedNote[0].message === `BrgyServe: your booking of 10x Monobloc Chair on ${schedule(at(72), at(75))} has been APPROVED. Please pay PHP 50.00 under My rentals or at the barangay hall.`,
+    approvedNote[0]?.message || '(none)');
+  const approvedLog = r.db.activity_logs;
+  check('  one APPROVE row by the Secretary: pending to confirmed, with the charge id',
+    approvedLog.length === 1 && approvedLog[0].action === 'APPROVE' && approvedLog[0].table_name === 'rental_requests'
+      && approvedLog[0].record_id === 630 && approvedLog[0].user_id === SEC.user_id
+      && sameJson(approvedLog[0].old_value, { status: 'pending' })
+      && sameJson(approvedLog[0].new_value, { status: 'confirmed', charge_id: r.chargeOfBooking(630)?.charge_id }),
+    JSON.stringify(approvedLog.map((l) => [l.action, l.old_value, l.new_value])));
+  check('  the answer is the Secretary\'s projection: confirmed, not_started, with purpose_type, decline_reason and requested_at',
+    r.body?.request?.request_id === 630 && r.body.request.derived_status === 'confirmed' && r.body.request.not_started === true
+      && r.body.request.purpose_type === 'general' && r.body.request.decline_reason === null && r.body.request.requested_at === at(-2)
+      && !JSON.stringify(r.body).includes('paymongo'), JSON.stringify(r.body?.request && Object.keys(r.body.request)));
+
+  r = await approve(636);
+  check('Approve at PHP 0 (3 mats at PHP 0): the charge is PAID, and the notice says no fee is required',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_amount === 0 && r.chargeOfBooking(636)?.status === 'PAID'
+      && r.db.notifications[0]?.message === `BrgyServe: your booking of 3x Rubber Mat on ${schedule(at(72), at(75))} has been APPROVED. No fee is required.`,
+    `${said(r)}; ${r.db.notifications[0]?.message}`);
+  r = await approve(635);
+  check('Approve a guest\'s request: the charge has no account, the guest\'s typed number gets the notice',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_charge_user_id === null && r.db.notifications[0]?.destination === '09179990000'
+      && r.db.notifications[0]?.user_id === null, `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  r = await approve(634);
+  check('Approve a facility request: PHP 500, one unit, no "1x" in the notice',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_amount === 500
+      && r.db.notifications[0]?.message.startsWith('BrgyServe: your booking of Covered Court on '), r.db.notifications[0]?.message);
+
+  // -- the funeral waiver (design C, 29 Oct 2026) ------------------------------
+  // The Secretary ticks "Free for funeral" on the Approve panel: the body's
+  // waive_for_funeral. The fake function refuses as approve_rental_booking
+  // does (an unmarked item, then a guest); test-027-in-transaction.sql proves
+  // the real rule under the lock.
+  const chairsMarked = (db) => { db.rental_items.find((i) => i.item_id === 802).funeral_eligible = true; };
+  const WAIVE = { waive_for_funeral: true };
+  r = await approve(630, { body: WAIVE, setup: chairsMarked });
+  check('Approve with the funeral waiver: 200, the function is asked with amount 0 and p_waive_for_funeral true',
+    r.status === 200 && r.rpcCalls().length === 1
+      && sortedJson(r.rpcCalls()[0].args) === sortedJson({ p_request_id: 630, p_processed_by: SEC.user_id, p_amount: 0,
+        p_charge_user_id: RES_A.user_id, p_waive_for_funeral: true }), `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
+  check('  confirmed, purpose_type funeral, one charge of PHP 0, PAID',
+    r.booking(630)?.status === 'confirmed' && r.booking(630)?.purpose_type === 'funeral'
+      && r.chargeOfBooking(630)?.amount === 0 && r.chargeOfBooking(630)?.status === 'PAID'
+      && r.body?.request?.purpose_type === 'funeral', JSON.stringify(r.chargeOfBooking(630)));
+  check('  the notice says only that no fee is required, never the reason',
+    r.db.notifications.length === 1
+      && r.db.notifications[0].message === `BrgyServe: your booking of 10x Monobloc Chair on ${schedule(at(72), at(75))} has been APPROVED. No fee is required.`
+      && !/funeral|waive/i.test(r.db.notifications[0].message), r.db.notifications[0]?.message || '(none)');
+  check('  one APPROVE row: pending to confirmed, the charge id, and fee_waived "funeral" (a code; never the purpose)',
+    r.db.activity_logs.length === 1 && r.db.activity_logs[0].action === 'APPROVE'
+      && sameJson(r.db.activity_logs[0].old_value, { status: 'pending' })
+      && sameJson(r.db.activity_logs[0].new_value, { status: 'confirmed', charge_id: r.chargeOfBooking(630)?.charge_id, fee_waived: 'funeral' })
+      && !JSON.stringify(r.db.activity_logs).includes('Family reunion'), JSON.stringify(r.db.activity_logs[0]?.new_value));
+  r = await approve(630, { body: { waive_for_funeral: false }, setup: chairsMarked });
+  check('waive_for_funeral: false is an ordinary approval: PHP 50 UNPAID, purpose_type general, no fee_waived in the log',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_waive_for_funeral === false && r.rpcCalls()[0]?.args?.p_amount === 50
+      && r.booking(630)?.purpose_type === 'general' && r.chargeOfBooking(630)?.status === 'UNPAID'
+      && !('fee_waived' in (r.db.activity_logs[0]?.new_value ?? {})), `${said(r)}; ${JSON.stringify(r.db.activity_logs[0]?.new_value)}`);
+  for (const [what, value] of [['"true" (text)', 'true'], ['1', 1], ['null', null], ['"yes"', 'yes'], ['an object', { funeral: true }]]) {
+    r = await approve(630, { body: { waive_for_funeral: value }, setup: chairsMarked });
+    check(`waive_for_funeral ${what}: 400 "waive_for_funeral must be true or false", the function never asked, nothing written`,
+      r.status === 400 && r.body?.error === 'waive_for_funeral must be true or false' && r.rpcCalls().length === 0
+      && nothingDecided(r, 630), said(r));
+  }
+  r = await approve(635, { body: WAIVE, setup: chairsMarked });
+  check('A waiver on a guest\'s request (outside borrower): 409 "only for a barangay resident", the booking left as it was',
+    r.status === 409 && r.body?.error === 'A funeral fee can be waived only for a barangay resident, so this request cannot be waived.'
+      && r.rpcCalls()[0]?.args?.p_waive_for_funeral === true && nothingDecided(r, 635)
+      && r.booking(635)?.purpose_type === 'general', said(r));
+  r = await approve(630, { body: WAIVE });
+  check('A waiver for an item not marked for funeral use: 409 "The Monobloc Chair is not marked…", nothing written',
+    r.status === 409 && r.body?.error === 'The Monobloc Chair is not marked for funeral use, so its fee cannot be waived.'
+      && nothingDecided(r, 630) && r.booking(630)?.purpose_type === 'general', said(r));
+  const STAFF_C = { user_id: 7201, username: 'rentals_probe_staff', role: 'staff' };
+  const PB_C = { user_id: 7203, username: 'rentals_probe_pb', role: 'punong_barangay' };
+  const TREASURER_C = { user_id: 7202, username: 'rentals_probe_treasurer', role: 'treasurer' };
+  for (const user of [RES_A, STAFF_C, PB_C, TREASURER_C]) {
+    r = await approve(630, { user, body: WAIVE, chain: true, setup: chairsMarked });
+    check(`${user.role} sending the waiver to approve is refused with 403 (the route is the Secretary's), nothing written`,
+      r.status === 403 && r.rpcCalls().length === 0 && nothingDecided(r, 630), said(r));
+  }
+  r = await approve(630, { body: WAIVE, chain: true, setup: chairsMarked });
+  check('  and the Secretary, through the same guard, is let in', r.status === 200 && r.booking(630)?.purpose_type === 'funeral', said(r));
+
+  // The function's refusals, each as the Secretary is told, nothing written.
+  const fac = { start: pgTime(at(96)), end: pgTime(at(98)) };
+  const APPROVE_REFUSALS = [
+    ['BOOKING_NOT_PENDING', 630, { ok: false, code: 'BOOKING_NOT_PENDING', status: 'confirmed' }, 409,
+      "Only a pending request can be approved — this booking is already 'confirmed'."],
+    ['BOOKING_EXPIRED', 630, { ok: false, code: 'BOOKING_EXPIRED' }, 409, "This request's start time has passed, so it can no longer be approved."],
+    ['ITEM_INACTIVE', 630, { ok: false, code: 'ITEM_INACTIVE' }, 409, 'The Monobloc Chair has been deactivated, so this request cannot be approved.'],
+    ['RESIDENT_ARCHIVED', 630, { ok: false, code: 'RESIDENT_ARCHIVED' }, 409, "The resident's record has been archived, so this request cannot be approved."],
+    ['FACILITY_TAKEN', 634, { ok: false, code: 'FACILITY_TAKEN', clashes: [fac] }, 409,
+      `The Covered Court is already booked from ${timeFmt.format(new Date(fac.start))} to ${timeFmt.format(new Date(fac.end))} on that date, so this request cannot be approved.`],
+    ['NOT_ENOUGH_LEFT with 2 stuck', 630, notEnough({ stuck: 2 }), 409,
+      'Only 3 of 100 Monobloc Chair are free for that time; this request asks for 10, so it cannot be approved. 2 are overdue and not yet returned.'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST (stock lowered since)', 630, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 10, quantity_available: 5 }, 400,
+      'Only 5 units of Monobloc Chair exist — you asked for 10'],
+    ['BOOKING_NOT_FOUND (deleted under the lock)', 630, { ok: false, code: 'BOOKING_NOT_FOUND' }, 404, 'Booking not found'],
+  ];
+  for (const [what, id, answer, status, words] of APPROVE_REFUSALS) {
+    r = await approve(id, { setup: (db) => { db.rpcAnswer.approve_rental_booking = answer; } });
+    check(`Approve refused, ${what}: ${status} "${words.length > 60 ? `${words.slice(0, 60)}…` : words}"`,
+      r.status === status && r.body?.error === words, said(r));
+    check('  still pending, no charge, nobody notified, nothing logged', nothingDecided(r, id),
+      JSON.stringify(r.db.calls.filter((c) => c.op !== 'select')));
+  }
+  r = await approve(630, { setup: (db) => { db.rpcAnswer.approve_rental_booking = { ok: false, code: 'SOMETHING_NEW' }; } });
+  check('An unknown approval refusal is a 500, never a made-up sentence, and nothing is decided',
+    r.status === 'threw' && /SOMETHING_NEW/.test(r.body?.error || '') && nothingDecided(r, 630), said(r));
+  r = await approve(630, { setup: (db) => { db.rpcError = { message: 'function exploded' }; } });
+  check('A failed call to approve_rental_booking is a 500 and nothing is decided',
+    r.status === 'threw' && /function exploded/.test(r.body?.error || '') && nothingDecided(r, 630), said(r));
+  r = await approve(999);
+  check('Approve a booking that does not exist: 404, the function is never asked', r.status === 404 && r.rpcCalls().length === 0, said(r));
+  r = await approve(632);
+  check('Approve an expired request (the fake answers as the function does): 409, still pending, no charge',
+    r.status === 409 && r.body?.error === "This request's start time has passed, so it can no longer be approved."
+      && nothingDecided(r, 632), said(r));
+  r = await approve(601);
+  check('Approve a booking that is already confirmed: 409 "already \'confirmed\'", its charge untouched',
+    r.status === 409 && /already 'confirmed'/.test(r.body?.error || '')
+      && sameJson(r.chargeOfBooking(601), freshDb().charges.find((c) => c.rental_request_id === 601)), said(r));
+
+  // -- decline -----------------------------------------------------------------
+  r = await decline(631, { reason: `  ${DECLINED_WHY}  ` });
+  check('Decline: 200 "Request declined", stored declined with the trimmed reason and the Secretary as processor',
+    r.status === 200 && r.body?.message === 'Request declined' && r.booking(631)?.status === 'declined'
+      && r.booking(631)?.decline_reason === DECLINED_WHY && r.booking(631)?.processed_by_user_id === SEC.user_id, said(r));
+  const declineUpdate = r.db.calls.find((c) => c.table === 'rental_requests' && c.op === 'update');
+  check('  one guarded UPDATE: WHERE status = pending AND the start still ahead; no function call, no charge',
+    declineUpdate && declineUpdate.filters.some(([op, c, v]) => op === 'eq' && c === 'status' && v === 'pending')
+      && declineUpdate.filters.some(([op, c]) => op === 'gt' && c === 'start_datetime')
+      && r.rpcCalls().length === 0 && !r.chargeOfBooking(631), JSON.stringify(declineUpdate?.filters));
+  check('  the borrower (resident B) is notified with the reason',
+    r.db.notifications.length === 1 && r.db.notifications[0].user_id === RES_B.user_id && r.db.notifications[0].destination === '09170000002'
+      && r.db.notifications[0].message === `BrgyServe: your booking request for Monobloc Chair on ${dateFmt.format(new Date(at(72)))} was declined. Reason: ${DECLINED_WHY}.`,
+    r.db.notifications[0]?.message || '(none)');
+  check('  one DECLINE row by the Secretary: pending to declined, reason_given, and never the reason\'s words',
+    r.db.activity_logs.length === 1 && r.db.activity_logs[0].action === 'DECLINE' && r.db.activity_logs[0].table_name === 'rental_requests'
+      && r.db.activity_logs[0].user_id === SEC.user_id && sameJson(r.db.activity_logs[0].old_value, { status: 'pending' })
+      && sameJson(r.db.activity_logs[0].new_value, { status: 'declined', reason_given: true })
+      && !JSON.stringify(r.db.activity_logs).includes('repairs'), JSON.stringify(r.db.activity_logs[0]?.new_value));
+  check('  the answer carries the reason and derived_status declined', r.body?.request?.decline_reason === DECLINED_WHY
+    && r.body.request.derived_status === 'declined' && r.body.request.not_started === false, JSON.stringify(r.body?.request?.derived_status));
+  const DECLINE_BAD = [
+    ['no reason', {}, 400, 'A reason is required (3 to 300 characters).'],
+    ['a reason of 2 characters after trimming', { reason: '  ab  ' }, 400, 'The reason must be 3 to 300 characters.'],
+    ['a reason of 301 characters', { reason: 'x'.repeat(301) }, 400, 'The reason must be 3 to 300 characters.'],
+    ['a reason that is not text', { reason: 12345 }, 400, 'The reason must be text.'],
+  ];
+  for (const [what, body, status, words] of DECLINE_BAD) {
+    r = await decline(631, body);
+    check(`Decline with ${what}: ${status} "${words}", nothing written`, r.status === status && r.body?.error === words
+      && r.booking(631)?.status === 'pending' && !r.db.calls.some((c) => c.op !== 'select') && r.db.notifications.length === 0, said(r));
+  }
+  r = await decline(631, { reason: 'x'.repeat(300) });
+  check('Decline with exactly 300 characters is accepted', r.status === 200 && r.booking(631)?.status === 'declined', said(r));
+  for (const [id, what, words] of [
+    [601, 'a confirmed booking', "Only a pending request can be declined — this booking is already 'confirmed'."],
+    [633, 'a declined one', "Only a pending request can be declined — this booking is already 'declined'."],
+    [632, 'an expired request', "This request's start time has passed, so it has expired and cannot be declined."],
+  ]) {
+    r = await decline(id, { reason: DECLINED_WHY });
+    check(`Decline refuses ${what}: 409 "${words.slice(0, 60)}…", nothing written`, r.status === 409 && r.body?.error === words
+      && !r.db.calls.some((c) => c.op !== 'select') && r.db.notifications.length === 0 && r.db.activity_logs.length === 0, said(r));
+  }
+  r = await decline(999, { reason: DECLINED_WHY });
+  check('Decline a booking that does not exist: 404', r.status === 404 && r.body?.error === 'Booking not found', said(r));
+  // Approved by another Secretary between the read and the update: the guard
+  // finds no pending row, so nothing is declined behind the approval.
+  r = await decline(630, { reason: DECLINED_WHY }, { setup: (db) => {
+    db.failWhen = ({ table, op }) => {
+      if (table === 'rental_requests' && op === 'update') db.rental_requests.find((b) => b.request_id === 630).status = 'confirmed';
+      return null;
+    };
+  } });
+  check('Decline racing an approval: 409 "Booking status just changed", the booking stays confirmed, nobody notified, nothing logged',
+    r.status === 409 && r.body?.error === 'Booking status just changed — refresh and try again' && r.booking(630)?.status === 'confirmed'
+      && r.booking(630)?.decline_reason === null && r.db.notifications.length === 0 && r.db.activity_logs.length === 0, said(r));
+
+  // -- Edit and Cancel on a pending request ---------------------------------------
+  r = await call({ method: 'put', path: '/:id', user: SEC, id: 630, body: editBody(), setup: withPending });
+  check('Edit moves a pending request (update_rental_booking_time), which stays pending',
+    r.status === 200 && r.rpcCalls().some((c) => c.name === 'update_rental_booking_time' && c.args.p_request_id === 630)
+      && r.booking(630)?.status === 'pending' && r.booking(630)?.start_datetime === manilaIso(EDIT_DAY, '08:00'), said(r));
+  for (const [id, what] of [[632, 'an expired request'], [633, 'a declined booking']]) {
+    r = await call({ method: 'put', path: '/:id', user: SEC, id, body: editBody(), setup: withPending });
+    check(`Edit refuses ${what} with the not-started 409`, r.status === 409 && r.body?.error === NOT_STARTED_EDIT && r.rpcCalls().length === 0, said(r));
+  }
+  r = await cancel(630, { reason: REASON }, { setup: withPending });
+  check('The Secretary\'s Cancel refuses a pending request: 409 "declined, not cancelled", nothing written',
+    r.status === 409 && r.body?.error === 'A pending request is declined, not cancelled.'
+      && r.booking(630)?.status === 'pending' && !r.db.calls.some((c) => c.op !== 'select'), said(r));
+
+  r = await mine(630, {}, { setup: withPending });
+  check('A resident cancels their own pending request: 200, cancelled, no charge to void',
+    r.status === 200 && r.booking(630)?.status === 'cancelled' && !r.chargeOfBooking(630)
+      && !r.db.calls.some((c) => c.table === 'charges' && c.op !== 'select'), said(r));
+  const pendingCancel = r.db.calls.find((c) => c.table === 'rental_requests' && c.op === 'update');
+  check('  the update is guarded on the status it read (pending), never on confirmed',
+    pendingCancel?.filters.some(([op, c, v]) => op === 'eq' && c === 'status' && v === 'pending'), JSON.stringify(pendingCancel?.filters));
+  check('  one CANCEL row: pending to cancelled, charge NONE, nothing to expire, no notice to the resident',
+    r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { status: 'pending' })
+      && r.db.activity_logs[0].new_value?.charge_outcome === 'NONE' && r.db.activity_logs[0].new_value?.session_expired === 'not_needed'
+      && r.db.notifications.length === 0, JSON.stringify(r.db.activity_logs[0]?.old_value));
+  r = await mine(637, {}, { setup: withPending });
+  check('No 24-hour rule for a pending request: one starting in 2 hours is cancelled online', r.status === 200
+    && r.booking(637)?.status === 'cancelled', said(r));
+  r = await mine(602);
+  check('  while a CONFIRMED booking 23 hours ahead is still refused (the 24-hour rule)', r.status === 409 && r.body?.error === TOO_LATE, said(r));
+  r = await mine(632, {}, { setup: withPending });
+  check('An expired pending request cannot be cancelled: the not-started 409', r.status === 409 && r.body?.error === NOT_STARTED_CANCEL, said(r));
+  r = await mine(633, {}, { setup: withPending });
+  check('A declined booking cannot be cancelled', r.status === 409 && r.body?.error === NOT_STARTED_CANCEL, said(r));
+  // Approved between the resident's read and their cancel: the guard on
+  // 'pending' finds nothing, so the approval and its charge stand.
+  r = await mine(630, {}, { setup: both(withPending, (db) => {
+    db.failWhen = ({ table, op }) => {
+      if (table === 'rental_requests' && op === 'update' && db.rental_requests.find((b) => b.request_id === 630).status === 'pending') {
+        db.rental_requests.find((b) => b.request_id === 630).status = 'confirmed';
+        db.charges.push({ charge_id: 1699, charge_type: 'RENTAL', amount: 50, status: 'UNPAID', user_id: RES_A.user_id, rental_request_id: 630 });
+      }
+      return null;
+    };
+  }) });
+  check('Cancel racing an approval: 409 "Booking status just changed", the booking stays confirmed and its new charge UNPAID',
+    r.status === 409 && r.body?.error === 'Booking status just changed — refresh and try again'
+      && r.booking(630)?.status === 'confirmed' && r.chargeOfBooking(630)?.status === 'UNPAID'
+      && r.db.activity_logs.length === 0, said(r));
+
+  // -- what the lists say ----------------------------------------------------------
+  r = await read('/mine', RES_A, '', withPending);
+  const minePending = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
+  check('GET /mine: a pending request reads pending, an expired one expired, a declined one declined',
+    minePending[630]?.derived_status === 'pending' && minePending[632]?.derived_status === 'expired'
+      && minePending[633]?.derived_status === 'declined', JSON.stringify([630, 632, 633].map((id) => minePending[id]?.derived_status)));
+  check('  can_cancel_online: true on a pending request (even 2 hours ahead), false with no note when expired or declined',
+    minePending[630]?.can_cancel_online === true && minePending[637]?.can_cancel_online === true && minePending[637]?.cancel_online_note === null
+      && minePending[632]?.can_cancel_online === false && minePending[632]?.cancel_online_note === null
+      && minePending[633]?.can_cancel_online === false && minePending[633]?.cancel_online_note === null,
+    JSON.stringify([630, 637, 632, 633].map((id) => [id, minePending[id]?.can_cancel_online, minePending[id]?.cancel_online_note])));
+  check('  the resident\'s projection is unchanged in this batch: no decline_reason, purpose_type or requested_at key',
+    Object.values(minePending).every((b) => !('decline_reason' in b) && !('purpose_type' in b) && !('requested_at' in b)));
+
+  r = await read('/', SEC, '', withPending);
+  const secPending = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
+  check('GET /: pending, expired and declined are derived as on /mine, and not_started is false on all three (no Cancel button)',
+    secPending[630]?.derived_status === 'pending' && secPending[632]?.derived_status === 'expired' && secPending[633]?.derived_status === 'declined'
+      && [630, 632, 633].every((id) => secPending[id]?.not_started === false),
+    JSON.stringify([630, 632, 633].map((id) => [secPending[id]?.derived_status, secPending[id]?.not_started])));
+  check('  every row carries decline_reason and purpose_type; #633\'s reason is its text',
+    Object.values(secPending).every((b) => 'decline_reason' in b && 'purpose_type' in b) && secPending[633]?.decline_reason === DECLINED_WHY,
+    JSON.stringify(secPending[633]?.decline_reason));
+  check('  requested_at is there when it was stored, and ABSENT (never null) on a booking made before migration 027',
+    secPending[630]?.requested_at === at(-2) && !('requested_at' in secPending[601]),
+    JSON.stringify([secPending[630]?.requested_at, 'requested_at' in (secPending[601] || {})]));
+  const statusFilter = async (status) => (await call({ method: 'get', path: '/', user: SEC, id: '', query: { status }, setup: withPending })).body?.requests?.map((b) => b.request_id).sort();
+  check('?status=expired lists the expired request only', sameJson(await statusFilter('expired'), [632]), JSON.stringify(await statusFilter('expired')));
+  check('?status=pending lists every request STORED pending, the expired one included (a stored filter)',
+    sameJson(await statusFilter('pending'), [630, 631, 632, 634, 635, 636, 637]), JSON.stringify(await statusFilter('pending')));
+  check('?status=declined lists the declined one', sameJson(await statusFilter('declined'), [633]), JSON.stringify(await statusFilter('declined')));
+  r = await call({ method: 'get', path: '/', user: SEC, id: '', query: { status: 'approved' } });
+  check('An unknown ?status= is a 400 that names pending, declined and expired',
+    r.status === 400 && /pending, declined, overdue, completed, expired, or 'all'/.test(r.body?.error || ''), said(r));
+
+  // -- What the Approve panel is told (batch R2b) -------------------------------------
+  // The Secretary's Approve panel shows "Fee if approved" and offers "Free for
+  // funeral" only on an item marked for it. Both come with the list:
+  // fee_if_approved on a request still waiting (derived pending), from the
+  // approve route's own feeIfApproved(), and the item's funeral_eligible.
+  const routeSource = fs.readFileSync(path.join(SRC, 'routes', 'rentalRequests.js'), 'utf8');
+  const manageEmbed = (/rental_items \(([^)]*)\)/.exec((/const MANAGE_FIELDS = `([\s\S]*?)`;/.exec(routeSource) || [])[1] || '') || [])[1] || '';
+  check('MANAGE_FIELDS gives each booking\'s item its funeral_eligible (an explicit column, never *)',
+    /\bfuneral_eligible\b/.test(manageEmbed) && !/\*/.test(manageEmbed), manageEmbed.replace(/\s+/g, ' ').trim());
+  r = await read('/', SEC, '', both(withPending, chairsMarked));
+  const listed = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
+  const mineRead = await read('/mine', RES_A, '', both(withPending, chairsMarked));
+  check('GET /: the item\'s funeral_eligible is in every row\'s item, true on the marked chairs; the resident\'s GET /mine '
+      + 'is unchanged, with neither funeral_eligible nor fee_if_approved',
+    Object.values(listed).length > 0 && Object.values(listed).every((b) => 'funeral_eligible' in (b.rental_items || {}))
+      && listed[630]?.rental_items?.funeral_eligible === true
+      && (mineRead.body?.requests || []).length > 0 && mineRead.body.requests.every((b) => !('fee_if_approved' in b)
+        && !('funeral_eligible' in (b.rental_items || {}))),
+    JSON.stringify([630, 634].map((id) => listed[id]?.rental_items?.funeral_eligible)));
+  const FEES = { 630: 50, 631: 50, 634: 500, 635: 10, 636: 0, 637: 50 };
+  const notWaiting = Object.values(listed).filter((b) => b.derived_status !== 'pending');
+  check('GET /: every request still waiting carries fee_if_approved, item fee x quantity (10 chairs PHP 50, the court PHP 500, '
+      + 'a guest\'s 2 chairs PHP 10, 3 free mats PHP 0), and every other row leaves it OUT, never null: the expired #632, '
+      + 'the declined #633, confirmed, cancelled, overdue and completed bookings',
+    Object.entries(FEES).every(([id, fee]) => listed[id]?.derived_status === 'pending' && listed[id]?.fee_if_approved === fee)
+      && notWaiting.length >= 10 && notWaiting.every((b) => !('fee_if_approved' in b))
+      && !!listed[632] && !('fee_if_approved' in listed[632]) && !!listed[633] && !('fee_if_approved' in listed[633]),
+    JSON.stringify({ waiting: Object.keys(FEES).map((id) => [id, listed[id]?.derived_status, listed[id]?.fee_if_approved]),
+      others: notWaiting.filter((b) => 'fee_if_approved' in b).map((b) => b.request_id) }));
+  r = await read('/:id', SEC, 634, both(withPending, chairsMarked));
+  const confirmedDetail = await read('/:id', SEC, 601, withPending);
+  check('GET /:id (the detail) carries the same: fee_if_approved PHP 500 on the pending court request, and the item\'s '
+      + 'funeral_eligible key; none on the confirmed #601',
+    r.status === 200 && r.body?.request?.fee_if_approved === 500 && 'funeral_eligible' in (r.body.request.rental_items || {})
+      && confirmedDetail.status === 200 && !!confirmedDetail.body?.request && !('fee_if_approved' in confirmedDetail.body.request),
+    `${said(r)}; ${said(confirmedDetail)}`);
+  const agree = [];
+  for (const id of Object.keys(FEES).map(Number)) {
+    const res = await approve(id);
+    agree.push([id, listed[id]?.fee_if_approved, res.rpcCalls()[0]?.args?.p_amount, res.chargeOfBooking(id)?.amount]);
+  }
+  check('The fee on screen and the charge cannot disagree: for every waiting request, what GET / says it would cost is the '
+      + 'amount approve sends and the charge it gets',
+    agree.every(([, shown, sent, charged]) => shown === sent && sent === charged), JSON.stringify(agree));
+  r = await approve(630, { body: WAIVE, setup: chairsMarked });
+  check('  a funeral waiver still sends PHP 0, whatever fee_if_approved said (PHP 50)',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_amount === 0 && listed[630]?.fee_if_approved === 50, said(r));
+  const approveHandler = (/router\.post\('\/:id\/approve'[\s\S]*?\n\}\);/.exec(routeSource) || [''])[0];
+  const managedBody = (/const withManaged = [\s\S]*?\n\};/.exec(routeSource) || [''])[0];
+  check('ONE helper: the approve route and the list both work the fee out through feeIfApproved(), and the approve route '
+      + 'no longer calls rentalAmount() itself',
+    /\bfeeIfApproved\(booking\)/.test(approveHandler) && !/\brentalAmount\(/.test(approveHandler)
+      && /\bfeeIfApproved\(row\)/.test(managedBody),
+    JSON.stringify({ approve: /\bfeeIfApproved\(/.test(approveHandler), rentalAmountInApprove: /\brentalAmount\(/.test(approveHandler),
+      managed: /\bfeeIfApproved\(/.test(managedBody) }));
+
+  // -- Reports: facility utilization ------------------------------------------------
+  const utilization = (setup) => call({ method: 'get', path: '/facility-utilization', user: SEC, id: '', router: reports,
+    query: { from: dayAhead(-30), to: dayAhead(30) }, setup });
+  r = await utilization();
+  check('Utilization with no pending or declined booking lists the five statuses as before',
+    r.status === 200 && sameJson(r.body?.by_status?.map((s) => s.status), ['confirmed', 'cancelled', 'returned', 'returned_late', 'returned_with_issue']),
+    JSON.stringify(r.body?.by_status));
+  const usedBefore = r.body?.totals?.bookings_excluding_cancelled;
+  r = await utilization(withPending);
+  check('With pending and declined requests on file: by_status adds them, with their counts',
+    r.status === 200 && r.body?.by_status?.find((s) => s.status === 'pending')?.count === 7
+      && r.body?.by_status?.find((s) => s.status === 'declined')?.count === 1, JSON.stringify(r.body?.by_status));
+  check('  and none of them counts as usage (confirmed and the three returns only)',
+    r.body?.totals?.bookings_excluding_cancelled === usedBefore, `${r.body?.totals?.bookings_excluding_cancelled} against ${usedBefore}`);
+
+  // -- the resident archive warning --------------------------------------------------
+  const archive = (setup) => call({ method: 'post', path: '/:id/archive', user: SEC, id: 9102, router: residentRecords,
+    setup: both((db) => { db.document_requests = []; db.rental_requests = db.rental_requests.filter((b) => b.resident_id !== 9102); }, setup) });
+  r = await archive((db) => { withPending(db); db.rental_requests = db.rental_requests.filter((b) => b.resident_id !== 9102 || b.request_id === 631); });
+  check('Archiving a resident with a pending request ahead: warned, "1 pending rental request", listed',
+    r.status === 409 && /1 pending rental request/.test(r.body?.error || '') && !/active rental booking/.test(r.body?.error || '')
+      && sameJson(r.body?.dependencies?.rentals?.map((b) => b.request_id), [631]), said(r));
+  r = await archive((db) => {
+    withPending(db);
+    db.rental_requests = db.rental_requests.filter((b) => b.resident_id !== 9102 || b.request_id === 631);
+    Object.assign(db.rental_requests.find((b) => b.request_id === 631), { start_datetime: at(-1), end_datetime: at(2) });
+  });
+  check('  an EXPIRED pending request is not open work: no rental warning',
+    !/rental/.test(r.body?.error || '') && (r.body?.dependencies?.rentals?.length ?? 0) === 0, said(r));
+
+  // -- Rental items: funeral_eligible ---------------------------------------------------
+  const tentItem = (extra = {}) => ({ name: 'Tent', type: 'equipment', description: 'Big tent', quantity_total: 20, fee: 100, ...extra });
+  r = await call({ method: 'post', path: '/', user: SEC, id: '', router: rentalItems,
+    body: { name: 'Stage', type: 'facility', quantity_total: 1, fee: 0, funeral_eligible: true } });
+  check('A facility cannot be created marked for funeral use: 400, nothing inserted',
+    r.status === 400 && r.body?.error === 'A facility cannot be marked for funeral use.' && !r.db.calls.some((c) => c.op === 'insert'), said(r));
+  r = await editItem(tentItem({ funeral_eligible: true }));
+  check('An equipment item can be marked for funeral use: saved, and the change logged',
+    r.status === 200 && tentOf(r)?.funeral_eligible === true && sameJson(r.db.activity_logs[0]?.new_value, { funeral_eligible: true }),
+    `${said(r)}; ${JSON.stringify(r.db.activity_logs[0]?.new_value)}`);
+  r = await editItem(tentItem(), { setup: (db) => { db.rental_items.find((i) => i.item_id === 803).funeral_eligible = true; } });
+  check('  a save without the field leaves the mark as it is', r.status === 200 && tentOf(r)?.funeral_eligible === true, said(r));
+  r = await editItem(tentItem({ type: 'facility', quantity_total: 1 }), { setup: (db) => { db.rental_items.find((i) => i.item_id === 803).funeral_eligible = true; } });
+  check('  turning a marked item into a facility is refused (400), not left to the database CHECK',
+    r.status === 400 && r.body?.error === 'A facility cannot be marked for funeral use.' && !r.db.calls.some((c) => c.op === 'update'), said(r));
+  r = await editItem(tentItem({ funeral_eligible: 'yes' }));
+  check('  funeral_eligible must be a boolean: "yes" is a 400', r.status === 400 && r.body?.error === 'funeral_eligible must be true or false', said(r));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

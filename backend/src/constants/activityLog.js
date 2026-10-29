@@ -12,6 +12,10 @@ const ACTIONS = {
   UNARCHIVE: 'UNARCHIVE',
   APPROVE: 'APPROVE',
   REJECT: 'REJECT',
+  // The Secretary declining a pending rental request (migration 027). Its
+  // own code, not REJECT: the screens say "Declined". The row holds
+  // reason_given, never the reason's words.
+  DECLINE: 'DECLINE',
   UNREJECT: 'UNREJECT',
   LINK: 'LINK',
   ACTIVATE: 'ACTIVATE',
@@ -108,7 +112,15 @@ const LOGGED_TABLES = [
   'events', 'event_attendees', 'dispute_records',
 ];
 
+// Tables no call site logs any more but whose rows are still in the log, so
+// the record-type filter (and a click on such a row's record) still accepts
+// them. rental_settings: PUT /api/rental-settings logged two UPDATE rows
+// before step O43 removed it (28 Oct 2026); migration 026 drops the table,
+// and the rows stay, as every log row does. activity:test fails if a table
+// here is logged again, or is left without a label on the page.
+const RETIRED_LOGGED_TABLES = ['rental_settings'];
+
 module.exports = {
   ACTIONS, SENSITIVE_KEYS, SENSITIVE_PREFIXES, SENSITIVE_SUBSTRINGS, RESIDENT_LOG_FIELDS, isSensitiveKey,
-  PERSONAL_FIELDS, isPersonalKey, LOGGED_TABLES,
+  PERSONAL_FIELDS, isPersonalKey, LOGGED_TABLES, RETIRED_LOGGED_TABLES,
 };

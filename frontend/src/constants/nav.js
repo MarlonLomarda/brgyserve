@@ -47,7 +47,7 @@ export const RESIDENT_NAV = [
   { to: "/resident/rentals", label: "My rentals", icon: FaBoxes },
   {
     to: "/resident/book-rental",
-    label: "Book a facility",
+    label: "Facilities and Items",
     icon: FaCalendarAlt,
   },
   { to: "/resident/events", label: "Events", icon: FaPeopleCarry },

@@ -1060,7 +1060,7 @@ async function collectDependencies(residentId) {
   let rentalQuery = supabase
     .from('rental_requests')
     .select('request_id, start_datetime, end_datetime, status, rental_items ( name, type )')
-    .eq('status', RENTAL_STATUS.CONFIRMED);
+    .in('status', [RENTAL_STATUS.CONFIRMED, RENTAL_STATUS.PENDING]);
   rentalQuery = accountIds.length > 0
     ? rentalQuery.or(`resident_id.eq.${residentId},requested_by_user_id.in.(${accountIds.join(',')})`)
     : rentalQuery.eq('resident_id', residentId);
@@ -1071,8 +1071,11 @@ async function collectDependencies(residentId) {
   const now = new Date();
   // Upcoming bookings, plus physical items past their end that were never
   // returned (still out — see the stage 5 derived statuses). A facility past
-  // its end has auto-completed and is not open work.
+  // its end has auto-completed and is not open work. A pending request
+  // (migration 027) is open work until its start passes; after that it has
+  // expired and nobody can approve it.
   const rentals = (bookings || []).filter((b) => {
+    if (b.status === RENTAL_STATUS.PENDING) return new Date(b.start_datetime) > now;
     if (new Date(b.end_datetime) >= now) return true;
     return RETURNABLE_TYPES.includes(b.rental_items?.type);
   });
@@ -1087,8 +1090,14 @@ function dependencySummary({ accounts, documents, rentals }) {
   if (documents.length) {
     parts.push(`${documents.length} open document request${documents.length === 1 ? '' : 's'}`);
   }
-  if (rentals.length) {
-    parts.push(`${rentals.length} active rental booking${rentals.length === 1 ? '' : 's'}`);
+  // A pending request is counted on its own, so it never reads as a booking.
+  const booked = rentals.filter((b) => b.status !== RENTAL_STATUS.PENDING).length;
+  const asked = rentals.length - booked;
+  if (booked) {
+    parts.push(`${booked} active rental booking${booked === 1 ? '' : 's'}`);
+  }
+  if (asked) {
+    parts.push(`${asked} pending rental request${asked === 1 ? '' : 's'}`);
   }
   const work = parts.length ? `${parts.join(', ')}. ` : '';
   const cascade = accounts.length

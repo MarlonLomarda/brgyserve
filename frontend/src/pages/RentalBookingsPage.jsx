@@ -1,52 +1,89 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
 import ListTabs from "../components/ListTabs";
 import ListToolbar from "../components/ListToolbar";
+import {
+  ApproveBookingPanel,
+  DeclineBookingPanel,
+} from "../components/BookingDecisionPanel";
 import CancelBookingPanel from "../components/CancelBookingPanel";
+import RentalAvailability from "../components/RentalAvailability";
 import ResidentPicker from "../components/ResidentPicker";
+import RowActionsMenu from "../components/RowActionsMenu";
 import { chargeOf, formatDate } from "../constants/requestStatus";
 import {
   ITEM_TYPE_LABELS,
   RETURN_OUTCOMES,
-  displayStatus,
   formatSchedule,
   isReturnable,
-  rentalMeta,
 } from "../constants/rentals";
-import { ANY, backwards, manilaToday } from "../utils/chargeFilters";
+import useRentalAvailability from "../hooks/useRentalAvailability";
+import useRentalSettings from "../hooks/useRentalSettings";
+import {
+  bookingRuleError,
+  bookingTimeError,
+  earliestBookingDate,
+  hoursText,
+  latestBookingDate,
+  manilaInputs,
+  timeLimits,
+} from "../utils/bookingTimes";
+import { ANY, backwards, clock, manilaToday } from "../utils/chargeFilters";
 import { searchTerms } from "../utils/chargeSearch";
 import { PAGE_SIZE, PAGE_SIZES, pageOf } from "../utils/paging";
 import {
+  bookingBlock,
+  EDIT_AVAILABILITY_FAILED,
+  editBlock,
+  quantityCap,
+} from "../utils/rentalAvailability";
+import {
   accountHandle,
   ANY_ITEM,
+  approvedMessage,
   bookedForName,
   bookingNumber,
   emptyText,
   filterCount,
   filtersNoMatchText,
   inTab,
+  isDecidable,
   isGuest,
   itemOptions,
   matchesItem,
   matchesPayment,
   matchesStarts,
+  matchesType,
   matchingBookings,
   noMatchText,
   openingTab,
   orderBookings,
+  overlapParts,
   paymentMarker,
   paymentOptions,
+  pendingOrder,
   RENTAL_TABS,
+  requestedLine,
   scheduleParts,
   searchHeading,
   searchPlaceholder,
+  showsPayment,
   STARTS_OPTIONS,
   startsRange,
+  statusBadge,
   tabCounts,
   tabHeading,
+  TYPE_OPTIONS,
 } from "../utils/rentalList";
+import {
+  FACILITY,
+  ITEM,
+  KIND_TEXT,
+  NOT_ASKED,
+  ofKind,
+} from "../utils/bookingKinds";
 
 // All-bookings view, shared by three roles: the Secretary manages
 // (canManage — edit/cancel), Barangay Staff mark physical items returned
@@ -140,6 +177,37 @@ import {
 // CancelBookingPanel with a required reason, and for a paid booking says the
 // payment stays recorded and a refund is due. A cancelled booking shows its
 // reason under its status, as text.
+//
+// TYPE AND KIND (27 Oct 2026, step C2). The filters row opens with a Type
+// filter, Any type, Facility, Equipment or Furniture (utils/rentalList.js),
+// which narrows with the others: the tab counts, the heading and Clear
+// filters treat it as they treat Item. The walk-in form splits its dropdown
+// with a Facility | Item toggle, as Book a rental's tabs do
+// (utils/bookingKinds.js). The Edit panel is unchanged: its item is fixed.
+//
+// APPROVAL (29 Oct 2026, batch R2b). Eight tabs: Pending, the requests
+// waiting for the Secretary, first and oldest request first; Not approved,
+// the declined and the expired, after Returned. The Secretary opens on
+// Pending, the Punong Barangay on Upcoming, Staff on Overdue. A booking stored
+// confirmed reads "Approved" here. A pending request's row says when it was
+// requested and whether another waiting request for the item overlaps it
+// (advice only), and for the Secretary carries Approve, Decline and Edit, never
+// Cancel (the server declines a request, never cancels it). Approve and
+// Decline open a panel over the list (components/BookingDecisionPanel.jsx,
+// the Payments View panel's pattern); a decision moves the focus to its
+// message, and a refusal is shown in the panel in the server's words, the
+// list loading again when it closes. Staff and the Punong Barangay see the
+// same tabs and rows, with no decision buttons.
+//
+// A SHORTER PENDING ROW (29 Oct 2026, after batch R2b). A pending request's
+// three buttons are one three-dot button whose menu holds Approve, Decline
+// and Edit (components/RowActionsMenu.jsx); every other row keeps its
+// buttons. "Requested Oct 29, 2:46 PM" is a line under the booking number,
+// the overlap note a line under the schedule naming the other request
+// ("Overlaps #126, requested later"), and the Status cell holds the badge:
+// a request not approved has no payment marker. When a panel opened from
+// the menu closes without a decision, the focus goes back to that row's
+// three-dot button (after Edit, once the list is drawn again).
 
 // Mirrors PH_MOBILE_RE in routes/rentalRequests.js, which is the real guard;
 // this copy only lets the Secretary see the problem without a round trip.
@@ -222,40 +290,82 @@ function ReturnedBy({ booking }) {
   );
 }
 
-const pad = (n) => String(n).padStart(2, "0");
-const toDateInput = (iso) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-const toTimeInput = (iso) => {
-  const d = new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
 // Edit changes the date, the times and the purpose, and nothing else (step
 // B2): the server refuses a different quantity, and the item and borrower
 // were never editable. So the quantity is shown, not offered, and the PUT
 // carries no quantity_requested; to change either, cancel and book again.
+//
+// Since step C3 it shows what is free for the new time under the time
+// fields, as the booking forms do, with this booking left out of the count
+// (exclude_request_id), and the booking's own quantity decides whether Save
+// is blocked (editBlock). Advice only: the server checks again on Save. The
+// fields are filled, and the date's earliest day set, in Manila time.
+//
+// Since step O43 (P29) it follows the booking rules as the two booking forms
+// do: the item's hours under its name ("Open 7:00 AM – 12:00 midnight"), the
+// time fields held to them, "(up to 31 days ahead)" by the date with the
+// date's max, and what is free is NOT ASKED while the slot breaks a rule: a
+// green "Free for 6:00 AM to 12:00 AM." sat above the server's refusal of the
+// same slot. Save then refuses it in the rules' words, under the time fields,
+// and sends nothing. The hours come with the list (MANAGE_FIELDS); an answer
+// without them shows no hours and leaves them to the server.
 function EditPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const [form, setForm] = useState({
-    date: toDateInput(booking.start_datetime),
-    start_time: toTimeInput(booking.start_datetime),
-    end_time: toTimeInput(booking.end_datetime),
-    purpose: booking.purpose,
+  const maxDaysAhead = useRentalSettings();
+  const hours = item ? hoursText(item) : null;
+  const limits = timeLimits(item);
+  const [form, setForm] = useState(() => {
+    const start = manilaInputs(booking.start_datetime);
+    return {
+      date: start.date,
+      start_time: start.time,
+      end_time: manilaInputs(booking.end_datetime).time,
+      purpose: booking.purpose,
+    };
   });
   const [error, setError] = useState("");
+  const [timeError, setTimeError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // A slot that breaks the booking rules is not asked about, as on the
+  // booking forms: Save refuses it in the rules' words.
+  const ruleBroken = item
+    ? bookingRuleError(form, clock.now(), { item, maxDaysAhead })
+    : null;
+  const askable = item && !ruleBroken;
+  const availability = useRentalAvailability(
+    askable ? item.item_id : undefined,
+    form.date,
+    form.start_time,
+    form.end_time,
+    booking.request_id,
+  );
+  const check = askable ? availability : NOT_ASKED;
+  const answer = check.status === "ready" ? check.data : null;
+  const blocked = editBlock({ answer, quantity: booking.quantity_requested });
+  const blockedId = useId();
 
   function handleChange(e) {
     const { name, value } = e.target;
+    // A changed date or time may answer the check; it runs again on Save.
+    if (name === "date" || name === "start_time" || name === "end_time") {
+      setTimeError("");
+    }
     setForm((f) => ({ ...f, [name]: value }));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // Save is disabled then; this stops the Enter key too.
+    if (blocked) return;
     setError("");
+    // The times, checked as the server will and in its words, before anything
+    // is sent (utils/bookingTimes.js, as on the booking forms). The server
+    // checks again with its own clock.
+    const refused = bookingTimeError(form, clock.now(), { item, maxDaysAhead });
+    setTimeError(refused || "");
+    if (refused) return;
     setBusy(true);
     try {
       const data = await authFetch(`/rental-requests/${booking.request_id}`, {
@@ -270,14 +380,19 @@ function EditPanel({ booking, onDone }) {
       onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message); // conflict messages land here
+      // The time was taken after the panel last asked: ask again.
+      if (err.status === 409) availability.reload();
       setBusy(false);
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in Manila, as on the booking forms: it was today in UTC, which
+  // until 8 AM in Manila is yesterday.
+  const today = earliestBookingDate(clock.now());
+  const latest = latestBookingDate(clock.now(), maxDaysAhead);
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Edit booking #{booking.request_id}</h3>
@@ -285,6 +400,7 @@ function EditPanel({ booking, onDone }) {
             {residentName(booking)} · {item?.name} (
             {ITEM_TYPE_LABELS[item?.type] || item?.type})
           </p>
+          {hours && <p className="muted">Open {hours}</p>}
           <p className="muted">
             Quantity: {booking.quantity_requested}
           </p>
@@ -304,13 +420,21 @@ function EditPanel({ booking, onDone }) {
       )}
 
       <form onSubmit={handleSubmit}>
+        {/* No Quantity box here, ever: Date takes the whole row, so Start
+            and End time sit side by side under it. */}
         <div className="grid-2">
-          <label>
-            Date
+          <label className="rental-date-full">
+            Date{" "}
+            {maxDaysAhead !== null && (
+              <span className="hint">
+                (up to {maxDaysAhead} day{maxDaysAhead === 1 ? "" : "s"} ahead)
+              </span>
+            )}
             <input
               name="date"
               type="date"
               min={today}
+              max={latest ?? undefined}
               value={form.date}
               onChange={handleChange}
               required
@@ -321,6 +445,7 @@ function EditPanel({ booking, onDone }) {
             <input
               name="start_time"
               type="time"
+              {...limits.start}
               value={form.start_time}
               onChange={handleChange}
               required
@@ -331,12 +456,23 @@ function EditPanel({ booking, onDone }) {
             <input
               name="end_time"
               type="time"
+              {...limits.end}
               value={form.end_time}
               onChange={handleChange}
               required
             />
           </label>
         </div>
+        {/* The times' own check, by the fields it is about. */}
+        {timeError && (
+          <div className="alert error" role="alert">
+            {timeError}
+          </div>
+        )}
+        <RentalAvailability
+          check={check}
+          failedText={EDIT_AVAILABILITY_FAILED}
+        />
         <label>
           Purpose
           <textarea
@@ -349,20 +485,34 @@ function EditPanel({ booking, onDone }) {
           />
         </label>
         <div className="actions">
-          <button className="btn" type="submit" disabled={busy}>
+          <button
+            className="btn"
+            type="submit"
+            disabled={busy || Boolean(blocked)}
+            aria-describedby={blocked ? blockedId : undefined}
+          >
             {busy ? "Checking availability…" : "Save changes"}
           </button>
+          {blocked && (
+            <span id={blockedId} className="rental-block-reason">
+              {blocked}
+            </span>
+          )}
         </div>
       </form>
     </div>
   );
 }
 
-// Staff record a physical item's return: an outcome + optional note.
+// Staff record a physical item's return: an outcome + optional note. An
+// overdue booking (the Overdue tab's own test, inTab) starts on "Returned
+// late", any other on time (step C3); Staff can change either.
 function ReturnPanel({ booking, onDone }) {
   const { authFetch } = useAuth();
   const item = booking.rental_items;
-  const [outcome, setOutcome] = useState(RETURN_OUTCOMES[0].value);
+  const [outcome, setOutcome] = useState(() =>
+    inTab(booking, "overdue") ? "returned_late" : RETURN_OUTCOMES[0].value,
+  );
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -387,7 +537,7 @@ function ReturnPanel({ booking, onDone }) {
   }
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Mark returned — booking #{booking.request_id}</h3>
@@ -406,7 +556,11 @@ function ReturnPanel({ booking, onDone }) {
         </button>
       </div>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <label>
@@ -461,49 +615,97 @@ const EMPTY_WALK_IN = {
 // a resident-facing page this feature does not otherwise touch. The fields
 // are the same ones that form collects; only who-it-is-for is new.
 //
-// THE CONFLICT CHECK IS THE SERVER'S. This posts to the same
-// POST /rental-requests handler BookRentalPage does, and that handler runs
-// findConflict() before and after the insert for every caller — there is no
-// second code path a walk-in could take around it. Refusals surface here in
-// `error` exactly as they do on the resident form.
+// THE AVAILABILITY CHECK IS THE SERVER'S. This posts to the same
+// POST /rental-requests handler BookRentalPage does, and that handler books
+// through create_rental_booking (migration 024) for every caller — there is
+// no second code path a walk-in could take around it. Before the press the
+// form shows what is free, from the same rule (RentalAvailability, as on Book
+// a rental), and its own time check runs as Book a rental's does; refusals
+// surface here in `error` exactly as they do on the resident form.
 function WalkInBookingPanel({ onDone }) {
   const { authFetch } = useAuth();
-  const [items, setItems] = useState(null); // null = loading
-  const [loadError, setLoadError] = useState("");
+  const [items, setItems] = useState(null); // null = loading, or a failed load
+  const [loadError, setLoadError] = useState(null); // why the last load failed
   const [mode, setMode] = useState("resident"); // 'resident' | 'guest'
+  // What is booked: a facility or an item (utils/bookingKinds.js), as Book a
+  // rental's tabs split it. Facility to start, on every visit.
+  const [kind, setKind] = useState(FACILITY);
   const [resident, setResident] = useState(null);
+  const residentBoxId = useId(); // the "Resident" label's for=
   const [guest, setGuest] = useState({ name: "", contact: "" });
   const [form, setForm] = useState({ ...EMPTY_WALK_IN });
   const [error, setError] = useState("");
+  // The form's own check of the times, shown under the time fields.
+  const [timeError, setTimeError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Numbers each load, so only the newest one may change the items.
+  const loadSeq = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await authFetch("/rental-items");
-        if (!cancelled) setItems(data.rental_items);
-      } catch (err) {
-        if (!cancelled) {
-          setLoadError(err.message);
-          setItems([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // A FAILED LOAD IS NOT AN EMPTY LIST (CLAUDE.md: a list that failed to
+  // load). This used to store [] beside the error, which showed "Nothing is
+  // currently available for rental." under it. items now stays null and the
+  // error, with Try again, takes the place of the fields, as on Book a rental.
+  const loadItems = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    setLoadError(null);
+    setItems(null);
+    try {
+      const data = await authFetch("/rental-items");
+      if (seq === loadSeq.current) setItems(data.rental_items);
+    } catch (err) {
+      if (seq === loadSeq.current) setLoadError(loadFailure(err));
+    }
   }, [authFetch]);
 
-  const selectedItem = items?.find(
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+
+  // How many days ahead a booking may start, or null while not known, asked
+  // after the items. The same rules as a resident's booking: the server
+  // applies them to both.
+  const maxDaysAhead = useRentalSettings();
+
+  // The toggle's own items, and Book a rental's rules for them: a Quantity
+  // for an item, none for a facility.
+  const words = KIND_TEXT[kind];
+  const shownItems = items === null ? null : ofKind(items, kind);
+  const selectedItem = shownItems?.find(
     (i) => String(i.item_id) === String(form.item_id),
   );
-  const isCountable = selectedItem && selectedItem.quantity_total > 1;
-  const quantity = isCountable ? Number(form.quantity) || 0 : 1;
+  const withQuantity = kind === ITEM;
+  const quantity = withQuantity ? Number(form.quantity) || 0 : 1;
   const estimatedFee = selectedItem ? Number(selectedItem.fee) * quantity : 0;
+  // The booking rules, as on Book a rental: the item's hours and how far
+  // ahead.
+  const hours = selectedItem ? hoursText(selectedItem) : null;
+  const limits = timeLimits(selectedItem);
+
+  // What is free for the chosen time: advice only, as on Book a rental, and
+  // nothing while no item is chosen or while the slot breaks the booking
+  // rules (Record booking refuses it in their words).
+  const ruleBroken = selectedItem
+    ? bookingRuleError(form, clock.now(), { item: selectedItem, maxDaysAhead })
+    : null;
+  const askable = selectedItem && !ruleBroken;
+  const availability = useRentalAvailability(
+    askable ? selectedItem.item_id : undefined,
+    form.date,
+    form.start_time,
+    form.end_time,
+  );
+  const check = askable ? availability : NOT_ASKED;
+  const answer = check.status === "ready" ? check.data : null;
+  const cap = selectedItem ? quantityCap(selectedItem, answer) : null;
+  const blocked = bookingBlock({ answer, quantity, countable: withQuantity });
+  const blockedId = useId();
 
   function handleChange(e) {
     const { name, value } = e.target;
+    // A changed date or time may answer the check; it runs again on Record.
+    if (name === "date" || name === "start_time" || name === "end_time") {
+      setTimeError("");
+    }
     setForm((f) => {
       const next = { ...f, [name]: value };
       if (name === "item_id") next.quantity = "1"; // reset when switching items
@@ -516,8 +718,21 @@ function WalkInBookingPanel({ onDone }) {
     setError("");
   }
 
+  // Facility | Item clears the item, the quantity and a time message (the
+  // availability answer goes with the item), as Book a rental's tabs do. The
+  // resident or guest above, the date, the times and the purpose stay.
+  function switchKind(next) {
+    if (next === kind) return;
+    setKind(next);
+    setForm((f) => ({ ...f, item_id: "", quantity: "1" }));
+    setTimeError("");
+    setError("");
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    // Record booking is disabled then; this stops the Enter key too.
+    if (blocked) return;
     if (mode === "resident" && !resident) {
       setError("Pick the resident this booking is for.");
       return;
@@ -533,6 +748,15 @@ function WalkInBookingPanel({ onDone }) {
       return;
     }
     setError("");
+    // The times, checked as the server will and in its words, before anything
+    // is sent (utils/bookingTimes.js, as on Book a rental). The server checks
+    // again with its own clock.
+    const refused = bookingTimeError(form, clock.now(), {
+      item: selectedItem,
+      maxDaysAhead,
+    });
+    setTimeError(refused || "");
+    if (refused) return;
     setBusy(true);
     try {
       const data = await authFetch("/rental-requests", {
@@ -555,14 +779,20 @@ function WalkInBookingPanel({ onDone }) {
       onDone({ type: "success", text: data.message });
     } catch (err) {
       setError(err.message); // conflict reasons surface here — pick another slot
+      // The slot was taken after the form last asked: ask again.
+      if (err.status === 409) availability.reload();
       setBusy(false);
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in Manila, whatever clock the hall's computer keeps: the date
+  // field's earliest day. It was today in UTC, which until 8 AM in Manila is
+  // yesterday.
+  const today = earliestBookingDate(clock.now());
+  const latest = latestBookingDate(clock.now(), maxDaysAhead);
 
   return (
-    <div className="pending-card">
+    <div className="pending-card rental-form-panel">
       <div className="pending-head">
         <div>
           <h3>Encode walk-in booking</h3>
@@ -576,14 +806,19 @@ function WalkInBookingPanel({ onDone }) {
         </button>
       </div>
 
-      {loadError && <div className="alert error">{loadError}</div>}
-      {error && <div className="alert error">{error}</div>}
+      {error && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
+        {/* Two toggles, one pressed: which kind of borrower this is for. */}
         <div className="tab-container">
           <button
             type="button"
             className={`tab ${mode === "resident" ? "active-tab" : ""}`}
+            aria-pressed={mode === "resident"}
             onClick={() => switchMode("resident")}
           >
             Existing resident
@@ -591,6 +826,7 @@ function WalkInBookingPanel({ onDone }) {
           <button
             type="button"
             className={`tab ${mode === "guest" ? "active-tab" : ""}`}
+            aria-pressed={mode === "guest"}
             onClick={() => switchMode("guest")}
           >
             Guest from another barangay
@@ -599,8 +835,11 @@ function WalkInBookingPanel({ onDone }) {
 
         {mode === "resident" ? (
           <>
-            <label>Resident</label>
+            <label htmlFor={residentBoxId} className="picker-label">
+              Resident
+            </label>
             <ResidentPicker
+              inputId={residentBoxId}
               value={resident}
               onPick={(r) => {
                 setResident(r);
@@ -641,14 +880,51 @@ function WalkInBookingPanel({ onDone }) {
           </div>
         )}
 
-        {items === null ? (
+        {/* The second toggle: what is booked. Drawn whatever the load did. */}
+        <div
+          className="tab-container"
+          role="group"
+          aria-label="What to book"
+        >
+          {[FACILITY, ITEM].map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`tab ${kind === k ? "active-tab" : ""}`}
+              aria-pressed={kind === k}
+              onClick={() => switchKind(k)}
+            >
+              {KIND_TEXT[k].toggle}
+            </button>
+          ))}
+        </div>
+
+        {/* The error first, then loading, then empty, then the fields. Try
+            again is a plain button, so pressing it inside this form loads the
+            items again and submits nothing. */}
+        {loadError ? (
+          <>
+            <div className="alert error" role="alert">
+              Could not load the rental items: {loadError}
+            </div>
+            <div className="actions book-rental-retry">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={loadItems}
+              >
+                Try again
+              </button>
+            </div>
+          </>
+        ) : items === null ? (
           <p className="muted">Loading rental items…</p>
-        ) : items.length === 0 ? (
-          <p className="muted">Nothing is currently available for rental.</p>
+        ) : shownItems.length === 0 ? (
+          <p className="muted">{words.none}</p>
         ) : (
           <>
             <label>
-              Facility / item
+              {words.field}
               <select
                 name="item_id"
                 value={form.item_id}
@@ -656,9 +932,9 @@ function WalkInBookingPanel({ onDone }) {
                 required
               >
                 <option value="" disabled>
-                  Select an item…
+                  {words.choose}
                 </option>
-                {items.map((i) => (
+                {shownItems.map((i) => (
                   <option key={i.item_id} value={i.item_id}>
                     {i.name} ({ITEM_TYPE_LABELS[i.type] || i.type}) — ₱
                     {Number(i.fee).toFixed(2)}
@@ -669,35 +945,50 @@ function WalkInBookingPanel({ onDone }) {
                 ))}
               </select>
             </label>
+            {hours && (
+              <p className="muted type-description">Open {hours}</p>
+            )}
             {selectedItem?.description && (
               <p className="muted type-description">
                 {selectedItem.description}
               </p>
             )}
 
+            {/* Facility: Date takes the whole row, so Start and End time sit
+                side by side under it. Item: Date | Quantity, then Pick-up |
+                Return time. */}
             <div className="grid-2">
-              <label>
-                Date
+              <label className={withQuantity ? undefined : "rental-date-full"}>
+                Date{" "}
+                {maxDaysAhead !== null && (
+                  <span className="hint">
+                    (up to {maxDaysAhead} day{maxDaysAhead === 1 ? "" : "s"}{" "}
+                    ahead)
+                  </span>
+                )}
                 <input
                   name="date"
                   type="date"
                   min={today}
+                  max={latest ?? undefined}
                   value={form.date}
                   onChange={handleChange}
                   required
                 />
               </label>
-              {isCountable && (
+              {withQuantity && (
                 <label>
                   Quantity{" "}
-                  <span className="hint">
-                    (up to {selectedItem.quantity_total})
-                  </span>
+                  {selectedItem && (
+                    <span className="hint">
+                      {cap > 0 ? `(up to ${cap})` : "(none left)"}
+                    </span>
+                  )}
                   <input
                     name="quantity"
                     type="number"
                     min="1"
-                    max={selectedItem.quantity_total}
+                    max={selectedItem ? Math.max(1, cap) : undefined}
                     step="1"
                     value={form.quantity}
                     onChange={handleChange}
@@ -706,26 +997,35 @@ function WalkInBookingPanel({ onDone }) {
                 </label>
               )}
               <label>
-                Start time
+                {words.start}
                 <input
                   name="start_time"
                   type="time"
+                  {...limits.start}
                   value={form.start_time}
                   onChange={handleChange}
                   required
                 />
               </label>
               <label>
-                End time
+                {words.end}
                 <input
                   name="end_time"
                   type="time"
+                  {...limits.end}
                   value={form.end_time}
                   onChange={handleChange}
                   required
                 />
               </label>
             </div>
+            {/* The times' own check, by the fields it is about. */}
+            {timeError && (
+              <div className="alert error" role="alert">
+                {timeError}
+              </div>
+            )}
+            <RentalAvailability check={check} />
 
             <label>
               Purpose
@@ -743,7 +1043,7 @@ function WalkInBookingPanel({ onDone }) {
             {selectedItem && (
               <p className="muted">
                 Estimated fee: <strong>₱{estimatedFee.toFixed(2)}</strong>
-                {isCountable && quantity > 0 && (
+                {withQuantity && quantity > 0 && (
                   <>
                     {" "}
                     ({quantity} × ₱{Number(selectedItem.fee).toFixed(2)})
@@ -753,9 +1053,19 @@ function WalkInBookingPanel({ onDone }) {
             )}
 
             <div className="actions">
-              <button className="btn" type="submit" disabled={busy}>
+              <button
+                className="btn"
+                type="submit"
+                disabled={busy || Boolean(blocked)}
+                aria-describedby={blocked ? blockedId : undefined}
+              >
                 {busy ? "Checking availability…" : "Record booking"}
               </button>
+              {blocked && (
+                <span id={blockedId} className="rental-block-reason">
+                  {blocked}
+                </span>
+              )}
             </div>
           </>
         )}
@@ -782,8 +1092,9 @@ export default function RentalBookingsPage({
   canReturn = false,
 }) {
   const { authFetch } = useAuth();
-  // The chosen status tab: Overdue for Staff, Upcoming for the others.
-  const [tab, setTab] = useState(() => openingTab(canReturn));
+  // The chosen status tab: Overdue for Staff, Pending for the Secretary,
+  // Upcoming for the Punong Barangay.
+  const [tab, setTab] = useState(() => openingTab(canReturn, canManage));
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
   const [loadError, setLoadError] = useState(null); // why the last load failed
   const [flash, setFlash] = useState(null);
@@ -793,6 +1104,16 @@ export default function RentalBookingsPage({
   const refocusId = useRef(null); // whose Cancel button gets the focus back
   const flashRef = useRef(null);
   const focusFlash = useRef(false); // a cancel went through: focus its message
+  // The Approve or Decline panel open over the list: { kind, booking,
+  // overlap }, the request and its overlap note as they were when it was
+  // chosen. The button that opened it (the row's three-dot button), for the
+  // focus to go back to.
+  const [deciding, setDeciding] = useState(null);
+  const decisionOpener = useRef(null);
+  // Whose three-dot button gets the focus once the list is drawn again: after
+  // a refused decision (the list loads again) and after the Edit panel opened
+  // from the menu (it takes the list's place, which loads again after a save).
+  const menuRefocus = useRef(null);
   const [encoding, setEncoding] = useState(false); // walk-in panel open
   // The search, as typed. Here rather than in the box, so it outlives the list
   // while the Edit, Mark returned or walk-in panel takes its place.
@@ -802,10 +1123,11 @@ export default function RentalBookingsPage({
   // Like the search, both live through every reload and Back from a panel.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  // The filters: Item, Payment and Starts (its choice, and From and To under
-  // "Choose dates"). Like the search, they live here, so they outlive the list
-  // while a panel takes its place; every visit starts them at Any, and none
-  // is kept in the browser.
+  // The filters: Type, Item, Payment and Starts (its choice, and From and To
+  // under "Choose dates"). Like the search, they live here, so they outlive
+  // the list while a panel takes its place; every visit starts them at Any,
+  // and none is kept in the browser.
+  const [typeChoice, setTypeChoice] = useState(ANY);
   const [itemChoice, setItemChoice] = useState(ANY_ITEM);
   const [paymentChoice, setPaymentChoice] = useState(ANY);
   const [dateChoice, setDateChoice] = useState(ANY);
@@ -878,10 +1200,10 @@ export default function RentalBookingsPage({
   }
 
   // After the panel closes, back to the row's Cancel button once it is drawn
-  // again (after the reload, when there was one); after a cancel, to the
-  // success message.
+  // again (after the reload, when there was one); after a cancel, or an
+  // approval or a decline, to the success message.
   useEffect(() => {
-    if (cancelling) return;
+    if (cancelling || deciding) return;
     if (refocusId.current !== null) {
       const button = document.querySelector(`[data-cancel-for="${refocusId.current}"]`);
       if (button) {
@@ -892,7 +1214,88 @@ export default function RentalBookingsPage({
       flashRef.current.focus();
       focusFlash.current = false;
     }
-  }, [cancelling, requests, flash]);
+  }, [cancelling, deciding, requests, flash]);
+
+  // APPROVE AND DECLINE (batch R2b). Each opens its panel over the list, the
+  // request as its row showed it; the page's message is cleared, as Cancel
+  // clears it.
+  function openDecision(kind, booking, opener) {
+    decisionOpener.current = opener;
+    setFlash(null);
+    // Both panels' overlap line is the row's own words, from the same helper
+    // (overlapParts), so the row and the two panels cannot disagree:
+    // "Overlaps #126, requested later".
+    setDeciding({
+      kind,
+      booking,
+      overlap: overlapParts(booking, requests ?? [])?.join(" ") ?? null,
+    });
+  }
+
+  // Every close route (Escape, Close, the backdrop) ends here, never while a
+  // request is out (the panel refuses first). Focus goes back to the button
+  // that opened it. After a refusal the list loads again, as after a refused
+  // cancel, and the focus goes to that row's three-dot button once it is
+  // drawn again, if the request still has one (the effect below).
+  function closeDecision(refused) {
+    if (!deciding) return;
+    const { booking } = deciding;
+    setDeciding(null);
+    if (refused) {
+      menuRefocus.current = booking.request_id;
+      load();
+    } else {
+      decisionOpener.current?.focus();
+    }
+  }
+
+  // Edit chosen from a request's menu: the Edit panel takes the list's place,
+  // as from a booking's Edit button, and when it closes the focus goes back
+  // to the row's three-dot button (the effect below).
+  function editFromMenu(booking) {
+    menuRefocus.current = booking.request_id;
+    setEditing(booking);
+  }
+
+  // A decision that went through: the panel closes, its message shows and
+  // takes the focus (the effect above), and the list loads again, the chosen
+  // tab kept; the request leaves Pending.
+  function decided(text) {
+    setDeciding(null);
+    focusFlash.current = true;
+    setFlash({ type: "success", text });
+    load();
+  }
+
+  async function sendApprove(booking, waive) {
+    const data = await authFetch(
+      `/rental-requests/${booking.request_id}/approve`,
+      { method: "POST", body: waive ? { waive_for_funeral: true } : {} },
+    );
+    decided(approvedMessage(data.request));
+  }
+
+  async function sendDecline(booking, reason) {
+    await authFetch(`/rental-requests/${booking.request_id}/decline`, {
+      method: "POST",
+      body: { reason },
+    });
+    decided("Request declined.");
+  }
+
+  // After a refused decision's reload, and after the Edit panel opened from
+  // the menu closes (Back, or a save and its reload): the focus to the row's
+  // three-dot button once the list is drawn again. If the request no longer
+  // has one (approved or expired meanwhile), or the reload failed, it is let
+  // go rather than kept for a later load.
+  useEffect(() => {
+    const id = menuRefocus.current;
+    if (id === null || deciding || editing) return;
+    if (requests === null && !loadError) return;
+    menuRefocus.current = null;
+    if (requests === null) return;
+    document.querySelector(`[data-actions-for="${id}"]`)?.focus();
+  }, [deciding, editing, requests, loadError]);
 
   // The search runs over the whole list, then the filters over what it
   // leaves, then the tabs split what matches. The tab counts come from every
@@ -906,10 +1309,14 @@ export default function RentalBookingsPage({
   // A filter that restricts something: "Choose dates" with no date is on
   // (Clear filters shows) but restricts nothing.
   const filtered =
-    itemChoice !== ANY_ITEM || paymentChoice !== ANY || range !== null;
+    typeChoice !== ANY ||
+    itemChoice !== ANY_ITEM ||
+    paymentChoice !== ANY ||
+    range !== null;
   // How many filters are on: the "(2)" on a phone's Filters button, and Clear
   // filters is offered while it is above 0.
   const filtersOn = filterCount({
+    type: typeChoice,
     item: itemChoice,
     payment: paymentChoice,
     date: dateChoice,
@@ -917,12 +1324,16 @@ export default function RentalBookingsPage({
   const searched = requests === null ? [] : matchingBookings(requests, query);
   const matching = searched.filter(
     (r) =>
+      matchesType(r, typeChoice) &&
       matchesItem(r, itemChoice) &&
       matchesPayment(r, paymentChoice) &&
       matchesStarts(r, range),
   );
   const counts = requests === null ? null : tabCounts(matching);
-  const shown = matching.filter((r) => inTab(r, tab));
+  // The Pending tab lists the oldest request first (pendingOrder); every
+  // other tab keeps the list's one order.
+  const inChosenTab = matching.filter((r) => inTab(r, tab));
+  const shown = tab === "pending" ? pendingOrder(inChosenTab) : inChosenTab;
   // One page of the tab's matches (utils/paging.js). Only the rows drawn are
   // a page: the heading and the counts still count every match.
   const paging = pageOf(shown.length, page, pageSize);
@@ -969,13 +1380,14 @@ export default function RentalBookingsPage({
     setPage(1);
   }
 
-  // Item, Payment, Starts, From and To.
+  // Type, Item, Payment, Starts, From and To.
   function narrowBy(set, value) {
     set(value);
     setPage(1);
   }
 
   function resetFilters() {
+    setTypeChoice(ANY);
     setItemChoice(ANY_ITEM);
     setPaymentChoice(ANY);
     setDateChoice(ANY);
@@ -1124,6 +1536,12 @@ export default function RentalBookingsPage({
                 className="rental-bookings-filters doc-requests-filters"
                 selects={[
                   {
+                    label: "Type",
+                    value: typeChoice,
+                    options: TYPE_OPTIONS,
+                    onChange: (value) => narrowBy(setTypeChoice, value),
+                  },
+                  {
                     label: "Item",
                     value: itemChoice,
                     options: itemChoices,
@@ -1229,9 +1647,17 @@ export default function RentalBookingsPage({
                 </thead>
                 <tbody>
                   {rows.map((r) => {
-                    const meta = rentalMeta(displayStatus(r));
+                    const meta = statusBadge(r);
                     const returnable = isReturnable(r.rental_items?.type);
                     const schedule = scheduleParts(r);
+                    // A request still waiting: when it was asked for, and
+                    // any other waiting request for the item it overlaps,
+                    // read from the whole list loaded (utils/rentalList.js).
+                    const decidable = isDecidable(r);
+                    const requested = decidable ? requestedLine(r) : null;
+                    const overlap = decidable
+                      ? overlapParts(r, requests)
+                      : null;
                     return (
                       <tr key={r.request_id}>
                         <td>
@@ -1249,6 +1675,18 @@ export default function RentalBookingsPage({
                           >
                             {bookingNumber(r)}
                           </div>
+                          {/* When a waiting request was made, "Requested
+                              Oct 29, 2:46 PM", one line under its number;
+                              nothing when it has no request time. On a phone
+                              card it is labelled "Request" (index.css). */}
+                          {requested && (
+                            <div
+                              className="muted small-note rental-bookings-request"
+                              data-label="Request"
+                            >
+                              {requested}
+                            </div>
+                          )}
                         </td>
                         <td data-label="Item">{r.rental_items?.name || "—"}</td>
                         <td data-label="Schedule">
@@ -1264,6 +1702,22 @@ export default function RentalBookingsPage({
                           ) : (
                             "—"
                           )}
+                          {/* The overlap note under the time it is about,
+                              naming the other request: "Overlaps #126,
+                              requested later". Each part never breaks, so a
+                              narrow cell breaks the line between them. */}
+                          {overlap && (
+                            <div className="muted reason-note rental-bookings-overlap">
+                              {overlap.map((part, i) => (
+                                <Fragment key={part}>
+                                  {i > 0 && " "}
+                                  <span className="rental-bookings-overlap-part">
+                                    {part}
+                                  </span>
+                                </Fragment>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="num" data-label="Qty">
                           {r.quantity_requested}
@@ -1275,7 +1729,9 @@ export default function RentalBookingsPage({
                           <span className={`badge ${meta.className}`}>
                             {meta.label}
                           </span>
-                          <PaymentMarker booking={r} />
+                          {/* No marker on a request not approved (waiting,
+                              declined, expired) while it has no charge. */}
+                          {showsPayment(r) && <PaymentMarker booking={r} />}
                           {r.returned_at && r.returned_by?.username && (
                             <ReturnedBy booking={r} />
                           )}
@@ -1290,9 +1746,43 @@ export default function RentalBookingsPage({
                                 Reason: {r.cancellation_reason}
                               </div>
                             )}
+                          {r.status === "declined" && r.decline_reason && (
+                            <div className="muted reason-note">
+                              Reason: {r.decline_reason}
+                            </div>
+                          )}
                         </td>
                         {(canManage || canReturn) && (
                           <td className="row-actions">
+                            {/* A request the server says is still waiting
+                                (derived pending): one three-dot button
+                                whose menu holds Approve, Decline and Edit,
+                                never Cancel, which the server refuses on a
+                                request. An expired or declined one has
+                                none. */}
+                            {canManage && decidable && (
+                              <RowActionsMenu
+                                label={`Actions for booking ${bookingNumber(r)}`}
+                                actionsFor={r.request_id}
+                                items={[
+                                  {
+                                    label: "Approve",
+                                    onSelect: (button) =>
+                                      openDecision("approve", r, button),
+                                  },
+                                  {
+                                    label: "Decline",
+                                    danger: true,
+                                    onSelect: (button) =>
+                                      openDecision("decline", r, button),
+                                  },
+                                  {
+                                    label: "Edit",
+                                    onSelect: () => editFromMenu(r),
+                                  },
+                                ]}
+                              />
+                            )}
                             {/* Edit and Cancel only where the server says the
                                 booking has not started (not_started: stored
                                 confirmed and its start ahead, the rule both
@@ -1317,9 +1807,12 @@ export default function RentalBookingsPage({
                                 </button>
                               </>
                             )}
+                            {/* Never before the booking starts (the
+                                server's not_started; it refuses too). */}
                             {canReturn &&
                               r.status === "confirmed" &&
-                              returnable && (
+                              returnable &&
+                              r.not_started !== true && (
                                 <button
                                   className="btn secondary"
                                   onClick={() => setReturning(r)}
@@ -1350,6 +1843,28 @@ export default function RentalBookingsPage({
             />
           )}
         </>
+      )}
+
+      {/* The Secretary's decision on a waiting request, over the list, at
+          z-index 50 (components/BookingDecisionPanel.jsx). Keyed by the
+          request, so a panel opened for another starts afresh. */}
+      {deciding?.kind === "approve" && (
+        <ApproveBookingPanel
+          key={deciding.booking.request_id}
+          booking={deciding.booking}
+          overlap={deciding.overlap}
+          onApprove={(waive) => sendApprove(deciding.booking, waive)}
+          onClose={closeDecision}
+        />
+      )}
+      {deciding?.kind === "decline" && (
+        <DeclineBookingPanel
+          key={deciding.booking.request_id}
+          booking={deciding.booking}
+          overlap={deciding.overlap}
+          onDecline={(reason) => sendDecline(deciding.booking, reason)}
+          onClose={closeDecision}
+        />
       )}
     </>
   );

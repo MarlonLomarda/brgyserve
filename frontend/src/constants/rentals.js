@@ -1,9 +1,19 @@
 // Display metadata for rentals (mirrors backend/src/constants/rentals.js).
-// Rentals are self-service (no pending/approved). Badge off derived_status —
-// the backend adds it — so facilities read 'Completed' and physical items
-// past due read 'Overdue' without the stored status changing.
+// Badge off derived_status — the backend adds it — so facilities read
+// 'Completed' and physical items past due read 'Overdue' without the stored
+// status changing.
+//
+// Since migration 027 a booking can wait for the Secretary's approval:
+// pending, then confirmed or declined, and a pending request whose start has
+// passed is derived 'expired'. No booking is stored pending yet (the batch
+// that switches the approval on comes later); the Activity Log reads these
+// three through this table, and since batch R2b the Rental bookings list
+// (Pending and Not approved tabs) does too.
 export const RENTAL_META = {
+  pending: { label: 'Pending', className: 'status-pending' },
   confirmed: { label: 'Confirmed', className: 'status-approved' },
+  declined: { label: 'Declined', className: 'status-rejected' },
+  expired: { label: 'Expired', className: 'status-cancelled' },
   overdue: { label: 'Overdue', className: 'status-rejected' },
   completed: { label: 'Completed', className: 'status-claimed' },
   returned: { label: 'Returned', className: 'status-claimed' },
@@ -11,6 +21,13 @@ export const RENTAL_META = {
   returned_with_issue: { label: 'Returned with issue', className: 'status-rejected' },
   cancelled: { label: 'Cancelled', className: 'status-cancelled' },
 };
+
+// The word a confirmed booking is shown with once the approval step is
+// switched on: "Approved". The stored status stays 'confirmed'. Since batch
+// R2b the Rental bookings list uses it (statusBadge in utils/rentalList.js);
+// the resident's pages keep RENTAL_META's "Confirmed" until the batch that
+// switches the approval on (R2c) puts it in RENTAL_META.confirmed.
+export const APPROVED_LABEL = 'Approved';
 
 export function rentalMeta(status) {
   return RENTAL_META[status] || { label: status, className: 'gray' };

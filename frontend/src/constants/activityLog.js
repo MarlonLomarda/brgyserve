@@ -16,6 +16,7 @@ import { EVENT_TYPE_LABELS } from './events';
 import { rejectionReasonLabel } from './registration';
 import { ROLE_LABELS } from '../auth/roles';
 import { formatPeso } from './reports';
+import { clockMinutes, clockText } from '../utils/bookingTimes';
 
 // Badge colours reuse the request-status classes: blue adds or allows, cyan
 // edits, green completes, yellow records money or a credential, red refuses
@@ -27,6 +28,8 @@ export const ACTION_META = {
   UNARCHIVE: { label: 'Unarchived', className: 'status-approved' },
   APPROVE: { label: 'Approved', className: 'status-approved' },
   REJECT: { label: 'Rejected', className: 'status-rejected' },
+  // The Secretary declining a pending rental request (migration 027).
+  DECLINE: { label: 'Declined', className: 'status-rejected' },
   UNREJECT: { label: 'Rejection lifted', className: 'status-approved' },
   LINK: { label: 'Linked', className: 'status-approved' },
   ACTIVATE: { label: 'Activated', className: 'status-approved' },
@@ -71,6 +74,7 @@ export const TABLE_LABELS = {
   charges: 'Charge',
   rental_items: 'Rental item',
   rental_requests: 'Rental booking',
+  rental_settings: 'Rental booking rules',
   events: 'Event',
   event_attendees: 'Event attendance',
   dispute_records: 'Blotter case',
@@ -123,6 +127,11 @@ export function recordLabel(row) {
     return TABLE_LABELS[row.table_name] || humanize(row.table_name);
   }
   if (row.table_name === 'users' || row.table_name === 'profiles') return `Account #${row.record_id}`;
+  // One row for the whole barangay (migration 025): its id says nothing.
+  // Nothing writes such a row since step O43 (the limit is fixed in the code
+  // and migration 026 drops the table), but the two written before stay in
+  // the log, so the label stays.
+  if (row.table_name === 'rental_settings') return TABLE_LABELS.rental_settings;
   return `${TABLE_LABELS[row.table_name] || humanize(row.table_name)} #${row.record_id}`;
 }
 
@@ -143,6 +152,16 @@ const FIELD_LABELS = {
   quantity_requested: 'Quantity',
   quantity_total: 'Total units',
   quantity_available: 'Units available',
+  // The booking rules (migration 025): an item's hours, and the
+  // barangay-wide limit on how far ahead a booking may start (no longer
+  // changed since step O43; kept for the rows already in the log).
+  booking_opens_at: 'Booking opens',
+  booking_closes_at: 'Booking closes',
+  // Migration 027: the items a funeral may be booked for, and an approved
+  // booking's charge.
+  funeral_eligible: 'Funeral use allowed',
+  charge_id: 'Charge',
+  max_days_ahead: 'Days ahead a booking can be made',
   masterlist_registered_on: 'Masterlist registration date',
   educational_attainment: 'Educational attainment',
   civil_status: 'Civil status',
@@ -161,6 +180,9 @@ const FIELD_LABELS = {
   session_expire_failure: 'GCash checkout error',
   reason_given: 'Reason given',
   gateway_payment_id: 'PayMongo payment',
+  // An approval whose fee the Secretary waived (design C): the code
+  // 'funeral', never the purpose's words.
+  fee_waived: 'Fee waived',
 };
 
 function humanize(key) {
@@ -178,6 +200,9 @@ const BOOLEAN_WORDS = {
 };
 const MONEY_KEYS = ['fee', 'fine_amount', 'amount', 'amount_each', 'total_amount', 'refund_due'];
 const TIME_KEYS = ['start_datetime', 'end_datetime', 'date_created', 'registered_at', 'timestamp'];
+// A time of day ("07:00:00", or "24:00:00" for midnight), said as the booking
+// forms say it: "7:00 AM", "12:00 midnight".
+const CLOCK_KEYS = ['booking_opens_at', 'booking_closes_at'];
 
 function statusLabel(table, value) {
   if (table === 'charges') return CHARGE_META[value]?.label || value;
@@ -192,6 +217,7 @@ function formatValue(table, key, v) {
   if (typeof v === 'boolean') return (BOOLEAN_WORDS[key] || ['No', 'Yes'])[v ? 1 : 0];
   if (MONEY_KEYS.includes(key) && !Number.isNaN(Number(v))) return formatPeso(v);
   if (TIME_KEYS.includes(key)) return formatLogTime(v);
+  if (CLOCK_KEYS.includes(key) && clockMinutes(v) !== null) return clockText(clockMinutes(v));
   if (key === 'status') return statusLabel(table, v);
   if (key === 'type') return (table === 'rental_items' ? ITEM_TYPE_LABELS : EVENT_TYPE_LABELS)[v] || v;
   if (typeof v === 'number') return String(v);
@@ -425,6 +451,21 @@ function actionSummary(row, before, after, withheld) {
     case 'REJECT':
       if (t === 'users') return `Registration rejected: ${rejectionReasonLabel(after.rejection_reason)}`;
       return transition(t, before.status, after.status);
+    // A rental request decided (migration 027): "Pending to Confirmed,
+    // charge #12"; "Pending to Confirmed, fee waived (funeral), charge #12";
+    // "Pending to Declined, reason given". The reason's words are never in
+    // the log.
+    case 'APPROVE':
+      if (t === 'rental_requests') {
+        return [
+          transition(t, before.status, after.status),
+          after.fee_waived === 'funeral' && 'fee waived (funeral)',
+          after.charge_id && `charge #${after.charge_id}`,
+        ];
+      }
+      return otherSummary(t, before, after);
+    case 'DECLINE':
+      return [transition(t, before.status, after.status), after.reason_given ? 'reason given' : 'no reason given'];
     case 'UNREJECT':
       return before.rejection_reason
         ? `Rejection lifted (was: ${rejectionReasonLabel(before.rejection_reason)})`

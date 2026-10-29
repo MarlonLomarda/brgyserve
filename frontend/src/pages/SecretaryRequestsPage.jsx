@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import ListFilters from "../components/ListFilters";
 import ListPager from "../components/ListPager";
@@ -481,6 +481,7 @@ function WalkInRequestPanel({ onDone }) {
   const [types, setTypes] = useState(null); // null = loading
   const [loadError, setLoadError] = useState("");
   const [resident, setResident] = useState(null);
+  const residentBoxId = useId(); // the "Resident" label's for=
   const [form, setForm] = useState({ document_type_id: "", purpose: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -555,8 +556,11 @@ function WalkInRequestPanel({ onDone }) {
       {error && <div className="alert error">{error}</div>}
 
       <form onSubmit={handleSubmit}>
-        <label>Resident</label>
+        <label htmlFor={residentBoxId} className="picker-label">
+          Resident
+        </label>
         <ResidentPicker
+          inputId={residentBoxId}
           value={resident}
           onPick={(r) => {
             setResident(r);

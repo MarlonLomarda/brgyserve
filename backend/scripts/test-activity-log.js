@@ -23,7 +23,7 @@ process.env.JWT_SECRET = 'activity-test-signing-key';
 
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { logActivity, logActivityMany, diffFields, scrub } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
-const { ACTIONS, isSensitiveKey, isPersonalKey, LOGGED_TABLES } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
+const { ACTIONS, isSensitiveKey, isPersonalKey, LOGGED_TABLES, RETIRED_LOGGED_TABLES = [] } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -290,6 +290,44 @@ const fakeFrom = (table) => {
       && !('MAKE_TEA' in ACTIONS)
       && actionValues('x ? ACTIONS.SETTLE : ACTIONS.REOPEN').every((v) => /^ACTIONS\.[A-Z_]+$/.test(v)));
 
+  // DECLINE (migration 027, 28 Oct 2026): the Secretary declining a pending
+  // rental request. Its own code, written at ONE call site, the decline
+  // route, on rental_requests, with reason_given and never the reason.
+  const declineSites = calls.filter((c) => /action:\s*ACTIONS\.DECLINE\b/.test(c.body));
+  const declineRoute = fs.readFileSync(path.join(ROUTES, 'rentalRequests.js'), 'utf8').replace(/\r/g, '');
+  const declineAt = declineRoute.indexOf("router.post('/:id/decline'");
+  const declineEnd = declineRoute.indexOf('\nrouter.', declineAt + 1);
+  check('DECLINE is an ACTIONS constant, and the vocabulary is 30 codes', ACTIONS.DECLINE === 'DECLINE'
+    && Object.keys(ACTIONS).length === 30, `${Object.keys(ACTIONS).length} codes`);
+  check('  written at exactly one call site: the decline route in rentalRequests.js, on rental_requests, with reason_given',
+    declineSites.length === 1 && declineSites[0].file === 'rentalRequests.js' && declineAt !== -1
+      && declineRoute.slice(declineAt, declineEnd === -1 ? undefined : declineEnd).includes('action: ACTIONS.DECLINE')
+      && /table:\s*'rental_requests'/.test(declineSites[0].body) && /reason_given:\s*true/.test(declineSites[0].body)
+      && !/decline_reason|parsed\.reason/.test(declineSites[0].body),
+    declineSites.map((c) => `${c.file}:${c.line}`).join(', ') || 'none');
+  check('  labelled on the Activity Log page', /^\s*DECLINE:\s*\{\s*label:\s*'Declined'/m.test(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8')),
+    'frontend/src/constants/activityLog.js');
+
+  // The funeral waiver (design C, 29 Oct 2026): the approve route's APPROVE
+  // row carries fee_waived, a code taken from PURPOSE_TYPE and only when the
+  // function answered waived, never the purpose's words; the Activity Log
+  // page words it "fee waived (funeral)".
+  const approveAt = declineRoute.indexOf("router.post('/:id/approve'");
+  const approveBody = approveAt === -1 ? '' : declineRoute.slice(approveAt, declineRoute.indexOf('\nrouter.', approveAt + 1));
+  const approveLog = approveBody.slice(approveBody.indexOf('action: ACTIONS.APPROVE'));
+  check('the rental APPROVE row logs fee_waived as the PURPOSE_TYPE code, only when the function answered waived',
+    approveAt !== -1 && /result\.waived === true \? \{ fee_waived: PURPOSE_TYPE\.FUNERAL \} : \{\}/.test(approveLog)
+      && !/(^|[\s{,])purpose\s*:|\.purpose\b(?!_type)/m.test(approveLog.slice(0, approveLog.indexOf('});'))),
+    approveAt === -1 ? 'no approve route' : 'rentalRequests.js');
+  const approveCase = (() => {
+    const v = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8').replace(/\r/g, '');
+    const at = v.indexOf("    case 'APPROVE':");
+    return at === -1 ? '' : v.slice(at, v.indexOf("    case 'DECLINE':", at));
+  })();
+  check('  the Activity Log page words a waived rental approval "fee waived (funeral)"',
+    /after\.fee_waived === 'funeral' && 'fee waived \(funeral\)'/.test(approveCase), approveCase ? 'APPROVE case found' : 'no APPROVE case');
+
   const badTable = calls.filter((c) => {
     const t = (c.body.match(/table:\s*(['"])([a-z_]+)\1/) || [])[2];
     return !t || !realTables.has(t);
@@ -308,16 +346,26 @@ const fakeFrom = (table) => {
   const unlabelled = [
     ...Object.keys(ACTIONS).filter((a) => !new RegExp(`^\\s*${a}:\\s*\\{\\s*label:`, 'm').test(frontendVocab)),
     ...LOGGED_TABLES.filter((t) => !new RegExp(`^\\s*${t}:\\s*'`, 'm').test(frontendVocab)),
+    // A retired table's rows are still in the log, so it keeps its label.
+    ...RETIRED_LOGGED_TABLES.filter((t) => !new RegExp(`^\\s*${t}:\\s*'`, 'm').test(frontendVocab)),
   ];
-  check('the frontend labels every action and every logged table', unlabelled.length === 0,
-    unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables`);
+  // Step O43: PUT /api/rental-settings is gone, so nothing logs
+  // rental_settings now, but its two old rows stay in the log: the table is
+  // RETIRED, never logged again and never left unlabelled.
+  check('rental_settings is retired, not logged: in RETIRED_LOGGED_TABLES, out of LOGGED_TABLES, and no call site logs it',
+    RETIRED_LOGGED_TABLES.includes('rental_settings') && !LOGGED_TABLES.includes('rental_settings')
+      && RETIRED_LOGGED_TABLES.every((t) => !tablesLogged.includes(t)),
+    `retired: ${RETIRED_LOGGED_TABLES.join(', ') || '(none)'}; logged: ${tablesLogged.join(', ')}`);
+  check('the frontend labels every action, every logged table and every retired one', unlabelled.length === 0,
+    unlabelled.join(', ') || `${Object.keys(ACTIONS).length} actions, ${LOGGED_TABLES.length} tables, ${RETIRED_LOGGED_TABLES.length} retired`);
   // Keys a route invents for the log rather than copying from a column. The
   // frontend would fall back to "Parties renamed 0 to 1" without its own
   // wording, so each must be named there.
   // The rental cancel's facts (25 Oct 2026) and the webhook's late-payment
   // row are markers too: none is a column the page already knows.
+  // fee_waived: an approval whose fee the Secretary waived (design C).
   const LOG_MARKERS = ['parties_renamed', 'charge_outcome', 'refund_due', 'session_expired',
-    'session_expire_failure', 'reason_given', 'gateway_payment_id'];
+    'session_expire_failure', 'reason_given', 'gateway_payment_id', 'fee_waived'];
   const markersMissing = LOG_MARKERS.filter((m) => !new RegExp(`^\\s*${m}:\\s*'`, 'm').test(frontendVocab)
     || !fs.readdirSync(ROUTES).some((f) => fs.readFileSync(path.join(ROUTES, f), 'utf8').includes(m)));
   check('every log marker a route writes is labelled in the frontend', markersMissing.length === 0,
@@ -411,6 +459,31 @@ const fakeFrom = (table) => {
     Promise.resolve(handler(req, res)).catch(reject);
   });
   const secretary = { user_id: 4242, username: 'probe_secretary', role: 'secretary' };
+
+  // A retired table's old rows can still be filtered by record type, and a
+  // click on one's record sends the same table (step O43): a 200 with the
+  // filter applied, while an unknown table is still a 400.
+  {
+    const activityLogsRoute = require(path.join(ROUTES, 'activityLogs.js'));
+    const eqs = [];
+    const before = supabase.from;
+    supabase.from = () => {
+      const b = new Proxy({}, { get(_, k) {
+        if (k === 'then') return (res, rej) => Promise.resolve({ data: [], error: null, count: 0 }).then(res, rej);
+        return (...args) => { if (k === 'eq') eqs.push(args); return b; };
+      } });
+      return b;
+    };
+    const list = handlerFor(activityLogsRoute, 'get', '/');
+    const retired = await invoke(list, { user: secretary, query: { table: 'rental_settings', record_id: '1' } });
+    check('GET /api/activity-logs?table=rental_settings&record_id=1 (a retired table): 200, filtered on the table and the record',
+      retired.status === 200 && eqs.some(([c, v]) => c === 'table_name' && v === 'rental_settings')
+        && eqs.some(([c, v]) => c === 'record_id' && v === 1), JSON.stringify({ status: retired.status, body: retired.body, eqs }));
+    const unknown = await invoke(list, { user: secretary, query: { table: 'no_such_table' } });
+    check('  an unknown table is still 400 "Unknown record type \'no_such_table\'"', unknown.status === 400
+      && unknown.body?.error === "Unknown record type 'no_such_table'", JSON.stringify(unknown));
+    supabase.from = before;
+  }
 
   const disputes = require(path.join(ROUTES, 'disputes.js'));
   answers.dispute_records = { dispute_id: 9, barangay_case_no: 'X-1', is_settled: true, dispute_parties: [] };

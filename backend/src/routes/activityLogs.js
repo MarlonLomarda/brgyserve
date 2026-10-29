@@ -1,7 +1,7 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { ACTIONS, LOGGED_TABLES } = require('../constants/activityLog');
+const { ACTIONS, LOGGED_TABLES, RETIRED_LOGGED_TABLES } = require('../constants/activityLog');
 const { scrub, withholdPersonal } = require('../services/activityLog');
 const { parsePaging, pageResponse, isRangeError } = require('../utils/listQuery');
 
@@ -90,7 +90,10 @@ function parseFilters(query) {
 
   const table = String(query.table ?? '').trim().toLowerCase();
   if (table && table !== 'all') {
-    if (!LOGGED_TABLES.includes(table)) return { error: `Unknown record type '${table}'` };
+    // A retired table's old rows can still be filtered (constants/activityLog.js).
+    if (!LOGGED_TABLES.includes(table) && !RETIRED_LOGGED_TABLES.includes(table)) {
+      return { error: `Unknown record type '${table}'` };
+    }
     f.table = table;
   }
 

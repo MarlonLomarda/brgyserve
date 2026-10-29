@@ -1724,6 +1724,72 @@ button.link-button:hover:not(:disabled) {
   background: #eff6ff;
 }
 
+/* The row actions menu (components/RowActionsMenu.jsx, 29 Oct 2026): a
+   pending request's Approve, Decline and Edit in Rental bookings, behind one
+   three-dot button. The Pay menu's rules COPIED under this menu's own class,
+   not shared, so a change to one menu leaves the other alone. The wrapper is
+   the actions cell's direct child, as the Pay menu's is, so it takes the
+   cell's inline-box margins. Above 640px the list floats, placed by the
+   component, at z-index 35, the Pay menu's rung: above the sticky header
+   (30) where they meet, below the drawer's backdrop (40) and the drawer
+   (50). The two-class item selectors beat `button:hover:not(:disabled)`
+   (0,2,1), as the Pay menu's do. */
+.row-menu .row-menu-list {
+  position: fixed;
+  z-index: 35;
+  min-width: 160px;
+  padding: 6px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+/* The button is a secondary button holding the icon alone: 40px square
+   (border-box), the icon centred, as tall as the row's other buttons. On a
+   phone card it goes full width like every card button. */
+.row-menu > .row-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.row-menu .row-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: none;
+  border-radius: 6px;
+}
+
+.row-menu .row-menu-item:hover:not(:disabled),
+.row-menu .row-menu-item:focus-visible {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+/* Decline keeps the red of the row button it replaced (.btn.danger). */
+.row-menu .row-menu-danger,
+.row-menu .row-menu-danger:hover:not(:disabled),
+.row-menu .row-menu-danger:focus-visible {
+  color: #b91c1c;
+}
+
+.row-menu .row-menu-danger:hover:not(:disabled),
+.row-menu .row-menu-danger:focus-visible {
+  background: #fef2f2;
+}
+
 .badge.gray {
   background: #f1f5f9;
   color: #64748b;
@@ -2030,12 +2096,51 @@ button.link-button:hover:not(:disabled) {
   margin: 0;
 }
 
+/* The picker's root (components/ResidentPicker.jsx), in its search and its
+   picked state, on all five screens that use it: the rental and document
+   walk-in forms, New household, Add a member and the blotter's party rows.
+   It is the one field not wrapped in a <label>, so it carries a label's 14px
+   itself; before step O1/O2 the next label (or the results list) touched it.
+   In a party row it also evens the row's foot with the typed-name fields. */
+.resident-picker {
+  margin-bottom: 14px;
+}
+
+/* A label naming the picker (for= its box) sits 6px above the box, as a
+   wrapping label's text does: the box's own 6px margin-top collapses with
+   this. A bare label kept its 14px and stood apart from its box. */
+.picker-label {
+  margin-bottom: 6px;
+}
+
 .picker-selected {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* "Searching…" and "No matching residents.": always in the DOM (role
+   status), spaced only while it says something. */
+.picker-status:not(:empty) {
+  margin-top: 0.35rem;
+}
+
+/* A failed search: the reason (role alert) and Try again on one line where
+   they fit. #b91c1c on white is 6.47:1. */
+.picker-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 0.35rem;
+}
+
+.picker-error p {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
 }
 
 .picker-results {
@@ -2046,11 +2151,15 @@ button.link-button:hover:not(:disabled) {
   overflow-y: auto;
 }
 
+/* A result is a <button>, so without a colour of its own it took the global
+   button's #fff, white on the card's white (1.00:1). #1e293b, the body text,
+   is 14.63:1 on white. */
 .picker-option {
   display: block;
   width: 100%;
   text-align: left;
   padding: 0.5rem 0.65rem;
+  color: #1e293b;
   background: none;
   border: none;
   border-bottom: 1px solid #f1f5f9;
@@ -2062,8 +2171,17 @@ button.link-button:hover:not(:disabled) {
   border-bottom: none;
 }
 
-.picker-option:hover {
+/* (0,3,1), as button.tab's hover is: the global button:hover:not(:disabled)
+   is (0,2,1) and beat a plain .picker-option:hover (0,2,0), painting the row
+   #1d4ed8, where the grey details read 1.41:1. On #f8fafc the name is
+   13.98:1 and the details, darkened to #475569, 7.24:1 (#64748b would be
+   4.55). The global button and .muted rules are unchanged. */
+button.picker-option:hover:not(:disabled) {
   background: #f8fafc;
+}
+
+button.picker-option:hover .muted {
+  color: #475569;
 }
 
 @media (max-width: 560px) {
@@ -3076,6 +3194,24 @@ button.pay-tab:hover:not(:disabled) {
    ones do, here and on a phone card (the 640px .stack-narrow block): a change
    to either rule changes both lists. */
 
+/* A pending request's "Requested Oct 29, 2:46 PM" (29 Oct 2026, after batch
+   R2b), the line under its booking number in the Booked for cell, never
+   breaks: 152.1px for that one, at most 164.4 ("Requested May 10, 12:00 AM",
+   every day and minute of 2026). The column holds 176px of text, so it fits
+   above 1045px; at 641-1045px, 160, the widest few run up to 4.4px into the
+   cell's 16px of padding rather than take a second line. On a phone card it
+   takes a label of its own, "Request" (the 640px .stack-narrow block).
+
+   Its overlap note, under the schedule, names the other request in parts,
+   "Overlaps #126," "requested later" (182.7px at most for the two, "Overlaps
+   #125, requested earlier"), none of which breaks, so the Schedule column's
+   144px of text breaks the note between them, never inside "#126" or
+   between "requested" and "later"; on a phone card it is one line. */
+.data-table .rental-bookings-request,
+.data-table .rental-bookings-overlap-part {
+  white-space: nowrap;
+}
+
 /* The Document requests columns (14 Oct 2026). Above 640px the columns stand
    in the same places on every tab, page, search and filter result: the
    layout is fixed, so these widths decide the columns, not the rows drawn
@@ -3266,9 +3402,85 @@ button.pay-tab:hover:not(:disabled) {
    (4px under) and .actions (4px over) collapse to 4px, which read as one
    block. Vertical margins collapse, so this 16px is the gap. (0,2,0) beats
    .actions; the shared .alert, .actions and .pending-card .alert rules, and
-   every other .actions row, are unchanged. */
+   every other .actions row, are unchanged. Since step C1b (26 Oct 2026) the
+   Secretary's walk-in form (WalkInBookingPanel in RentalBookingsPage.jsx)
+   carries the class on its own Try again row: the same row, in a card. */
 .actions.book-rental-retry {
   margin-top: 16px;
+}
+
+/* What is free for the chosen time, under the time fields of Book a rental
+   and the walk-in form (components/RentalAvailability.jsx, step C1b). The
+   result is a shared .alert (success while the time can be booked, error when
+   it cannot) holding one line per sentence, the first a little heavier; the
+   last answer is dimmed while a new one is out. The reason a booking is
+   blocked sits beside its disabled button, in the .actions row, in the error
+   red of .alert.error. Page-scoped: no shared rule is changed. */
+.rental-availability-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rental-availability-line:first-child {
+  font-weight: 600;
+}
+
+.rental-availability-result.is-stale {
+  opacity: 0.55;
+}
+
+.rental-availability .muted {
+  margin-bottom: 16px;
+}
+
+.rental-block-reason {
+  align-self: center;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+/* The four rental panels (step O1/O2): Encode walk-in, Edit and Mark
+   returned (RentalBookingsPage.jsx) and Cancel (CancelBookingPanel.jsx, which
+   My rentals opens too). .pending-head has no margin of its own, so the
+   tabs, the Date label or the first field touched the help text above (and,
+   at 640px and below, the Back button). It collapses with an .alert's 12px
+   to 16. The shared .pending-head, in 21 places, is unchanged. */
+.rental-form-panel .pending-head {
+  margin-bottom: 16px;
+}
+
+/* "← Back to list" keeps to one line beside the help text, which wraps
+   instead: on the walk-in it broke as "← Back to / list" at 768 and 1280.
+   At 640px and below the shared .pending-head wrap still gives it a line of
+   its own under the text, which is accepted. As .staff-accounts-page does
+   for "New staff account". Cancel has no Back button. */
+.rental-form-panel .pending-head > .btn {
+  white-space: nowrap;
+}
+
+/* A booking form with no Quantity box (an item with one unit on Book a
+   rental and the walk-in form; Edit always) left End time alone on a row.
+   The Date label then takes the whole row, and Start | End share the next;
+   the JSX decides when. 1 / -1, not .span-2: .span-2 is released at 560px
+   while .grid-2 collapses at 480, so 481 to 560 would break again. */
+.rental-date-full {
+  grid-column: 1 / -1;
+}
+
+/* Rental items' lower-stock warning (step C3): an .alert.info in the edit
+   form holding a sentence and two buttons. The paragraph's own margins made
+   the box taller above the sentence than below the buttons, and the box sat
+   4px over the Save row (.pending-card .alert's bottom margin); here it is
+   even, and 12px clear of Save. Scoped to the class: no shared .alert,
+   .actions or .pending-card rule changes. .alert.stock-warning is (0,2,0),
+   as .pending-card .alert is, and wins by coming later in the file. */
+.stock-warning p {
+  margin: 0 0 10px;
+}
+
+.alert.stock-warning {
+  margin-bottom: 12px;
 }
 
 /* The pager (batch 6b): one bar under the rows, a card like the table's. The
@@ -4933,6 +5145,22 @@ button.tab:hover:not(:disabled) {
     box-shadow: none;
   }
 
+  /* The row actions menu in a card, as the Pay menu is: the three-dot button
+     full width like every card button, the list in flow under it, full width,
+     every item 40px tall at least. Scoped by the menu's own class alone, which
+     at (0,3,0) beats the cell's `td.row-actions > *` (0,2,1) and leaves every
+     rule that names .row-actions as it was. */
+  .data-table.stack-narrow .row-menu {
+    display: block;
+    margin-top: 0;
+  }
+
+  .data-table.stack-narrow .row-menu .row-menu-list {
+    position: static;
+    margin-top: 8px;
+    box-shadow: none;
+  }
+
   /* ---- ISSUE 9: the modifier applied to the other fourteen list tables ----
      ISSUE 8 built the mechanism for one table; these three rules are all that
      was missing to reuse it everywhere else. The tables now carrying
@@ -5076,6 +5304,25 @@ button.tab:hover:not(:disabled) {
 
   .data-table.stack-narrow .rental-bookings-return-at {
     white-space: nowrap;
+  }
+
+  /* A pending request's "Requested …" line (29 Oct 2026, batch R2b; since
+     the menu fix, under the booking number in the first cell) takes a label
+     of its own, "Request", as the booking number takes "Booking" and the
+     returned-by note "Return": the same size, case, spacing and colour, 8px
+     under the number. */
+  .data-table.stack-narrow .rental-bookings-request {
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .data-table.stack-narrow .rental-bookings-request[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
   }
 
   /* The View panel on a phone fills the screen. Everything under the header

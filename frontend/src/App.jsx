@@ -565,13 +565,9 @@ export default function App() {
         path="/resident/book-rental"
         element={
           <ProtectedRoute role="resident">
-            <PageLayout
-              dashTitle={"Book a facility"}
-              dashSubtitle={"Book a barangay facility or item"}
-              navItems={RESIDENT_NAV}
-            >
-              <BookRentalPage />
-            </PageLayout>
+            {/* The page draws its own PageLayout: its heading follows its
+                Facilities | Items tab ("Book a Facility" or "Rent an Item"). */}
+            <BookRentalPage />
           </ProtectedRoute>
         }
       />

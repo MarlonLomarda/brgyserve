@@ -1,6 +1,6 @@
 // ===========================================================================
 // ROUTE ROLE GUARDS — resident records + document requests + disputes +
-// the activity log + payments + rental bookings.
+// the activity log + payments + rental bookings + the rental booking rules.
 //
 //   cd backend && npm run roles:test
 //
@@ -24,12 +24,19 @@
 // layers as well as each route's own guards. Before that it read the file as
 // open to all five roles.
 //
+// rentalSettings.js joined with the booking rules (migration 025, 28 Oct
+// 2026): GET is for every signed-in role (the booking forms show the limit).
+// Its PUT, the Secretary's, was removed in step O43 (the limit is a constant
+// in the code now), so GET is its only route. It has a router-level
+// authenticate and no role guard, so a route added there is open to all.
+//
 // rentalRequests.js joined with rental Edit and Cancel (25 Oct 2026), when
 // residents gained POST /mine/:id/cancel. Like documentRequests.js it guards
-// per route under a router-level authenticate, so every one of its nine
-// routes is declared below. Who may cancel WHICH booking — their own online
-// booking, 24 hours ahead, unpaid — is rentals:test's job; this file checks
-// who reaches each route at all.
+// per route under a router-level authenticate, so every one of its routes
+// (ten since GET /availability, step C1b) is declared below. Who may cancel
+// WHICH booking — their own online booking, 24 hours ahead, unpaid — is
+// rentals:test's job; this file checks who reaches each route at all, and
+// that /mine and /availability are declared before /:id.
 //
 // WHY THIS EXISTS. Both files used to be Secretary-only: residentRecords.js
 // opened with `router.use(authenticate, requireRole('secretary'))`, so every
@@ -62,6 +69,7 @@ const disputes = require(path.join(__dirname, '..', 'src', 'routes', 'disputes.j
 const activityLogs = require(path.join(__dirname, '..', 'src', 'routes', 'activityLogs.js'));
 const charges = require(path.join(__dirname, '..', 'src', 'routes', 'charges.js'));
 const rentalRequests = require(path.join(__dirname, '..', 'src', 'routes', 'rentalRequests.js'));
+const rentalSettings = require(path.join(__dirname, '..', 'src', 'routes', 'rentalSettings.js'));
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { withholdPersonal } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
 const { isSensitiveKey, isPersonalKey, PERSONAL_FIELDS } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
@@ -144,6 +152,7 @@ const EXPECTED = {
   },
   'rentalRequests.js': {
     'POST /': BOOKERS,                       // a resident's own booking, or the Secretary's walk-in
+    'GET /availability': BOOKERS,            // what is free before booking: the two booking forms only (step C1b)
     'POST /mine/:id/pay': OWNERSHIP_SCOPED,  // scoped by resident_id, like the document routes
     'POST /mine/:id/cancel': OWNERSHIP_SCOPED, // own ONLINE booking only: resident_id AND requested_by_user_id
     'GET /mine': OWNERSHIP_SCOPED,
@@ -151,7 +160,12 @@ const EXPECTED = {
     'GET /:id': VIEWERS,
     'PUT /:id': SECRETARY_ONLY,              // date, times and purpose of a booking that has not started
     'POST /:id/cancel': SECRETARY_ONLY,      // a booking that has not started, with a reason
+    'POST /:id/approve': SECRETARY_ONLY,     // a pending request: confirmed, with its charge (migration 027)
+    'POST /:id/decline': SECRETARY_ONLY,     // a pending request: declined, with a reason (migration 027)
     'POST /:id/return': STAFF_ONLY,          // Staff's one write action
+  },
+  'rentalSettings.js': {
+    'GET /': ALL_ROLES,                      // how far ahead a booking may start (a constant since step O43): every booking form shows it
   },
 };
 
@@ -277,7 +291,7 @@ function invoke(handler, { user, params = {}, body = {}, query = {} }) {
 const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
 
 (async () => {
-  console.log('Route role guards — resident records + document requests + disputes + activity log + payments + rental bookings');
+  console.log('Route role guards — resident records + document requests + disputes + activity log + payments + rental bookings + rental settings');
   console.log('No server started. No writes.');
 
   auditRouter('residentRecords.js', residentRecords);
@@ -286,10 +300,11 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   auditRouter('activityLogs.js', activityLogs);
   auditRouter('charges.js', charges);
   auditRouter('rentalRequests.js', rentalRequests);
+  auditRouter('rentalSettings.js', rentalSettings);
 
   // -- every route carries authenticate at the router level -----------------
   section('router-level authenticate');
-  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges], ['rentalRequests.js', rentalRequests]]) {
+  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges], ['rentalRequests.js', rentalRequests], ['rentalSettings.js', rentalSettings]]) {
     const hasAuth = router.stack.some((l) => !l.route && l.handle?.name === 'authenticate');
     check(`${label} mounts authenticate at the router level`, hasAuth);
   }
@@ -311,6 +326,22 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   const rentalByIdAt = indexOf(rentalRequests, 'get', '/:id');
   check('rentalRequests.js registers GET /mine before GET /:id', rentalMineAt !== -1 && rentalByIdAt !== -1 && rentalMineAt < rentalByIdAt,
     `GET /mine at stack index ${rentalMineAt}, GET /:id at ${rentalByIdAt}`);
+  // Below GET /:id, "/availability" would be read as a booking id: a resident
+  // would get 403 from its view guard and the Secretary 400 "Invalid booking id".
+  const rentalAvailabilityAt = indexOf(rentalRequests, 'get', '/availability');
+  check('rentalRequests.js registers GET /availability before GET /:id',
+    rentalAvailabilityAt !== -1 && rentalByIdAt !== -1 && rentalAvailabilityAt < rentalByIdAt,
+    `GET /availability at stack index ${rentalAvailabilityAt}, GET /:id at ${rentalByIdAt}`);
+
+  // The table above already fails a widened guard; said once more by name,
+  // because the availability answer exists for the two booking forms only.
+  section('rentalRequests.js — GET /availability refuses the other three roles');
+  const availabilityRoute = routesOf(rentalRequests).find((r) => r.keys.includes('GET /availability'));
+  for (const role of ['treasurer', 'staff', 'punong_barangay']) {
+    const admitted = !!availabilityRoute && admits(availabilityRoute, role);
+    check(`GET /availability refuses ${role}`, !!availabilityRoute && !admitted,
+      availabilityRoute ? (admitted ? 'admitted' : 'refused') : 'route not found');
+  }
 
   // -- the 401: no token never reaches a rental route --------------------------
   // The probe above skips authenticate (it reads the database); with NO token

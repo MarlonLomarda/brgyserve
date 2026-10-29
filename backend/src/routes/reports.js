@@ -279,13 +279,30 @@ router.get('/facility-utilization', requireRole(...ADMIN_ROLES), async (req, res
     RENTAL_STATUS.RETURNED_LATE,
     RENTAL_STATUS.RETURNED_WITH_ISSUE,
   ];
-  const byStatus = STORED_STATUSES.map((status) => ({
+  // Pending and declined requests (migration 027) are listed only when the
+  // range holds one: no booking is stored either way until the approval step
+  // is switched on, and two rows reading 0 would change the report for
+  // nothing. The five above are always listed, as before.
+  const APPROVAL_STATUSES = [RENTAL_STATUS.PENDING, RENTAL_STATUS.DECLINED];
+  const byStatus = [
+    ...STORED_STATUSES,
+    ...APPROVAL_STATUSES.filter((status) => rows.some((r) => r.status === status)),
+  ].map((status) => ({
     status,
     count: rows.filter((r) => r.status === status).length,
   }));
 
-  // Cancelled bookings are excluded from "usage" — the slot was never taken.
-  const used = rows.filter((r) => r.status !== RENTAL_STATUS.CANCELLED);
+  // "Usage" is a booking that took its slot: confirmed, or one of the three
+  // returns. Never a cancelled booking, a pending request (it holds nothing)
+  // or a declined one. Until migration 027 this was "everything but
+  // cancelled", the same set.
+  const USED_STATUSES = [
+    RENTAL_STATUS.CONFIRMED,
+    RENTAL_STATUS.RETURNED,
+    RENTAL_STATUS.RETURNED_LATE,
+    RENTAL_STATUS.RETURNED_WITH_ISSUE,
+  ];
+  const used = rows.filter((r) => USED_STATUSES.includes(r.status));
   const byItem = items
     .map((it) => {
       const itemRows = used.filter((r) => r.item_id === it.item_id);

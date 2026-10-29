@@ -1,16 +1,23 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { ITEM_TYPE, ITEM_TYPES } = require('../constants/rentals');
+const { ITEM_TYPE, ITEM_TYPES, RENTAL_STATUS, RETURNABLE_TYPES } = require('../constants/rentals');
 const { logActivity, diffFields } = require('../services/activityLog');
 const { ACTIONS } = require('../constants/activityLog');
+const { MIDNIGHT, clockMinutes } = require('../constants/rentalBookingRules');
 
 const router = express.Router();
 
 const MAX_FEE = 99999999.99; // numeric(10,2) ceiling
 const MAX_QUANTITY = 100000;
 
-const ITEM_FIELDS = 'item_id, name, type, description, quantity_total, quantity_available, fee, is_active';
+// funeral_eligible (migration 027): the Secretary marks the items a funeral
+// may be booked for (chairs, tables, tents). Never a facility: the database
+// CHECKs it too. The booking forms' active list (GET /) does not carry it yet.
+const ITEM_FIELDS =
+  'item_id, name, type, description, quantity_total, quantity_available, fee, is_active, booking_opens_at, booking_closes_at, funeral_eligible';
+
+const FUNERAL_FACILITY = 'A facility cannot be marked for funeral use.';
 
 // Returns the fee as a number rounded to centavos, or null if invalid.
 function parseFee(fee) {
@@ -44,13 +51,57 @@ function validateBody(body) {
 
   const description = String(body?.description ?? '').trim() || null;
 
+  const hours = parseHours(body);
+  if (hours.error) return { error: hours.error };
+
+  // Optional: a body without it leaves it as it is (a new item takes the
+  // database's false). A boolean only, never "true" or 1.
+  const funeral = {};
+  if (body?.funeral_eligible !== undefined) {
+    if (typeof body.funeral_eligible !== 'boolean') return { error: 'funeral_eligible must be true or false' };
+    if (body.funeral_eligible && type === ITEM_TYPE.FACILITY) return { error: FUNERAL_FACILITY };
+    funeral.funeral_eligible = body.funeral_eligible;
+  }
+
   // quantity_available mirrors quantity_total for now: a single number cannot
   // express per-time-slot availability, so the stage-2 conflict check derives
   // free units per slot from approved bookings against quantity_available.
   // Keeping the columns separate lets damaged/retired stock lower it later.
   return {
-    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee },
+    value: { name, type, description, quantity_total: quantity, quantity_available: quantity, fee, ...hours.value, ...funeral },
   };
+}
+
+// The item's booking hours (migration 025), "HH:MM". Optional as a PAIR: a
+// body with neither leaves them as they are (a new item takes the
+// database's 07:00 to 17:00), one with either must carry both. A close of
+// "00:00" or "24:00" is midnight, stored as 24:00 (a `time` holds it), since
+// a close at the day's first minute could never be after the opening. The
+// opening must be before the close; the database CHECKs that too.
+function parseHours(body) {
+  const opensRaw = body?.booking_opens_at;
+  const closesRaw = body?.booking_closes_at;
+  if (opensRaw === undefined && closesRaw === undefined) return { value: {} };
+  if (opensRaw === undefined || closesRaw === undefined) {
+    return { error: 'booking_opens_at and booking_closes_at must be sent together' };
+  }
+  const opens = clockMinutes(String(opensRaw).trim());
+  if (opens === null || opens === MIDNIGHT) {
+    return { error: 'booking_opens_at must be a time in HH:MM (24-hour) format' };
+  }
+  const closesText = String(closesRaw).trim();
+  let closes = clockMinutes(closesText);
+  if (closes === 0) closes = MIDNIGHT;
+  if (closes === null) {
+    return { error: 'booking_closes_at must be a time in HH:MM (24-hour) format, or 24:00 for midnight' };
+  }
+  if (opens >= closes) {
+    return { error: 'The opening time must be before the closing time' };
+  }
+  // As PostgREST sends a `time` back ("07:00:00"), so the log's diff of the
+  // row before and after compares like with like.
+  const clock = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`;
+  return { value: { booking_opens_at: clock(opens), booking_closes_at: clock(closes) } };
 }
 
 // Case-insensitive duplicate-name check (excludeId for updates).
@@ -62,12 +113,41 @@ async function nameTaken(name, excludeId = null) {
   return data.length > 0;
 }
 
+// What an item's bookings hold, as plain counts for the lower-stock warning:
+// its confirmed bookings (not cancelled, not returned) that are upcoming, or
+// overdue and not yet returned (a facility's past booking is completed, an
+// item's is overdue: deriveStatus in rentalRequests.js). No overlap rule here:
+// that is the database's (migration 024). Warning when the new total is below
+// ALL their units together is never wrong in the "no warning" direction: no
+// moment, and no single booking, can hold more than all of them. It can warn
+// for bookings on different days that never meet; the Secretary may then
+// lower it anyway.
+async function heldUnits(itemId, type) {
+  const { data, error } = await supabase
+    .from('rental_requests')
+    .select('quantity_requested, end_datetime')
+    .eq('item_id', itemId)
+    .eq('status', RENTAL_STATUS.CONFIRMED);
+  if (error) throw new Error(`Failed to load the item's bookings: ${error.message}`);
+  const now = new Date();
+  const held = data
+    .filter((b) => RETURNABLE_TYPES.includes(type) || new Date(b.end_datetime) > now)
+    .map((b) => b.quantity_requested);
+  return {
+    bookings: held.length,
+    units: held.reduce((sum, n) => sum + n, 0),
+    largest: held.length ? Math.max(...held) : 0,
+  };
+}
+
 // GET /api/rental-items — ACTIVE items only; any authenticated user.
 // This is what residents will use to pick an item when booking (stage 2).
+// Each item carries its booking hours (migration 025), which the booking
+// forms show and hold the time fields to.
 router.get('/', authenticate, async (req, res) => {
   const { data, error } = await supabase
     .from('rental_items')
-    .select('item_id, name, type, description, quantity_total, quantity_available, fee')
+    .select('item_id, name, type, description, quantity_total, quantity_available, fee, booking_opens_at, booking_closes_at')
     .eq('is_active', true)
     .order('name', { ascending: true });
   if (error) throw new Error(`Failed to load rental items: ${error.message}`);
@@ -132,6 +212,29 @@ router.put('/:id', async (req, res) => {
     .maybeSingle();
   if (beforeError) throw new Error(`Failed to load rental item: ${beforeError.message}`);
   if (!before) return res.status(404).json({ error: 'Rental item not found' });
+  // An item marked for funeral use turned into a facility, with the mark left
+  // as it is: the database's CHECK would refuse it as a 500.
+  if ((value.funeral_eligible ?? before.funeral_eligible) && value.type === ITEM_TYPE.FACILITY) {
+    return res.status(400).json({ error: FUNERAL_FACILITY });
+  }
+
+  // Lowering the stock below what bookings already hold: WARN, THEN ALLOW
+  // (step C3). Existing bookings stay; new ones are refused by the database's
+  // own rule until enough units are free. Only `confirm_lower_stock: true`
+  // saves it.
+  if (value.quantity_total < before.quantity_total && req.body?.confirm_lower_stock !== true) {
+    const held = await heldUnits(id, before.type);
+    if (value.quantity_total < held.units) {
+      return res.status(409).json({
+        error: `Upcoming or overdue bookings hold ${held.units} units of this item, more than the new total of ${value.quantity_total}.`,
+        code: 'STOCK_BELOW_BOOKED',
+        bookings: held.bookings,
+        units: held.units,
+        largest: held.largest,
+        new_total: value.quantity_total,
+      });
+    }
+  }
 
   const { data, error } = await supabase
     .from('rental_items')
