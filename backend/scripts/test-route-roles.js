@@ -160,6 +160,8 @@ const EXPECTED = {
     'GET /:id': VIEWERS,
     'PUT /:id': SECRETARY_ONLY,              // date, times and purpose of a booking that has not started
     'POST /:id/cancel': SECRETARY_ONLY,      // a booking that has not started, with a reason
+    'POST /:id/approve': SECRETARY_ONLY,     // a pending request: confirmed, with its charge (migration 027)
+    'POST /:id/decline': SECRETARY_ONLY,     // a pending request: declined, with a reason (migration 027)
     'POST /:id/return': STAFF_ONLY,          // Staff's one write action
   },
   'rentalSettings.js': {

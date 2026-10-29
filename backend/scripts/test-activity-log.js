@@ -290,6 +290,44 @@ const fakeFrom = (table) => {
       && !('MAKE_TEA' in ACTIONS)
       && actionValues('x ? ACTIONS.SETTLE : ACTIONS.REOPEN').every((v) => /^ACTIONS\.[A-Z_]+$/.test(v)));
 
+  // DECLINE (migration 027, 28 Oct 2026): the Secretary declining a pending
+  // rental request. Its own code, written at ONE call site, the decline
+  // route, on rental_requests, with reason_given and never the reason.
+  const declineSites = calls.filter((c) => /action:\s*ACTIONS\.DECLINE\b/.test(c.body));
+  const declineRoute = fs.readFileSync(path.join(ROUTES, 'rentalRequests.js'), 'utf8').replace(/\r/g, '');
+  const declineAt = declineRoute.indexOf("router.post('/:id/decline'");
+  const declineEnd = declineRoute.indexOf('\nrouter.', declineAt + 1);
+  check('DECLINE is an ACTIONS constant, and the vocabulary is 30 codes', ACTIONS.DECLINE === 'DECLINE'
+    && Object.keys(ACTIONS).length === 30, `${Object.keys(ACTIONS).length} codes`);
+  check('  written at exactly one call site: the decline route in rentalRequests.js, on rental_requests, with reason_given',
+    declineSites.length === 1 && declineSites[0].file === 'rentalRequests.js' && declineAt !== -1
+      && declineRoute.slice(declineAt, declineEnd === -1 ? undefined : declineEnd).includes('action: ACTIONS.DECLINE')
+      && /table:\s*'rental_requests'/.test(declineSites[0].body) && /reason_given:\s*true/.test(declineSites[0].body)
+      && !/decline_reason|parsed\.reason/.test(declineSites[0].body),
+    declineSites.map((c) => `${c.file}:${c.line}`).join(', ') || 'none');
+  check('  labelled on the Activity Log page', /^\s*DECLINE:\s*\{\s*label:\s*'Declined'/m.test(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8')),
+    'frontend/src/constants/activityLog.js');
+
+  // The funeral waiver (design C, 29 Oct 2026): the approve route's APPROVE
+  // row carries fee_waived, a code taken from PURPOSE_TYPE and only when the
+  // function answered waived, never the purpose's words; the Activity Log
+  // page words it "fee waived (funeral)".
+  const approveAt = declineRoute.indexOf("router.post('/:id/approve'");
+  const approveBody = approveAt === -1 ? '' : declineRoute.slice(approveAt, declineRoute.indexOf('\nrouter.', approveAt + 1));
+  const approveLog = approveBody.slice(approveBody.indexOf('action: ACTIONS.APPROVE'));
+  check('the rental APPROVE row logs fee_waived as the PURPOSE_TYPE code, only when the function answered waived',
+    approveAt !== -1 && /result\.waived === true \? \{ fee_waived: PURPOSE_TYPE\.FUNERAL \} : \{\}/.test(approveLog)
+      && !/(^|[\s{,])purpose\s*:|\.purpose\b(?!_type)/m.test(approveLog.slice(0, approveLog.indexOf('});'))),
+    approveAt === -1 ? 'no approve route' : 'rentalRequests.js');
+  const approveCase = (() => {
+    const v = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8').replace(/\r/g, '');
+    const at = v.indexOf("    case 'APPROVE':");
+    return at === -1 ? '' : v.slice(at, v.indexOf("    case 'DECLINE':", at));
+  })();
+  check('  the Activity Log page words a waived rental approval "fee waived (funeral)"',
+    /after\.fee_waived === 'funeral' && 'fee waived \(funeral\)'/.test(approveCase), approveCase ? 'APPROVE case found' : 'no APPROVE case');
+
   const badTable = calls.filter((c) => {
     const t = (c.body.match(/table:\s*(['"])([a-z_]+)\1/) || [])[2];
     return !t || !realTables.has(t);
@@ -325,8 +363,9 @@ const fakeFrom = (table) => {
   // wording, so each must be named there.
   // The rental cancel's facts (25 Oct 2026) and the webhook's late-payment
   // row are markers too: none is a column the page already knows.
+  // fee_waived: an approval whose fee the Secretary waived (design C).
   const LOG_MARKERS = ['parties_renamed', 'charge_outcome', 'refund_due', 'session_expired',
-    'session_expire_failure', 'reason_given', 'gateway_payment_id'];
+    'session_expire_failure', 'reason_given', 'gateway_payment_id', 'fee_waived'];
   const markersMissing = LOG_MARKERS.filter((m) => !new RegExp(`^\\s*${m}:\\s*'`, 'm').test(frontendVocab)
     || !fs.readdirSync(ROUTES).some((f) => fs.readFileSync(path.join(ROUTES, f), 'utf8').includes(m)));
   check('every log marker a route writes is labelled in the frontend', markersMissing.length === 0,
