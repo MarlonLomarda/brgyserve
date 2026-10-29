@@ -8431,10 +8431,11 @@ const root = () => dom.window.document.getElementById('root');
   // session once, in authFetch, and the route guard sends the person to the
   // login screen: the list never says "0 bookings" there either. The same
   // checks run for the three roles. Each role's list here holds only the
-  // bookings the page opens on (two upcoming for the Secretary and the Punong
-  // Barangay, two overdue for Staff), so these checks read the same whatever
-  // the page shows first; which rows a tab shows is the tabs' own checks'.
-  // Every request is answered by the fetch stub, and only GETs are sent.
+  // bookings the page opens on (two pending requests for the Secretary, who
+  // opens on Pending since batch R2b, two upcoming for the Punong Barangay,
+  // two overdue for Staff), so these checks read the same whatever the page
+  // shows first; which rows a tab shows is the tabs' own checks'. Every
+  // request is answered by the fetch stub, and only GETs are sent.
   console.log('\n--- Rental bookings: a failed load is an error, never an empty list ---');
   {
     const previousTZAD = process.env.TZ;
@@ -8475,6 +8476,11 @@ const root = () => dom.window.document.getElementById('root');
       booking(402, 'Ben', 'Reyes', 'Covered Court', 'facility', 'confirmed', '10-20')];
     const OVERDUE_TWO = () => [booking(403, 'Carla', 'Santos', 'Plastic Chairs', 'furniture', 'overdue', '10-02'),
       booking(404, 'Dino', 'Tan', 'Tent (10x10)', 'equipment', 'overdue', '09-30')];
+    // Two requests still waiting (stored pending, their start ahead), as the
+    // Secretary's opening tab holds them: no charge yet, each with the time it
+    // was asked for, Ana's first.
+    const PENDING_TWO = () => UPCOMING_TWO().map((b, i) => ({ ...b, status: 'pending', derived_status: 'pending',
+      charges: null, requested_at: `2026-10-1${5 + i}T02:00:00+00:00` }));
     const holdNext = () => {
       net.hold = true;
       return net.held.length;
@@ -8508,7 +8514,7 @@ const root = () => dom.window.document.getElementById('root');
     const methodsSent = [];
 
     const ROLES = [
-      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, rows: UPCOMING_TWO },
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, rows: PENDING_TWO },
       { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
         user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, rows: OVERDUE_TWO },
       { name: 'Punong Barangay', route: '/punong-barangay',
@@ -8711,23 +8717,25 @@ const root = () => dom.window.document.getElementById('root');
     const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
     const said = (v) => JSON.stringify(v);
     const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
-    const KEYS = ['upcoming', 'overdue', 'completed', 'returned', 'cancelled', 'all'];
+    // Since batch R2b, eight tabs: Pending first, Not approved after Returned.
+    const KEYS = ['pending', 'upcoming', 'overdue', 'completed', 'returned', 'not_approved', 'cancelled', 'all'];
     // Counts compared key by key, whatever order they were built in, and
-    // with no key besides the six.
+    // with no key besides the eight.
     const sameCounts = (got, want) => !!got && typeof got === 'object'
       && said(Object.keys(got).sort()) === said([...KEYS].sort()) && KEYS.every((k) => got[k] === want[k]);
-    const counts = (upcoming, overdue, completed, returned, cancelled, all) =>
-      ({ upcoming, overdue, completed, returned, cancelled, all });
+    const counts = (pending, upcoming, overdue, completed, returned, notApproved, cancelled, all) =>
+      ({ pending, upcoming, overdue, completed, returned, not_approved: notApproved, cancelled, all });
 
     // a. The helpers on their own.
     const order = attempt(() => L.RENTAL_TABS.map((t) => `${t.key}:${t.label}`).join(' | '));
-    check('rental tabs: Upcoming, Overdue, Completed, Returned, Cancelled, All, in that order',
-      order === 'upcoming:Upcoming | overdue:Overdue | completed:Completed | returned:Returned | cancelled:Cancelled | all:All',
+    check('rental tabs: Pending, Upcoming, Overdue, Completed, Returned, Not approved, Cancelled, All, in that order',
+      order === 'pending:Pending | upcoming:Upcoming | overdue:Overdue | completed:Completed | returned:Returned '
+        + '| not_approved:Not approved | cancelled:Cancelled | all:All',
       said(order));
     const bk = (id, status, derived) => ({ request_id: id, status, ...(derived === undefined ? {} : { derived_status: derived }) });
     // Every kind of booking, and the tabs it must be in: its derived status
     // decides, as the badge reads it, falling back to the stored status as
-    // the badge does; a status outside the seven is in All only.
+    // the badge does; a status outside the ten is in All only.
     const KINDS = [
       ['confirmed, its end still ahead', bk(1, 'confirmed', 'confirmed'), 'upcoming all'],
       ['confirmed, a physical item past its end (derived overdue)', bk(2, 'confirmed', 'overdue'), 'overdue all'],
@@ -8737,34 +8745,45 @@ const root = () => dom.window.document.getElementById('root');
       ['returned with an issue', bk(6, 'returned_with_issue', 'returned_with_issue'), 'returned all'],
       ['cancelled', bk(7, 'cancelled', 'cancelled'), 'cancelled all'],
       ['confirmed with no derived_status', bk(8, 'confirmed'), 'upcoming all'],
-      ['a status outside the seven', bk(9, 'archived', 'archived'), 'all'],
+      ['a status outside the ten', bk(9, 'archived', 'archived'), 'all'],
+      ['pending, its start ahead', bk(10, 'pending', 'pending'), 'pending all'],
+      ['declined', bk(11, 'declined', 'declined'), 'not_approved all'],
+      ['pending, its start passed (derived expired)', bk(12, 'pending', 'expired'), 'not_approved all'],
     ];
     const tabsHolding = (b) => KEYS.filter((tab) => attempt(() => L.inTab(b, tab)) === true).join(' ');
     const wrongKinds = KINDS.filter(([, b, want]) => tabsHolding(b) !== want);
     check('inTab: each booking is in the tab of its derived status and in All, and nowhere else: a past confirmed booking is '
-        + 'Overdue or Completed, never Upcoming; the three return outcomes are all Returned; an unknown status is in All only',
+        + 'Overdue or Completed, never Upcoming; the three return outcomes are all Returned; a waiting request is Pending, a '
+        + 'declined or an expired one Not approved, never Pending; an unknown status is in All only',
       wrongKinds.length === 0, said(wrongKinds.map(([name, b]) => ({ name, in: tabsHolding(b) }))));
     let got = attempt(() => L.tabCounts(KINDS.map((k) => k[1])));
-    check('rental tab counts over the whole list given: 2 upcoming, 1 overdue, 1 completed, 3 returned, 1 cancelled, 9 in all',
-      sameCounts(got, counts(2, 1, 1, 3, 1, 9)), said(got));
+    check('rental tab counts over the whole list given: 1 pending, 2 upcoming, 1 overdue, 1 completed, 3 returned, 2 not '
+        + 'approved, 1 cancelled, 12 in all',
+      sameCounts(got, counts(1, 2, 1, 1, 3, 2, 1, 12)), said(got));
     got = attempt(() => L.tabCounts([]));
-    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0)), said(got));
+    check('  an empty list counts 0 for every tab, never a missing count', sameCounts(got, counts(0, 0, 0, 0, 0, 0, 0, 0)), said(got));
     const HEADS = [['upcoming', 0, '0 upcoming bookings'], ['upcoming', 1, '1 upcoming booking'],
       ['overdue', 7, '7 overdue bookings'], ['overdue', 1, '1 overdue booking'], ['completed', 8, '8 completed bookings'],
       ['returned', 7, '7 returned bookings'], ['cancelled', 6, '6 cancelled bookings'], ['all', 28, '28 bookings'],
-      ['all', 1, '1 booking'], ['all', 1234, '1,234 bookings']];
+      ['all', 1, '1 booking'], ['all', 1234, '1,234 bookings'], ['pending', 3, '3 pending bookings'],
+      ['pending', 0, '0 pending bookings'], ['not_approved', 2, '2 declined or expired bookings'],
+      ['not_approved', 1, '1 declined or expired booking']];
     const heads = HEADS.map(([tab, n]) => attempt(() => L.tabHeading(tab, n)));
     check('the heading for a tab: "0 upcoming bookings", "1 upcoming booking", "7 overdue bookings", "1 overdue booking", '
-        + '"8 completed bookings", "7 returned bookings", "6 cancelled bookings", and on All "28 bookings", "1 booking", "1,234 bookings"',
+        + '"8 completed bookings", "7 returned bookings", "6 cancelled bookings", and on All "28 bookings", "1 booking", '
+        + '"1,234 bookings"; "3 pending bookings"; Not approved in its own words, "2 declined or expired bookings"',
       said(heads) === said(HEADS.map((h) => h[2])), said(heads));
-    const EMPTIES = ['No upcoming bookings.', 'No overdue bookings.', 'No completed bookings.', 'No returned bookings.',
-      'No cancelled bookings.', 'No bookings.'];
+    const EMPTIES = ['No pending bookings.', 'No upcoming bookings.', 'No overdue bookings.', 'No completed bookings.',
+      'No returned bookings.', 'No declined or expired bookings.', 'No cancelled bookings.', 'No bookings.'];
     const empties = KEYS.map((tab) => attempt(() => L.emptyText(tab)));
-    check('the empty text names the tab: "No upcoming bookings." … "No cancelled bookings.", and "No bookings." on All',
+    check('the empty text names the tab: "No pending bookings." … "No declined or expired bookings.", "No cancelled '
+        + 'bookings.", and "No bookings." on All',
       said(empties) === said(EMPTIES), said(empties));
-    const opening = [true, false, undefined].map((canReturn) => attempt(() => L.openingTab(canReturn)));
-    check('the opening tab: Overdue for Staff (canReturn), Upcoming for the others',
-      said(opening) === said(['overdue', 'upcoming', 'upcoming']), said(opening));
+    const opening = [[true, false], [false, true], [false, false], [undefined, undefined]]
+      .map(([canReturn, canManage]) => attempt(() => L.openingTab(canReturn, canManage)));
+    check('the opening tab: Overdue for Staff (canReturn), Pending for the Secretary (canManage), Upcoming for the Punong '
+        + 'Barangay (neither)',
+      said(opening) === said(['overdue', 'pending', 'upcoming', 'upcoming']), said(opening));
 
     // b. The real page. Eleven bookings in the list's real shape, newest
     // first as the server sends them, one or more for every derived status: a
@@ -8824,15 +8843,19 @@ const root = () => dom.window.document.getElementById('root');
     const nameOf = (r) => (r.guest ? r.guest[0] : `${r.who[0]} ${r.who[1]}`);
     // What each tab must show, written by hand: its rows, in the order sent,
     // and its heading.
+    // Since batch R2b two more tabs, both empty here: no booking is pending,
+    // declined or expired (section AV checks them).
     const WANT = {
+      Pending: { rows: [], heading: '0 pending bookings' },
       Upcoming: { rows: ['Ana Cruz', 'Ben Reyes'], heading: '2 upcoming bookings' },
       Overdue: { rows: ['Carla Santos', 'Maria Lourdes Villanueva-Santos', 'Dino Tan'], heading: '3 overdue bookings' },
       Completed: { rows: ['Elsa Uy', 'Fe Villa'], heading: '2 completed bookings' },
       Returned: { rows: ['Gil Wong', 'Hana Yap', 'Ivy Zamora'], heading: '3 returned bookings' },
+      'Not approved': { rows: [], heading: '0 declined or expired bookings' },
       Cancelled: { rows: ['Jun Abad'], heading: '1 cancelled booking' },
       All: { rows: ELEVEN.map(nameOf), heading: '11 bookings' },
     };
-    const STRIP = 'Upcoming 2 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 11';
+    const STRIP = 'Pending 0 · Upcoming 2 · Overdue 3 · Completed 2 · Returned 3 · Not approved 0 · Cancelled 1 · All 11';
     // Each row on All as a person reads it, as the page drew it before the
     // tabs: the name and the line under it, the item, schedule, quantity,
     // purpose and status cells, and the actions cell's buttons. The schedule
@@ -8851,8 +8874,9 @@ const root = () => dom.window.document.getElementById('root');
     // marker, as if staff1 had marked the payment) and comes before a return
     // note, so a phone card's "Return" label heads both.
     const BY = 'Returned by @staff1 on Oct 5, 2026, 9:30 AM';
+    // Since batch R2b a booking stored confirmed reads "Approved" on this page.
     const STATUS_CELL = {
-      501: 'Confirmed', 502: 'Confirmed', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
+      501: 'Approved', 502: 'Approved', 503: 'Overdue', 504: 'Overdue', 505: 'Overdue', 506: 'Completed', 507: 'Completed',
       508: `Returned ${BY}`, 509: `Returned late ${BY} Note: Returned a day late`,
       510: `Returned with issue ${BY} Note: One pole bent`, 511: 'Cancelled',
     };
@@ -8949,8 +8973,9 @@ const root = () => dom.window.document.getElementById('root');
     dom.window.confirm = (message) => { asked.push(message); return true; };
     const methodsSent = [];
 
+    // Since batch R2b the Secretary opens on Pending, empty here.
     const ROLES = [
-      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Pending' },
       { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
         user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
       { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
@@ -8967,9 +8992,9 @@ const root = () => dom.window.document.getElementById('root');
       let v = look(page);
       const group = page.query('.pay-tabs');
       const buttons = tabsOf(page);
-      check(`${name}: six tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
+      check(`${name}: eight tabs in order, each with its count, "${STRIP}", toggle buttons in a group named "Status"`,
         v.strip === STRIP && group?.getAttribute('role') === 'group' && group.getAttribute('aria-label') === 'Status'
-          && buttons.length === 6 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
+          && buttons.length === 8 && buttons.every((b) => b.type === 'button' && ['true', 'false'].includes(b.getAttribute('aria-pressed'))),
         said({ strip: v.strip, role: group?.getAttribute('role') ?? null, label: group?.getAttribute('aria-label') ?? null,
           pressed: buttons.map((b) => b.getAttribute('aria-pressed')) }));
       check(`${name}: it opens on ${opening}: ${opening} alone pressed, "${WANT[opening].heading}", and its rows in the order sent`,
@@ -9002,7 +9027,7 @@ const root = () => dom.window.document.getElementById('root');
         await clickIf(page, tab);
         seen[label] = look(page);
       }
-      check(`${name}: pressing each of the six tabs in turn sends no request`,
+      check(`${name}: pressing each of the eight tabs in turn sends no request`,
         missing.length === 0 && net.calls.length === sentBefore,
         said({ missing, sent: net.calls.slice(sentBefore).map((c) => `${c.method} ${c.url}`) }));
       const wrongTabs = Object.keys(WANT).filter((label) => label !== 'All').filter((label) => {
@@ -9033,7 +9058,7 @@ const root = () => dom.window.document.getElementById('root');
       // The answer is held, so the page can be read while it is out.
       await clickIf(page, tabNamed(page, 'Completed'));
       state.list.push({ id: 512, who: ['Kim', 'Bello'], item: 'hall', qty: 1, status: 'confirmed', derived: 'completed' });
-      const STRIP12 = 'Upcoming 2 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 1 · All 12';
+      const STRIP12 = 'Pending 0 · Upcoming 2 · Overdue 3 · Completed 3 · Returned 3 · Not approved 0 · Cancelled 1 · All 12';
       let at = holdNext();
       let sent = net.calls.length;
       await clickIf(page, buttonNamed(root(), 'Refresh'));
@@ -9052,7 +9077,7 @@ const root = () => dom.window.document.getElementById('root');
         said({ reloading, v }));
 
       // A reload that fails: no tabs and no select; then Try again.
-      const hadTabs = tabsOf(page).length === 6;
+      const hadTabs = tabsOf(page).length === 8;
       at = holdNext();
       await clickIf(page, buttonNamed(root(), 'Refresh'));
       release(at, 500, { error: 'Network down' });
@@ -9093,7 +9118,7 @@ const root = () => dom.window.document.getElementById('root');
           asked.length === 0 && flash === 'Booking #501 cancelled.'
             && said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/501/cancel', 'GET /rental-requests?status=all'])
             && said(v.pressed) === said(['Upcoming 1']) && v.heading === '1 upcoming booking' && said(v.rows) === said(['Ben Reyes'])
-            && v.strip === 'Upcoming 1 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 2 · All 12',
+            && v.strip === 'Pending 0 · Upcoming 1 · Overdue 3 · Completed 3 · Returned 3 · Not approved 0 · Cancelled 2 · All 12',
           said({ asked: asked.length, flash, calls: listCalls(net.calls.slice(sent)), v }));
         await clickIf(page, tabNamed(page, 'Cancelled'));
         v = look(page);
@@ -9165,7 +9190,7 @@ const root = () => dom.window.document.getElementById('root');
             && /"outcome":"returned_late"/.test(String(posted?.body))
             && said(v.pressed) === said(['Overdue 2']) && v.heading === '2 overdue bookings'
             && said(v.rows) === said(['Maria Lourdes Villanueva-Santos', 'Dino Tan'])
-            && v.strip === 'Upcoming 2 · Overdue 2 · Completed 3 · Returned 4 · Cancelled 1 · All 12',
+            && v.strip === 'Pending 0 · Upcoming 2 · Overdue 2 · Completed 3 · Returned 4 · Not approved 0 · Cancelled 1 · All 12',
           said({ panel, backCalls, calls: listCalls(net.calls.slice(sent)), body: posted?.body ?? null, v }));
         await clickIf(page, tabNamed(page, 'Returned'));
         v = look(page);
@@ -9198,9 +9223,10 @@ const root = () => dom.window.document.getElementById('root');
     }
 
     // c. A tab with nothing in it. As on the live data (14 Oct 2026), no
-    // booking is upcoming: the Secretary and the Punong Barangay still open
-    // on Upcoming, dimmed, and the page says so; and a list with no bookings
-    // at all, for Staff, who open on Overdue.
+    // booking is upcoming, and since batch R2b none is pending, declined or
+    // expired either: the Secretary still opens on Pending and the Punong
+    // Barangay on Upcoming, dimmed, and the page says so; and a list with no
+    // bookings at all, for Staff, who open on Overdue.
     const NONE_UPCOMING = ELEVEN.filter((r) => r.derived !== 'confirmed');
     for (const { name, route, token, user, opening } of ROLES) {
       seedSession(token, user);
@@ -9212,7 +9238,8 @@ const root = () => dom.window.document.getElementById('root');
       if (name === 'Staff') {
         check('Staff, with no bookings at all: every tab shows 0 and is dimmed, still a button; Overdue, pressed, says '
             + '"0 overdue bookings" and "No overdue bookings.", with no table',
-          v.strip === 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 0' && dimmed.length === 6
+          v.strip === 'Pending 0 · Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Not approved 0 · Cancelled 0 · All 0'
+            && dimmed.length === 8
             && dimmed.every((b) => b.disabled === false) && said(v.pressed) === said(['Overdue 0'])
             && v.heading === '0 overdue bookings' && v.empty === 'No overdue bookings.' && !v.table,
           said({ v, dimmed: dimmed.map(text) }));
@@ -9221,12 +9248,15 @@ const root = () => dom.window.document.getElementById('root');
         check('  Staff: and All says "0 bookings" and "No bookings."',
           all.heading === '0 bookings' && all.empty === 'No bookings.' && !all.table, said(all));
       } else {
-        check(`${name}, with no upcoming booking (as on the live data): it still opens on ${opening}, "Upcoming 0", the one tab `
-            + 'dimmed, still a button, pressed; "0 upcoming bookings" and "No upcoming bookings.", with no table',
-          v.strip === 'Upcoming 0 · Overdue 3 · Completed 2 · Returned 3 · Cancelled 1 · All 9'
-            && said(dimmed.map(text)) === said(['Upcoming 0']) && dimmed[0].disabled === false
-            && said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 upcoming bookings'
-            && v.empty === 'No upcoming bookings.' && !v.table,
+        const words = opening.toLowerCase();
+        check(`${name}, with no upcoming or pending booking (as on the live data): it still opens on ${opening}, `
+            + `"${opening} 0", dimmed with Upcoming and Not approved, still a button, pressed; "0 ${words} bookings" and `
+            + `"No ${words} bookings.", with no table`,
+          v.strip === 'Pending 0 · Upcoming 0 · Overdue 3 · Completed 2 · Returned 3 · Not approved 0 · Cancelled 1 · All 9'
+            && said(dimmed.map(text)) === said(['Pending 0', 'Upcoming 0', 'Not approved 0'])
+            && dimmed.every((b) => b.disabled === false)
+            && said(v.pressed) === said([`${opening} 0`]) && v.heading === `0 ${words} bookings`
+            && v.empty === `No ${words} bookings.` && !v.table,
           said({ v, dimmed: dimmed.map(text) }));
       }
       methodsSent.push(...net.calls.map((c) => c.method));
@@ -9234,14 +9264,14 @@ const root = () => dom.window.document.getElementById('root');
     }
 
     // d. The strip on a narrow phone, as the Secretary: it is ListTabs, so
-    // where the six tabs do not fit it scrolls inside itself, fades the edge
+    // where the eight tabs do not fit it scrolls inside itself, fades the edge
     // that has tabs past it, and brings a chosen tab fully into view by moving
     // the strip, never the page (section W checks the strip in full). jsdom
-    // lays nothing out, so the strip is laid out by hand: 300px holding 588px
-    // of tabs.
+    // lays nothing out, so the strip is laid out by hand: 300px holding 840px
+    // of tabs (Pending and Not approved, since batch R2b, at 104 and 148).
     {
       const FADE = 24;
-      const WIDTHS = [118, 106, 124, 108, 120, 62];
+      const WIDTHS = [104, 118, 106, 124, 108, 148, 120, 62];
       const MAX = WIDTHS.reduce((a, b) => a + b, 0) - 300;
       const scrolled = [];
       const proto = dom.window.HTMLElement.prototype;
@@ -9273,10 +9303,10 @@ const root = () => dom.window.document.getElementById('root');
       await clickIf(page, tabNamed(page, 'All'));
       const box = tabNamed(page, 'All')?.getBoundingClientRect();
       const end = { at: left, left: box?.left ?? null, right: box?.right ?? null, fade: strip()?.getAttribute('data-fade') ?? null };
-      await clickIf(page, tabNamed(page, 'Upcoming'));
+      await clickIf(page, tabNamed(page, 'Pending'));
       const first = { at: left, fade: strip()?.getAttribute('data-fade') ?? null };
       check('narrow phone: the rental tabs scroll inside their strip: "end" faded while they overflow it; All, chosen, scrolls '
-          + 'the strip to its end, in full view; Upcoming back to its start; the page itself never scrolls',
+          + 'the strip to its end, in full view; Pending, the first, back to its start; the page itself never scrolls',
         !!s && narrow === 'end' && end.at === MAX && end.right !== null && end.right <= 300 && end.left >= FADE
           && end.fade === 'start' && first.at === 0 && first.fade === 'end' && scrolled.length === 0,
         said({ narrow, end, first, pageScrolls: scrolled.length }));
@@ -9460,15 +9490,16 @@ const root = () => dom.window.document.getElementById('root');
     };
     const keysOf = (ids) => ids.map(rowKey);
     // What each tab holds, in the order sent, written out by hand.
+    // Since batch R2b, Pending and Not approved too, both empty here.
     const TAB_IDS = {
-      Upcoming: [], Overdue: [2, 3, 5, 8, 16, 20, 25], Completed: [1, 4, 7, 11, 14, 19, 24, 27],
-      Returned: [6, 12, 10, 15, 18, 21, 23], Cancelled: [9, 13, 17, 22, 26, 28], All: SENT,
+      Pending: [], Upcoming: [], Overdue: [2, 3, 5, 8, 16, 20, 25], Completed: [1, 4, 7, 11, 14, 19, 24, 27],
+      Returned: [6, 12, 10, 15, 18, 21, 23], 'Not approved': [], Cancelled: [9, 13, 17, 22, 26, 28], All: SENT,
     };
-    const STRIP28 = 'Upcoming 0 · Overdue 7 · Completed 8 · Returned 7 · Cancelled 6 · All 28';
+    const STRIP28 = 'Pending 0 · Upcoming 0 · Overdue 7 · Completed 8 · Returned 7 · Not approved 0 · Cancelled 6 · All 28';
     // "santos": Juan Santos Dela Cruz, Maria Elena Villamor Santos and Maria
     // Lourdes Villanueva-Santos.
     const SANTOS = [1, 2, 3, 11, 10, 18, 20, 25, 27];
-    const STRIP_SANTOS = 'Upcoming 0 · Overdue 4 · Completed 3 · Returned 2 · Cancelled 0 · All 9';
+    const STRIP_SANTOS = 'Pending 0 · Upcoming 0 · Overdue 4 · Completed 3 · Returned 2 · Not approved 0 · Cancelled 0 · All 9';
 
     // a. utils/rentalList.js: who a row is for, its account, and what a
     // booking's search reads.
@@ -9625,8 +9656,10 @@ const root = () => dom.window.document.getElementById('root');
     // Writes to jsdom's own Storage are counted by `domStorage` (top of the
     // file), beside the stub's.
 
+    // Since batch R2b the Secretary opens on Pending, which holds none here,
+    // as Upcoming holds none: the checks read the opening tab's own words.
     const ROLES_AE = [
-      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Upcoming' },
+      { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER, opening: 'Pending' },
       { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
         user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue' },
       { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
@@ -9678,11 +9711,14 @@ const root = () => dom.window.document.getElementById('root');
         headRow?.querySelector('h2')?.getAttribute('aria-live') === 'polite',
         said({ ariaLive: headRow?.querySelector('h2')?.getAttribute('aria-live') ?? null }));
       let v = look(page);
+      const openWords = opening.toLowerCase();
       const openingReads = opening === 'Overdue'
         ? v.heading === '7 overdue bookings' && said(v.rows) === said(keysOf(TAB_IDS.Overdue))
-        : v.heading === '0 upcoming bookings' && v.empty === 'No upcoming bookings.' && v.rows.length === 0 && !v.clearSearch;
+        : v.heading === `0 ${openWords} bookings` && v.empty === `No ${openWords} bookings.` && v.rows.length === 0
+          && !v.clearSearch;
       check(`${name}: with nothing typed the list reads as it did: ${opening} chosen, `
-          + `${opening === 'Overdue' ? '"7 overdue bookings" and its seven rows' : '"0 upcoming bookings" and "No upcoming bookings."'}, `
+          + `${opening === 'Overdue' ? '"7 overdue bookings" and its seven rows'
+            : `"0 ${openWords} bookings" and "No ${openWords} bookings."`}, `
           + 'every count over the 28',
         openingReads && said(v.pressed) === said([`${opening} ${TAB_IDS[opening].length}`]) && v.strip === STRIP28, said(v));
 
@@ -9704,14 +9740,14 @@ const root = () => dom.window.document.getElementById('root');
           said(v.rows) === said(keysOf([2, 3, 20, 25])) && said(v.pressed) === said(['Overdue 4'])
             && v.heading === '4 of 7 overdue bookings match', said(v));
       } else {
-        check(`${name}: on Upcoming, which holds none, "santos" keeps Upcoming chosen: "0 of 0 upcoming bookings match", and `
-            + 'in place of the rows \'No upcoming bookings match "santos"\' with a Clear search button',
-          said(v.pressed) === said(['Upcoming 0']) && v.heading === '0 of 0 upcoming bookings match'
-            && v.empty === 'No upcoming bookings match "santos"' && v.clearSearch && v.rows.length === 0, said(v));
+        check(`${name}: on ${opening}, which holds none, "santos" keeps ${opening} chosen: "0 of 0 ${openWords} bookings `
+            + `match", and in place of the rows 'No ${openWords} bookings match "santos"' with a Clear search button`,
+          said(v.pressed) === said([`${opening} 0`]) && v.heading === `0 of 0 ${openWords} bookings match`
+            && v.empty === `No ${openWords} bookings match "santos"` && v.clearSearch && v.rows.length === 0, said(v));
       }
       check(`${name}: the counts follow the search, "${STRIP_SANTOS}", and the tabs left with none are dimmed, still buttons`,
-        v.strip === STRIP_SANTOS && said(v.dimmed) === said(['Upcoming 0', 'Cancelled 0'])
-          && tabsOf(page).length === 6 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
+        v.strip === STRIP_SANTOS && said(v.dimmed) === said(['Pending 0', 'Upcoming 0', 'Not approved 0', 'Cancelled 0'])
+          && tabsOf(page).length === 8 && tabsOf(page).every((b) => b.disabled === false), said({ strip: v.strip, dimmed: v.dimmed }));
 
       // The tabs split what matches.
       sent = net.calls.length;
@@ -9746,9 +9782,9 @@ const root = () => dom.window.document.getElementById('root');
         noSearch.heading === '0 upcoming bookings' && noSearch.empty === 'No upcoming bookings.' && !noSearch.clearSearch,
         said(noSearch));
       check(`${name}: with "zzz", matching nothing: "0 of 0 upcoming bookings match", 'No upcoming bookings match "zzz"' `
-          + 'with Clear search, and all six tabs dimmed',
+          + 'with Clear search, and all eight tabs dimmed',
         zzz.heading === '0 of 0 upcoming bookings match' && zzz.empty === 'No upcoming bookings match "zzz"' && zzz.clearSearch
-          && zzz.dimmed.length === 6 && said(zzz.pressed) === said(['Upcoming 0']), said(zzz));
+          && zzz.dimmed.length === 8 && said(zzz.pressed) === said(['Upcoming 0']), said(zzz));
 
       // What a search finds, on All.
       await clickIf(page, tabNamed(page, 'All'));
@@ -9936,7 +9972,7 @@ const root = () => dom.window.document.getElementById('root');
           said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/cancel', 'GET /rental-requests?status=all'])
             && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
             && v.heading === '3 of 6 overdue bookings match'
-            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 2 · Cancelled 1 · All 9',
+            && v.strip === 'Pending 0 · Upcoming 0 · Overdue 3 · Completed 3 · Returned 2 · Not approved 0 · Cancelled 1 · All 9',
           said({ calls: listCalls(net.calls.slice(sent)), v }));
       }
       if (name === 'Staff') {
@@ -9950,7 +9986,7 @@ const root = () => dom.window.document.getElementById('root');
           said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/2/return', 'GET /rental-requests?status=all'])
             && v.search === 'santos' && said(v.pressed) === said(['Overdue 3']) && said(v.rows) === said(keysOf([3, 20, 25]))
             && v.heading === '3 of 6 overdue bookings match'
-            && v.strip === 'Upcoming 0 · Overdue 3 · Completed 3 · Returned 3 · Cancelled 0 · All 9',
+            && v.strip === 'Pending 0 · Upcoming 0 · Overdue 3 · Completed 3 · Returned 3 · Not approved 0 · Cancelled 0 · All 9',
           said({ calls: listCalls(net.calls.slice(sent)), v }));
       }
 
@@ -10904,9 +10940,11 @@ const root = () => dom.window.document.getElementById('root');
         ? { requests: list.map((b) => asServerFor({ ...b })) } : undefined);
       const nameAF = (id) => SHOWN_AS[ROWS_AF.find((r) => r[0] === id)[2]];
       const wantRowAF = (id) => `${nameAF(id)} | #${id} | ${MARKER_AF[id]}`;
-      const TAB_AF = { Upcoming: [112, 61, 21], Overdue: [19, 12], Completed: [11, 10], Returned: [7, 6, 2],
-        Cancelled: [9, 8, 1], All: ROWS_AF.map((r) => r[0]) };
-      const STRIP13 = 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 3 · Cancelled 3 · All 13';
+      // Since batch R2b, Pending (the Secretary's opening tab) and Not
+      // approved too, both empty here.
+      const TAB_AF = { Pending: [], Upcoming: [112, 61, 21], Overdue: [19, 12], Completed: [11, 10], Returned: [7, 6, 2],
+        'Not approved': [], Cancelled: [9, 8, 1], All: ROWS_AF.map((r) => r[0]) };
+      const STRIP13 = 'Pending 0 · Upcoming 3 · Overdue 2 · Completed 2 · Returned 3 · Not approved 0 · Cancelled 3 · All 13';
       const bodyRows = (page) => page.queryAll('table.data-table tbody tr');
       const numberEls = (tr) => tr.querySelectorAll('.doc-requests-number');
       const markerEls = (tr) => tr.querySelectorAll('.doc-requests-pay');
@@ -11039,7 +11077,7 @@ const root = () => dom.window.document.getElementById('root');
           const x = lookAF(page);
           if (said(x.rows) !== said(ids.map(wantRowAF)) || x.strip !== STRIP13) wrongTabs.push({ label, rows: x.rows, strip: x.strip });
         }
-        check(`${name}: on every one of the six tabs, every row shows its own number and marker under the same counts, and `
+        check(`${name}: on every one of the eight tabs, every row shows its own number and marker under the same counts, and `
             + 'pressing them sends nothing', wrongTabs.length === 0 && net.calls.length === sentTabs,
         said({ wrongTabs, sent: net.calls.length - sentTabs }));
 
@@ -11068,9 +11106,9 @@ const root = () => dom.window.document.getElementById('root');
         await type(page, '1');
         v = lookAF(page);
         check(`${name}: with "1", the heading and the counts follow the search as they do for a name: "8 of 13 bookings match", `
-            + '"Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8"',
+            + '"Pending 0 · Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Not approved 0 · Cancelled 1 · All 8"',
           v.heading === '8 of 13 bookings match'
-            && v.strip === 'Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Cancelled 1 · All 8',
+            && v.strip === 'Pending 0 · Upcoming 3 · Overdue 2 · Completed 2 · Returned 0 · Not approved 0 · Cancelled 1 · All 8',
           said({ heading: v.heading, strip: v.strip }));
         const wordHits = {};
         for (const q of WORDS) wordHits[q] = await found(q);
@@ -11703,7 +11741,7 @@ const root = () => dom.window.document.getElementById('root');
         };
         const sentF = [];
 
-        const STRIP14 = 'Upcoming 5 · Overdue 1 · Completed 2 · Returned 3 · Cancelled 3 · All 14';
+        const STRIP14 = 'Pending 0 · Upcoming 5 · Overdue 1 · Completed 2 · Returned 3 · Not approved 0 · Cancelled 3 · All 14';
         const ALL14 = ROWS_F.map((r) => r[0]);
         const ITEMS_F = 'Any item | Basketball Court | Folding Tables | Multipurpose Hall | Plastic Chairs | stick | Tables';
         const PAYS_F = 'Any payment | Paid | Unpaid | No fee | Not billed | Void';
@@ -11713,11 +11751,11 @@ const root = () => dom.window.document.getElementById('root');
         const BY_ITEM = { 'Basketball Court': [151, 142, 139], 'Folding Tables': [150, 145], 'Multipurpose Hall': [146, 138],
           'Plastic Chairs': [147, 143, 140], stick: [148, 141], Tables: [149, 144] };
         const BY_PAY = {
-          Paid: { rows: [148, 146, 144, 139], strip: 'Upcoming 1 · Overdue 0 · Completed 2 · Returned 1 · Cancelled 0 · All 4' },
-          Unpaid: { rows: [151, 149, 147, 145, 141], strip: 'Upcoming 3 · Overdue 1 · Completed 0 · Returned 1 · Cancelled 0 · All 5' },
-          'No fee': { rows: [150, 143], strip: 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2' },
-          'Not billed': { rows: [140], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 1 · All 1' },
-          Void: { rows: [142, 138], strip: 'Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 2 · All 2' },
+          Paid: { rows: [148, 146, 144, 139], strip: 'Pending 0 · Upcoming 1 · Overdue 0 · Completed 2 · Returned 1 · Not approved 0 · Cancelled 0 · All 4' },
+          Unpaid: { rows: [151, 149, 147, 145, 141], strip: 'Pending 0 · Upcoming 3 · Overdue 1 · Completed 0 · Returned 1 · Not approved 0 · Cancelled 0 · All 5' },
+          'No fee': { rows: [150, 143], strip: 'Pending 0 · Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Not approved 0 · Cancelled 0 · All 2' },
+          'Not billed': { rows: [140], strip: 'Pending 0 · Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Not approved 0 · Cancelled 1 · All 1' },
+          Void: { rows: [142, 138], strip: 'Pending 0 · Upcoming 0 · Overdue 0 · Completed 0 · Returned 0 · Not approved 0 · Cancelled 2 · All 2' },
         };
         const BY_DATE = {
           Today: [147, 146, 145], 'Next 7 days': [148, 147, 146, 145], 'Next 30 days': [150, 149, 148, 147, 146, 145],
@@ -11729,8 +11767,14 @@ const root = () => dom.window.document.getElementById('root');
 
         for (const { name, route, token, user, opening } of ROLES_AE) {
           const state = makeStateF();
+          // Since batch R2b the Secretary opens on Pending, which holds none
+          // here. These checks are about the filters on the tab a role works
+          // in, so the Secretary goes to Upcoming first (shownTab), as the page
+          // opened before; the opening tab itself is sections AD's and AV's.
+          const shownTab = opening === 'Pending' ? 'Upcoming' : opening;
           const openRows = opening === 'Overdue' ? [145] : [151, 150, 149, 148, 147];
           const openingHeading = opening === 'Overdue' ? '1 overdue booking' : '5 upcoming bookings';
+          const visitHeading = opening === 'Pending' ? '0 pending bookings' : openingHeading;
           seedSession(token, user);
           resetNet(200, answerForF(state));
           // The first open, held, then failing; then Try again.
@@ -11751,6 +11795,7 @@ const root = () => dom.window.document.getElementById('root');
             !openingLook.row && openingLook.loading && !failedOpen.row && failedOpen.error === 'Could not load the bookings: Network down'
               && !!itemSelect(page) && !!paySelect(page) && !!dateSelect(page),
             said({ openingLook, failedOpen, after: !!itemSelect(page) }));
+          if (shownTab !== opening) await clickIf(page, tabNamed(page, shownTab));
 
           // Where it sits, what it holds, and how it opens.
           const row = filtersRow(page);
@@ -11773,7 +11818,7 @@ const root = () => dom.window.document.getElementById('root');
               && follows(selects[1], selects[2]), said({ namedOk, ids: selects.map((s) => s?.id ?? null) }));
           let v = lookF(page);
           check(`${name}: they open on "Any item", "Any payment" and "Any date", with no From or To, no Clear filters and no hint, and `
-              + `the list as before: ${opening}, "${openingHeading}", "${STRIP14}"`,
+              + `the list as before: ${shownTab}, "${openingHeading}", "${STRIP14}"`,
             v.item === 'Any item' && v.payment === 'Any payment' && v.date === 'Any date' && v.from === null && v.to === null
               && !v.clear && !v.hint && v.heading === openingHeading && v.strip === STRIP14 && said(v.rows) === said(openRows), said(v));
           check(`${name}: Item offers "Any item" and the six items the loaded rows hold, sorted by name with case ignored: "${ITEMS_F}"`,
@@ -11792,7 +11837,7 @@ const root = () => dom.window.document.getElementById('root');
           const sentBefore = net.calls.length;
           await pickItem(page, 'Tables');
           v = lookF(page);
-          const TABLES_STRIP = 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Cancelled 0 · All 2';
+          const TABLES_STRIP = 'Pending 0 · Upcoming 1 · Overdue 0 · Completed 0 · Returned 1 · Not approved 0 · Cancelled 0 · All 2';
           if (opening === 'Overdue') {
             check('Staff: Item "Tables" on Overdue, which holds one booking of Folding Tables: not it, though its name holds "Tables": '
                 + '"0 of 1 overdue booking match", "No overdue bookings match your search or filters." with Clear search and filters; '
@@ -11897,10 +11942,10 @@ const root = () => dom.window.document.getElementById('root');
             said(wrongDates.filter((w) => !PRESET_LABELS.includes(w.k))));
           await pickDate(page, 'Today');
           v = lookF(page);
-          check(`${name}: Today on All: "3 of 14 bookings match", and the counts follow the date, "Upcoming 1 · Overdue 1 · Completed 1 `
-              + '· Returned 0 · Cancelled 0 · All 3"',
+          check(`${name}: Today on All: "3 of 14 bookings match", and the counts follow the date, "Pending 0 · Upcoming 1 · Overdue 1 · Completed 1 `
+              + '· Returned 0 · Not approved 0 · Cancelled 0 · All 3"',
             v.heading === '3 of 14 bookings match'
-              && v.strip === 'Upcoming 1 · Overdue 1 · Completed 1 · Returned 0 · Cancelled 0 · All 3', said(v));
+              && v.strip === 'Pending 0 · Upcoming 1 · Overdue 1 · Completed 1 · Returned 0 · Not approved 0 · Cancelled 0 · All 3', said(v));
           await pickDate(page, 'Choose dates');
           const fromBox = fromInput(page);
           const toBox = toInput(page);
@@ -11943,7 +11988,7 @@ const root = () => dom.window.document.getElementById('root');
               + 'in place of the rows "No upcoming bookings match your search or filters." with one button, Clear search and filters',
             said(oneFilter.rows) === said([151, 149, 147]) && oneFilter.heading === '3 of 5 upcoming bookings match'
               && said(withSearch.rows) === said([149]) && withSearch.heading === '1 of 5 upcoming bookings matches'
-              && withSearch.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1'
+              && withSearch.strip === 'Pending 0 · Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Not approved 0 · Cancelled 0 · All 1'
               && nothingLeft.rows.length === 0 && nothingLeft.heading === '0 of 5 upcoming bookings match'
               && nothingLeft.empty === 'No upcoming bookings match your search or filters.'
               && said(nothingLeft.emptyButtons) === said(['Clear search and filters']),
@@ -12001,7 +12046,7 @@ const root = () => dom.window.document.getElementById('root');
           v = lookF(page);
           check(`${name}: Plastic Chairs, Unpaid, 1 to 31 Oct, on All: #147 alone, "1 of 14 bookings matches"`,
             filtersOf(v) === SET && said(v.rows) === said([147]) && v.heading === '1 of 14 bookings matches'
-              && v.strip === 'Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Cancelled 0 · All 1', said(v));
+              && v.strip === 'Pending 0 · Upcoming 1 · Overdue 0 · Completed 0 · Returned 0 · Not approved 0 · Cancelled 0 · All 1', said(v));
           await clickIf(page, tabNamed(page, 'Upcoming'));
           const onUpcoming = lookF(page);
           await type(page, 'teresita');
@@ -12081,11 +12126,11 @@ const root = () => dom.window.document.getElementById('root');
             await page.settle();
             v = lookF(page);
             check('Staff: Record return with Unpaid on posts the return, loads the list again, once, and keeps the filter and the tab: '
-                + '#145, returned and still unpaid, is still shown, now counted under Returned: "Upcoming 3 · Overdue 0 · Completed 0 '
-                + '· Returned 2 · Cancelled 0 · All 5"',
+                + '#145, returned and still unpaid, is still shown, now counted under Returned: "Pending 0 · Upcoming 3 · Overdue 0 · Completed 0 '
+                + '· Returned 2 · Not approved 0 · Cancelled 0 · All 5"',
               said(listCalls(net.calls.slice(sent))) === said(['POST /rental-requests/145/return', 'GET /rental-requests?status=all'])
                 && v.payment === 'Unpaid' && said(v.rows) === said([151, 149, 147, 145, 141])
-                && v.strip === 'Upcoming 3 · Overdue 0 · Completed 0 · Returned 2 · Cancelled 0 · All 5'
+                && v.strip === 'Pending 0 · Upcoming 3 · Overdue 0 · Completed 0 · Returned 2 · Not approved 0 · Cancelled 0 · All 5'
                 && said(v.pressed) === said(['All 5']), said({ calls: listCalls(net.calls.slice(sent)), v }));
           }
 
@@ -12137,10 +12182,10 @@ const root = () => dom.window.document.getElementById('root');
           await again.settle();
           v = lookF(again);
           check(`${name}: nothing about the filters is kept in the browser: no localStorage or sessionStorage write, through window or `
-              + `not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on ${opening}, "${openingHeading}"`,
+              + `not, sessionStorage empty, no cookie; a new visit opens with all three at Any, on ${opening}, "${visitHeading}"`,
             writesAfter === writesAtOpen && domWritesAfter === domWritesAtOpen && dom.window.sessionStorage.length === 0
               && dom.window.document.cookie === '' && filtersOf(v) === 'Any item / Any payment / Any date' && !v.clear
-              && v.heading === openingHeading,
+              && v.heading === visitHeading,
             said({ writes: writesAfter - writesAtOpen, domWrites: domWritesAfter - domWritesAtOpen,
               session: dom.window.sessionStorage.length, v: filtersOf(v), heading: v.heading }));
           sentF.push(...net.calls.map((c) => c.method));
@@ -16590,6 +16635,10 @@ const root = () => dom.window.document.getElementById('root');
     resetNet(200, stub);
     page = await globalThis.mountInteractive(root(), '/secretary/rentals');
     await page.settle();
+    // Since batch R2b the Secretary opens on Pending, which holds none here:
+    // the Type filter is checked on Upcoming, the tab the page opened on.
+    const upcomingTab = page.queryAll('.pay-tabs button').find((x) => x.textContent.startsWith('Upcoming '));
+    await clickIf(page, upcomingTab);
     let sel = typeSelect(page);
     const labels = sel ? [...sel.options].map((o) => text(o)) : null;
     const order = page.queryAll('.rental-bookings-filters .pay-filter > label').map(text);
@@ -17297,6 +17346,967 @@ const root = () => dom.window.document.getElementById('root');
     if (F.clock && realNow) F.clock.now = realNow;
     check('section AU kept nothing in the browser: no write to localStorage or sessionStorage',
       kept.sets === 0 && domStorage.writes === kept.dom, said({ stub: kept.sets, jsdom: domStorage.writes - kept.dom }));
+  }
+
+  // =========================================================================
+  // AV. Rental bookings: the Secretary approves and declines (batch R2b)
+  // =========================================================================
+  // Migration 027 and batch R2a built the approval and left it switched off:
+  // POST /rental-requests/:id/approve and /decline (Secretary only), a
+  // pending request that holds nothing, and a fee the Secretary may waive for
+  // a funeral. This batch is the Secretary's screen for it, on the shared
+  // Rental bookings list: eight tabs (Pending first, Not approved after
+  // Returned), the Secretary opening on Pending; a booking stored confirmed
+  // reading "Approved" here (the resident's pages keep "Confirmed"); a
+  // pending request's row saying when it was requested ("Requested Oct 28,
+  // 2026, 7:45 PM", nothing when the payload has no requested_at) and
+  // whether another waiting request for the item overlaps it, and carrying
+  // Approve, Decline and Edit, never Cancel; expired and declined rows with
+  // no buttons; the Pending tab oldest request first. Approve and Decline
+  // open a panel over the list (the Payments View panel's pattern: Escape,
+  // the corner Close, the phone's Close and the backdrop all close it, never
+  // while a request is out; the body's scroll locked; focus into it, back to
+  // the row's button when it closes, to the message after a decision). The
+  // Approve panel shows "Fee if approved" from the server's fee_if_approved
+  // and offers "Free for funeral" only for an item marked funeral_eligible,
+  // booked by a resident (never a guest); ticking it reads "PHP 0.00, free
+  // for funeral" and sends waive_for_funeral: true. A refusal shows in the
+  // panel in the server's words and the request stays pending. Decline asks
+  // for a reason as Cancel does. Staff and the Punong Barangay see the same
+  // tabs and rows, with no decision buttons. utils/rentalList.js is checked
+  // case by case first, then the real page against stubbed requests.
+  console.log('\n--- Rental bookings: Approve, Decline and the Pending tab (batch R2b) ---');
+  {
+    const fs = require('fs');
+    const previousTZAV = process.env.TZ;
+    process.env.TZ = 'Asia/Manila';
+    const L = globalThis.rentalList || {};
+    const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const bodyOf = (call) => { try { return JSON.parse(call?.body ?? 'null'); } catch { return call?.body ?? null; } };
+    const kept = { sets: store.sets, dom: domStorage.writes };
+    const methods = [];
+
+    // a. The helpers on their own.
+    const bk = (id, status, derived, extra = {}) => ({ request_id: id, status, derived_status: derived, ...extra });
+    let got = [bk(1, 'confirmed', 'confirmed'), bk(2, 'pending', 'pending'), bk(3, 'declined', 'declined'),
+      bk(4, 'pending', 'expired'), bk(5, 'confirmed', 'overdue'), bk(6, 'cancelled', 'cancelled')]
+      .map((b) => attempt(() => { const m = L.statusBadge(b); return `${m.label}/${m.className}`; }));
+    check('statusBadge, this page\'s badge: a booking stored confirmed reads "Approved" (status-approved); Pending, Declined, '
+        + 'Expired, Overdue and Cancelled read as RENTAL_META words them',
+      said(got) === said(['Approved/status-approved', 'Pending/status-pending', 'Declined/status-rejected',
+        'Expired/status-cancelled', 'Overdue/status-rejected', 'Cancelled/status-cancelled']), said(got));
+    got = [bk(1, 'pending', 'pending'), bk(2, 'pending', 'expired'), bk(3, 'confirmed', 'confirmed'),
+      bk(4, 'declined', 'declined')].map((b) => attempt(() => L.isDecidable(b)));
+    check('isDecidable: only a request the server says is still waiting (derived pending), never an expired, confirmed or '
+        + 'declined one', said(got) === said([true, false, false, false]), said(got));
+    got = [bk(1, 'pending', 'pending', { requested_at: '2026-10-28T11:45:00+00:00' }), bk(2, 'pending', 'pending'),
+      bk(3, 'pending', 'pending', { requested_at: null }), bk(4, 'pending', 'pending', { requested_at: 'soon' })]
+      .map((b) => attempt(() => L.requestedText(b)));
+    check('requestedText: "Requested" and "Oct 28, 2026, 7:45 PM" for a stored time (Manila here); null, never a dash or '
+        + '"unknown", when the key is absent, null or not a time',
+      said(got) === said([{ label: 'Requested', at: 'Oct 28, 2026, 7:45 PM' }, null, null, null]), said(got));
+    const ORDER_IN = [bk(5, 'pending', 'pending'), bk(9, 'pending', 'pending', { requested_at: '2026-10-28T03:00:00Z' }),
+      bk(7, 'pending', 'pending', { requested_at: '2026-10-27T03:00:00Z' }), bk(3, 'pending', 'pending'),
+      bk(8, 'pending', 'pending', { requested_at: '2026-10-27T03:00:00Z' })];
+    const orderSnapshot = said(ORDER_IN.map((b) => b.request_id));
+    got = attempt(() => L.pendingOrder(ORDER_IN).map((b) => b.request_id));
+    check('pendingOrder, the Pending tab\'s order: the oldest request first (#7 and #8 at the same moment, the lower number '
+        + 'first, then #9), requests with no time last, by number (#3, #5); the list given left as it was',
+      said(got) === said([7, 8, 9, 3, 5]) && said(ORDER_IN.map((b) => b.request_id)) === orderSnapshot, said(got));
+    const pend = (id, item, from, to, requested, extra = {}) => bk(id, 'pending', 'pending', {
+      rental_items: { item_id: item }, start_datetime: `2026-11-03T${from}:00+08:00`, end_datetime: `2026-11-03T${to}:00+08:00`,
+      ...(requested ? { requested_at: `2026-10-28T${requested}:00+08:00` } : {}), ...extra });
+    const A = pend(1, 3, '08:00', '17:00', '19:45');
+    const B = pend(2, 3, '13:00', '17:00', '21:05');
+    const C = pend(3, 3, '16:00', '17:00', '22:30');
+    const OVERLAP_SET = [A, B, C,
+      pend(4, 3, '17:00', '19:00', '18:00'), // touches A, B and C at 17:00: no overlap
+      pend(5, 4, '08:00', '17:00', '07:00'), // another item
+      bk(6, 'confirmed', 'confirmed', { rental_items: { item_id: 3 }, start_datetime: '2026-11-03T09:00:00+08:00',
+        end_datetime: '2026-11-03T10:00:00+08:00' }),
+      bk(7, 'declined', 'declined', { rental_items: { item_id: 3 }, start_datetime: '2026-11-03T09:00:00+08:00',
+        end_datetime: '2026-11-03T10:00:00+08:00' }),
+      bk(8, 'pending', 'expired', { rental_items: { item_id: 3 }, start_datetime: '2026-11-03T09:00:00+08:00',
+        end_datetime: '2026-11-03T10:00:00+08:00' }),
+    ];
+    got = [A, B, C, OVERLAP_SET[3], OVERLAP_SET[4]].map((b) => attempt(() => L.overlapNote(b, OVERLAP_SET)));
+    check('overlapNote counts the OTHER requests still waiting for the same item whose times meet, and says when they were '
+        + 'asked: the first request "2 other requests … (both requested later)", the middle "(1 requested earlier, 1 later)", '
+        + 'the last "(both requested earlier)"; a request that only touches them at 17:00, or is for another item, none; a '
+        + 'confirmed, a declined or an expired booking at the same time is never counted',
+      said(got) === said(['2 other requests for this item overlap this one (both requested later)',
+        '2 other requests for this item overlap this one (1 requested earlier, 1 later)',
+        '2 other requests for this item overlap this one (both requested earlier)', null, null]), said(got));
+    got = [attempt(() => L.overlapNote(A, [A, B])), attempt(() => L.overlapNote(B, [A, B])),
+      attempt(() => L.overlapNote(pend(10, 3, '08:00', '09:00', null), [pend(10, 3, '08:00', '09:00', null), A])),
+      attempt(() => L.overlapNote(pend(11, 3, '08:00', '09:00', '19:45'), [pend(11, 3, '08:00', '09:00', '19:45'), A])),
+      attempt(() => L.overlapNote(bk(12, 'pending', 'expired', { rental_items: { item_id: 3 },
+        start_datetime: A.start_datetime, end_datetime: A.end_datetime }), [A])),
+      attempt(() => L.overlapNote(A, [A, B, C, pend(13, 3, '09:00', '10:00', '19:00'), pend(14, 3, '10:00', '11:00', '23:00')]))];
+    check('  one other: "Another request for this item overlaps this one (requested earlier)" / "(requested later)"; with no '
+        + 'request time on either side, no order is claimed; at the same moment the lower number counts as first (#1 before '
+        + '#11, so #11 reads "requested earlier"); an expired request gets no note; four others: "4 other requests … (1 '
+        + 'requested earlier, 3 later)"',
+      said(got) === said(['Another request for this item overlaps this one (requested later)',
+        'Another request for this item overlaps this one (requested earlier)',
+        'Another request for this item overlaps this one',
+        'Another request for this item overlaps this one (requested earlier)',
+        null, '4 other requests for this item overlap this one (1 requested earlier, 3 later)']), said(got));
+    // The row's shorter words (29 Oct 2026, the menu fix): the Approve panel
+    // keeps requestedText and overlapNote, checked above.
+    got = [bk(1, 'pending', 'pending', { requested_at: '2026-10-28T11:45:00+00:00' }),
+      bk(2, 'pending', 'pending', { requested_at: '2026-05-10T16:00:00Z' }), bk(3, 'pending', 'pending'),
+      bk(4, 'pending', 'pending', { requested_at: null }), bk(5, 'pending', 'pending', { requested_at: 'soon' })]
+      .map((b) => attempt(() => L.requestedLine(b)?.replace(/\s+/g, ' ') ?? null));
+    check('requestedLine, the row\'s line: "Requested Oct 28, 7:45 PM", no year (Manila here; "May 11, 12:00 AM" for '
+        + 'midnight); null, never a dash or "unknown", when the key is absent, null or not a time',
+      said(got) === said(['Requested Oct 28, 7:45 PM', 'Requested May 11, 12:00 AM', null, null, null]), said(got));
+    got = [A, B, C, OVERLAP_SET[3], OVERLAP_SET[4]].map((b) => attempt(() => L.overlapParts(b, OVERLAP_SET)));
+    check('overlapParts, the row\'s overlap line, NAMES the other request so its "earlier" or "later" is about that one: the '
+        + 'first request "Overlaps #2, requested later, and 1 more" (#2, the next asked for, named), the middle and the last '
+        + '"Overlaps #1, requested earlier, and 1 more"; none for a request that only touches them or is for another item; '
+        + 'in parts, the places the line may break',
+      said(got) === said([['Overlaps #2,', 'requested later,', 'and 1 more'], ['Overlaps #1,', 'requested earlier,', 'and 1 more'],
+        ['Overlaps #1,', 'requested earlier,', 'and 1 more'], null, null]), said(got));
+    const noTime = pend(10, 3, '08:00', '09:00', null);
+    const noTimeWide = pend(15, 3, '12:00', '15:00', null); // meets A and B
+    const sameMoment = pend(11, 3, '08:00', '09:00', '19:45');
+    got = [attempt(() => L.overlapParts(A, [A, B])), attempt(() => L.overlapParts(B, [A, B])),
+      attempt(() => L.overlapParts(noTime, [noTime, A])), attempt(() => L.overlapParts(noTimeWide, [noTimeWide, A, B])),
+      attempt(() => L.overlapParts(sameMoment, [sameMoment, A])),
+      attempt(() => L.overlapParts(bk(12, 'pending', 'expired', { rental_items: { item_id: 3 },
+        start_datetime: A.start_datetime, end_datetime: A.end_datetime }), [A])),
+      attempt(() => L.overlapParts(A, [A, B, C, pend(13, 3, '09:00', '10:00', '19:00'), pend(14, 3, '10:00', '11:00', '23:00')]))];
+    check('  one other: "Overlaps #2, requested later" / "Overlaps #1, requested earlier"; with no request time on one side, '
+        + 'no order claimed: "Overlaps #1", "Overlaps #1 and 1 more"; at the same moment the lower number counts as first '
+        + '(#11 reads "Overlaps #1, requested earlier"); an expired request none; four others name the first asked for, '
+        + '"Overlaps #13, requested earlier, and 3 more"',
+      said(got) === said([['Overlaps #2,', 'requested later'], ['Overlaps #1,', 'requested earlier'], ['Overlaps #1'],
+        ['Overlaps #1', 'and 1 more'], ['Overlaps #1,', 'requested earlier'], null,
+        ['Overlaps #13,', 'requested earlier,', 'and 3 more']]), said(got));
+    const NO_CHARGE = { charges: null };
+    got = [bk(1, 'pending', 'pending', NO_CHARGE), bk(2, 'declined', 'declined', NO_CHARGE),
+      bk(3, 'pending', 'expired', NO_CHARGE), bk(4, 'pending', 'pending', { charges: [] }),
+      bk(5, 'cancelled', 'cancelled', NO_CHARGE), bk(6, 'confirmed', 'confirmed', NO_CHARGE),
+      bk(7, 'confirmed', 'overdue', { charges: { amount: '150.00', status: 'UNPAID' } }),
+      bk(8, 'declined', 'declined', { charges: [{ amount: '5.00', status: 'VOID' }] })]
+      .map((b) => attempt(() => L.showsPayment(b)));
+    check('showsPayment: no marker on a request not approved (waiting, declined, expired) while it has no charge; a '
+        + 'cancelled or confirmed booking with none keeps its "Not billed", and every row with a charge keeps its marker',
+      said(got) === said([false, false, false, false, true, true, true, true]), said(got));
+    const res = (extra = {}) => bk(20, 'pending', 'pending', { resident_id: 820, outside_borrower_name: null,
+      rental_items: { item_id: 3, funeral_eligible: true }, ...extra });
+    got = [res(), res({ resident_id: null, outside_borrower_name: 'Pedro Guest' }), res({ outside_borrower_name: 'Pedro Guest' }),
+      res({ rental_items: { item_id: 3, funeral_eligible: false } }), res({ rental_items: { item_id: 3 } }),
+      res({ derived_status: 'expired' }), res({ status: 'confirmed', derived_status: 'confirmed' }), res({ resident_id: null })]
+      .map((b) => attempt(() => L.funeralWaivable(b)));
+    check('funeralWaivable, the "Free for funeral" box\'s rule: only a waiting request, for an item marked funeral_eligible, '
+        + 'booked for a resident; never a guest\'s, an unmarked item\'s (false or no key), an expired or confirmed one, or '
+        + 'one with no resident record',
+      said(got) === said([true, false, false, false, false, false, false, false]), said(got));
+    got = [[{ fee_if_approved: 300 }, false], [{ fee_if_approved: '150.5' }, false], [{ fee_if_approved: 300 }, true],
+      [{ fee_if_approved: 0 }, false], [{}, false], [{ fee_if_approved: null }, false], [{}, true]]
+      .map(([b, w]) => attempt(() => L.feeLine(b, w)));
+    check('feeLine, after "Fee if approved": the server\'s fee_if_approved, "PHP 300.00", "PHP 150.50", "PHP 0.00"; with the '
+        + 'waiver "PHP 0.00, free for funeral"; nothing at all when the payload has no fee_if_approved (or null), never a fee '
+        + 'worked out here',
+      said(got) === said(['PHP 300.00', 'PHP 150.50', 'PHP 0.00, free for funeral', 'PHP 0.00', null, null,
+        'PHP 0.00, free for funeral']), said(got));
+    got = [{ charges: { amount: '5.00', status: 'UNPAID' } }, { charges: [{ amount: '300.00', status: 'UNPAID' }] },
+      { charges: { amount: '0.00', status: 'PAID' } }, { charges: null }, null]
+      .map((r) => attempt(() => L.approvedMessage(r)));
+    check('approvedMessage, from the charge the answer carries: "Booking approved. A charge of PHP 5.00 was created.", '
+        + '"… PHP 300.00 …", "Booking approved. No fee is due." for PHP 0; "Booking approved." alone with no charge to read',
+      said(got) === said(['Booking approved. A charge of PHP 5.00 was created.',
+        'Booking approved. A charge of PHP 300.00 was created.', 'Booking approved. No fee is due.', 'Booking approved.',
+        'Booking approved.']), said(got));
+
+    // b. The real page. Requests and bookings in MANAGE_FIELDS' shape, with
+    // derived_status, not_started and, on a waiting request, fee_if_approved,
+    // as GET /rental-requests sends them since batch R2b. The tent (marked
+    // for funeral use) holds three overlapping requests on 3 Nov and one that
+    // only touches them; the chairs, also marked, a guest's request; the
+    // costume set is not marked; #808 has no requested_at; #805 carries no
+    // fee_if_approved, as an answer without it would.
+    const ITEM = {
+      tent: { item_id: 3, name: 'Tent', type: 'equipment', fee: '150.00', quantity_total: 4, quantity_available: 4,
+        booking_opens_at: '07:00:00', booking_closes_at: '17:00:00', funeral_eligible: true },
+      chairs: { item_id: 4, name: 'Plastic Chairs', type: 'furniture', fee: '5.00', quantity_total: 200, quantity_available: 200,
+        booking_opens_at: '07:00:00', booking_closes_at: '17:00:00', funeral_eligible: true },
+      court: { item_id: 1, name: 'Basketball Court', type: 'facility', fee: '200.00', quantity_total: 1, quantity_available: 1,
+        booking_opens_at: '07:00:00', booking_closes_at: '24:00:00', funeral_eligible: false },
+      costume: { item_id: 6, name: 'Sinulog Costume Set', type: 'equipment', fee: '100.00', quantity_total: 12,
+        quantity_available: 12, booking_opens_at: '07:00:00', booking_closes_at: '17:00:00', funeral_eligible: false },
+    };
+    const at = (day, hhmm) => new Date(`2026-${day}T${hhmm}:00+08:00`).toISOString().replace('.000Z', '+00:00');
+    const person = (id, first, last, account = true) => ({ resident_id: 800 + id, first_name: first, middle_name: null,
+      last_name: last, suffix: null, account: account ? { username: `${first.toLowerCase()}_${id}` } : null });
+    const row = (id, o) => ({
+      request_id: id, quantity_requested: o.qty ?? 1, start_datetime: at(o.day, o.from), end_datetime: at(o.day, o.to),
+      purpose: o.purpose ?? `Purpose ${id}`, status: o.status, return_note: null,
+      returned_at: o.status === 'returned' ? at(o.day, '18:00') : null, cancellation_reason: null,
+      decline_reason: o.decline ?? null, purpose_type: 'general',
+      ...(o.requested ? { requested_at: at(o.requested[0], o.requested[1]) } : {}),
+      resident_id: o.guest ? null : 800 + id, outside_borrower_name: o.guest ? o.guest[0] : null,
+      outside_borrower_contact: o.guest ? o.guest[1] : null,
+      rental_items: ITEM[o.item], resident_records: o.guest ? null : person(id, o.who[0], o.who[1], o.account !== false),
+      requester: { user_id: 700 + id, username: o.guest ? 'secretary1' : `${o.who[0].toLowerCase()}_${id}`, email: null, profiles: null },
+      returned_by: o.status === 'returned' ? { user_id: 3, username: 'staff1', profiles: null } : null,
+      charges: o.charge ?? null, derived_status: o.derived ?? o.status,
+      not_started: o.status === 'confirmed' && (o.derived ?? o.status) === 'confirmed',
+      ...(o.fee !== undefined ? { fee_if_approved: o.fee } : {}),
+    });
+    const UNPAID = (amount) => ({ charge_id: 990, amount, status: 'UNPAID', declared_method: null, declared_reference: null,
+      declared_at: null });
+    const LIST = () => [
+      row(801, { item: 'tent', who: ['Dino', 'Tan'], status: 'pending', day: '11-03', from: '08:00', to: '17:00', qty: 2,
+        requested: ['10-28', '19:45'], fee: 300, purpose: 'Wake for the late Lola Teodora, three nights at the family home' }),
+      row(802, { item: 'tent', who: ['Ana', 'Cruz'], status: 'pending', day: '11-03', from: '13:00', to: '17:00',
+        requested: ['10-28', '21:05'], fee: 150 }),
+      row(803, { item: 'tent', who: ['Ben', 'Reyes'], status: 'pending', day: '11-03', from: '16:00', to: '17:00',
+        requested: ['10-28', '22:30'], fee: 150 }),
+      row(804, { item: 'tent', who: ['Carla', 'Santos'], status: 'pending', day: '11-05', from: '08:00', to: '12:00',
+        requested: ['10-26', '11:00'], fee: 150 }),
+      row(805, { item: 'tent', who: ['Elsa', 'Uy'], status: 'pending', day: '11-03', from: '17:00', to: '19:00',
+        requested: ['10-28', '23:00'] }),
+      row(806, { item: 'chairs', guest: ['Maria Lourdes Villanueva-Santos', '+639281112233'], status: 'pending', day: '11-04',
+        from: '08:00', to: '12:00', qty: 40, requested: ['10-27', '10:10'], fee: 200 }),
+      row(807, { item: 'costume', who: ['Fe', 'Villa'], status: 'pending', day: '11-06', from: '08:00', to: '12:00', qty: 3,
+        requested: ['10-28', '09:00'], fee: 300 }),
+      row(808, { item: 'court', who: ['Gil', 'Wong'], account: false, status: 'pending', day: '11-06', from: '18:00', to: '22:00',
+        fee: 200 }),
+      row(809, { item: 'court', who: ['Hana', 'Yap'], status: 'declined', day: '11-07', from: '08:00', to: '10:00',
+        requested: ['10-25', '08:00'], decline: 'The court is closed for repairs that week' }),
+      row(810, { item: 'chairs', who: ['Ivy', 'Zamora'], status: 'pending', derived: 'expired', day: '10-28', from: '08:00',
+        to: '12:00', qty: 30, requested: ['10-20', '11:00'] }),
+      row(811, { item: 'chairs', who: ['Jun', 'Abad'], status: 'confirmed', day: '11-08', from: '08:00', to: '12:00', qty: 50,
+        charge: UNPAID('250.00') }),
+      row(812, { item: 'tent', who: ['Kim', 'Bello'], status: 'confirmed', derived: 'overdue', day: '10-10', from: '08:00',
+        to: '12:00', charge: UNPAID('150.00') }),
+      row(813, { item: 'court', who: ['Lea', 'Cruz'], status: 'cancelled', day: '10-05', from: '08:00', to: '10:00',
+        charge: { ...UNPAID('200.00'), status: 'VOID' } }),
+      row(814, { item: 'chairs', who: ['Mon', 'Dy'], status: 'returned', day: '10-01', from: '08:00', to: '12:00',
+        charge: { ...UNPAID('25.00'), status: 'PAID' } }),
+    ];
+    const PENDING_ORDER = [804, 806, 807, 801, 802, 803, 805, 808];
+    const STRIP = 'Pending 8 · Upcoming 1 · Overdue 1 · Completed 0 · Returned 1 · Not approved 2 · Cancelled 1 · All 14';
+    // The stub holds the list and changes it as the server would: an
+    // approval confirms the request and bills it, a decline stores the reason.
+    // `refuse` answers the next decision with that status and sentence.
+    const makeState = () => ({ list: LIST(), refuse: null });
+    const answer = (state) => (url, method) => {
+      if (method === 'GET' && /\/rental-requests\?status=all$/.test(url)) return { requests: state.list };
+      if (method === 'GET' && url.endsWith('/rental-settings')) return { max_days_ahead: 31 };
+      if (method === 'GET' && url.includes('/rental-requests/availability')) {
+        return { ok: true, item_type: 'equipment', total: 4, used: 0, booked: 0, stuck: 0, resting: 0, left: 4 };
+      }
+      const act = url.match(/\/rental-requests\/(\d+)\/(approve|decline)$/);
+      if (method === 'POST' && act) {
+        if (state.refuse) return { error: state.refuse };
+        const r = state.list.find((b) => b.request_id === Number(act[1]));
+        if (!r) return undefined;
+        const sent = bodyOf(net.calls.at(-1)) || {};
+        if (act[2] === 'decline') {
+          Object.assign(r, { status: 'declined', derived_status: 'declined', decline_reason: sent.reason ?? null });
+          delete r.fee_if_approved;
+          return { message: 'Request declined', request: { ...r } };
+        }
+        const waived = sent.waive_for_funeral === true;
+        const amount = waived ? '0.00' : Number(r.fee_if_approved).toFixed(2);
+        Object.assign(r, { status: 'confirmed', derived_status: 'confirmed', not_started: true,
+          purpose_type: waived ? 'funeral' : 'general',
+          charges: { charge_id: 1990 + r.request_id, amount, status: waived ? 'PAID' : 'UNPAID', declared_method: null,
+            declared_reference: null, declared_at: null } });
+        delete r.fee_if_approved;
+        return { message: 'Booking approved', request: { ...r } };
+      }
+      if (method === 'PUT' && /\/rental-requests\/\d+$/.test(url)) return { message: 'Booking updated' };
+      return undefined;
+    };
+    const tabsOf = (pg) => pg.queryAll('.pay-tabs button');
+    const tabNamed = (pg, label) => tabsOf(pg).find((b) => b.textContent.startsWith(`${label} `));
+    const rowsIn = (pg) => pg.queryAll('table.data-table tbody tr');
+    const idOf = (tr) => Number((text(tr.querySelector('.doc-requests-number')) || '#0').slice(1));
+    const rowOf = (pg, id) => rowsIn(pg).find((tr) => idOf(tr) === id) ?? null;
+    const buttonsOf = (pg, id) => [...(rowOf(pg, id)?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
+    const badgeOf = (pg, id) => text(rowOf(pg, id)?.querySelector('.badge'));
+    const requestBlock = (pg, id) => rowOf(pg, id)?.querySelector('.rental-bookings-request') ?? null;
+    const overlapOf = (pg, id) => text(rowOf(pg, id)?.querySelector('.rental-bookings-overlap'));
+    // A pending row's three-dot button (components/RowActionsMenu.jsx), its
+    // menu, and an action chosen from it as a person does: a press on the
+    // button, then on the item. null where the row has no menu.
+    const menuButton = (pg, id) => rowOf(pg, id)?.querySelector('button[aria-haspopup="menu"]') ?? null;
+    const menuItems = (pg) => pg.queryAll('[role="menu"] [role="menuitem"]');
+    const choose = async (pg, id, label) => {
+      const b = menuButton(pg, id);
+      if (!b) return null;
+      await pg.click(b);
+      const item = menuItems(pg).find((i) => i.textContent === label);
+      if (item) await pg.click(item);
+      return b;
+    };
+    const markerOf = (pg, id) => text(rowOf(pg, id)?.querySelector('.doc-requests-pay'));
+    // jsdom has no scrollIntoView; this one records what asked to be shown
+    // (the menu brings a list in flow into view when it opens).
+    const scrolled = [];
+    const scrollProto = dom.window.HTMLElement.prototype;
+    const previousScrollAV = scrollProto.scrollIntoView;
+    scrollProto.scrollIntoView = function scrollIntoView(options) { scrolled.push({ el: this, options }); };
+    // A browser's bare getComputedStyle, which the menu reads to tell a
+    // floating list from one in flow; only window, document and navigator
+    // are global here otherwise.
+    const previousStyleAV = global.getComputedStyle;
+    global.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+    const look = (pg) => ({
+      heading: text(pg.query('.list-head h2')),
+      strip: tabsOf(pg).map(text).join(' · '),
+      pressed: pg.queryAll('.pay-tabs button[aria-pressed="true"]').map(text),
+      ids: rowsIn(pg).map(idOf),
+      flash: text(pg.query('.alert.success')),
+      loading: root().textContent.includes('Loading bookings…'),
+    });
+    const overlay = (pg) => pg.query('.modal-overlay');
+    const dialog = (pg) => overlay(pg)?.querySelector('[role="dialog"]') ?? null;
+    const panelView = (pg) => {
+      const d = dialog(pg);
+      if (!d) return { open: false };
+      const terms = [...d.querySelectorAll('.pay-panel-details dt')].map(text);
+      const defs = [...d.querySelectorAll('.pay-panel-details dd')].map(text);
+      const feeDt = [...d.querySelectorAll('.pay-panel-actions dt')].map(text);
+      const feeDd = [...d.querySelectorAll('.pay-panel-actions dd')].map(text);
+      const labelled = (d.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+        .map((id) => text(dom.window.document.getElementById(id))).join(' ');
+      return {
+        open: true,
+        classes: `${overlay(pg).className} > ${d.className}`,
+        modal: d.getAttribute('aria-modal'),
+        name: labelled,
+        title: text(d.querySelector('h2')),
+        // Its spans read whole, a space between: the number, then the badge.
+        meta: [...(d.querySelector('.pay-panel-meta')?.children ?? [])].map(text).join(' '),
+        user: text(d.querySelector('.pay-panel-user')),
+        details: Object.fromEntries(terms.map((t, i) => [t, defs[i]])),
+        note: text(d.querySelector('.pay-panel-details .pay-panel-note')),
+        action: text(d.querySelector('.pay-panel-actions h3')),
+        fee: feeDt.length ? `${feeDt[0]}: ${feeDd[0]}` : null,
+        box: d.querySelector('input[type="checkbox"]'),
+        boxLabel: text(d.querySelector('input[type="checkbox"]')?.closest('label')),
+        alerts: [...d.querySelectorAll('[role="alert"]')].map(text),
+        submit: d.querySelector('button[type="submit"]'),
+        x: d.querySelector('button.pay-panel-x'),
+        footerClose: d.querySelector('.pay-panel-footer button'),
+        reason: d.querySelector('textarea'),
+        counter: text(d.querySelector('.char-counter')),
+        helper: text(d.querySelector('p.muted')),
+      };
+    };
+    const typeReason = async (pg, value) => {
+      const box = panelView(pg).reason;
+      if (!box) return;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(box, value);
+      box.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await pg.settle();
+    };
+    // Pressing the panel's submit button, as a person does; a disabled one
+    // does nothing.
+    const pressSubmit = async (pg) => { const s = panelView(pg).submit; if (s) await pg.click(s); };
+    // The form's submit event itself, as the Enter key sends it.
+    const forceSubmit = async (pg) => {
+      const form = dialog(pg)?.querySelector('form');
+      if (form) form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+      await pg.settle();
+    };
+    const holdNext = () => { net.hold = true; return net.held.length; };
+    const decisionCalls = (from) => net.calls.slice(from).filter((c) => c.method !== 'GET')
+      .map((c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`);
+    const gets = (from) => net.calls.slice(from).filter((c) => c.method === 'GET' && /status=all$/.test(c.url)).length;
+    const bodyOverflow = () => dom.window.document.body.style.overflow;
+    const SEC = { name: 'Secretary', route: '/secretary/rentals', token: VALID, user: USER };
+    const openPage = async (who, state) => {
+      seedSession(who.token, who.user);
+      resetNet(200, answer(state));
+      const pg = await globalThis.mountInteractive(root(), who.route);
+      await pg.settle();
+      return pg;
+    };
+    const day = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: BUNDLE_ZONE });
+    const hour = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: BUNDLE_ZONE });
+    const scheduleOf = (b) => `${day.format(new Date(b.start_datetime))}, ${hour.format(new Date(b.start_datetime))} – `
+      + `${hour.format(new Date(b.end_datetime))}`.replace(/\s+/g, ' ');
+
+    let state = makeState();
+    let page = await openPage(SEC, state);
+    let v = look(page);
+    check('Secretary: eight tabs, "Pending, Upcoming, Overdue, Completed, Returned, Not approved, Cancelled, All", with every '
+        + `count over the whole list: "${STRIP}"; it opens on Pending: "8 pending bookings"`,
+      v.strip === STRIP && said(v.pressed) === said(['Pending 8']) && v.heading === '8 pending bookings', said(v));
+    check('  the Pending tab lists the oldest request first and the one with no request time last: '
+        + `${PENDING_ORDER.map((id) => `#${id}`).join(', ')}`,
+      said(v.ids) === said(PENDING_ORDER), said(v.ids));
+    const pendingButtons = Object.fromEntries(PENDING_ORDER.map((id) => {
+      const b = menuButton(page, id);
+      return [id, { buttons: buttonsOf(page, id).length, label: b?.getAttribute('aria-label') ?? null,
+        title: b?.getAttribute('title') ?? null, popup: b?.getAttribute('aria-haspopup') ?? null,
+        expanded: b?.getAttribute('aria-expanded') ?? null }];
+    }));
+    check('  every pending row has ONE button, a three-dot menu button (aria-haspopup="menu", aria-expanded="false", named '
+        + 'and titled "Actions for booking #N"), with no Approve, Decline, Edit or Cancel beside it; its badge reads "Pending"',
+      PENDING_ORDER.every((id) => said(pendingButtons[id]) === said({ buttons: 1, label: `Actions for booking #${id}`,
+        title: `Actions for booking #${id}`, popup: 'menu', expanded: 'false' }) && badgeOf(page, id) === 'Pending'),
+      said({ pendingButtons, badges: PENDING_ORDER.map((id) => badgeOf(page, id)) }));
+
+    // The menu itself, on #804 (the first row), with nothing sent throughout.
+    const menuSent = net.calls.length;
+    const m804 = menuButton(page, 804);
+    const listOf = () => page.query('[role="menu"]');
+    const focusedText = () => page.active()?.textContent ?? null;
+    const scrolledAt = scrolled.length;
+    await clickIf(page, m804);
+    const menuView = { expanded: m804?.getAttribute('aria-expanded') ?? null,
+      controls: !!listOf() && m804?.getAttribute('aria-controls') === listOf().id,
+      items: menuItems(page).map((i) => i.textContent), roles: menuItems(page).map((i) => i.getAttribute('role')),
+      named: dom.window.document.getElementById(listOf()?.getAttribute('aria-labelledby') ?? '')?.getAttribute('aria-label') ?? null,
+      danger: menuItems(page).map((i) => i.classList.contains('row-menu-danger')), focus: focusedText(),
+      shown: scrolled.slice(scrolledAt).map((s) => [s.el === listOf(), s.options?.block ?? null]) };
+    check('a press on it opens its menu: Approve, Decline and Edit, in that order, each role="menuitem" in a role="menu" named '
+        + 'by the button, Decline in the danger red; aria-expanded="true" and aria-controls the list; the focus on Approve; '
+        + 'and a list in flow (no CSS here, as on a phone) is brought into view whole',
+      menuView.expanded === 'true' && menuView.controls && said(menuView.items) === said(['Approve', 'Decline', 'Edit'])
+        && menuView.roles.length === 3 && menuView.roles.every((r) => r === 'menuitem')
+        && menuView.named === 'Actions for booking #804' && said(menuView.danger) === said([false, true, false])
+        && menuView.focus === 'Approve' && said(menuView.shown) === said([[true, 'nearest']]),
+      said(menuView));
+    const walk = [];
+    for (const k of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'Home', 'End']) {
+      if (listOf()) await page.key(k);
+      walk.push(focusedText());
+    }
+    check('  ArrowDown walks Approve, Decline, Edit and wraps round to Approve; ArrowUp wraps back to Edit; Home goes to '
+        + 'Approve and End to Edit',
+      said(walk) === said(['Decline', 'Edit', 'Approve', 'Edit', 'Approve', 'Edit']), said(walk));
+    if (listOf()) await page.key('Escape');
+    const escView = { open: !!listOf(), focus: page.active() === m804 && !!m804,
+      expanded: m804?.getAttribute('aria-expanded') ?? null };
+    check('  Escape closes it and puts the focus back on its button, aria-expanded="false" again',
+      !escView.open && escView.focus && escView.expanded === 'false', said(escView));
+    await clickIf(page, m804);
+    const reopened = !!listOf();
+    await clickIf(page, m804);
+    const toggledShut = !listOf();
+    await clickIf(page, m804);
+    await page.pressOutside();
+    await page.settle();
+    const outsideShut = !listOf();
+    if (m804) await page.key('ArrowDown', m804);
+    const downOpens = { open: !!listOf(), focus: focusedText() };
+    if (listOf()) await page.key('Escape');
+    if (m804) await page.key('ArrowUp', m804);
+    const upOpens = { open: !!listOf(), focus: focusedText() };
+    if (listOf()) await page.key('Escape');
+    check('  a second press on the button closes it, and so does a press outside; ArrowDown on the closed button opens it on '
+        + 'Approve, ArrowUp on Edit',
+      reopened && toggledShut && outsideShut && said(downOpens) === said({ open: true, focus: 'Approve' })
+        && said(upOpens) === said({ open: true, focus: 'Edit' }),
+      said({ reopened, toggledShut, outsideShut, downOpens, upOpens }));
+    // Tab past the last item: the focus leaves the menu for the next row's
+    // button (focusout, as a browser sends it); moving between its own items
+    // keeps it open.
+    await clickIf(page, m804);
+    if (listOf()) await page.key('End');
+    const edit804 = menuItems(page).at(-1);
+    edit804?.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: menuItems(page)[0] }));
+    await page.settle();
+    const keptInside = !!listOf();
+    edit804?.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: menuButton(page, 806) }));
+    await page.settle();
+    const tabbedOut = !listOf();
+    // A click alone on another row's button (no press outside first, as a
+    // screen reader may send it): only that row's list is open.
+    await clickIf(page, m804);
+    await clickIf(page, menuButton(page, 806));
+    const oneOpen = { lists: page.queryAll('[role="menu"]').length,
+      expanded: PENDING_ORDER.filter((id) => menuButton(page, id)?.getAttribute('aria-expanded') === 'true'),
+      named: dom.window.document.getElementById(listOf()?.getAttribute('aria-labelledby') ?? '')?.getAttribute('aria-label') ?? null };
+    if (listOf()) await page.key('Escape');
+    check('  Tab past the last item (the focus leaving for the next row\'s button) closes it, moving between its own items '
+        + 'does not; opening another row\'s menu with a click alone closes the first: one list open, #806\'s',
+      keptInside && tabbedOut && said(oneOpen) === said({ lists: 1, expanded: [806], named: 'Actions for booking #806' }),
+      said({ keptInside, tabbedOut, oneOpen }));
+    // Floating (position: fixed, as index.css makes it above 640px): placed
+    // from the button, and a scroll or a resize closes it; in flow a scroll
+    // leaves it open.
+    const floatCss = dom.window.document.createElement('style');
+    floatCss.textContent = '.row-menu .row-menu-list { position: fixed; }';
+    dom.window.document.head.appendChild(floatCss);
+    await clickIf(page, m804);
+    const placed = listOf()?.getAttribute('style') ?? null;
+    dom.window.dispatchEvent(new dom.window.Event('scroll'));
+    await page.settle();
+    const scrollShut = !listOf();
+    await clickIf(page, m804);
+    const reopenedFloating = !!listOf();
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
+    await page.settle();
+    const resizeShut = !listOf();
+    floatCss.remove();
+    await clickIf(page, m804);
+    dom.window.dispatchEvent(new dom.window.Event('scroll'));
+    await page.settle();
+    const inFlowKept = !!listOf();
+    if (listOf()) await page.key('Escape');
+    check('  floating, the list is placed from its button (top and left) and a scroll or a resize closes it; in flow, as on a '
+        + 'phone, a scroll leaves it open; and none of this sent anything',
+      /top: \d+px/.test(placed ?? '') && /left: \d+px/.test(placed ?? '') && scrollShut && reopenedFloating && resizeShut
+        && inFlowKept && net.calls.length === menuSent,
+      said({ placed, scrollShut, reopenedFloating, resizeShut, inFlowKept, sent: net.calls.length - menuSent }));
+
+    const requestedLines = Object.fromEntries([801, 806, 808].map((id) => {
+      const line = requestBlock(page, id);
+      return [id, { line: text(line), label: line?.getAttribute('data-label') ?? null,
+        cell: line ? [...rowOf(page, id).children].indexOf(line.closest('td')) : null,
+        afterNumber: line?.previousElementSibling?.classList.contains('doc-requests-number') ?? null }];
+    }));
+    const statusCells = Object.fromEntries(PENDING_ORDER.map((id) => [id, text(rowOf(page, id)?.children[5])]));
+    check('  a pending row says when it was requested on ONE line under its booking number, "Requested Oct 28, 7:45 PM" '
+        + '(#801), no year, labelled "Request" for a phone card; #808, with no request time, shows NOTHING: no line, no '
+        + 'dash, no "unknown"; the Status cell holds the badge alone: no "Not billed" and no request line',
+      requestedLines[801].line === 'Requested Oct 28, 7:45 PM' && requestedLines[801].label === 'Request'
+        && requestedLines[801].cell === 0 && requestedLines[801].afterNumber === true
+        && requestedLines[806].line === 'Requested Oct 27, 10:10 AM' && requestedLines[808].line === null
+        && !/unknown|—|Requested/.test(text(rowOf(page, 808)?.children[0]) ?? '')
+        && PENDING_ORDER.every((id) => statusCells[id] === 'Pending'),
+      said({ requestedLines, statusCells }));
+    const notes = Object.fromEntries([801, 802, 803, 804, 805, 806].map((id) => [id, overlapOf(page, id)]));
+    const noteCell = rowOf(page, 801)?.querySelector('.rental-bookings-overlap')?.closest('td');
+    check('  the overlap note, from the whole list, under the schedule it is about, NAMES the other request: #801 "Overlaps '
+        + '#802, requested later, and 1 more"; #802 and #803 "Overlaps #801, requested earlier, and 1 more"; none for #804 '
+        + '(another day), #805 (it only touches them at 5:00 PM) or #806 (another item)',
+      said(notes) === said({ 801: 'Overlaps #802, requested later, and 1 more', 802: 'Overlaps #801, requested earlier, and 1 more',
+        803: 'Overlaps #801, requested earlier, and 1 more', 804: null, 805: null, 806: null })
+        && noteCell?.getAttribute('data-label') === 'Schedule',
+      said({ notes, cell: noteCell?.getAttribute('data-label') ?? null }));
+    await clickIf(page, tabNamed(page, 'All'));
+    const markers = Object.fromEntries(look(page).ids.map((id) => [id, markerOf(page, id)]));
+    await clickIf(page, tabNamed(page, 'Pending'));
+    check('  "Not billed" is gone from every request not approved (the eight pending, the declined #809, the expired #810); '
+        + 'every booking with a charge keeps its marker: #811 Unpaid, #812 Unpaid, #813 Void, #814 Paid',
+      [...PENDING_ORDER, 809, 810].every((id) => id in markers && markers[id] === null)
+        && markers[811] === 'Unpaid' && markers[812] === 'Unpaid' && markers[813] === 'Void' && markers[814] === 'Paid',
+      said(markers));
+    await clickIf(page, tabNamed(page, 'Not approved'));
+    v = look(page);
+    const notApproved = Object.fromEntries(v.ids.map((id) => [id, { badge: badgeOf(page, id), buttons: buttonsOf(page, id),
+      reasons: [...(rowOf(page, id)?.querySelectorAll('.reason-note') ?? [])].map(text), request: text(requestBlock(page, id)),
+      // The Status cell's lines read whole, a space between.
+      status: [...(rowOf(page, id)?.children[5]?.children ?? [])].map(text).join(' ') }]));
+    check('Secretary: Not approved holds the declined #809 and the expired #810, "2 declined or expired bookings", NO button '
+        + 'or menu on either, no requested line or note, and a Status cell of the badge and, for the decline, its reason '
+        + 'alone: "Declined Reason: …" and "Expired", no "Not billed"',
+      v.heading === '2 declined or expired bookings' && said(v.ids.slice().sort()) === said([809, 810])
+        && notApproved[809]?.badge === 'Declined' && notApproved[810]?.badge === 'Expired'
+        && notApproved[809].buttons.length === 0 && notApproved[810].buttons.length === 0
+        && said(notApproved[809].reasons) === said(['Reason: The court is closed for repairs that week'])
+        && notApproved[809].request === null && notApproved[810].request === null
+        && notApproved[809].status === 'Declined Reason: The court is closed for repairs that week'
+        && notApproved[810].status === 'Expired',
+      said({ heading: v.heading, notApproved }));
+    await clickIf(page, tabNamed(page, 'Upcoming'));
+    const upcomingRow = { badge: badgeOf(page, 811), buttons: buttonsOf(page, 811).join(' + ') };
+    await clickIf(page, tabNamed(page, 'Overdue'));
+    const overdueBadge = badgeOf(page, 812);
+    check('Secretary: a booking stored confirmed reads "Approved" (#811, with Edit and Cancel as before); an overdue one '
+        + 'still reads "Overdue"',
+      upcomingRow.badge === 'Approved' && upcomingRow.buttons === 'Edit + Cancel' && overdueBadge === 'Overdue',
+      said({ upcomingRow, overdueBadge }));
+    await clickIf(page, tabNamed(page, 'Pending'));
+
+    // The Approve panel, chosen from #801's menu: what it shows, and nothing sent.
+    let sent = net.calls.length;
+    const menu801 = menuButton(page, 801);
+    await choose(page, 801, 'Approve');
+    let p = panelView(page);
+    check('Approve, chosen from #801\'s menu, closes the menu and opens a panel OVER the list (the list stays under it): the '
+        + 'Payments View panel\'s .modal-overlay and .pay-panel, role="dialog", aria-modal, named "Approve this request '
+        + 'Booking #801 Dino Tan"; choosing it sends nothing',
+      p.open && !page.query('[role="menu"]') && p.classes === 'modal-overlay pay-panel-overlay > pay-panel'
+        && p.modal === 'true' && p.name === 'Approve this request Booking #801 Dino Tan' && !!rowOf(page, 801)
+        && net.calls.length === sent,
+      said({ p: { open: p.open, classes: p.classes, modal: p.modal, name: p.name }, menu: !!page.query('[role="menu"]'),
+        sent: net.calls.length - sent }));
+    const B801 = LIST()[0];
+    check('  it shows who (Dino Tan, @dino_801), what (Tent (Equipment)), when, how many (2), the purpose in full, the '
+        + 'requested time, the overlap line in the row\'s words ("Overlaps #802, requested later, and 1 more"), and "Fee if '
+        + 'approved: PHP 300.00" (the server\'s fee_if_approved)',
+      p.title === 'Dino Tan' && p.user === '@dino_801' && p.meta === 'Booking #801 Pending'
+        && said(p.details) === said({ Item: 'Tent (Equipment)', Schedule: scheduleOf(B801), Quantity: '2',
+          Purpose: 'Wake for the late Lola Teodora, three nights at the family home', Requested: 'Oct 28, 2026, 7:45 PM' })
+        && p.note === 'Overlaps #802, requested later, and 1 more'
+        && p.fee === 'Fee if approved: PHP 300.00' && text(p.submit) === 'Approve',
+      said({ title: p.title, user: p.user, meta: p.meta, details: p.details, note: p.note, fee: p.fee, submit: text(p.submit) }));
+    check('  the body\'s scroll is locked while it is open, and the focus is in the panel',
+      bodyOverflow() === 'hidden' && page.active() === dialog(page), said({ overflow: bodyOverflow(), active: page.active()?.className }));
+    check('  "Free for funeral" is offered on #801 (the tent is marked, a resident\'s request), unticked',
+      !!p.box && p.box.checked === false && p.boxLabel === 'Free for funeral', said({ box: !!p.box, label: p.boxLabel }));
+    await clickIf(page, p.box);
+    p = panelView(page);
+    check('  ticking it changes the fee line to "Fee if approved: PHP 0.00, free for funeral"; unticking puts PHP 300.00 back',
+      p.box?.checked === true && p.fee === 'Fee if approved: PHP 0.00, free for funeral', said({ fee: p.fee }));
+    await clickIf(page, p.box);
+    const unticked = panelView(page).fee;
+    await clickIf(page, dialog(page));
+    const afterInside = panelView(page).open;
+    await page.key('Escape');
+    await page.settle();
+    check('  a press inside the panel leaves it open; Escape closes it, sends nothing, puts the scroll back and the focus on '
+        + '#801\'s three-dot button',
+      unticked === 'Fee if approved: PHP 300.00' && afterInside && !panelView(page).open && net.calls.length === sent
+        && bodyOverflow() === '' && !!menu801 && page.active() === menu801,
+      said({ unticked, afterInside, open: panelView(page).open, sent: net.calls.length - sent, overflow: bodyOverflow(),
+        active: page.active()?.getAttribute('aria-label') ?? page.active()?.textContent }));
+    await choose(page, 801, 'Approve');
+    await clickIf(page, panelView(page).x);
+    const afterX = { open: panelView(page).open, focus: !!menu801 && page.active() === menu801 };
+    await choose(page, 801, 'Approve');
+    await clickIf(page, overlay(page));
+    const afterBackdrop = { open: panelView(page).open, focus: !!menu801 && page.active() === menu801 };
+    await choose(page, 801, 'Approve');
+    await clickIf(page, panelView(page).footerClose);
+    const afterFooter = { open: panelView(page).open, focus: !!menu801 && page.active() === menu801 };
+    check('  the corner Close (aria-label "Close"), a press on the backdrop and the phone\'s Close each close it with the '
+        + 'focus back on #801\'s three-dot button, and none sends anything',
+      !afterX.open && afterX.focus && !afterBackdrop.open && afterBackdrop.focus && !afterFooter.open && afterFooter.focus
+        && net.calls.length === sent && bodyOverflow() === '',
+      said({ afterX, afterBackdrop, afterFooter, sent: net.calls.length - sent }));
+
+    // The box is offered only where the waiver can be given.
+    await choose(page, 806, 'Approve');
+    const guestPanel = panelView(page);
+    await page.key('Escape');
+    await choose(page, 807, 'Approve');
+    const unmarkedPanel = panelView(page);
+    await page.key('Escape');
+    await choose(page, 808, 'Approve');
+    const untimedPanel = panelView(page);
+    await page.key('Escape');
+    await choose(page, 805, 'Approve');
+    const feelessPanel = panelView(page);
+    await page.key('Escape');
+    await page.settle();
+    check('  no "Free for funeral" for a guest\'s request (#806, though the chairs are marked: "Guest · +639281112233") or '
+        + 'for an item not marked (#807, the costume set)',
+      guestPanel.open && !guestPanel.box && guestPanel.user === 'Guest · +639281112233'
+        && guestPanel.fee === 'Fee if approved: PHP 200.00' && unmarkedPanel.open && !unmarkedPanel.box
+        && unmarkedPanel.fee === 'Fee if approved: PHP 300.00',
+      said({ guest: { box: !!guestPanel.box, user: guestPanel.user, fee: guestPanel.fee },
+        unmarked: { box: !!unmarkedPanel.box, fee: unmarkedPanel.fee } }));
+    check('  with no request time (#808) the panel has no "Requested" row and no dash; "No online account" under the name; '
+        + 'with no fee_if_approved (#805) no fee line at all',
+      untimedPanel.open && !('Requested' in untimedPanel.details) && !Object.values(untimedPanel.details).includes('—')
+        && untimedPanel.user === 'No online account' && feelessPanel.open && feelessPanel.fee === null
+        && !/PHP/.test(text(dialog(page)) ?? ''),
+      said({ untimed: untimedPanel.details, user: untimedPanel.user, feeless: feelessPanel.fee }));
+    // Both panels' overlap line comes from the row's own helper
+    // (overlapParts), so the row, Approve and Decline read the same.
+    const panelNotes = {};
+    for (const id of [802, 803, 804]) {
+      panelNotes[id] = { row: overlapOf(page, id) };
+      for (const kind of ['Approve', 'Decline']) {
+        await choose(page, id, kind);
+        panelNotes[id][kind.toLowerCase()] = panelView(page).note ?? null;
+        if (panelView(page).open) await page.key('Escape');
+        await page.settle();
+      }
+    }
+    const BOTH = 'Overlaps #801, requested earlier, and 1 more';
+    check('  the Approve and Decline panels\' overlap line is the row\'s own words: #802 and #803 "Overlaps #801, requested '
+        + 'earlier, and 1 more" in the row and in both panels; #804, which overlaps nothing, has no line in any of them',
+      said(panelNotes) === said({ 802: { row: BOTH, approve: BOTH, decline: BOTH },
+        803: { row: BOTH, approve: BOTH, decline: BOTH }, 804: { row: null, approve: null, decline: null } }),
+      said(panelNotes));
+
+    // Approve with the waiver: the body, then the message, the focus, the reload.
+    await choose(page, 801, 'Approve');
+    await clickIf(page, panelView(page).box);
+    sent = net.calls.length;
+    let held = holdNext();
+    await pressSubmit(page);
+    p = panelView(page);
+    const busyView = { open: p.open, submit: text(p.submit), disabled: p.submit?.disabled, x: p.x?.disabled,
+      footer: p.footerClose?.disabled, box: p.box?.disabled };
+    await page.key('Escape');
+    const escWhileBusy = panelView(page).open;
+    await clickIf(page, overlay(page));
+    const backdropWhileBusy = panelView(page).open;
+    check('Approve with "Free for funeral": while the request is out the button reads "Approving…" and is disabled, Close, '
+        + 'the phone\'s Close and the box too, and neither Escape nor the backdrop closes the panel',
+      busyView.open && busyView.submit === 'Approving…' && busyView.disabled === true && busyView.x === true
+        && busyView.footer === true && busyView.box === true && escWhileBusy && backdropWhileBusy,
+      said({ busyView, escWhileBusy, backdropWhileBusy }));
+    net.hold = false;
+    if (typeof net.held[held] === 'function') net.held[held](200, answer(state)(net.calls[sent]?.url ?? '', 'POST'));
+    await page.settle();
+    v = look(page);
+    check('  it posts { waive_for_funeral: true } to /rental-requests/801/approve, closes, says "Booking approved. No fee is '
+        + 'due." with the focus on that message, and loads the list again, once, still on Pending, #801 gone from it',
+      said(decisionCalls(sent)) === said(['POST /rental-requests/801/approve'])
+        && said(bodyOf(net.calls[sent])) === said({ waive_for_funeral: true }) && !panelView(page).open
+        && v.flash === 'Booking approved. No fee is due.' && page.active() === page.query('.alert.success')
+        && gets(sent) === 1 && said(v.pressed) === said(['Pending 7']) && !v.ids.includes(801) && bodyOverflow() === '',
+      said({ calls: decisionCalls(sent), body: bodyOf(net.calls[sent]), v, overflow: bodyOverflow() }));
+    await clickIf(page, tabNamed(page, 'Upcoming'));
+    check('  #801 is under Upcoming now, "Approved", with "No fee" under the badge',
+      badgeOf(page, 801) === 'Approved' && text(rowOf(page, 801)?.querySelector('.doc-requests-pay')) === 'No fee',
+      said({ badge: badgeOf(page, 801), marker: text(rowOf(page, 801)?.querySelector('.doc-requests-pay')) }));
+    await clickIf(page, tabNamed(page, 'Pending'));
+
+    // Approve without the waiver: no waive_for_funeral, the amount from the answer.
+    sent = net.calls.length;
+    await choose(page, 807, 'Approve');
+    await pressSubmit(page);
+    v = look(page);
+    check('Approve an ordinary request (#807): the body carries no waive_for_funeral, and the message names the charge the '
+        + 'answer carries: "Booking approved. A charge of PHP 300.00 was created."',
+      said(decisionCalls(sent)) === said(['POST /rental-requests/807/approve'])
+        && said(bodyOf(net.calls.find((c, i) => i >= sent && c.method === 'POST'))) === said({})
+        && v.flash === 'Booking approved. A charge of PHP 300.00 was created.' && page.active() === page.query('.alert.success'),
+      said({ calls: decisionCalls(sent), flash: v.flash }));
+
+    // A refusal: in the panel, in the server's words; the request stays pending.
+    const TAKEN = 'The Tent is already booked from 8:00 AM to 5:00 PM on that date, so this request cannot be approved.';
+    state.refuse = TAKEN;
+    net.status = 409;
+    sent = net.calls.length;
+    await choose(page, 802, 'Approve');
+    await pressSubmit(page);
+    net.status = 200;
+    p = panelView(page);
+    check('Approve refused (409): the server\'s sentence inside the panel with role="alert", the panel still open, Approve '
+        + 'pressable again, nothing reloaded yet',
+      p.open && said(p.alerts) === said([TAKEN]) && p.submit?.disabled === false && text(p.submit) === 'Approve'
+        && gets(sent) === 0, said({ open: p.open, alerts: p.alerts, gets: gets(sent) }));
+    state.refuse = null;
+    sent = net.calls.length;
+    await page.key('Escape');
+    await page.settle();
+    v = look(page);
+    check('  closing it after the refusal loads the list again, once; #802 is still pending, with its menu, and the focus is '
+        + 'on its three-dot button once the list is drawn again',
+      gets(sent) === 1 && v.ids.includes(802) && badgeOf(page, 802) === 'Pending'
+        && !!menuButton(page, 802) && page.active() === menuButton(page, 802),
+      said({ gets: gets(sent), ids: v.ids, active: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+
+    // The Decline panel: the reason, as Cancel asks it.
+    const HELPER = 'The resident receives this reason by text message. Keep it short and use plain letters.';
+    sent = net.calls.length;
+    await choose(page, 803, 'Decline');
+    p = panelView(page);
+    check('Decline opens its panel over the list, "Decline this request Booking #803 Ben Reyes": a required "Reason for '
+        + 'declining" box, maxLength 300, the focus in it, "0/300", the Cancel panel\'s helper, and Decline disabled',
+      p.open && p.name === 'Decline this request Booking #803 Ben Reyes' && !!p.reason && p.reason.required === true
+        && p.reason.maxLength === 300 && page.active() === p.reason && p.counter === '0/300' && p.helper === HELPER
+        && text(p.submit) === 'Decline' && p.submit.disabled === true && text(p.reason.closest('label'))?.startsWith('Reason for declining')
+        && bodyOverflow() === 'hidden' && net.calls.length === sent,
+      said({ open: p.open, name: p.name, counter: p.counter, helper: p.helper, disabled: p.submit?.disabled,
+        focus: page.active() === p.reason }));
+    const disabledAt = {};
+    for (const value of ['ab', '   ab   ', 'abc']) {
+      await typeReason(page, value);
+      disabledAt[value] = panelView(page).submit?.disabled;
+    }
+    await typeReason(page, 'ab');
+    await forceSubmit(page);
+    const forcedPosts = decisionCalls(sent).length;
+    check('  Decline stays disabled until the reason has 3 characters after trimming ("ab", "   ab   " disabled, "abc" not), '
+        + 'and the Enter key with 2 sends nothing',
+      said(disabledAt) === said({ ab: true, '   ab   ': true, abc: false }) && forcedPosts === 0, said({ disabledAt, forcedPosts }));
+    await typeReason(page, '  The tent is needed for the barangay assembly  ');
+    await pressSubmit(page);
+    v = look(page);
+    check('  a reason posts { reason } trimmed to /rental-requests/803/decline, closes, says "Request declined." with the '
+        + 'focus on it, and loads the list again, once; #803 leaves Pending',
+      said(decisionCalls(sent)) === said(['POST /rental-requests/803/decline'])
+        && said(bodyOf(net.calls.find((c, i) => i >= sent && c.method === 'POST'))) === said({ reason: 'The tent is needed for the barangay assembly' })
+        && !panelView(page).open && v.flash === 'Request declined.' && page.active() === page.query('.alert.success')
+        && gets(sent) === 1 && !v.ids.includes(803),
+      said({ calls: decisionCalls(sent), v }));
+    await clickIf(page, tabNamed(page, 'Not approved'));
+    check('  #803 is under Not approved now, "Declined", with "Reason: The tent is needed for the barangay assembly"',
+      badgeOf(page, 803) === 'Declined' && [...(rowOf(page, 803)?.querySelectorAll('.reason-note') ?? [])].map(text)
+        .includes('Reason: The tent is needed for the barangay assembly'), text(rowOf(page, 803)));
+    await clickIf(page, tabNamed(page, 'Pending'));
+    const EXPIRED_WORDS = "This request's start time has passed, so it has expired and cannot be declined.";
+    state.refuse = EXPIRED_WORDS;
+    net.status = 409;
+    await choose(page, 804, 'Decline');
+    await typeReason(page, 'Not available that day');
+    await pressSubmit(page);
+    net.status = 200;
+    state.refuse = null;
+    p = panelView(page);
+    const refusedDecline = { open: p.open, alerts: p.alerts };
+    await clickIf(page, p.x);
+    await page.settle();
+    check('Decline refused (409): the server\'s sentence in the panel with role="alert"; Close then loads the list again and '
+        + 'puts the focus on #804\'s three-dot button',
+      refusedDecline.open && said(refusedDecline.alerts) === said([EXPIRED_WORDS]) && !panelView(page).open
+        && !!menuButton(page, 804) && page.active() === menuButton(page, 804),
+      said({ refusedDecline, active: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    sent = net.calls.length;
+    const menu805 = menuButton(page, 805);
+    await choose(page, 805, 'Decline');
+    await typeReason(page, 'Typed, then left');
+    const declineOpened = panelView(page).open;
+    await page.key('Escape');
+    await page.settle();
+    check('  Escape closes the Decline panel too, sends nothing (the typed reason with it), puts the scroll back and the '
+        + 'focus on #805\'s three-dot button',
+      declineOpened && !panelView(page).open && net.calls.length === sent && bodyOverflow() === ''
+        && !!menu805 && page.active() === menu805,
+      said({ declineOpened, open: panelView(page).open, sent: net.calls.length - sent,
+        active: page.active()?.getAttribute('aria-label') ?? page.active()?.textContent }));
+
+    // Edit on a pending request, from its menu: the Edit panel takes the
+    // list's place, as for a booking; Back, then Save.
+    sent = net.calls.length;
+    await choose(page, 802, 'Edit');
+    const editOpened = { title: text(page.query('.rental-form-panel h3')), menu: !!page.query('[role="menu"]') };
+    await clickIf(page, page.queryAll('.rental-form-panel button').find((b) => /Back to list/.test(b.textContent)) ?? null);
+    await page.settle();
+    const editBack = { list: look(page).ids.includes(802), focus: !!menuButton(page, 802) && page.active() === menuButton(page, 802),
+      sent: net.calls.slice(sent).filter((c) => c.method !== 'GET').length };
+    check('Edit, chosen from #802\'s menu, closes the menu and opens "Edit booking #802" in the list\'s place; "Back to list" '
+        + 'writes nothing and puts the focus on #802\'s three-dot button, not on the page',
+      editOpened.title === 'Edit booking #802' && !editOpened.menu && editBack.list && editBack.focus && editBack.sent === 0,
+      said({ editOpened, editBack, active: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    await choose(page, 802, 'Edit');
+    const editTitle = text(page.query('.rental-form-panel h3'));
+    if (page.query('.rental-form-panel form')) await page.submit();
+    await page.settle();
+    const put = net.calls.slice(sent).find((c) => c.method === 'PUT');
+    check('  Save sends the PUT (date, times and purpose; no quantity), then the list again, the request still on Pending, and '
+        + 'the focus on its three-dot button once the list is drawn again',
+      editTitle === 'Edit booking #802' && /\/rental-requests\/802$/.test(put?.url ?? '')
+        && said(Object.keys(bodyOf(put) ?? {}).sort()) === said(['date', 'end_time', 'purpose', 'start_time'])
+        && look(page).ids.includes(802) && said(look(page).pressed[0]?.split(' ')[0]) === said('Pending')
+        && !!menuButton(page, 802) && page.active() === menuButton(page, 802),
+      said({ editTitle, put: put?.url ?? null, body: bodyOf(put), v: look(page),
+        active: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // c. Staff and the Punong Barangay: the same tabs and rows, no decision.
+    for (const who of [
+      { name: 'Staff', route: '/staff', token: makeToken({ sub: '3', role: 'staff', exp: VALID_EXP }),
+        user: { user_id: 3, username: 'staff1', role: 'staff', must_change_password: false }, opening: 'Overdue 1' },
+      { name: 'Punong Barangay', route: '/punong-barangay', token: makeToken({ sub: '5', role: 'punong_barangay', exp: VALID_EXP }),
+        user: { user_id: 5, username: 'pb_ubujan', role: 'punong_barangay', must_change_password: false }, opening: 'Upcoming 1' },
+    ]) {
+      state = makeState();
+      page = await openPage(who, state);
+      v = look(page);
+      const openedOn = v.pressed;
+      await clickIf(page, tabNamed(page, 'Pending'));
+      const onPending = look(page);
+      const pendingButtonsOf = PENDING_ORDER.map((id) => buttonsOf(page, id).join(' + ') || '(none)');
+      check(`${who.name}: the same eight tabs and counts ("${STRIP}"), opening on ${who.opening.split(' ')[0]}; on Pending the `
+          + 'same eight requests in the same order, badges "Pending", "Requested Oct 28, 7:45 PM" and "Overlaps #801, '
+          + 'requested earlier, and 1 more", no "Not billed", and NO three-dot menu: no button at all'
+          + `${who.name === 'Punong Barangay' ? ', and no actions column' : ''}`,
+        v.strip === STRIP && said(openedOn) === said([who.opening]) && said(onPending.ids) === said(PENDING_ORDER)
+          && PENDING_ORDER.every((id) => badgeOf(page, id) === 'Pending') && pendingButtonsOf.every((b) => b === '(none)')
+          && !page.query('[aria-haspopup="menu"][data-actions-for]')
+          && text(requestBlock(page, 801)) === 'Requested Oct 28, 7:45 PM'
+          && overlapOf(page, 802) === 'Overlaps #801, requested earlier, and 1 more'
+          && PENDING_ORDER.every((id) => markerOf(page, id) === null)
+          && (who.name === 'Punong Barangay' ? page.queryAll('table.data-table thead th').length === 6 : true)
+          && !overlay(page),
+        said({ strip: v.strip, openedOn, ids: onPending.ids, pendingButtonsOf, requested: text(requestBlock(page, 801)),
+          note: overlapOf(page, 802) }));
+      await clickIf(page, tabNamed(page, 'Upcoming'));
+      const upcomingBadge = badgeOf(page, 811);
+      await clickIf(page, tabNamed(page, 'Not approved'));
+      const naButtons = [809, 810].map((id) => buttonsOf(page, id).length);
+      check(`  ${who.name}: "Approved" on the confirmed #811, and no button on the declined or expired rows`,
+        upcomingBadge === 'Approved' && naButtons.every((n) => n === 0), said({ upcomingBadge, naButtons }));
+      methods.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // d. The resident's page keeps "Confirmed" for the same kind of booking.
+    seedSession(makeToken({ sub: '2', role: 'resident', exp: VALID_EXP }),
+      { user_id: 2, username: 'res_one', role: 'resident', must_change_password: false });
+    resetNet(200, (url, method) => (method === 'GET' && /\/rental-requests\/mine$/.test(url) ? { requests: [{
+      request_id: 901, quantity_requested: 1, start_datetime: at('11-08', '08:00'), end_datetime: at('11-08', '12:00'),
+      purpose: 'Birthday', status: 'confirmed', return_note: null, returned_at: null, cancellation_reason: null,
+      rental_items: { item_id: 4, name: 'Plastic Chairs', type: 'furniture', fee: '5.00' }, charges: UNPAID('5.00'),
+      derived_status: 'confirmed', can_cancel_online: false, cancel_online_note: null }] } : undefined));
+    page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const mineBadge = text(page.query('table.data-table tbody .badge'));
+    const mineWords = page.html();
+    await page.unmount();
+    state = makeState();
+    page = await openPage(SEC, state);
+    await clickIf(page, tabNamed(page, 'Upcoming'));
+    const listBadge = badgeOf(page, 811);
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    check('The same kind of booking (stored confirmed, ahead) reads "Approved" on the Secretary\'s list and still "Confirmed" '
+        + 'on the resident\'s My rentals, which shows no Approve, Decline, requested time or overlap note',
+      listBadge === 'Approved' && mineBadge === 'Confirmed' && !/Approve|Decline|Requested|overlaps/.test(mineWords),
+      said({ listBadge, mineBadge }));
+
+    // e. The CSS: the requested date never breaks, the phone card labels the
+    // block, and the panels are the 50 rung of the z-index ladder.
+    const css = fs.readFileSync(path.join(HERE, '..', 'src', 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const ruleBody = (cssText, selector) => {
+      const at = cssText.indexOf(`${selector} {`);
+      if (at < 0) return null;
+      return cssText.slice(at + selector.length + 2, cssText.indexOf('}', at)).replace(/\s+/g, ' ').trim();
+    };
+    const phoneBlocks = [];
+    for (let i = css.indexOf('@media (max-width: 640px)'); i >= 0; i = css.indexOf('@media (max-width: 640px)', i + 1)) {
+      let depth = 0;
+      let j = css.indexOf('{', i);
+      for (let k = j; k < css.length; k += 1) {
+        if (css[k] === '{') depth += 1;
+        if (css[k] === '}') { depth -= 1; if (depth === 0) { phoneBlocks.push(css.slice(j + 1, k)); break; } }
+      }
+    }
+    const nowrap = ruleBody(css, '.data-table .rental-bookings-overlap-part');
+    const nowrapBoth = /\.data-table \.rental-bookings-request,\s*\.data-table \.rental-bookings-overlap-part \{\s*white-space: nowrap;\s*\}/
+      .test(css);
+    const labelRule = phoneBlocks.map((b) => ruleBody(b, '.data-table.stack-narrow .rental-bookings-request[data-label]::before'))
+      .find(Boolean) ?? null;
+    const overlayRule = ruleBody(css, '.modal-overlay');
+    const menuList = ruleBody(css, '.row-menu .row-menu-list');
+    const menuBtn = ruleBody(css, '.row-menu > .row-menu-btn');
+    const menuItem = ruleBody(css, '.row-menu .row-menu-item');
+    const cardMenu = phoneBlocks.map((b) => ruleBody(b, '.data-table.stack-narrow .row-menu')).find(Boolean) ?? null;
+    const cardList = phoneBlocks.map((b) => ruleBody(b, '.data-table.stack-narrow .row-menu .row-menu-list')).find(Boolean) ?? null;
+    check('index.css: the requested line and each part of the overlap note never break (white-space: nowrap); on a phone card '
+        + 'the requested line is labelled from its data-label; the row menu\'s list floats (position: fixed) at z-index 35, the '
+        + 'Pay menu\'s rung, and opens in flow in a phone card (position: static); its button and items are 40px tall at '
+        + 'least; the panels\' .modal-overlay is z-index 50',
+      nowrap === 'white-space: nowrap;' && nowrapBoth && /content: attr\(data-label\);/.test(labelRule ?? '')
+        && /display: block;/.test(labelRule ?? '') && /position: fixed;/.test(menuList ?? '') && /z-index: 35;/.test(menuList ?? '')
+        && /min-height: 40px;/.test(menuBtn ?? '') && /min-height: 40px;/.test(menuItem ?? '')
+        && /display: block;/.test(cardMenu ?? '') && /position: static;/.test(cardList ?? '')
+        && /z-index: 50;/.test(overlayRule ?? ''),
+      said({ nowrap, nowrapBoth, labelRule, menuList, menuBtn, menuItem, cardMenu, cardList, overlay: overlayRule }));
+
+    check('section AV\'s writes were the decisions and the edit, each answered by the fetch stub; nothing kept in the browser',
+      said(methods.filter((m) => m !== 'GET')) === said(['POST', 'POST', 'POST', 'POST', 'POST', 'PUT'])
+        && store.sets - kept.sets === 0 && domStorage.writes === kept.dom,
+      said({ writes: methods.filter((m) => m !== 'GET'), stub: store.sets - kept.sets, jsdom: domStorage.writes - kept.dom }));
+    if (previousScrollAV === undefined) delete scrollProto.scrollIntoView;
+    else scrollProto.scrollIntoView = previousScrollAV;
+    if (previousStyleAV === undefined) delete global.getComputedStyle;
+    else global.getComputedStyle = previousStyleAV;
+    if (previousTZAV === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAV;
   }
 
   console.error = origError;

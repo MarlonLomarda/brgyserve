@@ -1841,6 +1841,62 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   check('An unknown ?status= is a 400 that names pending, declined and expired',
     r.status === 400 && /pending, declined, overdue, completed, expired, or 'all'/.test(r.body?.error || ''), said(r));
 
+  // -- What the Approve panel is told (batch R2b) -------------------------------------
+  // The Secretary's Approve panel shows "Fee if approved" and offers "Free for
+  // funeral" only on an item marked for it. Both come with the list:
+  // fee_if_approved on a request still waiting (derived pending), from the
+  // approve route's own feeIfApproved(), and the item's funeral_eligible.
+  const routeSource = fs.readFileSync(path.join(SRC, 'routes', 'rentalRequests.js'), 'utf8');
+  const manageEmbed = (/rental_items \(([^)]*)\)/.exec((/const MANAGE_FIELDS = `([\s\S]*?)`;/.exec(routeSource) || [])[1] || '') || [])[1] || '';
+  check('MANAGE_FIELDS gives each booking\'s item its funeral_eligible (an explicit column, never *)',
+    /\bfuneral_eligible\b/.test(manageEmbed) && !/\*/.test(manageEmbed), manageEmbed.replace(/\s+/g, ' ').trim());
+  r = await read('/', SEC, '', both(withPending, chairsMarked));
+  const listed = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
+  const mineRead = await read('/mine', RES_A, '', both(withPending, chairsMarked));
+  check('GET /: the item\'s funeral_eligible is in every row\'s item, true on the marked chairs; the resident\'s GET /mine '
+      + 'is unchanged, with neither funeral_eligible nor fee_if_approved',
+    Object.values(listed).length > 0 && Object.values(listed).every((b) => 'funeral_eligible' in (b.rental_items || {}))
+      && listed[630]?.rental_items?.funeral_eligible === true
+      && (mineRead.body?.requests || []).length > 0 && mineRead.body.requests.every((b) => !('fee_if_approved' in b)
+        && !('funeral_eligible' in (b.rental_items || {}))),
+    JSON.stringify([630, 634].map((id) => listed[id]?.rental_items?.funeral_eligible)));
+  const FEES = { 630: 50, 631: 50, 634: 500, 635: 10, 636: 0, 637: 50 };
+  const notWaiting = Object.values(listed).filter((b) => b.derived_status !== 'pending');
+  check('GET /: every request still waiting carries fee_if_approved, item fee x quantity (10 chairs PHP 50, the court PHP 500, '
+      + 'a guest\'s 2 chairs PHP 10, 3 free mats PHP 0), and every other row leaves it OUT, never null: the expired #632, '
+      + 'the declined #633, confirmed, cancelled, overdue and completed bookings',
+    Object.entries(FEES).every(([id, fee]) => listed[id]?.derived_status === 'pending' && listed[id]?.fee_if_approved === fee)
+      && notWaiting.length >= 10 && notWaiting.every((b) => !('fee_if_approved' in b))
+      && !!listed[632] && !('fee_if_approved' in listed[632]) && !!listed[633] && !('fee_if_approved' in listed[633]),
+    JSON.stringify({ waiting: Object.keys(FEES).map((id) => [id, listed[id]?.derived_status, listed[id]?.fee_if_approved]),
+      others: notWaiting.filter((b) => 'fee_if_approved' in b).map((b) => b.request_id) }));
+  r = await read('/:id', SEC, 634, both(withPending, chairsMarked));
+  const confirmedDetail = await read('/:id', SEC, 601, withPending);
+  check('GET /:id (the detail) carries the same: fee_if_approved PHP 500 on the pending court request, and the item\'s '
+      + 'funeral_eligible key; none on the confirmed #601',
+    r.status === 200 && r.body?.request?.fee_if_approved === 500 && 'funeral_eligible' in (r.body.request.rental_items || {})
+      && confirmedDetail.status === 200 && !!confirmedDetail.body?.request && !('fee_if_approved' in confirmedDetail.body.request),
+    `${said(r)}; ${said(confirmedDetail)}`);
+  const agree = [];
+  for (const id of Object.keys(FEES).map(Number)) {
+    const res = await approve(id);
+    agree.push([id, listed[id]?.fee_if_approved, res.rpcCalls()[0]?.args?.p_amount, res.chargeOfBooking(id)?.amount]);
+  }
+  check('The fee on screen and the charge cannot disagree: for every waiting request, what GET / says it would cost is the '
+      + 'amount approve sends and the charge it gets',
+    agree.every(([, shown, sent, charged]) => shown === sent && sent === charged), JSON.stringify(agree));
+  r = await approve(630, { body: WAIVE, setup: chairsMarked });
+  check('  a funeral waiver still sends PHP 0, whatever fee_if_approved said (PHP 50)',
+    r.status === 200 && r.rpcCalls()[0]?.args?.p_amount === 0 && listed[630]?.fee_if_approved === 50, said(r));
+  const approveHandler = (/router\.post\('\/:id\/approve'[\s\S]*?\n\}\);/.exec(routeSource) || [''])[0];
+  const managedBody = (/const withManaged = [\s\S]*?\n\};/.exec(routeSource) || [''])[0];
+  check('ONE helper: the approve route and the list both work the fee out through feeIfApproved(), and the approve route '
+      + 'no longer calls rentalAmount() itself',
+    /\bfeeIfApproved\(booking\)/.test(approveHandler) && !/\brentalAmount\(/.test(approveHandler)
+      && /\bfeeIfApproved\(row\)/.test(managedBody),
+    JSON.stringify({ approve: /\bfeeIfApproved\(/.test(approveHandler), rentalAmountInApprove: /\brentalAmount\(/.test(approveHandler),
+      managed: /\bfeeIfApproved\(/.test(managedBody) }));
+
   // -- Reports: facility utilization ------------------------------------------------
   const utilization = (setup) => call({ method: 'get', path: '/facility-utilization', user: SEC, id: '', router: reports,
     query: { from: dayAhead(-30), to: dayAhead(30) }, setup });
