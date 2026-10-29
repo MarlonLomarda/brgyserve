@@ -44,6 +44,7 @@ import {
   tabCounts,
   tabHeading,
 } from "../utils/requestList";
+import { FaRegFilePdf } from "react-icons/fa6";
 
 // Document request processing. Shared by three roles: the Secretary passes
 // canManage and gets the four workflow actions; Staff and the Punong Barangay
@@ -410,6 +411,9 @@ function RequestDetail({ id, canManage, onBack }) {
               >
                 Reject…
               </button>
+              <button className="preview-btn">
+                <FaRegFilePdf /> Preview Document
+              </button>
             </div>
           )}
 
@@ -635,9 +639,7 @@ function loadFailure(err) {
     : "the server did not respond";
 }
 
-export default function SecretaryRequestsPage({
-  canManage = false,
-}) {
+export default function SecretaryRequestsPage({ canManage = false }) {
   const { authFetch } = useAuth();
   const [tab, setTab] = useState("pending"); // the chosen status tab
   const [requests, setRequests] = useState(null); // null = loading, or a failed load
@@ -737,8 +739,7 @@ export default function SecretaryRequestsPage({
   // utils/requestList.js. A choice a reload no longer offers (its type
   // renamed, its one void charge no longer void) goes back to Any, and the
   // page to 1: a select never reads a choice over rows that do not hold it.
-  const documentChoices =
-    requests === null ? null : documentOptions(requests);
+  const documentChoices = requests === null ? null : documentOptions(requests);
   const paymentChoices = requests === null ? null : paymentOptions(requests);
   if (
     documentChoices &&
@@ -855,7 +856,9 @@ export default function SecretaryRequestsPage({
               region, as the Payments totals line is, so a screen reader
               hears "2 of 6 pending requests match" as the search is typed. */}
           <div className="list-head doc-requests-head">
-            <h2 ref={headingRef} aria-live="polite">{heading}</h2>
+            <h2 ref={headingRef} aria-live="polite">
+              {heading}
+            </h2>
             <div className="head-actions">
               <button className="btn secondary" onClick={load}>
                 Refresh
@@ -986,9 +989,7 @@ export default function SecretaryRequestsPage({
             <div className="empty">
               <p>
                 No{" "}
-                {tab === "all"
-                  ? ""
-                  : `${statusMeta(tab).label.toLowerCase()} `}
+                {tab === "all" ? "" : `${statusMeta(tab).label.toLowerCase()} `}
                 requests.
               </p>
             </div>

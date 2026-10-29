@@ -1280,6 +1280,21 @@ a {
   margin-top: 4px;
 }
 
+.preview-btn {
+  background-color: transparent;
+  color: #1e293b;
+  margin-left: auto;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.preview-btn:hover {
+  background-color: transparent !important;
+  text-decoration: underline;
+}
+
 .inline-form {
   display: flex;
   gap: 8px;
