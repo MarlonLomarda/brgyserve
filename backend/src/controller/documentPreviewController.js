@@ -4,6 +4,7 @@ const { generateDocx } = require("../services/documentGenerationService.js");
 const {
   convertDocxToPdf,
 } = require("../services/documentConversionService.js");
+const { readableDate } = require("../services/date.js");
 
 const previewPdf = async (req, res) => {
   try {
@@ -24,9 +25,28 @@ const previewPdf = async (req, res) => {
     if (!data) throw new Error(`Document request with ID ${id} is not found.`);
 
     const { template_path } = data.document_types;
+    const { resident_records } = data;
+
+    const templateData = {
+      full_name: [
+        resident_records.first_name,
+        resident_records.middle_name,
+        resident_records.last_name,
+        resident_records.suffix,
+      ]
+        .filter((part) => typeof part === "string" && part.trim() !== "")
+        .map((part) => part.trim())
+        .join(" "),
+      civil_status: resident_records.civil_status || "Single/Married",
+      address: resident_records.address,
+      purpose: data.purpose || "a requirement",
+      date: data.processed_at
+        ? readableDate(data.processed_at)
+        : readableDate(data.requested_at),
+    };
 
     // generate .docx file with the resident's information filled in
-    const docxBuffer = await generateDocx(template_path, data.resident_records);
+    const docxBuffer = await generateDocx(template_path, templateData);
 
     // convert the .docx file into a .pdf
     const pdfBuffer = await convertDocxToPdf(docxBuffer);
