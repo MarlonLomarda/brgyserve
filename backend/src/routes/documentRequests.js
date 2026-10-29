@@ -14,6 +14,7 @@ const { notify } = require("../services/notifications");
 const { RELATED_TYPE } = require("../constants/notifications");
 const { logActivity } = require("../services/activityLog");
 const { ACTIONS } = require("../constants/activityLog");
+const { previewPdf } = require("../controller/documentPreviewController.js");
 
 const router = express.Router();
 
@@ -923,5 +924,8 @@ router.post("/:id/claim", requireRole("secretary"), async (req, res) => {
     request,
   });
 });
+
+// route for previewing the docx file as a pdf for the secretary only
+router.get("/:id/preview", previewPdf);
 
 module.exports = router;
