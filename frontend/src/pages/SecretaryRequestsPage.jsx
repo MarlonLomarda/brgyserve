@@ -231,6 +231,20 @@ function RequestDetail({ id, canManage, onBack }) {
     }
   }
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setDocumentUrl(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  });
+
   const r = request;
   const resident = r?.resident_records;
   const charge = chargeOf(r);
@@ -438,15 +452,25 @@ function RequestDetail({ id, canManage, onBack }) {
                 </button>
               </div>
 
-              {documentUrl && (
-                <div className="document-preview">
-                  <h4>Document Preview</h4>
+              {fetchingDocument && (
+                <div className="document-preview-overlay">
+                  <div className="document-preview-loading">
+                    <div className="loading-spinner"></div>
+                    <span>Loading Document...</span>
+                  </div>
+                </div>
+              )}
 
+              {documentUrl && (
+                <div
+                  className="document-preview-overlay"
+                  onClick={() => {
+                    setDocumentUrl(null);
+                  }}
+                >
                   <iframe
                     title={`Preview of document request ${id}`}
-                    src={documentUrl}
-                    width="100%"
-                    height="600"
+                    src={`${documentUrl}#view=FitH`}
                   />
                 </div>
               )}

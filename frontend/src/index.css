@@ -1295,6 +1295,60 @@ a {
   text-decoration: underline;
 }
 
+.document-preview-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.5);
+
+  .document-preview-loading {
+    background-color: #fff;
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 90vh;
+    height: 90dvh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  iframe {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 90vh;
+    height: 90dvh;
+    border: none;
+  }
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #94a3b8;
+  border-top: 4px solid #1d4ed8;
+  border-radius: 50%;
+
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .inline-form {
   display: flex;
   gap: 8px;
