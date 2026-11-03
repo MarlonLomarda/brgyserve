@@ -129,10 +129,14 @@ router.put("/:id", uploadDocx.single("docxTemplate"), async (req, res) => {
     .select(TYPE_FIELDS)
     .eq("document_type_id", id)
     .maybeSingle();
+
   if (beforeError)
     throw new Error(`Failed to load document type: ${beforeError.message}`);
+
   if (!before)
     return res.status(404).json({ error: "Document type not found" });
+
+  let uploadedTemplatePath = null;
 
   // upload docx template to supabase storage if there is a template uploaded
   if (value.template_path) {
@@ -147,28 +151,57 @@ router.put("/:id", uploadDocx.single("docxTemplate"), async (req, res) => {
     if (uploadError) {
       throw new Error(`Template upload failed: ${uploadError.message}`);
     }
+
+    uploadedTemplatePath = uploadedData.path;
   }
+
+  // keep the old template path if no new file is uploaded
+  const updateValues = {
+    ...value,
+    template_path: uploadedTemplatePath ?? before.template_path,
+  };
 
   // update the database
   const { data, error } = await supabase
     .from("document_types")
-    .update(value)
+    .update(updateValues)
     .eq("document_type_id", id)
     .select(TYPE_FIELDS)
     .maybeSingle();
 
   if (error) {
     // if update fails, remove the uploaded template in supabase storage
-    await supabase.storage
-      .from("document-templates")
-      .remove([value.template_path]);
+    if (uploadedTemplatePath) {
+      await supabase.storage
+        .from("document-templates")
+        .remove([uploadedTemplatePath]);
+    }
 
     throw new Error(`Failed to update document type: ${error.message}`);
   }
 
   if (!data) return res.status(404).json({ error: "Document type not found" });
 
+  // Remove the old template after a successful replacement.
+  if (
+    uploadedTemplatePath &&
+    before.template_path &&
+    before.template_path !== uploadedTemplatePath
+  ) {
+    const { error: removeError } = await supabase.storage
+      .from("document-templates")
+      .remove([before.template_path]);
+
+    if (removeError) {
+      throw new Error(
+        "Failed to remove previous document template:",
+        removeError,
+      );
+    }
+  }
+
   const diff = diffFields(before, data);
+
   await logActivity({
     userId: req.user.user_id,
     action: ACTIONS.UPDATE,
