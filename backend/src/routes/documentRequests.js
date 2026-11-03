@@ -926,6 +926,6 @@ router.post("/:id/claim", requireRole("secretary"), async (req, res) => {
 });
 
 // route for previewing the docx file as a pdf for the secretary only
-router.get("/:id/preview", previewPdf);
+router.get("/:id/preview", requireRole("secretary"), previewPdf);
 
 module.exports = router;
