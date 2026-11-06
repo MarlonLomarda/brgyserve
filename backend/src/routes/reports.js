@@ -279,18 +279,30 @@ router.get('/facility-utilization', requireRole(...ADMIN_ROLES), async (req, res
     RENTAL_STATUS.RETURNED_LATE,
     RENTAL_STATUS.RETURNED_WITH_ISSUE,
   ];
-  // Pending and declined requests (migration 027) are listed only when the
-  // range holds one: no booking is stored either way until the approval step
-  // is switched on, and two rows reading 0 would change the report for
-  // nothing. The five above are always listed, as before.
-  const APPROVAL_STATUSES = [RENTAL_STATUS.PENDING, RENTAL_STATUS.DECLINED];
+  // REQUESTS (migration 027; since batch R2c every resident's booking starts
+  // as one): pending, declined, and EXPIRED — stored pending with its start
+  // passed, nobody having decided it (deriveStatus in rentalRequests.js). A
+  // request never held a slot, so it is in no total and no usage figure
+  // below; by_status lists each kind in a bucket of its own, after the five,
+  // and only when the range holds one, so a report with none reads as before.
+  // An expired request is NOT counted as pending: "pending" says the
+  // Secretary still has it to decide, and nobody can decide an expired one.
+  // The five stored statuses above are always listed, as before.
+  const now = new Date();
+  const requestStatus = (r) => {
+    if (r.status === RENTAL_STATUS.DECLINED) return RENTAL_STATUS.DECLINED;
+    if (r.status !== RENTAL_STATUS.PENDING) return null;
+    return new Date(r.start_datetime) > now ? RENTAL_STATUS.PENDING : RENTAL_STATUS.EXPIRED;
+  };
+  const REQUEST_STATUSES = [RENTAL_STATUS.PENDING, RENTAL_STATUS.DECLINED, RENTAL_STATUS.EXPIRED];
+  const requests = rows.filter((r) => requestStatus(r) !== null);
+  const bookings = rows.filter((r) => requestStatus(r) === null);
   const byStatus = [
-    ...STORED_STATUSES,
-    ...APPROVAL_STATUSES.filter((status) => rows.some((r) => r.status === status)),
-  ].map((status) => ({
-    status,
-    count: rows.filter((r) => r.status === status).length,
-  }));
+    ...STORED_STATUSES.map((status) => ({ status, count: bookings.filter((r) => r.status === status).length })),
+    ...REQUEST_STATUSES
+      .map((status) => ({ status, count: requests.filter((r) => requestStatus(r) === status).length }))
+      .filter((s) => s.count > 0),
+  ];
 
   // "Usage" is a booking that took its slot: confirmed, or one of the three
   // returns. Never a cancelled booking, a pending request (it holds nothing)
@@ -323,8 +335,12 @@ router.get('/facility-utilization', requireRole(...ADMIN_ROLES), async (req, res
   const report = {
     range: { from: range.from, to: range.to },
     generated_at: new Date().toISOString(),
+    // total_bookings counts BOOKINGS: the requests (pending, declined,
+    // expired) are listed in by_status only. With none on file this is
+    // rows.length, as it always was. The key names stay: the screen and the
+    // PDF read them.
     totals: {
-      total_bookings: rows.length,
+      total_bookings: bookings.length,
       bookings_excluding_cancelled: used.length,
       cancelled: rows.filter((r) => r.status === RENTAL_STATUS.CANCELLED).length,
       items_used: withBookings.length,

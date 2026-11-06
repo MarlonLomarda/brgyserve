@@ -20,9 +20,9 @@ const RETURNABLE_TYPES = [ITEM_TYPE.EQUIPMENT, ITEM_TYPE.FURNITURE];
 // Since migration 027 (28 Oct 2026) a booking CAN wait for the Secretary's
 // approval: stored 'pending', then 'confirmed' (shown as "Approved") or
 // 'declined'. A pending request holds nothing, and its charge is raised when
-// it is approved (approve_rental_booking). Until the batch that switches it
-// on, every booking, a resident's and a walk-in alike, is still stored
-// 'confirmed' at once, as before.
+// it is approved (approve_rental_booking). Since batch R2c (30 Oct 2026)
+// every RESIDENT's booking is stored 'pending'; the Secretary's walk-ins (and
+// her own booking) are still stored 'confirmed' at once, with their charge.
 //
 // STORED statuses (written to rental_requests.status):
 //   pending               a request waiting for the Secretary; holds NOTHING,

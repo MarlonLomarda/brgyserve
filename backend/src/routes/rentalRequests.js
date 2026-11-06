@@ -24,8 +24,12 @@ const router = express.Router();
 
 router.use(authenticate);
 
+// The resident's projection (POST /, GET /mine and their own cancel). Since
+// batch R2c it reads decline_reason and requested_at (migration 027), so My
+// rentals can say why a request was declined and when it was made; both are
+// left out when NULL (withResidentView, below), never sent as null.
 const RENTAL_FIELDS =
-  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, cancellation_reason, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
+  'request_id, quantity_requested, start_datetime, end_datetime, purpose, status, return_note, returned_at, cancellation_reason, decline_reason, requested_at, rental_items ( item_id, name, type, fee ), charges ( charge_id, amount, status, declared_method, declared_reference, declared_at )';
 
 // Management/staff views: adds the requester (with their profile name), the
 // item's capacity numbers and booking hours (the Edit panel shows the hours
@@ -310,6 +314,30 @@ function withDerived(row) {
   return out;
 }
 
+// What the one who BOOKED is told about it (RENTAL_FIELDS: POST /, GET /mine
+// and the resident's own cancel), batch R2c. On top of withDerived():
+//   - decline_reason only when there is one (a declined request), never null;
+//   - fee_if_approved on a request still waiting (derived pending), from
+//     feeIfApproved(), the ONE function the approve route charges with, so
+//     what My rentals shows and what approval charges cannot disagree. An
+//     item with fee 0 gives 0, a real answer: approving it makes a PHP 0
+//     charge, PAID ("No fee"). Every other row leaves the key out;
+//   - NO charges key on a request never approved (stored pending or
+//     declined): it cannot have a charge until approve_rental_booking writes
+//     one with the approval, and [] or null would read as a charge looked for
+//     and not found (CLAUDE.md, a withheld field is absent). A cancelled row
+//     keeps the key, as it always did: nothing on it says whether it was
+//     ever approved.
+const NEVER_BILLED = [RENTAL_STATUS.PENDING, RENTAL_STATUS.DECLINED];
+function withResidentView(row) {
+  if (!row) return row;
+  const out = withDerived(row);
+  if (out.decline_reason === null) delete out.decline_reason;
+  if (NEVER_BILLED.includes(out.status)) delete out.charges;
+  if (out.derived_status === RENTAL_STATUS.PENDING) out.fee_if_approved = feeIfApproved(row);
+  return out;
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -507,24 +535,63 @@ async function callBookingFunction(name, args) {
   return data;
 }
 
+// ONE PENDING REQUEST PER ITEM AND TIME, PER RESIDENT (batch 4, decided by the
+// developer on 6 Nov 2026 after the local walkthrough). Whether this resident
+// already has a request still waiting for the same item at an overlapping
+// time. Overlap is the database's own (rental_holds' in_use, migration 027):
+// start < the other's end AND the other's start < end, so back-to-back
+// windows do not overlap. Only 'pending' rows whose start is still ahead
+// count: an expired request (pending, start passed) is not waiting, and a
+// declined or cancelled one is gone; an approved booking holds the slot and is
+// refused by place_rental_booking's own slot check. `residentId` is the
+// session's own record (resolveBorrower), never anything in the body. A
+// failed lookup throws (a 500), never reads as "none". No lock: two requests
+// arriving in the same instant could both pass, as nothing in the database
+// forbids it.
+async function ownPendingOverlap(residentId, itemId, startIso, endIso) {
+  const { data, error } = await supabase
+    .from('rental_requests')
+    .select('request_id')
+    .eq('resident_id', residentId)
+    .eq('item_id', itemId)
+    .eq('status', RENTAL_STATUS.PENDING)
+    .gt('start_datetime', new Date().toISOString())
+    .lt('start_datetime', endIso)
+    .gt('end_datetime', startIso);
+  if (error) {
+    throw new Error(`Failed to check for a pending request: ${error.message}`);
+  }
+  return (data ?? []).length > 0;
+}
+
+const DUPLICATE_REQUEST =
+  'You already have a pending request for this item at an overlapping time. Cancel it under My rentals first if you want to change it.';
+
 // RENTAL_FIELDS' own columns. If the re-read after a booking fails, the answer
 // is built from these and the item, never from the function's row as it came
 // back, which carries the borrower's contact number.
 const RENTAL_COLUMNS = [
   'request_id', 'quantity_requested', 'start_datetime', 'end_datetime', 'purpose', 'status',
-  'return_note', 'returned_at', 'cancellation_reason',
+  'return_note', 'returned_at', 'cancellation_reason', 'decline_reason', 'requested_at',
 ];
 
-// POST /api/rental-requests — a resident books for themselves, or the
-// Secretary encodes a WALK-IN. The booking is checked and written in one call
-// to place_rental_booking (migration 027; it replaces 024's
+// POST /api/rental-requests — a resident asks for a booking, or the
+// Secretary encodes a WALK-IN. Either is checked and written in one call to
+// place_rental_booking (migration 027; it replaces 024's
 // create_rental_booking, which stays in the database until migration 028 for
-// the code that ran before), CONFIRMED at once when the slot is free, for
-// both kinds as before: the approval step (a resident's request stored
-// 'pending') is built but not yet switched on. Because both paths go through
-// this ONE handler a walk-in is checked against exactly the availability
-// rules a resident's own booking is — there is no second code path that
-// could skip them.
+// the code that ran before). Because both paths go through this ONE handler a
+// walk-in is checked against exactly the availability rules a resident's own
+// request is — there is no second code path that could skip them.
+//
+// THE APPROVAL SWITCH (batch R2c, decided 30 Oct 2026). A RESIDENT's booking
+// is a REQUEST: stored 'pending', it holds nothing (rental_holds skips it),
+// has NO charge and sends NO text; the Secretary approves it (and the charge
+// is made then, by approve_rental_booking) or declines it. Every other caller
+// — the Secretary's walk-in for a resident or a guest, and her own booking
+// with neither — is CONFIRMED at once with its charge and the CONFIRMED text,
+// as before. The switch is keyed on the caller's ROLE, never on
+// borrower.walkIn: the Secretary's own booking has walkIn false, and must
+// not wait for her own approval.
 //
 // requested_by_user_id records WHO FILED IT; who it is FOR is resident_id or
 // the outside_borrower_* pair — see resolveBorrower().
@@ -544,6 +611,8 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     return res.status(borrower.status).json({ error: borrower.error });
   }
   const isGuest = borrower.kind === 'guest';
+  // The approval switch (R2c): by the caller's role, never borrower.walkIn.
+  const isRequest = req.user.role === 'resident';
 
   // For the fee, the item's name in the sentences, the booking rules, and the
   // answer. Whether it exists, is active and has the units is the function's
@@ -567,6 +636,14 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     }
   }
 
+  // A resident's second request for the same item and time while the first
+  // still waits (batch 4). Keyed like the switch, on the caller's role, so a
+  // walk-in and the Secretary's own booking never meet it. An unknown or
+  // inactive item is left to the function's refusal, as the rules are above.
+  if (isRequest && item?.is_active && (await ownPendingOverlap(borrower.residentId, itemId, startIso, endIso))) {
+    return res.status(409).json({ error: DUPLICATE_REQUEST });
+  }
+
   const result = await callBookingFunction('place_rental_booking', {
     p_item_id: itemId,
     p_requested_by_user_id: req.user.user_id,
@@ -580,10 +657,11 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     p_start: startIso,
     p_end: endIso,
     p_purpose: purpose,
-    // Until the approval batches: every booking is general and confirmed at
-    // once, exactly as create_rental_booking stored it.
+    // A resident's request waits for the Secretary; everything else is
+    // confirmed at once (the switch, above). Every booking here is general:
+    // only the Secretary's waiver at approval makes one 'funeral'.
     p_purpose_type: PURPOSE_TYPE.GENERAL,
-    p_status: RENTAL_STATUS.CONFIRMED,
+    p_status: isRequest ? RENTAL_STATUS.PENDING : RENTAL_STATUS.CONFIRMED,
   });
   if (!result?.ok) {
     const refused = refusalOf(result ?? {}, item);
@@ -594,7 +672,7 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
     throw new Error(`Booking ${created.request_id} was made for item ${itemId}, which could not be read`);
   }
 
-  // Stage 4: a confirmed booking always carries exactly one RENTAL charge
+  // Stage 4: a CONFIRMED booking always carries exactly one RENTAL charge
   // (same pattern as document approval). Zero-fee rentals get an amount-0
   // charge auto-marked PAID, matching the document rule. No transactions in
   // supabase-js, so compensate: if the charge can't be created, delete the
@@ -603,24 +681,28 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   // walk-in the submitter is the Secretary, and keying the charge to
   // req.user.user_id would bill barangay staff. A resident with no account,
   // and every guest, gets null — a hall-only charge the Treasurer settles.
-  const amount = rentalAmount(item, quantity);
-  const { error: chargeError } = await supabase.from('charges').insert({
-    charge_type: CHARGE_TYPE.RENTAL,
-    amount,
-    status: amount > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
-    user_id: isGuest ? null : borrower.accountId,
-    rental_request_id: created.request_id,
-    created_at: new Date().toISOString(),
-  });
-  // 23505 = a charge already exists for this booking (UNIQUE
-  // charges.rental_request_id, migration 010) — benign, keep going.
-  if (chargeError && chargeError.code !== '23505') {
-    await supabase.from('rental_requests').delete().eq('request_id', created.request_id);
-    throw new Error(`Booking reverted — failed to create its charge: ${chargeError.message}`);
+  // A resident's REQUEST gets no charge here (R2c): approve_rental_booking
+  // writes it in the same transaction as the approval.
+  if (!isRequest) {
+    const amount = rentalAmount(item, quantity);
+    const { error: chargeError } = await supabase.from('charges').insert({
+      charge_type: CHARGE_TYPE.RENTAL,
+      amount,
+      status: amount > 0 ? CHARGE_STATUS.UNPAID : CHARGE_STATUS.PAID,
+      user_id: isGuest ? null : borrower.accountId,
+      rental_request_id: created.request_id,
+      created_at: new Date().toISOString(),
+    });
+    // 23505 = a charge already exists for this booking (UNIQUE
+    // charges.rental_request_id, migration 010) — benign, keep going.
+    if (chargeError && chargeError.code !== '23505') {
+      await supabase.from('rental_requests').delete().eq('request_id', created.request_id);
+      throw new Error(`Booking reverted — failed to create its charge: ${chargeError.message}`);
+    }
   }
 
   // Re-read so the response carries the charge just created, in RENTAL_FIELDS'
-  // shape.
+  // shape (a request has none, and its answer no charges key).
   const { data: withCharge } = await supabase
     .from('rental_requests')
     .select(RENTAL_FIELDS)
@@ -636,13 +718,18 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
   // sign: both are outside the GSM alphabet and would double the message cost.
   // To the BORROWER, not the submitter. A guest's number is the one typed at
   // the counter, used directly — there is no resident record to join through.
-  await notify({
-    userId: isGuest ? null : borrower.accountId,
-    destination: isGuest ? borrower.contact : borrower.contactNumber,
-    relatedType: RELATED_TYPE.RENTAL_REQUEST,
-    relatedTo: created.request_id,
-    message: `BrgyServe: your booking is CONFIRMED - ${quantity > 1 ? `${quantity}x ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`,
-  });
+  // A resident's REQUEST sends no text (R2c): they have just done it, and the
+  // Secretary sees it on her Pending tab. The approval or the decline is
+  // what they are sent.
+  if (!isRequest) {
+    await notify({
+      userId: isGuest ? null : borrower.accountId,
+      destination: isGuest ? borrower.contact : borrower.contactNumber,
+      relatedType: RELATED_TYPE.RENTAL_REQUEST,
+      relatedTo: created.request_id,
+      message: `BrgyServe: your booking is CONFIRMED - ${quantity > 1 ? `${quantity}x ` : ''}${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)} to ${timeFmt.format(end)}.`,
+    });
+  }
 
   // A guest is recorded as a guest, never by name or contact number; the
   // purpose is free text and is left out too.
@@ -659,17 +746,15 @@ router.post('/', requireRole(...CREATE_ROLES), async (req, res) => {
       quantity_requested: quantity,
       start_datetime: startIso,
       end_datetime: endIso,
-      status: RENTAL_STATUS.CONFIRMED,
+      status: isRequest ? RENTAL_STATUS.PENDING : RENTAL_STATUS.CONFIRMED,
     },
   });
 
   const when = `${item.name} on ${dateFmt.format(start)}, ${timeFmt.format(start)}–${timeFmt.format(end)}`;
-  res.status(201).json({
-    message: borrower.walkIn
-      ? `Walk-in booking recorded for ${isGuest ? borrower.name : `resident #${borrower.residentId}`}: ${when}.`
-      : `Booking confirmed: ${when}.`,
-    request: withDerived(answered),
-  });
+  let message = `Booking confirmed: ${when}.`;
+  if (isRequest) message = `Request sent: ${when}.`;
+  else if (borrower.walkIn) message = `Walk-in booking recorded for ${isGuest ? borrower.name : `resident #${borrower.residentId}`}: ${when}.`;
+  res.status(201).json({ message, request: withResidentView(answered) });
 });
 
 // The keys GET /availability passes on from rental_availability: numbers and
@@ -795,7 +880,7 @@ router.post('/mine/:id/pay', async (req, res) => {
 
   const { data: booking, error: loadError } = await supabase
     .from('rental_requests')
-    .select('request_id, status, charges ( charge_id, amount, status )')
+    .select('request_id, status, start_datetime, charges ( charge_id, amount, status )')
     .eq('request_id', id)
     .eq('resident_id', residentId) // own bookings only
     .maybeSingle();
@@ -806,8 +891,19 @@ router.post('/mine/:id/pay', async (req, res) => {
     return res.status(404).json({ error: 'Booking not found' });
   }
 
+  // A request has no charge until it is approved (R2c), so "contact the
+  // barangay" would send the resident to the hall for nothing. Said by its
+  // status: still waiting (pending, start ahead), or never approved
+  // (declined, or pending past its start: expired). Any other booking with
+  // no charge keeps the old sentence.
   const charge = chargeOf(booking);
   if (!charge) {
+    if (booking.status === RENTAL_STATUS.PENDING && startAhead(booking)) {
+      return res.status(409).json({ error: "This request is waiting for the Secretary's approval. You can pay once it is approved." });
+    }
+    if (booking.status === RENTAL_STATUS.PENDING || booking.status === RENTAL_STATUS.DECLINED) {
+      return res.status(409).json({ error: 'This request was not approved, so there is nothing to pay.' });
+    }
     return res.status(409).json({ error: 'This booking has no charge yet — contact the barangay' });
   }
   if (charge.status !== CHARGE_STATUS.UNPAID) {
@@ -934,7 +1030,12 @@ router.post('/mine/:id/cancel', async (req, res) => {
     reason: parsed.reason,
     notifyBorrower: false,
     responseFields: RENTAL_FIELDS,
-    message: 'Your booking has been cancelled.',
+    view: withResidentView,
+    // By the row's stored status, as My rentals words its button: a pending
+    // row is a request (batch 4).
+    message: booking.status === RENTAL_STATUS.PENDING
+      ? 'Your request has been cancelled.'
+      : 'Your booking has been cancelled.',
   });
   res.status(result.status).json(result.body);
 });
@@ -955,6 +1056,9 @@ router.post('/mine/:id/cancel', async (req, res) => {
 // (can_cancel_online) and, where not, why (cancel_online_note), from
 // onlineCancelView(), so My rentals never guesses. requested_by_user_id is
 // read for that and NOT sent: on a walk-in it is the Secretary's account.
+// Since batch R2c each row goes through withResidentView(): the decline
+// reason and the request time when there are any, and on a request still
+// waiting what approving it would charge.
 router.get('/mine', async (req, res) => {
   const residentId = await ownResidentId(req.user.user_id);
   if (!residentId) {
@@ -971,7 +1075,7 @@ router.get('/mine', async (req, res) => {
   }
   res.json({
     requests: data.map(({ requested_by_user_id: filedBy, ...row }) => ({
-      ...withDerived(row),
+      ...withResidentView(row),
       ...onlineCancelView({ ...row, requested_by_user_id: filedBy }, req.user.user_id),
     })),
   });
@@ -1192,7 +1296,9 @@ async function revertCancel(booking) {
 //   6. one CANCEL row in the activity log. The reason is free text, so the
 //      log says only whether one was given; the text stays on the booking and
 //      in the notification.
-async function cancelBooking(booking, { user, processedBy, reason, notifyBorrower, responseFields, message }) {
+// `view` shapes the re-read answer: withDerived for the Secretary's
+// projection, withResidentView for the resident's own (R2c).
+async function cancelBooking(booking, { user, processedBy, reason, notifyBorrower, responseFields, view = withDerived, message }) {
   const id = booking.request_id;
   if (!isCancellable(booking)) {
     return { status: 409, body: { error: 'Only a booking that has not started can be cancelled.' } };
@@ -1298,7 +1404,7 @@ async function cancelBooking(booking, { user, processedBy, reason, notifyBorrowe
     },
   });
 
-  return { status: 200, body: { message, request: withDerived(fresh) } };
+  return { status: 200, body: { message, request: view(fresh) } };
 }
 
 // The columns an edit may change. The diff is taken on these only, so a
@@ -1462,10 +1568,9 @@ router.post('/:id/cancel', requireRole('secretary'), async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // Approval (migration 027) — the Secretary approves or declines a PENDING
-// request. Built in batch R2a and dormant until a later batch makes
-// residents' bookings pending: today POST / stores every booking confirmed,
-// so nothing reaches these routes from a screen. Staff and the Punong
-// Barangay stay read-only.
+// request. Built in batch R2a; since batch R2c every resident's booking
+// arrives here pending (POST /), while walk-ins are still confirmed at once.
+// Staff and the Punong Barangay stay read-only.
 // ---------------------------------------------------------------------------
 
 // What both decisions read about the request: who it is for (to reach them),
@@ -1495,6 +1600,19 @@ function approvalRefusal(result, item) {
       return { status: 409, error: `The ${name} is not marked for funeral use, so its fee cannot be waived.` };
     case 'FUNERAL_RESIDENTS_ONLY':
       return { status: 409, error: 'A funeral fee can be waived only for a barangay resident, so this request cannot be waived.' };
+    // The item's stock was lowered while the request waited
+    // (rental_slot_refusal's MORE_THAN_EXIST). Her words, not a booker's "you
+    // asked for": a request's quantity cannot be edited, so declining it is
+    // what is left to her (R2c). Every other quantity refusal is refusalOf's.
+    case 'QUANTITY_INVALID':
+      if (result.reason === 'MORE_THAN_EXIST') {
+        const n = result.quantity_available;
+        return {
+          status: 409,
+          error: `Only ${n} unit${n === 1 ? '' : 's'} of ${name} exist${n === 1 ? 's' : ''} now, and this request is for ${result.requested}, so it cannot be approved. Decline it.`,
+        };
+      }
+      return refusalOf(result, item);
     case 'FACILITY_TAKEN': {
       const first = Array.isArray(result.clashes) ? result.clashes[0] : null;
       if (first) {
