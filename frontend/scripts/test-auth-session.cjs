@@ -192,11 +192,12 @@
 // index.css reader.
 //
 // Section AH is the Terms of Use and the Help Center on rental bookings, read
-// in /login's modals and in docs/legal-copy.md, their source of truth: a
-// booking is confirmed as soon as it is submitted, if it is free, and neither
-// says the Barangay approves, reviews or declines one; section 8's other two
-// paragraphs and the other two answers about bookings are as they were; and
-// the markdown and the two modals say the same, block for block.
+// in /login's modals and in docs/legal-copy.md, their source of truth: since
+// batch R2c a booking is a request the Barangay Secretary approves or
+// declines, holding no slot until approved and billed once approved, and
+// neither says a booking is confirmed at once; section 8's two paragraphs
+// about returns and the other two answers about bookings are as they were;
+// and the markdown and the two modals say the same, block for block.
 //
 // Section AI is the resident's My rentals and Book a rental: what section AD
 // checks on Rental bookings. A load that fails (a 500, a server that cannot
@@ -221,9 +222,10 @@
 // page's FAQ tell a resident to look: under My requests and My rentals,
 // never "inside the portal" or "under notifications", since a resident has
 // no notifications page; and the FAQ's "How do I pay the fee?" tells a
-// document request (Pay once it is approved) apart from a rental (Pay as soon
-// as it is confirmed). docs/legal-copy.md says the same words; the Terms are
-// dated 25 October 2026, and since step B2 the Privacy Policy is too.
+// document request (Pay once it is approved) apart from a rental (Pay once
+// the Secretary approves the request, since batch R2c, as "How do I reserve
+// a barangay facility or equipment?" also says). docs/legal-copy.md says the
+// same words; the Terms and the Privacy Policy are dated 6 November 2026.
 //
 // Section AL is Book a rental's two messages and its Try again: the server's
 // refusal of a booking is read out (role="alert"), as the time message and
@@ -284,6 +286,14 @@
 // Booking rules box (the limit is a constant in the server's code), and
 // AU-e holds the Secretary's Edit panel to the same rules as the booking
 // forms (P29).
+//
+// Section AW is batch R2c, a resident's booking is a request: My rentals
+// reads the request keys by presence (Requested on, in Manila; the server's
+// estimated fee, never one worked out here; the decline reason; the expired
+// line; Pay only on a row with an UNPAID charge; Approved for a stored
+// confirmed booking); Book a rental's "Send request", its pay-later line and
+// its "Request sent" card; the archive warning's Pending badge; and the
+// facility report's requests note, and a range of requests only shown.
 //
 // No backend required.
 //   cd frontend && npm run test:auth
@@ -13188,40 +13198,59 @@ const root = () => dom.window.document.getElementById('root');
   }
 
   // =========================================================================
-  // AH. Terms of Use and Help Center: a booking is confirmed at once
+  // AH. Terms of Use and Help Center: a booking is a request (batch R2c)
   // =========================================================================
-  // A rental booking is confirmed by the system the moment it is submitted,
-  // when the facility or the units asked for are free; nobody approves it
-  // (routes/rentalRequests.js inserts it as confirmed, processed_by_user_id
-  // null). The Terms of Use said, in section 8, that a booking is "confirmed
-  // only when the Barangay approves the booking" and "may be declined", and
-  // the Help Center answered "How do I book a facility?" with "The Barangay
-  // reviews and confirms it. A booking is not confirmed until it is
-  // approved." Both now say a booking is confirmed at once. The modals are
+  // From step A (16 Oct 2026) until batch R2c a rental booking was confirmed
+  // the moment it was submitted, and section 8 and the Help Center said so.
+  // Since batch R2c (6 Nov 2026) a resident's booking is a REQUEST:
+  // routes/rentalRequests.js stores it pending with no charge, and the
+  // Barangay Secretary approves or declines it. Section 8 now says that, and
+  // that a request holds no slot until approved, is billed once approved,
+  // expires if undecided and may be cancelled before it starts; the Help
+  // Center's "How do I book a facility?" says the same, shorter. The modals are
   // read as a person reads them, opened from /login's legal links, heading by
   // heading and paragraph by paragraph. docs/legal-copy.md is their source of
   // truth, each body that file transcribed by hand, so it is read from disk
   // and must say the same, word for word. The rest of section 8 and the other
   // two answers about bookings stay as they were.
-  console.log('\n--- Terms of Use and Help Center: a booking is confirmed at once ---');
+  console.log('\n--- Terms of Use and Help Center: a booking is a request (batch R2c) ---');
   {
     const fs = require('fs');
     const said = (v) => JSON.stringify(v);
     const words = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
-    const T_NEW = 'A booking is confirmed as soon as you submit it, if the facility or the number of items you ask for '
-      + 'is free for that date and time; otherwise it is refused with the reason. The Barangay may change or cancel a '
-      + 'confirmed booking where the facility or item is needed for official use. You can check the status of your '
-      + 'booking under My rentals.';
+    // Since batch R2c (6 Nov 2026) a resident's booking is a REQUEST the
+    // Secretary approves or declines (routes/rentalRequests.js stores it
+    // pending, with no charge), so section 8 says so in four paragraphs, and
+    // the Help Center's answer in two. The two paragraphs about returns are
+    // kept word for word.
+    const T_NEW = [
+      'A booking of a facility or item is a request. The Barangay Secretary approves or declines it, and you can follow '
+        + 'it under My rentals. If a request is declined, the reason is shown there.',
+      // Batch 4 (6 Nov 2026): the duplicate rule's sentence, after "More than one resident may ask".
+      'A request does not hold the date and time. More than one resident may ask for the same time; the slot is taken '
+        + 'only when the Secretary approves a request. You cannot have two pending requests of your own for the same '
+        + 'item at overlapping times. A request for a time already taken by an approved booking is refused at once, '
+        + 'with the reason.',
+      'The fee is billed when your request is approved. You can then pay it at the Barangay Office or online by GCash.',
+      'A request that is not decided before its start time expires. You may cancel a pending request at any time before '
+        + 'it starts. The Barangay may change or cancel an approved booking where the facility or item is needed for '
+        + 'official use.',
+    ];
     const T_KEPT = [
       'You are responsible for the facility or item during the period booked. The conditions of use, when it must be '
         + 'returned, and any charge for late return or damage are agreed with the Barangay at the time of booking.',
       'The portal does not calculate or apply such charges automatically. Where one applies, the Barangay Treasurer '
         + 'records it against your account and it appears among your charges.',
     ];
-    const H_NEW = 'Sign in, open the bookings section, choose the facility or item, and give the date and time. If it '
-      + 'is free, the booking is confirmed at once and its fee appears under My rentals.';
+    const H_NEW = [
+      'Sign in, open the bookings section, choose the facility or item, and give the date and time. This sends a request, '
+        + 'which the Barangay Secretary approves or declines; follow it under My rentals, where a declined request shows '
+        + 'its reason.',
+      'Until it is approved a request does not hold the time, and one not decided before its start time expires. You can '
+        + 'cancel it any time before it starts. Its fee is billed once it is approved.',
+    ];
     const H_GROUP = [
-      { q: 'How do I book a facility?', a: [H_NEW] },
+      { q: 'How do I book a facility?', a: H_NEW },
       { q: 'My requested time was not available.', a: ['A facility cannot be booked for two overlapping periods. '
         + 'Choose another slot, or ask the Barangay Office what is free.'] },
       { q: 'What happens when I return the item or facility?', a: ['Barangay staff record the return in the portal.',
@@ -13229,13 +13258,18 @@ const root = () => dom.window.document.getElementById('root');
           + 'when you booked. The portal does not work such charges out on its own — if one applies, the Treasurer '
           + 'records it and it appears among your charges.'] },
     ];
-    // What the two said before, word for word.
+    // What the two said before, word for word: before step A (16 Oct 2026),
+    // and from step A until batch R2c (a booking confirmed at once).
     const OLD = [
       'are confirmed only when the Barangay approves the booking',
       'a booking may be declined or cancelled by the Barangay',
       'The Barangay reviews and confirms it.',
       'A booking is not confirmed until it is approved.',
+      'A booking is confirmed as soon as you submit it',
+      'the booking is confirmed at once',
     ];
+    // Words that say a booking is confirmed without anyone approving it.
+    const INSTANT = /confirmed (at once|as soon as)|no (further )?approval|confirms? the reservation immediately/i;
     // The sentences, block by block, that tie a booking, a facility or a
     // rental to an approval, a review, an endorsement or a refusal.
     const approvalSentences = (blocks) => blocks.flatMap((b) => words(b.text).split(/(?<=[.!?])\s+/))
@@ -13316,35 +13350,38 @@ const root = () => dom.window.document.getElementById('root');
     const t8Md = under(termsMd, 'h3', '8. Facility bookings', ['h2', 'h3']);
     const hBook = under(help.blocks, 'h3', 'Facility bookings', ['h2', 'h3']);
     const hBookMd = under(helpMd, 'h3', 'Facility bookings', ['h2', 'h3']);
-    const wantT8 = [T_NEW, ...T_KEPT].map((t) => `p: ${t}`);
+    const wantT8 = [...T_NEW, ...T_KEPT].map((t) => `p: ${t}`);
     const wantBook = H_GROUP.flatMap(({ q, a }) => [`h4: ${q}`, ...a.map((t) => `p: ${t}`)]);
+    const instantIn = (blocks) => blocks.filter((b) => INSTANT.test(b.text)).map((b) => b.text);
 
-    check('Terms of Use, section 8, as /login\'s modal shows it (TermsOfUse.jsx): "A booking is confirmed as soon as you '
-        + 'submit it, …" where it said a booking waits for the Barangay\'s approval, then its other two paragraphs as '
-        + 'they were',
+    check('Terms of Use, section 8, as /login\'s modal shows it (TermsOfUse.jsx): a booking is a request the Barangay '
+        + 'Secretary approves or declines, it holds no slot until approved, the fee is billed on approval, an undecided '
+        + 'request expires and a pending one may be cancelled; then the two paragraphs about returns as they were',
       said(lines(t8)) === said(wantT8), said(lines(t8)));
-    check('  and section 8 has no sentence tying a booking to an approval, a review or a refusal, and none of the old '
-        + 'words ("confirmed only when the Barangay approves the booking", "may be declined or cancelled by the Barangay")',
-      t8.length > 0 && approvalSentences(t8).length === 0 && oldIn(t8).length === 0,
+    check('  and section 8 ties a booking to the Secretary\'s approval (sentences naming a booking and approving or '
+        + 'declining), with none of the old words ("confirmed as soon as you submit it", "confirmed only when the '
+        + 'Barangay approves the booking")',
+      t8.length > 0 && approvalSentences(t8).length >= 2 && oldIn(t8).length === 0,
       said({ approval: approvalSentences(t8), old: oldIn(t8) }));
-    check('Help Center, as the modal shows it (HelpCenter.jsx): "How do I book a facility?" is answered "Sign in, … If it '
-        + 'is free, the booking is confirmed at once and its fee appears under My rentals."; the question and the other '
-        + 'two answers about bookings as they were',
+    check('Help Center, as the modal shows it (HelpCenter.jsx): "How do I book a facility?" is answered in two paragraphs: '
+        + 'a request the Secretary approves or declines, followed under My rentals; it holds no time until approved, '
+        + 'expires if undecided, can be cancelled before it starts, and is billed once approved; the other two answers '
+        + 'about bookings as they were',
       said(lines(hBook)) === said(wantBook), said(lines(hBook)));
-    check('  and no answer about bookings says the Barangay reviews, confirms or approves a booking ("The Barangay '
-        + 'reviews and confirms it.", "A booking is not confirmed until it is approved.")',
-      hBook.length > 0 && approvalSentences(hBook).length === 0 && oldIn(hBook).length === 0,
+    check('  and no answer about bookings keeps the old words ("the booking is confirmed at once", "The Barangay reviews '
+        + 'and confirms it.")',
+      hBook.length > 0 && approvalSentences(hBook).length >= 1 && oldIn(hBook).length === 0,
       said({ approval: approvalSentences(hBook), old: oldIn(hBook) }));
-    check('neither modal, read whole, has a sentence tying a booking to an approval, a review or a refusal',
+    check('neither modal, read whole, says a booking is confirmed at once, as soon as it is submitted, or with no approval',
       terms.blocks.length > 20 && help.blocks.length > 20
-        && approvalSentences(terms.blocks).length === 0 && approvalSentences(help.blocks).length === 0,
-      said({ terms: approvalSentences(terms.blocks), help: approvalSentences(help.blocks) }));
+        && instantIn(terms.blocks).length === 0 && instantIn(help.blocks).length === 0,
+      said({ terms: instantIn(terms.blocks), help: instantIn(help.blocks) }));
     check('docs/legal-copy.md, the modals\' source of truth, reads the same new words: section 8 and the Help Center\'s '
-        + 'answers about bookings, and neither part has a sentence tying a booking to an approval',
+        + 'answers about bookings, and neither part says a booking is confirmed at once',
       said(lines(t8Md)) === said(wantT8) && said(lines(hBookMd)) === said(wantBook)
-        && approvalSentences(termsMd).length === 0 && approvalSentences(helpMd).length === 0
+        && instantIn(termsMd).length === 0 && instantIn(helpMd).length === 0
         && oldIn(termsMd).length === 0 && oldIn(helpMd).length === 0,
-      said({ t8Md: lines(t8Md), hBookMd: lines(hBookMd), approval: [...approvalSentences(termsMd), ...approvalSentences(helpMd)] }));
+      said({ t8Md: lines(t8Md), hBookMd: lines(hBookMd), instant: [...instantIn(termsMd), ...instantIn(helpMd)] }));
     // The h2 is the modal's title, which the markdown carries as its "##".
     const termsBody = lines(terms.blocks.filter((b) => b.tag !== 'h2'));
     const helpBody = lines(help.blocks.filter((b) => b.tag !== 'h2'));
@@ -13451,7 +13488,7 @@ const root = () => dom.window.document.getElementById('root');
     const mineTwo = (v) => said(v.rows) === said(['Sound System', 'Folding Tables']) && v.heading === '2 bookings'
       && v.pay === 2 && v.refresh && !v.error && v.alerts.length === 0 && !v.tryAgain && !v.loading && !v.empty;
 
-    // What Book a rental shows: its card, the form's fields and Book now.
+    // What Book a rental shows: its card, the form's fields and Send request.
     // The card's heading was "Book a facility or item"; since section AT it
     // opens with its Facilities | Items tabs, Facilities pressed, and each
     // tab has its own empty sentence.
@@ -13463,7 +13500,7 @@ const root = () => dom.window.document.getElementById('root');
         alerts: page.queryAll('.alert.error').map(text),
         tryAgain: !!tryAgainButton(page),
         fields: page.queryAll('.section-card select, .section-card input, .section-card textarea').length,
-        bookNow: !!buttonNamed(root(), 'Book now'),
+        bookNow: !!buttonNamed(root(), 'Send request'),
         empty: /No (facility|item) is currently available for (booking|rental)\./.test(all),
         loading: all.includes('Loading rental items…'),
       };
@@ -13664,7 +13701,7 @@ const root = () => dom.window.document.getElementById('root');
       bookLoadingOnly(bookOpening) && isItems(bookFirst)
         && bookFailed.error === 'Could not load the rental items: Network down' && bookFailed.tryAgain,
       `${said(bookOpening)} then ${said(bookFailed)}`);
-    check('  Book a rental: and no "No facility is currently available for booking.", no booking form (no field, no Book now) '
+    check('  Book a rental: and no "No facility is currently available for booking.", no booking form (no field, no Send request) '
         + 'and no "Loading…" beside it: it cannot read as nothing to rent',
       bookErrorOnly(bookFailed), said(bookFailed));
 
@@ -13870,16 +13907,17 @@ const root = () => dom.window.document.getElementById('root');
 
     // d. The real form, as a resident, at 00:30 on 1 Jan 2027 in Manila: on
     // these two clocks it is still 31 Dec. The booking form is the page's only
-    // form, so it is submitted as a press of Book now would.
+    // form, so it is submitted as a press of Send request would.
     const ITEMS = [
       { item_id: 21, name: 'Covered Court', type: 'facility', description: null, quantity_total: 1, quantity_available: 1, fee: '300.00' },
     ];
     const CONFLICT = 'The Covered Court is already booked from 9:00 AM to 11:00 AM on Jan 1, 2027';
+    // The server's answer since batch R2c: a request, pending, no charges key.
     const booked = (body) => ({
-      message: 'Booking confirmed',
-      request: { request_id: 990, status: 'confirmed', start_datetime: `${body.date}T${body.start_time}:00+08:00`,
+      message: 'Request sent',
+      request: { request_id: 990, status: 'pending', derived_status: 'pending', start_datetime: `${body.date}T${body.start_time}:00+08:00`,
         end_datetime: `${body.date}T${body.end_time}:00+08:00`, quantity_requested: body.quantity_requested,
-        purpose: body.purpose, rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } },
+        purpose: body.purpose, fee_if_approved: 300, rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } },
     });
     const bodyOf = (c) => { try { return JSON.parse(c?.body || ''); } catch { return null; } };
     for (const zone of ZONES) {
@@ -13929,11 +13967,11 @@ const root = () => dom.window.document.getElementById('root');
         others: page.queryAll('.section-card .alert.error')
           .filter((el) => el !== page.query('.section-card .grid-2 + [role="alert"]')).map(text),
         posts: posts().length,
-        bookNow: buttonNamed(root(), 'Book now') ? !buttonNamed(root(), 'Book now').disabled : null,
-        confirmed: text(page.query('.section-card h3')) === 'Booking confirmed',
+        bookNow: buttonNamed(root(), 'Send request') ? !buttonNamed(root(), 'Send request').disabled : null,
+        sent: text(page.query('.section-card h3')) === 'Request sent',
       });
       const refused = (v, want, postsBefore) => v.message === want && v.others.length === 0 && v.posts === postsBefore
-        && v.bookNow === true && !v.confirmed;
+        && v.bookNow === true && !v.sent;
 
       const min = page.query('input[name="date"]')?.getAttribute('min') ?? null;
       check(`${zone}: the date field's earliest day is 2027-01-01, today in Manila at 00:30, never 2026-12-31, the day on `
@@ -13943,7 +13981,7 @@ const root = () => dom.window.document.getElementById('root');
       await press();
       let v = view();
       check(`${zone}: today, a start already past (00:15, at 00:30): "${PAST}" straight under the time fields, and no `
-          + 'booking request sent (0 POSTs); Book now stays pressable',
+          + 'booking request sent (0 POSTs); Send request stays pressable',
         refused(v, PAST, 0), said(v));
 
       await fillIn('2026-12-31', '10:00', '12:00');
@@ -13976,9 +14014,9 @@ const root = () => dom.window.document.getElementById('root');
       v = view();
       const sentBody = bodyOf(posts()[0]);
       check(`${zone}: valid times (1 Jan 2027, 09:00 to 11:00) send exactly one booking request, with the form's date and `
-          + 'times as typed, and the booking is confirmed',
+          + 'times as typed, and the page says "Request sent"',
         v.posts === 1 && /\/rental-requests$/.test(posts()[0]?.url || '') && sentBody?.date === '2027-01-01'
-          && sentBody?.start_time === '09:00' && sentBody?.end_time === '11:00' && sentBody?.item_id === 21 && v.confirmed,
+          && sentBody?.start_time === '09:00' && sentBody?.end_time === '11:00' && sentBody?.item_id === 21 && v.sent,
         said({ v, sentBody }));
 
       // e. The server is still the authority: a refusal the form cannot
@@ -14047,18 +14085,24 @@ const root = () => dom.window.document.getElementById('root');
       + 'but they are not delivered to your phone. Email is used only for password reset links, and for the set-password '
       + 'links Barangay officials receive to set up their accounts.';
     const FAQ_PAY_Q = 'How do I pay the fee?';
+    // Since batch R2c a rental is paid once the Secretary approves the request.
     const FAQ_PAY = 'You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is '
-      + 'approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it '
-      + 'is confirmed. Then choose Pay online via GCash.';
+      + 'approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals once the '
+      + 'Secretary approves your request. Then choose Pay online via GCash.';
+    const INSTANT_FAQ = /confirm\w* (the reservation |the booking )?(immediately|at once)|as soon as it is confirmed/i;
+    const FAQ_RESERVE_Q = 'How do I reserve a barangay facility or equipment?';
+    const FAQ_RESERVE = 'Choose the item, the date, the time and how many units you need, then send your request. The '
+      + 'Barangay Secretary approves or declines it, and you pay only once it is approved; follow it under My rentals.';
     // What they said before, word for word.
     const OLD_T = ['Notices about your requests, bookings, and payments appear', 'Check the portal for the current status'];
     const OLD_H = ['under notifications'];
     const OLD_FAQ = 'Once your request is approved, tap Pay beside it in My requests or My rentals';
-    const TERMS_DATE = 'Effective: 25 October 2026';
-    // Step B2 changed the Privacy Policy's log paragraph (a cancelled rental
-    // booking, and a GCash payment received after one), so its date moved
-    // too; section AM reads the paragraph.
-    const PRIVACY_DATE = 'Effective: 25 October 2026';
+    // Batch R2c (6 Nov 2026) changed Terms section 8, so the Terms' date
+    // moved; it changed the Privacy Policy's log paragraph (approving and
+    // declining, and a facility booking request), so its date moved too.
+    // Section AM reads the paragraph.
+    const TERMS_DATE = 'Effective: 6 November 2026';
+    const PRIVACY_DATE = 'Effective: 6 November 2026';
     const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
     const has = (blocks, o) => blocks.some((b) => b.text.includes(o));
 
@@ -14187,9 +14231,14 @@ const root = () => dom.window.document.getElementById('root');
     await landing.unmount();
     const pay = faqs.find((f) => f.q === FAQ_PAY_Q);
     check('the landing page\'s FAQ answers "How do I pay the fee?" with "… For a document request, once it is approved, tap '
-        + 'Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it is '
-        + 'confirmed. Then choose Pay online via GCash."',
+        + 'Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals once the Secretary '
+        + 'approves your request. Then choose Pay online via GCash."',
       pay?.a === FAQ_PAY, said(pay ?? faqs.map((f) => f.q)));
+    const reserve = faqs.find((f) => f.q === FAQ_RESERVE_Q);
+    check('  and "How do I reserve a barangay facility or equipment?" is a request the Secretary approves or declines, paid '
+        + 'once approved; no FAQ answer says a reservation or booking is confirmed immediately or at once',
+      reserve?.a === FAQ_RESERVE && faqs.every((f) => !INSTANT_FAQ.test(f.a)),
+      said({ reserve: reserve ?? null, instant: faqs.filter((f) => INSTANT_FAQ.test(f.a)).map((f) => f.q) }));
     check('  and no FAQ answer says "Once your request is approved, tap Pay beside it in My requests or My rentals", or '
         + 'promises a notification',
       faqs.length > 5 && faqs.every((f) => !f.a.includes(OLD_FAQ) && !/notif/i.test(f.a)),
@@ -14406,7 +14455,7 @@ const root = () => dom.window.document.getElementById('root');
     check('  and nothing else about it changed: "alert error" its only classes, straight under the card\'s Facilities | Items tabs '
         + '(its heading until section AT), the only message on the card, the form still there below it',
       refusal?.className === 'alert error' && !!refusal?.previousElementSibling?.classList.contains('tab-container')
-        && page.queryAll('.section-card .alert').length === 1 && !!buttonNamed(root(), 'Book now')
+        && page.queryAll('.section-card .alert').length === 1 && !!buttonNamed(root(), 'Send request')
         && page.queryAll('.section-card select, .section-card input, .section-card textarea').length >= 5,
       said({ className: refusal?.className ?? null, before: refusal?.previousElementSibling?.tagName ?? null,
         alerts: page.queryAll('.section-card .alert').map(text) }));
@@ -14417,8 +14466,8 @@ const root = () => dom.window.document.getElementById('root');
     check('  the time message is still read out: "' + PAST + '" under the time fields, role="alert", no request sent',
       text(timeMessage) === PAST && timeMessage?.className === 'alert error' && posts() === 1,
       said({ message: text(timeMessage), posts: posts() }));
-    // The form's own .actions row, Book now's: the shared spacing.
-    const bookNowRow = buttonNamed(root(), 'Book now')?.closest('div') ?? null;
+    // The form's own .actions row, Send request's: the shared spacing.
+    const bookNowRow = buttonNamed(root(), 'Send request')?.closest('div') ?? null;
     const bookNowClass = bookNowRow?.className ?? null;
     const bookNowTop = WIDTHS.map((w) => marginAt(w, bookNowRow, 'top'));
     await finish(page);
@@ -14451,13 +14500,13 @@ const root = () => dom.window.document.getElementById('root');
     check('Book a rental: a successful load of no items still says so, in the Facilities tab\'s words since section AT ("No '
         + 'facility is currently available for booking."), with no message, no Try again row and no form',
       root().textContent.includes('No facility is currently available for booking.') && page.queryAll('.alert').length === 0
-        && retryRows(page).length === 0 && !tryAgainButton(page) && !buttonNamed(root(), 'Book now'),
+        && retryRows(page).length === 0 && !tryAgainButton(page) && !buttonNamed(root(), 'Send request'),
       said({ alerts: page.queryAll('.alert').map(text), rows: retryRows(page).length }));
     await finish(page);
 
-    // e. The form is as it was: its Book now row is a plain .actions row,
+    // e. The form is as it was: its Send request row is a plain .actions row,
     // with the shared 4px.
-    check('Book a rental: the form is as it was: Book now\'s row is "actions" alone, its margin-top 4px from the shared '
+    check('Book a rental: the form is as it was: Send request\'s row is "actions" alone, its margin-top 4px from the shared '
         + '".actions" at 390, 768 and 1280px',
       bookNowClass === 'actions' && bookNowTop.every((m) => m?.selector === '.actions' && m?.value === '4px'),
       said({ bookNowClass, top: bookNowTop.map((m) => m && `${m.selector} ${m.value}`) }));
@@ -14580,7 +14629,7 @@ const root = () => dom.window.document.getElementById('root');
     const QUANTITY_FIXED = 'The quantity cannot be changed. Cancel this booking and book again.';
     const TOO_LATE = 'A booking can be cancelled online only until 24 hours before it starts. Please go to the barangay hall.';
     const PAID_HALL = 'A paid booking can only be cancelled at the barangay hall, so your refund can be arranged.';
-    const HELPER = 'The resident receives this reason by text message. Keep it short and use plain letters.';
+    const HELPER = 'The resident sees this reason under My rentals.'; // R2c: no text is delivered (Terms section 10)
     const WARN_902 = `This booking was paid (PHP 150.00). The payment stays recorded. The resident is told to contact the barangay about the refund.`;
     const UNDO = 'This cannot be undone. You will need to book again.';
     const SAFE_TEXT = '<b>Typhoon</b> signal no. 2';
@@ -14824,10 +14873,12 @@ const root = () => dom.window.document.getElementById('root');
       if (method === 'POST' && at) {
         if (net.status !== 200) return { error: st.refusal };
         const row = st.list.find((b) => b.request_id === Number(at[1]));
+        // The route's sentence by the row's status (batch 4): a pending row is a request.
+        const message = row.status === 'pending' ? 'Your request has been cancelled.' : 'Your booking has been cancelled.';
         Object.assign(row, { status: 'cancelled', derived_status: 'cancelled', can_cancel_online: false, cancel_online_note: null,
           cancellation_reason: bodyOf(net.calls.at(-1))?.reason ?? null,
-          charges: { ...row.charges, status: 'VOID' } });
-        return { message: 'Your booking has been cancelled.' };
+          ...(row.charges ? { charges: { ...row.charges, status: 'VOID' } } : {}) });
+        return { message };
       }
       return undefined;
     };
@@ -14895,6 +14946,51 @@ const root = () => dom.window.document.getElementById('root');
     check('  with a reason it posts { reason } trimmed', said(bodyOf(postReason)) === said({ reason: 'Change of plans' }), said(bodyOf(postReason)));
     await finish(page);
 
+    // Batch 4 (6 Nov 2026): the words follow the row's STATUS. A pending row
+    // is a request: "Cancel request", a panel titled "Cancel request" with
+    // "Cancel this request" and "Keep request", and the server's "Your request
+    // has been cancelled."; a confirmed row keeps every "booking" word.
+    const pendingMine = () => {
+      const b = mineBooking(806, 'Rubber Mat', { status: 'pending', derived_status: 'pending', can_cancel_online: true,
+        requested_at: '2026-11-05T17:30:00Z', fee_if_approved: 50 });
+      delete b.charges; // a request has no charge, and no charges key
+      return b;
+    };
+    const panelWords = (pg) => {
+      const panel = pg.query('.cancel-booking-panel');
+      return { title: text(panel?.querySelector('h3')), buttons: [...(panel?.querySelectorAll('button') ?? [])].map(text) };
+    };
+    const rowButtonsAll = (pg, item) => [...(mineRow(pg, item)?.querySelectorAll('button') ?? [])].map(text)
+      .filter((t) => /^Cancel/.test(t ?? ''));
+    mineState.list = [...MINE(), pendingMine()];
+    page = await mineOpen();
+    check('My rentals: a PENDING row\'s button reads "Cancel request" (no "Cancel booking"); the confirmed Sound System\'s '
+        + 'still reads "Cancel booking"',
+      said(rowButtonsAll(page, 'Rubber Mat')) === said(['Cancel request']) && said(rowButtonsAll(page, 'Sound System')) === said(['Cancel booking']),
+      said({ pending: rowButtonsAll(page, 'Rubber Mat'), confirmed: rowButtonsAll(page, 'Sound System') }));
+    await clickIf(page, [...(mineRow(page, 'Sound System')?.querySelectorAll('button') ?? [])].find((b) => text(b) === 'Cancel booking'));
+    const confirmedPanel = panelWords(page);
+    check('  a confirmed booking\'s panel keeps its words: "Cancel booking", "Cancel this booking", "Keep booking"',
+      confirmedPanel.title === 'Cancel booking' && said(confirmedPanel.buttons) === said(['Cancel this booking', 'Keep booking']),
+      said(confirmedPanel));
+    await clickIf(page, [...(page.query('.cancel-booking-panel')?.querySelectorAll('button') ?? [])].find((b) => text(b) === 'Keep booking'));
+    await clickIf(page, [...(mineRow(page, 'Rubber Mat')?.querySelectorAll('button') ?? [])].find((b) => text(b) === 'Cancel request'));
+    const pendingPanel = panelWords(page);
+    check('  a pending request\'s panel says "request": titled "Cancel request", with "Cancel this request" and "Keep request", '
+        + 'and no "booking" in any of them',
+      pendingPanel.title === 'Cancel request' && said(pendingPanel.buttons) === said(['Cancel this request', 'Keep request'])
+        && ![pendingPanel.title, ...pendingPanel.buttons].some((t) => /booking/i.test(t ?? '')),
+      said(pendingPanel));
+    sent = net.calls.length;
+    if (page.query('.cancel-booking-panel form')) await page.submit();
+    const postPending = net.calls.slice(sent).find((c) => c.method === 'POST');
+    check('  sending it posts to /rental-requests/mine/806/cancel, and the page shows the server\'s "Your request has been '
+        + 'cancelled."',
+      /\/rental-requests\/mine\/806\/cancel$/.test(postPending?.url ?? '') && !panelView(page).open
+        && text(page.query('.alert.success')) === 'Your request has been cancelled.',
+      said({ post: postPending?.url, flash: text(page.query('.alert.success')) }));
+    await finish(page);
+
     // --- the Activity Log page's words (constants/activityLog.js) ---
     const L = globalThis.activityLog || {};
     const sum = (action, table, before, after) => (typeof L.summarize === 'function'
@@ -14928,12 +15024,17 @@ const root = () => dom.window.document.getElementById('root');
       said({ meta, inFilter: (L.ACTION_FILTERS || []).find((o) => o.value === 'PAYMENT_ON_VOID_CHARGE') ?? null }));
 
     // --- the Privacy Policy names both, in the modal and in its source ---
+    // Batch R2c (6 Nov 2026): declining is logged (DECLINE, since R2a, with
+    // reason_given and never the reason), and a resident's booking is a
+    // request, so the paragraph names both.
     const LOG_PARA = 'BrgyServe keeps a log of the actions Barangay officials and staff take on records: adding, editing, '
-      + 'archiving and approving them, recording payments, recording event attendance, recording blotter cases, and sending '
-      + 'an official a set-password link. Actions of yours that change a record are logged too: registering, submitting or '
-      + 'cancelling a request, booking a facility, cancelling a rental booking, declaring a payment, having a GCash payment '
-      + 'confirmed, changing or resetting your password, and setting your password from an emailed set-password link. A '
-      + 'GCash payment received after its booking was cancelled is also recorded in this log.';
+      + 'archiving, approving and declining them, recording payments, recording event attendance, recording blotter cases, '
+      + 'and sending an official a set-password link. Actions of yours that change a record are logged too: registering, '
+      + 'submitting or cancelling a request, requesting a facility booking, cancelling a rental booking, declaring a '
+      + 'payment, having a GCash payment confirmed, changing or resetting your password, and setting your password from an '
+      + 'emailed set-password link. A GCash payment received after its booking was cancelled is also recorded in this log. '
+      + 'When a facility booking request is approved or declined, the log records which official decided it and when, but '
+      + 'not the reason given for a decline.';
     const flat = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
     seedSession(null);
     resetNet(200);
@@ -14946,8 +15047,9 @@ const root = () => dom.window.document.getElementById('root');
     const md = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
     const mdAt = md.indexOf('#### A log of changes to records');
     const mdPara = mdAt < 0 ? null : flat(md.slice(mdAt).split('\n\n')[1]);
-    check('the Privacy Policy\'s log paragraph names "cancelling a rental booking" and "A GCash payment received after its '
-        + 'booking was cancelled is also recorded in this log.", in the modal (LegalPrivacy.jsx) and in docs/legal-copy.md alike',
+    check('the Privacy Policy\'s log paragraph names "cancelling a rental booking", "A GCash payment received after its '
+        + 'booking was cancelled", approving and declining, and that a decided booking request is logged with who and when '
+        + 'but not the reason, in the modal (LegalPrivacy.jsx) and in docs/legal-copy.md alike',
       modalPara === LOG_PARA && mdPara === LOG_PARA, said({ modalPara, mdPara }));
 
     dom.window.confirm = previousConfirm;
@@ -14971,7 +15073,7 @@ const root = () => dom.window.document.getElementById('root');
   // components/RentalAvailability.jsx, worded by utils/rentalAvailability.js):
   // asked only once an item, a date and two whole times are set, 400ms after
   // the last change, the older of two answers dropped; the quantity box
-  // capped at what is left; Book now (Record booking) blocked, with the reason
+  // capped at what is left; Send request (Record booking) blocked, with the reason
   // beside it, when nothing is left; a check that failed blocking nothing; a
   // 409 at submit shown in the server's words and the check asked again. The
   // page only advises: the server decides. AO also checks the walk-in form's
@@ -15333,15 +15435,15 @@ const root = () => dom.window.document.getElementById('root');
     resetNet(200, stub);
     let page = await globalThis.mountInteractive(root(), '/resident/book-rental');
     await page.settle();
-    const afterFailed = await sharedChecks(page, 'Book a rental', 'Book now', DAY);
-    // The failed check left the form valid (09:00 to 11:30): Book now sends.
-    st.post = { message: 'Booking confirmed', request: { request_id: 991, status: 'confirmed', start_datetime: `${DAY}T09:00:00+08:00`,
-      end_datetime: `${DAY}T11:30:00+08:00`, quantity_requested: 1, purpose: 'Barangay assembly',
+    const afterFailed = await sharedChecks(page, 'Book a rental', 'Send request', DAY);
+    // The failed check left the form valid (09:00 to 11:30): Send request sends.
+    st.post = { message: 'Request sent', request: { request_id: 991, status: 'pending', derived_status: 'pending', start_datetime: `${DAY}T09:00:00+08:00`,
+      end_datetime: `${DAY}T11:30:00+08:00`, quantity_requested: 1, purpose: 'Barangay assembly', fee_if_approved: 300,
       rental_items: { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' } } };
     let sent = posts().length;
     await press(page);
-    check('Book a rental: after a failed check Book now still sends the booking (the server decides)',
-      afterFailed.failed === FAILED && posts().length === sent + 1 && text(page.query('.section-card h3')) === 'Booking confirmed',
+    check('Book a rental: after a failed check Send request still sends the request (the server decides)',
+      afterFailed.failed === FAILED && posts().length === sent + 1 && text(page.query('.section-card h3')) === 'Request sent',
       String(posts().length - sent));
     await clickIf(page, buttonNamed(root(), 'Book another'));
     // A 409 at submit: the server's sentence, read out, and the check asked again.
@@ -15350,7 +15452,7 @@ const root = () => dom.window.document.getElementById('root');
     await times(page, DAY, '08:00', '10:00');
     await purposeIn(page);
     await wait(page);
-    let v = look(page, 'Book now');
+    let v = look(page, 'Send request');
     const shownBefore = said(v.lines);
     st.post = { error: CONFLICT };
     st.answers[`21 08:00 10:00`] = facility(0, [{ start: pgAt(DAY, '08:00'), end: pgAt(DAY, '10:00') }]);
@@ -15360,10 +15462,10 @@ const root = () => dom.window.document.getElementById('root');
     net.status = 200;
     const refusalShown = page.queryAll('.section-card [role="alert"]').map(text);
     await wait(page);
-    v = look(page, 'Book now');
-    check('Book a rental: a 409 at Book now shows the server\'s own sentence with role="alert"',
+    v = look(page, 'Send request');
+    check('Book a rental: a 409 at Send request shows the server\'s own sentence with role="alert"',
       shownBefore === said(['Free for 8:00 AM to 10:00 AM.', NOTHING]) && refusalShown.includes(CONFLICT), said({ shownBefore, refusalShown }));
-    check('  and asks the availability again (one more request, for the same time), which now reads taken and blocks Book now',
+    check('  and asks the availability again (one more request, for the same time), which now reads taken and blocks Send request',
       asks().length === sent + 1 && said(paramsOf(asks().at(-1))) === said({ item_id: '21', date: DAY, start_time: '08:00', end_time: '10:00' })
         && v.lines[0] === NOT_FREE && v.enabled === false, said({ asks: asks().length - sent, v }));
     await finish(page);
@@ -16534,7 +16636,7 @@ const root = () => dom.window.document.getElementById('root');
     await wait(page);
     await page.submit();
     const itemBody = bodyOf(posts().at(-1));
-    check('  Book now on the Items tab sends the same six keys as before, the quantity typed (3) and the times as start_time / end_time',
+    check('  Send request on the Items tab sends the same six keys as before, the quantity typed (3) and the times as start_time / end_time',
       !!itemBody && said(Object.keys(itemBody).sort()) === KEYS && itemBody.item_id === 25 && itemBody.quantity_requested === 3
         && itemBody.start_time === '09:00' && itemBody.end_time === '11:00', said(itemBody));
     await clickIf(page, buttonNamed(root(), 'Book another'));
@@ -17023,7 +17125,7 @@ const root = () => dom.window.document.getElementById('root');
     let sent = posts().length;
     await submitIf(page);
     v = view(page);
-    check(`  the hall until 00:00 (midnight): Book now shows "${HALL_WORDS}" under the time fields and sends nothing`,
+    check(`  the hall until 00:00 (midnight): Send request shows "${HALL_WORDS}" under the time fields and sends nothing`,
       v.timeAlert === HALL_WORDS && posts().length === sent, said({ v, posts: posts().length - sent }));
     await new Promise((r) => setTimeout(r, 550));
     await page.settle();
@@ -17380,6 +17482,14 @@ const root = () => dom.window.document.getElementById('root');
     const fs = require('fs');
     const previousTZAV = process.env.TZ;
     process.env.TZ = 'Asia/Manila';
+    // The fixtures below are dated early November 2026, written on 29 Oct
+    // for a "today" before them. The Edit panel checks its times against the
+    // page's clock, so on the real date they rotted on 3 Nov ("The booking
+    // must start in the future", no PUT). Pinned to noon of 29 Oct in Manila,
+    // as other sections pin theirs, and put back at the end (6 Nov 2026).
+    const F_AV = globalThis.chargeFilters;
+    const realNowAV = F_AV?.clock?.now;
+    if (F_AV?.clock) F_AV.clock.now = () => new Date('2026-10-29T04:00:00Z');
     const L = globalThis.rentalList || {};
     const attempt = (f) => { try { return f(); } catch (e) { return `threw: ${e.message}`; } };
     const said = (v) => JSON.stringify(v);
@@ -18097,8 +18207,24 @@ const root = () => dom.window.document.getElementById('root');
         && !!menuButton(page, 802) && page.active() === menuButton(page, 802),
       said({ gets: gets(sent), ids: v.ids, active: page.active()?.getAttribute('aria-label') ?? page.active()?.tagName }));
 
+    // Batch R2c: stock lowered while the request waited is a 409 (it was a 400
+    // in a booker's words); the panel shows the server's sentence as any.
+    const FEWER = 'Only 2 units of Tent exist now, and this request is for 3, so it cannot be approved. Decline it.';
+    state.refuse = FEWER;
+    net.status = 409;
+    await choose(page, 802, 'Approve');
+    await pressSubmit(page);
+    net.status = 200;
+    p = panelView(page);
+    check('Approve refused because the stock was lowered (the 409 batch R2c words for the Secretary): "Only 2 units of '
+        + 'Tent exist now, … Decline it." inside the panel with role="alert", the panel still open',
+      p.open && said(p.alerts) === said([FEWER]) && p.submit?.disabled === false, said({ open: p.open, alerts: p.alerts }));
+    state.refuse = null;
+    await page.key('Escape');
+    await page.settle();
+
     // The Decline panel: the reason, as Cancel asks it.
-    const HELPER = 'The resident receives this reason by text message. Keep it short and use plain letters.';
+    const HELPER = 'The resident sees this reason under My rentals.'; // R2c: no text is delivered (Terms section 10)
     sent = net.calls.length;
     await choose(page, 803, 'Decline');
     p = panelView(page);
@@ -18234,7 +18360,9 @@ const root = () => dom.window.document.getElementById('root');
       await page.unmount();
     }
 
-    // d. The resident's page keeps "Confirmed" for the same kind of booking.
+    // d. Since batch R2c the resident's page says "Approved" too
+    // (APPROVED_LABEL) for the same kind of booking; the Activity Log keeps
+    // its own words.
     seedSession(makeToken({ sub: '2', role: 'resident', exp: VALID_EXP }),
       { user_id: 2, username: 'res_one', role: 'resident', must_change_password: false });
     resetNet(200, (url, method) => (method === 'GET' && /\/rental-requests\/mine$/.test(url) ? { requests: [{
@@ -18246,6 +18374,7 @@ const root = () => dom.window.document.getElementById('root');
     await page.settle();
     const mineBadge = text(page.query('table.data-table tbody .badge'));
     const mineWords = page.html();
+    const mineButtons = page.queryAll('button').map((b) => b.textContent.trim());
     await page.unmount();
     state = makeState();
     page = await openPage(SEC, state);
@@ -18253,10 +18382,12 @@ const root = () => dom.window.document.getElementById('root');
     const listBadge = badgeOf(page, 811);
     methods.push(...net.calls.map((c) => c.method));
     await page.unmount();
-    check('The same kind of booking (stored confirmed, ahead) reads "Approved" on the Secretary\'s list and still "Confirmed" '
-        + 'on the resident\'s My rentals, which shows no Approve, Decline, requested time or overlap note',
-      listBadge === 'Approved' && mineBadge === 'Confirmed' && !/Approve|Decline|Requested|overlaps/.test(mineWords),
-      said({ listBadge, mineBadge }));
+    check('The same kind of booking (stored confirmed, ahead) reads "Approved" on the Secretary\'s list and, since batch '
+        + 'R2c, "Approved" on the resident\'s My rentals too, which shows no Approve or Decline button, no requested time '
+        + '(this booking has none) and no overlap note',
+      listBadge === 'Approved' && mineBadge === 'Approved' && !mineButtons.some((b) => /^(Approve|Decline)$/.test(b))
+        && !/Requested|overlaps/.test(mineWords),
+      said({ listBadge, mineBadge, mineButtons }));
 
     // e. The CSS: the requested date never breaks, the phone card labels the
     // block, and the panels are the 50 rung of the z-index ladder.
@@ -18298,7 +18429,7 @@ const root = () => dom.window.document.getElementById('root');
       said({ nowrap, nowrapBoth, labelRule, menuList, menuBtn, menuItem, cardMenu, cardList, overlay: overlayRule }));
 
     check('section AV\'s writes were the decisions and the edit, each answered by the fetch stub; nothing kept in the browser',
-      said(methods.filter((m) => m !== 'GET')) === said(['POST', 'POST', 'POST', 'POST', 'POST', 'PUT'])
+      said(methods.filter((m) => m !== 'GET')) === said(['POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'PUT'])
         && store.sets - kept.sets === 0 && domStorage.writes === kept.dom,
       said({ writes: methods.filter((m) => m !== 'GET'), stub: store.sets - kept.sets, jsdom: domStorage.writes - kept.dom }));
     if (previousScrollAV === undefined) delete scrollProto.scrollIntoView;
@@ -18307,6 +18438,300 @@ const root = () => dom.window.document.getElementById('root');
     else global.getComputedStyle = previousStyleAV;
     if (previousTZAV === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAV;
+    if (F_AV?.clock && realNowAV) F_AV.clock.now = realNowAV;
+  }
+
+  // =========================================================================
+  // AW. A booking is a request (batch R2c): My rentals, Book a rental, the
+  // archive warning and the facility report
+  // =========================================================================
+  // Since batch R2c the server stores a resident's booking PENDING with no
+  // charge (routes/rentalRequests.js). GET /mine carries decline_reason and
+  // requested_at only when there are any, fee_if_approved only on a request
+  // still waiting, and NO charges key on a request never approved. My rentals
+  // reads those keys by presence and never works a fee out itself; Pay shows
+  // where the row has an UNPAID charge, so a row with no charges key has none,
+  // whatever its status. A stored-confirmed booking reads "Approved"
+  // (APPROVED_LABEL). Book a rental says "Request sent" and its button "Send
+  // request". The archive warning badges a pending request "Pending". The
+  // facility report notes that pending, declined and expired are requests,
+  // and a range holding only requests is shown, not called empty. The clock
+  // here is Los Angeles, so "Requested on" can only read Manila's day if the
+  // page says it in Manila.
+  console.log('\n--- A booking is a request (batch R2c): My rentals, Book a rental, the archive warning, the facility report ---');
+  {
+    const said = (v) => JSON.stringify(v);
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const previousTZAW = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    const kept = { sets: store.sets, dom: domStorage.writes };
+    const methods = [];
+
+    // --- a. My rentals: one row of each kind, in GET /mine's R2c shape ---
+    const CHAIRS = { item_id: 4, name: 'Plastic Chairs', type: 'furniture', fee: '5.00' };
+    const COURT = { item_id: 21, name: 'Covered Court', type: 'facility', fee: '300.00' };
+    const MAT = { item_id: 9, name: 'Rubber Mat', type: 'equipment', fee: '0.00' };
+    const charge = (id, status, amount) => [{ charge_id: id, amount, status, declared_method: null, declared_reference: null, declared_at: null }];
+    // 300 characters, the longest reason the server takes.
+    const LONG_SENTENCE = 'The covered court is closed for roof repairs on that day, and the barangay needs every chair for '
+      + 'the assembly in the hall. ';
+    const LONG_REASON = `${LONG_SENTENCE.repeat(3).slice(0, 299).trimEnd().padEnd(299, 's')}.`;
+    const row = (id, extra) => ({
+      request_id: id, quantity_requested: 1, start_datetime: '2026-11-20T00:00:00Z', end_datetime: '2026-11-20T04:00:00Z',
+      purpose: `Purpose ${id}`, status: 'pending', return_note: null, returned_at: null, cancellation_reason: null,
+      rental_items: COURT, can_cancel_online: false, cancel_online_note: null, ...extra,
+    });
+    // 1:30 AM on 6 Nov in Manila is still 5 Nov in Los Angeles.
+    const REQ_AT = '2026-11-05T17:30:00Z';
+    const MINE = [
+      // fee_if_approved 45 where 10 chairs x PHP 5 is 50: the page must show the server's 45.
+      row(701, { quantity_requested: 10, rental_items: CHAIRS, derived_status: 'pending', requested_at: REQ_AT, fee_if_approved: 45, can_cancel_online: true }),
+      row(702, { rental_items: MAT, derived_status: 'pending', requested_at: REQ_AT, fee_if_approved: 0, can_cancel_online: true }),
+      row(703, { status: 'declined', derived_status: 'declined', requested_at: REQ_AT, decline_reason: LONG_REASON }),
+      row(704, { start_datetime: '2026-11-01T00:00:00Z', end_datetime: '2026-11-01T04:00:00Z', derived_status: 'expired', requested_at: REQ_AT }),
+      row(705, { status: 'confirmed', derived_status: 'confirmed', charges: charge(1705, 'UNPAID', 300) }),
+      row(706, { status: 'cancelled', derived_status: 'cancelled', cancellation_reason: 'Change of plans', charges: charge(1706, 'VOID', 300) }),
+      row(707, { status: 'returned', derived_status: 'returned', rental_items: CHAIRS, charges: charge(1707, 'PAID', 5) }),
+      // Approved, and no charges key at all: no Pay, whatever its status says.
+      row(708, { status: 'confirmed', derived_status: 'confirmed' }),
+      // Waiting, two hours from its start: Cancel is still offered (no 24-hour rule).
+      row(709, { start_datetime: '2026-11-06T06:00:00Z', end_datetime: '2026-11-06T08:00:00Z', derived_status: 'pending', requested_at: REQ_AT, fee_if_approved: 300, can_cancel_online: true }),
+    ];
+    const MANILA_REQUESTED = `Requested on ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' }).format(new Date(REQ_AT))}`;
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, (url, method) => (method === 'GET' && /\/rental-requests\/mine$/.test(url) ? { requests: MINE } : undefined));
+    let page = await globalThis.mountInteractive(root(), '/resident/rentals');
+    await page.settle();
+    const rows = page.queryAll('table.my-rentals-table tbody tr');
+    const view = rows.map((tr, i) => {
+      const status = tr.querySelector('.badge')?.closest('td');
+      return {
+        id: MINE[i]?.request_id,
+        badge: text(tr.querySelector('.badge')),
+        notes: [...(status?.querySelectorAll('.reason-note, .small-note') || [])].map(text),
+        buttons: [...tr.querySelectorAll('button')].map((b) => text(b)),
+        pay: !!tr.querySelector('[aria-haspopup="menu"], .pay-menu'),
+      };
+    });
+    const byId = Object.fromEntries(view.map((v) => [v.id, v]));
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    const notesOf = (id) => byId[id]?.notes ?? [];
+    const hasNote = (id, words) => notesOf(id).includes(words);
+    check('My rentals: the badges read Pending, Pending, Declined, Expired, Approved (a stored-confirmed booking, APPROVED_LABEL), '
+        + 'Cancelled, Returned, Approved, Pending',
+      rows.length === MINE.length && said(view.map((v) => v.badge))
+        === said(['Pending', 'Pending', 'Declined', 'Expired', 'Approved', 'Cancelled', 'Returned', 'Approved', 'Pending']),
+      said(view.map((v) => v.badge)));
+    check(`  "${MANILA_REQUESTED}" on each row that has requested_at (Manila's 6 Nov, on a Los Angeles clock), and no `
+        + '"Requested on" line on a row without the key',
+      [701, 702, 703, 704, 709].every((id) => hasNote(id, MANILA_REQUESTED)) && /Nov 6, 2026/.test(MANILA_REQUESTED)
+        && [705, 706, 707, 708].every((id) => !notesOf(id).some((n) => /^Requested on/.test(n))),
+      said(view.map((v) => [v.id, v.notes.filter((n) => /Requested/.test(n))])));
+    check('  a waiting request shows the server\'s fee_if_approved, never one worked out here: "Estimated fee ₱45.00" on #701 '
+        + '(10 chairs at ₱5.00 would be ₱50.00), "No fee" on #702 (fee_if_approved 0), "Estimated fee ₱300.00" on #709; and '
+        + 'no estimate on any other row',
+      hasNote(701, 'Estimated fee ₱45.00') && !notesOf(701).some((n) => /50\.00/.test(n)) && hasNote(702, 'No fee')
+        && hasNote(709, 'Estimated fee ₱300.00')
+        && [703, 704, 705, 706, 707, 708].every((id) => !notesOf(id).some((n) => /^Estimated fee/.test(n))),
+      said(view.map((v) => [v.id, v.notes.filter((n) => /fee/i.test(n))])));
+    check('  the declined #703 shows "Declined: " and its whole 300-character reason',
+      LONG_REASON.length === 300 && hasNote(703, `Declined: ${LONG_REASON}`), said(notesOf(703)));
+    check('  the expired #704 shows "Not decided before its start time." with no Cancel button and no Pay',
+      hasNote(704, 'Not decided before its start time.') && byId[704]?.buttons.length === 0 && byId[704]?.pay === false,
+      said(byId[704]));
+    // Batch 4 (6 Nov 2026): a pending row is a request, so its button reads
+    // "Cancel request", decided by the row's status; "Cancel booking" stays
+    // for every other status.
+    check('  "Cancel request" on each waiting request the server lets the resident cancel (#701, #702, and #709 two hours '
+        + 'from its start), on no other row, and "Cancel booking" on none of them',
+      view.filter((v) => v.buttons.includes('Cancel request')).map((v) => v.id).join() === '701,702,709'
+        && !view.some((v) => v.buttons.includes('Cancel booking')),
+      said(view.map((v) => [v.id, v.buttons])));
+    check('  Pay ▾ only where the row carries an UNPAID charge (#705): none on a request without a charges key (#701 to '
+        + '#704, #709), and none on the approved #708 that has no charges key either',
+      view.filter((v) => v.pay).map((v) => v.id).join() === '705', said(view.map((v) => [v.id, v.pay])));
+
+    // --- b. Book a rental: "Send request", the estimate's line, "Request sent" ---
+    const F = globalThis.chargeFilters;
+    const realNowAW = F?.clock?.now;
+    if (F?.clock) F.clock.now = () => new Date('2026-12-31T16:30:00Z');
+    const ITEMS = [{ ...COURT, description: null, quantity_total: 1, quantity_available: 1 }];
+    const ANSWER = {
+      message: 'Request sent: Covered Court on Jan 1, 2027, 9:00 AM–11:00 AM.',
+      request: { request_id: 990, status: 'pending', derived_status: 'pending', start_datetime: '2027-01-01T09:00:00+08:00',
+        end_datetime: '2027-01-01T11:00:00+08:00', quantity_requested: 1, purpose: 'Basketball practice', return_note: null,
+        returned_at: null, cancellation_reason: null, requested_at: '2026-12-31T16:30:00Z', fee_if_approved: 300, rental_items: COURT },
+    };
+    const SENT_MSG = 'The Barangay Secretary will review your request. You can track its status under My rentals and pay any '
+      + 'fee once it is approved.';
+    const PAY_LATER = 'You pay only after the Secretary approves your request.';
+    seedSession(RES_TOKEN, RES_USER);
+    resetNet(200, (url, method) => {
+      if (method === 'GET' && /\/rental-items$/.test(url)) return { rental_items: ITEMS };
+      if (method === 'POST' && /\/rental-requests$/.test(url)) return ANSWER;
+      return undefined;
+    });
+    page = await globalThis.mountInteractive(root(), '/resident/book-rental');
+    await page.settle();
+    const select = page.query('select[name="item_id"]');
+    if (select) {
+      select.value = '21';
+      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await page.settle();
+    }
+    for (const [name, value] of [['date', '2027-01-01'], ['start_time', '09:00'], ['end_time', '11:00']]) {
+      if (page.query(`input[name="${name}"]`)) await page.fill(`input[name="${name}"]`, value);
+    }
+    const purpose = page.query('textarea[name="purpose"]');
+    if (purpose) {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(purpose, 'Basketball practice');
+      purpose.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    }
+    await page.settle();
+    const formButtons = page.queryAll('form button[type="submit"]').map((b) => text(b));
+    const estimate = page.queryAll('form p.muted').map(text);
+    const estimateAt = estimate.findIndex((t) => /^Estimated fee: ₱300\.00/.test(t ?? ''));
+    check('Book a rental: the submit button reads "Send request" (no "Book now")',
+      said(formButtons) === said(['Send request']) && !buttonNamed(root(), 'Book now'), said(formButtons));
+    check(`  and under "Estimated fee: ₱300.00" the line "${PAY_LATER}"`,
+      estimateAt >= 0 && estimate[estimateAt + 1] === PAY_LATER, said(estimate));
+    if (page.query('form')) await page.submit();
+    await page.settle();
+    const card = page.query('.dash-main .section-card');
+    const dl = Object.fromEntries([...(card?.querySelectorAll('dl.info-grid > div') || [])].map((d) => {
+      // A dd's own words, then each element under it as its own part.
+      const dd = d.querySelector('dd');
+      const own = dd ? [...dd.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').replace(/\s+/g, ' ').trim() : null;
+      const parts = dd ? [...dd.children].filter((c) => !c.classList.contains('badge')).map(text) : [];
+      return [text(d.querySelector('dt')), [own || text(dd?.querySelector('.badge')), ...parts].join(' | ')];
+    }));
+    const mainText = text(page.query('.dash-main'));
+    check('  after sending: the card\'s title is "Request sent" and its message is exactly the decided sentence',
+      text(card?.querySelector('h3')) === 'Request sent' && text(card?.querySelector('.alert.success')) === SENT_MSG,
+      said({ title: text(card?.querySelector('h3')), message: text(card?.querySelector('.alert.success')) }));
+    check('  the request reads "Pending"; its "Estimated fee" row says ₱300.00 and the same pay-later line; and nothing on the '
+        + 'page says "Booking confirmed" or "no further approval"',
+      dl.Status === 'Pending' && dl['Estimated fee'] === `₱300.00 | ${PAY_LATER}` && !('Fee' in dl)
+        && !/Booking confirmed|no further approval/i.test(mainText ?? ''),
+      said({ dl, confirmedWords: /Booking confirmed|no further approval/i.test(mainText ?? '') }));
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    if (F?.clock && realNowAW) F.clock.now = realNowAW;
+
+    // --- c. The archive warning badges a pending request "Pending" ---
+    const SEC_AW = { user_id: 1, username: 'secretary1', role: 'secretary', must_change_password: false };
+    const RECORD = { resident_id: 9101, first_name: 'Ana', middle_name: null, last_name: 'Probe', suffix: null,
+      birthdate: '1990-01-01', address: 'Purok 1', contact_number: null, sex: 'Female', civil_status: 'Single', is_archived: false };
+    seedSession(makeToken({ sub: '1', role: 'secretary', exp: VALID_EXP }), SEC_AW);
+    resetNet(200, (url, method) => {
+      net.status = 200;
+      if (method === 'GET' && /\/resident-records\?/.test(url)) return { records: [RECORD], total: 1, page: 1, total_pages: 1 };
+      if (method === 'GET' && /\/resident-records\/9101$/.test(url)) return { record: RECORD, linked_accounts: [] };
+      if (method === 'POST' && /\/resident-records\/9101\/archive$/.test(url)) {
+        net.status = 409;
+        return { error: 'This resident has open work.', dependencies: { accounts: [], documents: [], rentals: [
+          { request_id: 801, status: 'pending', start_datetime: '2026-11-20T00:00:00Z', end_datetime: '2026-11-20T04:00:00Z', rental_items: { name: 'Tent', type: 'equipment' } },
+          { request_id: 802, status: 'confirmed', start_datetime: '2026-11-21T00:00:00Z', end_datetime: '2026-11-21T04:00:00Z', rental_items: { name: 'Covered Court', type: 'facility' } },
+        ] } };
+      }
+      return undefined;
+    });
+    page = await globalThis.mountInteractive(root(), '/secretary/residents');
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'View'));
+    await page.settle();
+    await clickIf(page, buttonNamed(root(), 'Archive'));
+    await page.settle();
+    const deps = page.queryAll('.suggest-section li.suggestion')
+      .map((li) => `${text(li.querySelector('.badge'))} ${text(li.querySelector('strong'))}`);
+    methods.push(...net.calls.map((c) => c.method));
+    net.status = 200;
+    await page.unmount();
+    check('Resident records: the archive warning badges the pending request "Pending" and the booking "Active"',
+      said(deps) === said(['Pending Tent #801', 'Active Covered Court #802']), said(deps));
+
+    // --- d. The facility report: the requests note, "Expired", and a range of requests only ---
+    const CHART_BOX = { width: 800, height: 260, top: 0, left: 0, right: 800, bottom: 260, x: 0, y: 0 };
+    class BoxObserver {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { this.callback([{ target, contentRect: CHART_BOX }]); }
+      unobserve() {}
+      disconnect() {}
+    }
+    const previousObserver = global.ResizeObserver;
+    global.ResizeObserver = BoxObserver;
+    const elementProto = dom.window.HTMLElement.prototype;
+    const realRect = elementProto.getBoundingClientRect;
+    elementProto.getBoundingClientRect = function rect() {
+      return this.classList?.contains('recharts-responsive-container') ? { ...CHART_BOX } : realRect.call(this);
+    };
+    const previousFrame = global.requestAnimationFrame;
+    const previousCancel = global.cancelAnimationFrame;
+    global.requestAnimationFrame = () => 0;
+    global.cancelAnimationFrame = () => {};
+    const STORED = ['confirmed', 'cancelled', 'returned', 'returned_late', 'returned_with_issue'];
+    const facility = (totals, requests) => ({
+      range: { from: '2025-12-01', to: '2026-11-06' }, generated_at: '2026-11-06T02:00:00.000Z', totals,
+      by_status: [...STORED.map((status) => ({ status, count: totals.total_bookings ? { confirmed: 2, cancelled: 1 }[status] ?? 0 : 0 })),
+        ...requests],
+      by_item: [{ item_id: 21, name: 'Covered Court', type: 'facility', is_active: true, bookings: totals.bookings_excluding_cancelled, units_booked: totals.bookings_excluding_cancelled }],
+      most_used: null, least_used: null, never_used: [],
+      monthly: [{ month: '2026-11', count: totals.bookings_excluding_cancelled }],
+    });
+    const REQUESTS = [{ status: 'pending', count: 2 }, { status: 'declined', count: 1 }, { status: 'expired', count: 1 }];
+    const ZERO = { total_bookings: 0, bookings_excluding_cancelled: 0, cancelled: 0, items_used: 0, items_never_used: 1 };
+    const NOTE = 'Pending, declined and expired are requests, not bookings.';
+    const openFacility = async (answer) => {
+      seedSession(makeToken({ sub: '1', role: 'secretary', exp: VALID_EXP }), SEC_AW);
+      resetNet(200, (url) => (url.includes('/reports/facility-utilization?') ? answer : (url.includes('/reports/') ? { totals: null } : undefined)));
+      const p = await globalThis.mountInteractive(root(), '/secretary/reports');
+      await p.settle();
+      const pick = p.queryAll('select').find((s) => [...s.options].some((o) => o.value === 'facility-utilization'));
+      if (pick) {
+        pick.value = 'facility-utilization';
+        pick.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        await p.settle();
+      }
+      const block = p.queryAll('.report-sheet [data-pdf-block]').find((b) => text(b.querySelector('h4')) === 'By status');
+      const seen = {
+        empty: /No data for this period \(/.test(text(p.query('.dash-main')) ?? ''),
+        tiles: p.queryAll('.stat-row .stat-tile').map((t) => `${text(t.querySelector('.stat-label'))} ${text(t.querySelector('.stat-value'))}`),
+        statuses: [...(block?.querySelectorAll('tbody tr') || [])].map((tr) => [...tr.querySelectorAll('td')].map(text).join(' ')),
+        note: [...(block?.querySelectorAll('p') || [])].map(text),
+        head: [...(block?.querySelectorAll('thead th') || [])].map(text),
+      };
+      methods.push(...net.calls.map((c) => c.method));
+      await p.unmount();
+      return seen;
+    };
+    let seen = await openFacility(facility({ total_bookings: 3, bookings_excluding_cancelled: 2, cancelled: 1, items_used: 1, items_never_used: 0 }, REQUESTS));
+    check('Facility report: "By status" carries the note "Pending, declined and expired are requests, not bookings.", lists '
+        + 'Pending 2, Declined 1 and Expired 1 after the five, keeps its "Status | Bookings" table, and "Total bookings" keeps '
+        + 'its label',
+      !seen.empty && said(seen.note) === said([NOTE]) && said(seen.head) === said(['Status', 'Bookings'])
+        && said(seen.statuses.slice(5)) === said(['Pending 2', 'Declined 1', 'Expired 1']) && seen.tiles.includes('Total bookings 3'),
+      said(seen));
+    seen = await openFacility(facility(ZERO, [{ status: 'pending', count: 1 }, { status: 'expired', count: 2 }]));
+    check('  a range holding only requests (total_bookings 0, Pending 1, Expired 2) is SHOWN, not "No data for this period"',
+      !seen.empty && said(seen.statuses.slice(5)) === said(['Pending 1', 'Expired 2']) && seen.tiles.includes('Total bookings 0'),
+      said(seen));
+    seen = await openFacility(facility(ZERO, []));
+    check('  and a range with nothing at all (every bucket 0) still says "No data for this period"', seen.empty, said(seen));
+    if (previousObserver === undefined) delete global.ResizeObserver;
+    else global.ResizeObserver = previousObserver;
+    if (previousFrame === undefined) delete global.requestAnimationFrame;
+    else global.requestAnimationFrame = previousFrame;
+    if (previousCancel === undefined) delete global.cancelAnimationFrame;
+    else global.cancelAnimationFrame = previousCancel;
+    elementProto.getBoundingClientRect = realRect;
+
+    check('section AW\'s only write was the one request sent and the one archive asked, each answered by the fetch stub; '
+        + 'nothing kept in the browser',
+      said(methods.filter((m) => m !== 'GET')) === said(['POST', 'POST']) && domStorage.writes === kept.dom,
+      said({ writes: methods.filter((m) => m !== 'GET'), jsdom: domStorage.writes - kept.dom }));
+    if (previousTZAW === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZAW;
   }
 
   console.error = origError;

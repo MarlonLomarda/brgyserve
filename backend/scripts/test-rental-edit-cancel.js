@@ -509,9 +509,21 @@ const ITEM_OFF = 'That item is not currently available for rental';
 // Postgres's own timestamptz text, as the functions' jsonb carries it.
 const pgTime = (isoText) => isoText.replace(/\.\d{3}Z$/, '+00:00');
 const sortedJson = (o) => JSON.stringify(Object.keys(o ?? {}).sort().reduce((acc, k) => ({ ...acc, [k]: o[k] }), {}));
-// RENTAL_FIELDS' columns plus derived_status: what POST / answers with.
+// RENTAL_FIELDS' columns plus derived_status: what POST / answers with for a
+// booking confirmed at once (a walk-in). Since R2c RENTAL_FIELDS reads
+// decline_reason and requested_at, each left out when null: a new booking has
+// a requested_at and no decline_reason.
 const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_datetime', 'purpose', 'quantity_requested',
-  'rental_items', 'request_id', 'return_note', 'returned_at', 'start_datetime', 'status'];
+  'rental_items', 'request_id', 'requested_at', 'return_note', 'returned_at', 'start_datetime', 'status'];
+// A resident's request (R2c): no charges key at all (a request has no charge),
+// and fee_if_approved, what approving it would charge.
+const RESIDENT_PENDING_KEYS = ['cancellation_reason', 'derived_status', 'end_datetime', 'fee_if_approved', 'purpose',
+  'quantity_requested', 'rental_items', 'request_id', 'requested_at', 'return_note', 'returned_at', 'start_datetime', 'status'];
+// Everything a row of GET /mine may carry, and its embeds: the allow-list the
+// whole-payload sweep holds the resident's payload to.
+const MINE_ROW_KEYS = [...new Set([...RENTAL_KEYS, ...RESIDENT_PENDING_KEYS, 'decline_reason', 'can_cancel_online', 'cancel_online_note'])];
+const MINE_ITEM_KEYS = ['fee', 'item_id', 'name', 'type'];
+const MINE_CHARGE_KEYS = ['amount', 'charge_id', 'declared_at', 'declared_method', 'declared_reference', 'status'];
 
 (async () => {
   console.log('Rental Edit and Cancel — real handlers, fake tables, no network');
@@ -531,39 +543,108 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     && res.db.rental_requests.length === freshDb().rental_requests.length;
   const overlapQuery = (res) => res.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'select'
     && c.filters.some(([op]) => op === 'lt' || op === 'gt'));
+  // R2c batch 4 (6 Nov 2026): a resident's POST looks up their OWN pending
+  // requests for the item at an overlapping time (the duplicate rule). That
+  // is the one overlap query the route may run; any other is a slot check of
+  // its own, which is the function's job.
+  const ownPendingLookup = (c) => c.table === 'rental_requests' && c.op === 'select'
+    && c.filters.some(([op, col, v]) => op === 'eq' && col === 'status' && v === 'pending')
+    && c.filters.some(([op]) => op === 'lt' || op === 'gt');
+  const ownPendingLookups = (res) => res.db.calls.filter(ownPendingLookup);
+  const slotQuery = (res) => res.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'select'
+    && c.filters.some(([op]) => op === 'lt' || op === 'gt') && !ownPendingLookup(c));
+  const hasFilter = (c, op, col, v) => !!c?.filters.some(([o, k, x]) => o === op && k === col && x === v);
 
+  // BATCH R2c (30 Oct 2026): a RESIDENT's booking is a request. It is stored
+  // pending, holds nothing (the database's rule, proven by
+  // test-027-in-transaction.sql), has no charge until the Secretary approves
+  // it, and sends no text. Walk-ins, and the Secretary's own booking, stay
+  // confirmed with their charge, exactly as before: the switch is keyed on the
+  // caller's role, never on borrower.walkIn.
+  const confirmedText = (qtyName, s, e) => `BrgyServe: your booking is CONFIRMED - ${qtyName} on ${dateFmt.format(new Date(s))}, ${timeFmt.format(new Date(s))} to ${timeFmt.format(new Date(e))}.`;
+  const whenText = (s, e) => `Monobloc Chair on ${dateFmt.format(new Date(s))}, ${timeFmt.format(new Date(s))}–${timeFmt.format(new Date(e))}`;
   let r = await book(RES_A, bookBody());
-  check('A resident\'s booking calls place_rental_booking once, confirmed and general as before, with their own record and account',
+  check('A resident\'s booking calls place_rental_booking once, PENDING and general, with their own record and account',
     r.rpcCalls().length === 1 && r.rpcCalls()[0].name === 'place_rental_booking'
       && sortedJson(r.rpcCalls()[0].args) === sortedJson({
         p_item_id: 802, p_requested_by_user_id: RES_A.user_id, p_resident_id: 9101,
         p_outside_borrower_name: null, p_outside_borrower_contact: null,
-        p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party', p_purpose_type: 'general', p_status: 'confirmed',
+        p_quantity: 3, p_start: bookStart, p_end: bookEnd, p_purpose: 'Birthday party', p_purpose_type: 'general', p_status: 'pending',
       }), JSON.stringify(r.rpcCalls()));
-  check('  answers 201 "Booking confirmed: …"', r.status === 201 && /^Booking confirmed: Monobloc Chair on /.test(r.body?.message || ''), said(r));
-  check('  the route inserts no booking itself and runs no overlap query of its own (the function does both)',
-    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'insert') && !overlapQuery(r),
-    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => c.op)));
-  check('  and deletes nothing afterwards (no post-insert race guard)', !r.db.calls.some((c) => c.op === 'delete')
-    && r.booking(NEW_ID)?.status === 'confirmed');
-  const newCharge = r.chargeOfBooking(NEW_ID);
-  check('  one RENTAL charge, UNPAID, fee x quantity (PHP 15), on the resident\'s account',
-    newCharge?.charge_type === 'RENTAL' && newCharge?.amount === 15 && newCharge?.status === 'UNPAID'
-      && newCharge?.user_id === RES_A.user_id, JSON.stringify(newCharge));
-  const bookNote = r.db.notifications;
-  check('  the borrower is notified once, in today\'s words, to their account and number',
-    bookNote.length === 1 && bookNote[0].user_id === RES_A.user_id && bookNote[0].destination === '09170000001'
-      && bookNote[0].message === `BrgyServe: your booking is CONFIRMED - 3x Monobloc Chair on ${dateFmt.format(new Date(bookStart))}, ${timeFmt.format(new Date(bookStart))} to ${timeFmt.format(new Date(bookEnd))}.`,
-    bookNote[0]?.message || '(none)');
-  check('  one CREATE row by the resident, with no purpose in it',
+  check('  answers 201 "Request sent: " and the item and time phrase "Booking confirmed: " used',
+    r.status === 201 && r.body?.message === `Request sent: ${whenText(bookStart, bookEnd)}.`, said(r));
+  check('  the route inserts no booking itself and runs no slot query of its own (the function does both); its one '
+      + 'overlap lookup is the resident\'s own pending requests for this item (the duplicate rule, batch 4)',
+    !r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'insert') && !slotQuery(r)
+      && ownPendingLookups(r).length === 1 && hasFilter(ownPendingLookups(r)[0], 'eq', 'resident_id', 9101)
+      && hasFilter(ownPendingLookups(r)[0], 'eq', 'item_id', 802),
+    JSON.stringify(r.db.calls.filter((c) => c.table === 'rental_requests').map((c) => [c.op, c.filters])));
+  check('  and deletes nothing afterwards (no post-insert race guard); the request is stored pending',
+    !r.db.calls.some((c) => c.op === 'delete') && r.booking(NEW_ID)?.status === 'pending', JSON.stringify(r.booking(NEW_ID)?.status));
+  check('  NO charge: the route inserts none, and the request has none',
+    !r.chargeOfBooking(NEW_ID) && !r.db.calls.some((c) => c.table === 'charges' && c.op === 'insert'),
+    JSON.stringify(r.chargeOfBooking(NEW_ID) ?? null));
+  check('  NO text: nobody is notified, the resident or the Secretary', r.db.notifications.length === 0,
+    r.db.notifications.map((n) => n.message).join(' | '));
+  check('  one CREATE row by the resident, status pending, with no purpose in it',
     r.db.activity_logs.length === 1 && r.db.activity_logs[0].action === 'CREATE' && r.db.activity_logs[0].record_id === NEW_ID
       && r.db.activity_logs[0].user_id === RES_A.user_id && sortedJson(r.db.activity_logs[0].new_value) === sortedJson({
       item_id: 802, resident_id: 9101, guest: false, walk_in: false, quantity_requested: 3,
-      start_datetime: bookStart, end_datetime: bookEnd, status: 'confirmed' }), JSON.stringify(r.db.activity_logs[0]?.new_value));
-  check('  the answer is the booking re-read with RENTAL_FIELDS (and derived_status), never the function\'s row',
-    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS)
-      && r.body.request.request_id === NEW_ID && Array.isArray(r.body.request.charges) && r.body.request.charges.length === 1,
-    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()));
+      start_datetime: bookStart, end_datetime: bookEnd, status: 'pending' }), JSON.stringify(r.db.activity_logs[0]?.new_value));
+  check('  the answer is the request re-read with RENTAL_FIELDS, derived pending, requested_at, fee_if_approved PHP 15, and NO '
+      + 'charges key and no decline_reason key (absent, not null or [])',
+    JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RESIDENT_PENDING_KEYS)
+      && r.body.request.request_id === NEW_ID && r.body.request.derived_status === 'pending'
+      && r.body.request.fee_if_approved === 15 && r.body.request.requested_at === iso(NOW),
+    JSON.stringify(r.body?.request));
+
+  // The charge insert cannot fail a request: there is none to make.
+  r = await book(RES_A, bookBody(), { setup: (db) => { db.failWhen = ({ table, op }) => (table === 'charges' && op === 'insert' ? { message: 'forced charge failure' } : null); } });
+  check('A resident\'s request never tries a charge: with charge inserts failing it is still 201, stored pending, nothing deleted',
+    r.status === 201 && r.booking(NEW_ID)?.status === 'pending' && !r.db.calls.some((c) => c.table === 'charges' && c.op !== 'select')
+      && !r.db.calls.some((c) => c.op === 'delete'), said(r));
+
+  // The slot itself is the database's (test-027-in-transaction.sql: a second
+  // pending request for the same free slot is accepted; an approved booking
+  // holds it). Here, what the route does with each answer for a request.
+  r = await book(RES_B, bookBody({ item_id: 801, quantity_requested: 1 }), { setup: (db) => {
+    db.rental_requests.push({ ...db.rental_requests.find((b) => b.request_id === 612), request_id: 613, item_id: 801, quantity_requested: 1,
+      start_datetime: bookStart, end_datetime: bookEnd, status: 'pending', requested_at: at(-1), decline_reason: null, purpose_type: 'general' });
+  } });
+  check('Two residents may file the same slot: B\'s request for the court A has a pending request on is sent to the function '
+      + 'with no slot check of the route\'s own, and stored pending beside A\'s (pending holds nothing)',
+    r.status === 201 && r.rpcCalls().length === 1 && r.rpcCalls()[0].args.p_status === 'pending' && !slotQuery(r)
+      && r.booking(613)?.status === 'pending' && r.booking(NEW_ID)?.status === 'pending' && r.booking(NEW_ID)?.resident_id === 9102,
+    `${said(r)}; ${JSON.stringify([r.booking(613)?.status, r.booking(NEW_ID)?.status])}`);
+  const takenClash = { start: pgTime(bookStart), end: pgTime(bookEnd) };
+  r = await book(RES_A, bookBody({ item_id: 801, quantity_requested: 1 }), { setup: (db) => { db.rpcAnswer.place_rental_booking = { ok: false, code: 'FACILITY_TAKEN', clashes: [takenClash] }; } });
+  check('A resident\'s request for a slot an APPROVED booking holds is still refused (the function\'s FACILITY_TAKEN, asked '
+      + 'with p_status pending): 409 in the booker\'s words, nothing written',
+    r.status === 409 && r.rpcCalls()[0]?.args?.p_status === 'pending' && nothingWritten(r)
+      && r.body?.error === `The Covered Court is already booked from ${timeFmt.format(new Date(takenClash.start))} to ${timeFmt.format(new Date(takenClash.end))} on that date — please pick a different time.`,
+    said(r));
+
+  // The Secretary booking with neither a resident nor a guest gets her own
+  // record. borrower.walkIn is false there, so a switch keyed on walkIn would
+  // make her wait for her own approval.
+  const secLinked = (db) => {
+    db.resident_records.push({ resident_id: 9103, first_name: 'Sec', middle_name: null, last_name: 'Probe', suffix: null, contact_number: '09170000003', is_archived: false });
+    db.profiles.find((p) => p.user_id === SEC.user_id).resident_id = 9103;
+  };
+  r = await book(SEC, bookBody(), { setup: secLinked });
+  check('The Secretary\'s own booking (no resident_id, no guest) stays CONFIRMED: p_status confirmed, stored confirmed, '
+      + '"Booking confirmed: …"',
+    r.status === 201 && r.rpcCalls()[0]?.args?.p_status === 'confirmed' && r.rpcCalls()[0]?.args?.p_resident_id === 9103
+      && r.booking(NEW_ID)?.status === 'confirmed' && r.body?.message === `Booking confirmed: ${whenText(bookStart, bookEnd)}.`,
+    `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args?.p_status)}`);
+  check('  with its charge (UNPAID PHP 15, on her account), the CONFIRMED text, and CREATE status confirmed, walk_in false',
+    r.chargeOfBooking(NEW_ID)?.status === 'UNPAID' && r.chargeOfBooking(NEW_ID)?.amount === 15 && r.chargeOfBooking(NEW_ID)?.user_id === SEC.user_id
+      && r.db.notifications.length === 1 && r.db.notifications[0].message === confirmedText('3x Monobloc Chair', bookStart, bookEnd)
+      && r.db.activity_logs[0]?.new_value?.status === 'confirmed' && r.db.activity_logs[0]?.new_value?.walk_in === false,
+    JSON.stringify({ charge: r.chargeOfBooking(NEW_ID), note: r.db.notifications[0]?.message, log: r.db.activity_logs[0]?.new_value }));
+  check('  and its answer keeps its charge in the charges key (a booking, not a request)',
+    Array.isArray(r.body?.request?.charges) && r.body.request.charges.length === 1 && !('fee_if_approved' in (r.body?.request ?? {})),
+    JSON.stringify(r.body?.request && Object.keys(r.body.request)));
 
   r = await book(SEC, bookBody({ outside_borrower_name: '  Pedro Guest ', outside_borrower_contact: '09179990000' }));
   check('A guest walk-in calls the function with the guest\'s name and number, no resident, filed by the Secretary',
@@ -577,6 +658,10 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     JSON.stringify(r.body));
   check('  the charge has no account, and the guest\'s number gets the notice',
     r.chargeOfBooking(NEW_ID)?.user_id === null && r.db.notifications[0]?.destination === '09179990000');
+  check('  still CONFIRMED at once: stored confirmed, UNPAID charge, the CONFIRMED text, "Walk-in booking recorded …"',
+    r.booking(NEW_ID)?.status === 'confirmed' && r.chargeOfBooking(NEW_ID)?.status === 'UNPAID'
+      && r.db.notifications[0]?.message === confirmedText('3x Monobloc Chair', bookStart, bookEnd)
+      && r.body?.message === `Walk-in booking recorded for Pedro Guest: ${whenText(bookStart, bookEnd)}.`, said(r));
 
   r = await book(SEC, bookBody({ resident_id: 9102 }));
   check('A walk-in for a registered resident calls the function with that resident, filed by the Secretary',
@@ -584,6 +669,12 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
       && r.rpcCalls()[0]?.args?.p_outside_borrower_name === null, `${said(r)}; ${JSON.stringify(r.rpcCalls()[0]?.args)}`);
   check('  the charge goes on resident B\'s account, never the Secretary\'s', r.chargeOfBooking(NEW_ID)?.user_id === RES_B.user_id,
     JSON.stringify(r.chargeOfBooking(NEW_ID)));
+  check('  still CONFIRMED at once: p_status confirmed, stored confirmed, the CONFIRMED text to resident B, CREATE status confirmed',
+    r.rpcCalls()[0]?.args?.p_status === 'confirmed' && r.booking(NEW_ID)?.status === 'confirmed'
+      && r.db.notifications.length === 1 && r.db.notifications[0].user_id === RES_B.user_id
+      && r.db.notifications[0].message === confirmedText('3x Monobloc Chair', bookStart, bookEnd)
+      && r.db.activity_logs[0]?.new_value?.status === 'confirmed' && r.db.activity_logs[0]?.new_value?.walk_in === true,
+    JSON.stringify({ p_status: r.rpcCalls()[0]?.args?.p_status, note: r.db.notifications[0]?.message }));
 
   r = await book(RES_A, bookBody({ quantity_requested: 0 }));
   check('Body validation still runs first: quantity 0 is a 400 and the function is never called',
@@ -594,8 +685,9 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   check('  and so does who the borrower is (an account with no record: 409, no call)', r.status === 409 && r.rpcCalls().length === 0, said(r));
 
   const chargeFails = (db) => { db.failWhen = ({ table, op }) => (table === 'charges' && op === 'insert' ? { message: 'forced charge failure' } : null); };
-  r = await book(RES_A, bookBody(), { setup: chargeFails });
-  check('If the charge cannot be created, the booking the function made is deleted and the error is today\'s',
+  // A walk-in, since a resident's request (R2c) makes no charge to fail.
+  r = await book(SEC, bookBody({ resident_id: 9102 }), { setup: chargeFails });
+  check('If a walk-in\'s charge cannot be created, the booking the function made is deleted and the error is today\'s',
     r.status === 'threw' && /^Booking reverted — failed to create its charge: forced charge failure/.test(r.body?.error || '')
       && !r.booking(NEW_ID) && r.db.calls.some((c) => c.table === 'rental_requests' && c.op === 'delete'),
     `${said(r)}; booking ${JSON.stringify(r.booking(NEW_ID) ?? null)}`);
@@ -608,6 +700,16 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     r.status === 201 && !JSON.stringify(r.body).includes('09179990000')
       && JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RENTAL_KEYS),
     `${said(r)}; ${JSON.stringify(r.body?.request)}`);
+  // Only the re-read (by request_id) fails here: since batch 4 a resident's
+  // POST also looks up their own pending requests first, and a failure THERE
+  // is a 500 (checked under the duplicate rule), not this fallback.
+  r = await book(RES_A, bookBody(), {
+    setup: (db) => { db.failWhen = ({ table, op, filters }) => (table === 'rental_requests' && op === 'select'
+      && filters.some(([o, c]) => o === 'eq' && c === 'request_id') ? { message: 'forced read failure' } : null); },
+  });
+  check('  and a resident\'s request answered from that fallback has the request\'s keys too: no charges key, fee_if_approved',
+    r.status === 201 && JSON.stringify(Object.keys(r.body?.request ?? {}).sort()) === JSON.stringify(RESIDENT_PENDING_KEYS)
+      && r.body.request.fee_if_approved === 15, `${said(r)}; ${JSON.stringify(r.body?.request)}`);
 
   // Each coded refusal: today's status and words, and nothing written.
   const clashA = { start: pgTime(manilaIso(BOOK_DAY, '08:00')), end: pgTime(manilaIso(BOOK_DAY, '10:00')) };
@@ -1671,8 +1773,12 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
       `The Covered Court is already booked from ${timeFmt.format(new Date(fac.start))} to ${timeFmt.format(new Date(fac.end))} on that date, so this request cannot be approved.`],
     ['NOT_ENOUGH_LEFT with 2 stuck', 630, notEnough({ stuck: 2 }), 409,
       'Only 3 of 100 Monobloc Chair are free for that time; this request asks for 10, so it cannot be approved. 2 are overdue and not yet returned.'],
-    ['QUANTITY_INVALID MORE_THAN_EXIST (stock lowered since)', 630, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 10, quantity_available: 5 }, 400,
-      'Only 5 units of Monobloc Chair exist — you asked for 10'],
+    // R2c: in the Secretary's words, not a booker's "you asked for": she
+    // cannot change a request's quantity, only decline it.
+    ['QUANTITY_INVALID MORE_THAN_EXIST (stock lowered since)', 630, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 10, quantity_available: 5 }, 409,
+      'Only 5 units of Monobloc Chair exist now, and this request is for 10, so it cannot be approved. Decline it.'],
+    ['QUANTITY_INVALID MORE_THAN_EXIST, one unit left', 630, { ok: false, code: 'QUANTITY_INVALID', reason: 'MORE_THAN_EXIST', requested: 10, quantity_available: 1 }, 409,
+      'Only 1 unit of Monobloc Chair exists now, and this request is for 10, so it cannot be approved. Decline it.'],
     ['BOOKING_NOT_FOUND (deleted under the lock)', 630, { ok: false, code: 'BOOKING_NOT_FOUND' }, 404, 'Booking not found'],
   ];
   for (const [what, id, answer, status, words] of APPROVE_REFUSALS) {
@@ -1806,6 +1912,133 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
       && r.booking(630)?.status === 'confirmed' && r.chargeOfBooking(630)?.status === 'UNPAID'
       && r.db.activity_logs.length === 0, said(r));
 
+  // -- the cancel's sentence follows the row's status (batch 4, 6 Nov 2026) ---------
+  // A pending row is a request, so cancelling it says "request"; every other
+  // status keeps "booking". Decided by the status the route read, never by a role.
+  const REQUEST_CANCELLED = 'Your request has been cancelled.';
+  const BOOKING_CANCELLED = 'Your booking has been cancelled.';
+  r = await mine(630, {}, { setup: withPending });
+  check(`The resident's cancel of a PENDING request answers "${REQUEST_CANCELLED}"`,
+    r.status === 200 && r.body?.message === REQUEST_CANCELLED, said(r));
+  r = await mine(637, {}, { setup: withPending });
+  check('  and so does one two hours from its start', r.status === 200 && r.body?.message === REQUEST_CANCELLED, said(r));
+  r = await mine(601);
+  check(`  while the cancel of a CONFIRMED booking still answers "${BOOKING_CANCELLED}"`,
+    r.status === 200 && r.body?.message === BOOKING_CANCELLED, said(r));
+  r = await mine(612);
+  check('  (a confirmed booking with no charge too)', r.status === 200 && r.body?.message === BOOKING_CANCELLED, said(r));
+
+  // -- one pending request per item and time, per resident (batch 4, 6 Nov 2026) -----
+  // Decided by the developer after the local walkthrough: a RESIDENT's second
+  // request for the SAME item at an overlapping time, while their first is
+  // still PENDING, is refused before place_rental_booking is called. Overlap
+  // is the database's own (rental_holds' in_use, migration 027): start < the
+  // other's end AND the other's start < end, so back-to-back windows do not
+  // overlap. Only the resident's own pending requests count, found from the
+  // session, never the body; walk-ins and the Secretary's own booking never
+  // meet the rule (the switch's key, req.user.role === 'resident').
+  section('The duplicate rule — one pending request per item and time, per resident (batch 4)');
+  const DUPLICATE = 'You already have a pending request for this item at an overlapping time. Cancel it under My rentals first if you want to change it.';
+  const DUP_ID = 640;
+  // A's pending request for 3 chairs on BOOK_DAY, 08:00 to 10:00 (bookBody's slot).
+  const firstRequest = (extra = {}) => (db) => {
+    db.rental_requests.push({ ...db.rental_requests.find((b) => b.request_id === 612), request_id: DUP_ID, quantity_requested: 3,
+      start_datetime: bookStart, end_datetime: bookEnd, status: 'pending', requested_at: at(-1), decline_reason: null,
+      purpose_type: 'general', ...extra });
+  };
+  const newId = DUP_ID + 1;
+  const refusedClean = (res) => res.status === 409 && res.body?.error === DUPLICATE && res.rpcCalls().length === 0
+    && !res.db.calls.some((c) => c.op === 'insert' || c.op === 'update' || c.op === 'delete')
+    && res.db.notifications.length === 0 && res.db.activity_logs.length === 0
+    && res.db.rental_requests.length === freshDb().rental_requests.length + 1;
+
+  r = await book(RES_A, bookBody(), { setup: firstRequest() });
+  check('Same resident, same item, the same time while the first is PENDING: 409 in the decided words, and nothing written '
+      + '(no function call, no row, no charge, no log, no text)', refusedClean(r), said(r));
+  r = await book(RES_A, bookBody({ start_time: '09:00', end_time: '11:00' }), { setup: firstRequest() });
+  check('  an overlapping time (09:00 to 11:00 against 08:00 to 10:00) is refused the same way', refusedClean(r), said(r));
+  r = await book(RES_A, bookBody({ start_time: '08:30', end_time: '09:30' }), { setup: firstRequest() });
+  check('  and a time inside the first (08:30 to 09:30) too', refusedClean(r), said(r));
+  r = await book(RES_A, bookBody({ start_time: '07:00', end_time: '12:00' }), { setup: firstRequest() });
+  check('  and a time around the first (07:00 to 12:00) too', refusedClean(r), said(r));
+  const lookup = ownPendingLookups(r)[0];
+  check('  the lookup is keyed on the session\'s own record and this item, pending only, by start and end',
+    ownPendingLookups(r).length === 1 && hasFilter(lookup, 'eq', 'resident_id', 9101) && hasFilter(lookup, 'eq', 'item_id', 802)
+      && hasFilter(lookup, 'lt', 'start_datetime', manilaIso(BOOK_DAY, '12:00'))
+      && hasFilter(lookup, 'gt', 'end_datetime', manilaIso(BOOK_DAY, '07:00')),
+    JSON.stringify(lookup?.filters));
+
+  r = await book(RES_B, bookBody(), { setup: firstRequest() });
+  check('A DIFFERENT resident asking for the same item and slot is still accepted: 201, pending, beside A\'s',
+    r.status === 201 && r.booking(newId)?.status === 'pending' && r.booking(newId)?.resident_id === 9102
+      && r.booking(DUP_ID)?.status === 'pending', said(r));
+  r = await book(RES_A, bookBody({ start_time: '10:00', end_time: '12:00' }), { setup: firstRequest() });
+  check('Same resident, same item, BACK TO BACK after the first (10:00 to 12:00, starting at its end): accepted',
+    r.status === 201 && r.booking(newId)?.status === 'pending', said(r));
+  r = await book(RES_A, bookBody({ start_time: '07:00', end_time: '08:00' }), { setup: firstRequest() });
+  check('  and back to back before it (07:00 to 08:00, ending at its start): accepted',
+    r.status === 201 && r.booking(newId)?.status === 'pending', said(r));
+  r = await book(RES_A, bookBody({ date: dayAhead(6) }), { setup: firstRequest() });
+  check('  and the same time on a different date: accepted', r.status === 201 && r.booking(newId)?.status === 'pending', said(r));
+  r = await book(RES_A, bookBody({ item_id: 801, quantity_requested: 1 }), { setup: firstRequest() });
+  check('Same resident, a DIFFERENT item (the court) at the same time: accepted',
+    r.status === 201 && r.booking(newId)?.item_id === 801 && r.booking(newId)?.status === 'pending', said(r));
+
+  for (const [what, extra] of [
+    ['DECLINED', { status: 'declined', decline_reason: DECLINED_WHY, processed_by_user_id: SEC.user_id }],
+    ['CANCELLED', { status: 'cancelled' }],
+    // Stored pending, its start already passed (derived expired), still running into the new window.
+    ['EXPIRED', { start_datetime: at(-1), end_datetime: bookEnd }],
+  ]) {
+    r = await book(RES_A, bookBody(), { setup: firstRequest(extra) });
+    check(`Same resident, same item and time, after the first was ${what}: accepted (201, pending)`,
+      r.status === 201 && r.booking(newId)?.status === 'pending' && r.body?.error === undefined, said(r));
+  }
+
+  r = await book(RES_A, bookBody({ item_id: 801, quantity_requested: 1 }), { setup: (db) => {
+    firstRequest({ item_id: 801, quantity_requested: 1, status: 'confirmed' })(db);
+    db.rpcAnswer.place_rental_booking = { ok: false, code: 'FACILITY_TAKEN', clashes: [takenClash] };
+  } });
+  check('Same resident, same item and time, when the first is APPROVED: not the duplicate words, but the function\'s own '
+      + 'slot refusal (the approved booking holds the slot)',
+    r.status === 409 && r.rpcCalls().length === 1 && r.body?.error !== DUPLICATE && /already booked from/.test(r.body?.error || ''),
+    said(r));
+
+  r = await book(SEC, bookBody({ resident_id: 9101 }), { setup: firstRequest() });
+  check('A walk-in the Secretary encodes for resident A, at the time A has a pending request for: never meets the rule '
+      + '(201, confirmed, no own-pending lookup)',
+    r.status === 201 && r.booking(newId)?.status === 'confirmed' && ownPendingLookups(r).length === 0, said(r));
+  r = await book(SEC, bookBody(), { setup: both(secLinked, firstRequest({ resident_id: 9103, requested_by_user_id: SEC.user_id })) });
+  check('  nor the Secretary\'s own booking, with a pending row on her own record at that time (201, confirmed, no lookup)',
+    r.status === 201 && r.booking(newId)?.status === 'confirmed' && ownPendingLookups(r).length === 0, said(r));
+  r = await book(SEC, bookBody({ outside_borrower_name: 'Pedro Guest', outside_borrower_contact: '09179990000' }), { setup: firstRequest() });
+  check('  nor a guest walk-in (201, confirmed, no lookup)',
+    r.status === 201 && r.booking(newId)?.status === 'confirmed' && ownPendingLookups(r).length === 0, said(r));
+
+  r = await book(RES_A, bookBody(), { setup: (db) => {
+    firstRequest()(db);
+    db.rental_items.find((i) => i.item_id === 802).is_active = false;
+    db.rpcAnswer.place_rental_booking = { ok: false, code: 'ITEM_INACTIVE' };
+  } });
+  check('An INACTIVE item is left to the function\'s refusal, as the booking rules are: "not currently available", not the '
+      + 'duplicate words, and no lookup', r.status === 400 && r.body?.error === ITEM_OFF && ownPendingLookups(r).length === 0, said(r));
+
+  // The body names someone else: the session decides, both ways round.
+  r = await book(RES_A, bookBody({ resident_id: 9102 }), { setup: firstRequest() });
+  check('Keyed on the SESSION: A, with a pending request, sending resident_id 9102 in the body is still refused',
+    refusedClean(r), said(r));
+  r = await book(RES_A, bookBody({ resident_id: 9102 }), { setup: firstRequest({ resident_id: 9102, requested_by_user_id: RES_B.user_id }) });
+  check('  and A, with none, sending the resident_id of B (who has one at that time) is accepted, as A\'s own',
+    r.status === 201 && r.booking(newId)?.resident_id === 9101, said(r));
+
+  r = await book(RES_A, bookBody(), { setup: (db) => {
+    db.failWhen = ({ table, op, filters }) => (table === 'rental_requests' && op === 'select'
+      && filters.some(([o, c, v]) => o === 'eq' && c === 'status' && v === 'pending') ? { message: 'lookup exploded' } : null);
+  } });
+  check('A database error in the lookup is a 500 (thrown), never read as "no duplicate": no function call, nothing written',
+    r.status === 'threw' && r.rpcCalls().length === 0 && !r.db.calls.some((c) => c.op === 'insert' || c.op === 'update' || c.op === 'delete')
+      && r.db.activity_logs.length === 0, said(r));
+
   // -- what the lists say ----------------------------------------------------------
   r = await read('/mine', RES_A, '', withPending);
   const minePending = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
@@ -1817,8 +2050,121 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
       && minePending[632]?.can_cancel_online === false && minePending[632]?.cancel_online_note === null
       && minePending[633]?.can_cancel_online === false && minePending[633]?.cancel_online_note === null,
     JSON.stringify([630, 637, 632, 633].map((id) => [id, minePending[id]?.can_cancel_online, minePending[id]?.cancel_online_note])));
-  check('  the resident\'s projection is unchanged in this batch: no decline_reason, purpose_type or requested_at key',
-    Object.values(minePending).every((b) => !('decline_reason' in b) && !('purpose_type' in b) && !('requested_at' in b)));
+  // R2c: the resident is told why a request was declined, when it was made,
+  // and what approving it would cost. Each key is ABSENT when there is
+  // nothing to say, never null (CLAUDE.md, a withheld or empty field).
+  const mineList = Object.values(minePending);
+  check('  decline_reason only on the declined #633, as its text; ABSENT (never null) on every other row',
+    minePending[633]?.decline_reason === DECLINED_WHY
+      && mineList.filter((b) => b.request_id !== 633).every((b) => !('decline_reason' in b)),
+    JSON.stringify(mineList.filter((b) => 'decline_reason' in b).map((b) => [b.request_id, b.decline_reason])));
+  check('  requested_at on the requests that stored one (#630, #632, #633), ABSENT on bookings made before migration 027 (#601)',
+    [630, 632, 633].every((id) => minePending[id]?.requested_at === at(-2)) && !!minePending[601] && !('requested_at' in minePending[601]),
+    JSON.stringify([630, 632, 633, 601].map((id) => [id, minePending[id]?.requested_at])));
+  const MINE_FEES = { 630: 50, 634: 500, 636: 0, 637: 50 };
+  check('  fee_if_approved on each request still waiting (10 chairs PHP 50, the court PHP 500, 3 free mats PHP 0 as 0), and '
+      + 'ABSENT on every other row: the expired #632, the declined #633, confirmed and cancelled bookings',
+    Object.entries(MINE_FEES).every(([id, fee]) => minePending[id]?.derived_status === 'pending' && minePending[id]?.fee_if_approved === fee)
+      && mineList.filter((b) => !(b.request_id in MINE_FEES)).every((b) => !('fee_if_approved' in b)) && mineList.length >= 12,
+    JSON.stringify(mineList.filter((b) => 'fee_if_approved' in b).map((b) => [b.request_id, b.fee_if_approved])));
+  check('  a request never approved (pending, expired, declined) has NO charges key; every booking keeps it',
+    [630, 632, 633, 634, 636, 637].every((id) => minePending[id] && !('charges' in minePending[id]))
+      && mineList.filter((b) => ![630, 632, 633, 634, 636, 637].includes(b.request_id)).every((b) => 'charges' in b),
+    JSON.stringify(mineList.map((b) => [b.request_id, 'charges' in b])));
+  check('  still no purpose_type key (the waiver is the Secretary\'s business)', mineList.every((b) => !('purpose_type' in b)));
+  // The whole payload: only resident A's rows, only allow-listed keys at every
+  // level, and nobody else's name, number, account or booking anywhere in it.
+  const mineJson = JSON.stringify(r.body);
+  const strayKeys = mineList.flatMap((b) => [
+    ...Object.keys(b).filter((k) => !MINE_ROW_KEYS.includes(k)),
+    ...Object.keys(b.rental_items || {}).filter((k) => !MINE_ITEM_KEYS.includes(k)).map((k) => `rental_items.${k}`),
+    ...[].concat(b.charges || []).flatMap((c) => Object.keys(c).filter((k) => !MINE_CHARGE_KEYS.includes(k)).map((k) => `charges.${k}`)),
+  ]);
+  const ownIds = freshDb().rental_requests.filter((b) => b.resident_id === 9101).map((b) => b.request_id).concat([630, 632, 633, 634, 636, 637]).sort();
+  const LEAKS = ['Pedro Guest', '09179990000', '09170000002', '09170000001', 'Ben', 'Probe', 'requested_by', 'processed_by', 'resident_id',
+    'outside_borrower', 'purpose_type', 'funeral', 'paymongo', 'username', 'email', 'quantity_available', String(SEC.user_id), String(RES_B.user_id)];
+  check('  the whole payload: resident A\'s rows only, every key on the allow-list (row, item, charge), and none of another '
+      + 'party\'s name, number, account or the booking\'s filer anywhere in it',
+    sameJson(mineList.map((b) => b.request_id).sort(), ownIds) && strayKeys.length === 0 && LEAKS.every((s) => !mineJson.includes(s)),
+    JSON.stringify({ ids: mineList.map((b) => b.request_id).sort(), strayKeys: [...new Set(strayKeys)], leaks: LEAKS.filter((s) => mineJson.includes(s)) }));
+
+  // -- POST /mine/:id/pay on a booking with no charge (R2c) -----------------------------
+  // A request has no charge until it is approved, so "no charge yet, contact
+  // the barangay" would send the resident to the hall for nothing.
+  const pay = (id, opts = {}) => call({ method: 'post', path: '/mine/:id/pay', user: RES_A, id, body: { method: 'onsite' }, ...opts });
+  const WAITING_PAY = "This request is waiting for the Secretary's approval. You can pay once it is approved.";
+  const NOT_APPROVED_PAY = 'This request was not approved, so there is nothing to pay.';
+  const nothingPaid = (res) => !res.db.calls.some((c) => c.op !== 'select') && res.db.activity_logs.length === 0;
+  for (const [what, id, words] of [['a pending request', 630, WAITING_PAY], ['a pending request 2 hours ahead', 637, WAITING_PAY],
+    ['a declined request', 633, NOT_APPROVED_PAY], ['an expired request', 632, NOT_APPROVED_PAY]]) {
+    r = await pay(id, { setup: withPending });
+    check(`Pay on ${what}: 409 "${words}", nothing written`, r.status === 409 && r.body?.error === words && nothingPaid(r), said(r));
+  }
+  r = await pay(612);
+  check('  any other booking with no charge (confirmed #612) keeps the old 409 "This booking has no charge yet — contact the barangay"',
+    r.status === 409 && r.body?.error === 'This booking has no charge yet — contact the barangay' && nothingPaid(r), said(r));
+  r = await pay(601);
+  check('Pay onsite on a confirmed booking with an UNPAID charge is unchanged: 200, declared onsite, one DECLARE_PAYMENT row',
+    r.status === 200 && r.body?.message === "Noted — please pay in cash at the barangay hall treasurer's desk."
+      && r.chargeOfBooking(601)?.declared_method === 'onsite' && r.db.activity_logs[0]?.action === 'DECLARE_PAYMENT', said(r));
+  r = await pay(605);
+  check('  and another resident\'s booking is still a 404', r.status === 404 && r.body?.error === 'Booking not found', said(r));
+
+  // -- end to end: a request resident A files, then decided (R2c) ------------------------
+  // Filed through the real POST / handler, then decided by the real approve,
+  // decline and cancel handlers on the SAME tables (carried over).
+  const carry = (from) => (db) => {
+    db.rental_requests = structuredClone(from.db.rental_requests);
+    db.charges = structuredClone(from.db.charges);
+  };
+  const filed = await book(RES_A, bookBody());
+  r = await call({ method: 'post', path: '/:id/approve', user: SEC, id: NEW_ID, setup: carry(filed) });
+  check('End to end: A\'s request from POST / (pending, no charge) is approved by the real handler: 200, confirmed, one UNPAID '
+      + 'RENTAL charge of PHP 15 on A\'s account, the APPROVED text',
+    filed.status === 201 && filed.booking(NEW_ID)?.status === 'pending' && !filed.chargeOfBooking(NEW_ID)
+      && r.status === 200 && r.booking(NEW_ID)?.status === 'confirmed' && r.chargeOfBooking(NEW_ID)?.amount === 15
+      && r.chargeOfBooking(NEW_ID)?.status === 'UNPAID' && r.chargeOfBooking(NEW_ID)?.user_id === RES_A.user_id
+      && r.db.notifications.length === 1 && r.db.notifications[0].message
+        === `BrgyServe: your booking of 3x Monobloc Chair on ${schedule(bookStart, bookEnd)} has been APPROVED. Please pay PHP 15.00 under My rentals or at the barangay hall.`,
+    `${said(filed)} / ${said(r)}; ${r.db.notifications[0]?.message}`);
+  check('  the fee A was shown when filing (fee_if_approved) is the charge approval created',
+    filed.body?.request?.fee_if_approved === r.chargeOfBooking(NEW_ID)?.amount,
+    `${filed.body?.request?.fee_if_approved} against ${r.chargeOfBooking(NEW_ID)?.amount}`);
+  const approvedState = r;
+  r = await read('/mine', RES_A, '', carry(approvedState));
+  const nowApproved = (r.body?.requests || []).find((b) => b.request_id === NEW_ID);
+  check('  then My rentals reads it confirmed, its UNPAID charge in the charges key, no fee_if_approved',
+    nowApproved?.derived_status === 'confirmed' && nowApproved?.charges?.[0]?.status === 'UNPAID' && !('fee_if_approved' in nowApproved),
+    JSON.stringify(nowApproved));
+  r = await pay(NEW_ID, { setup: carry(approvedState) });
+  check('  and Pay onsite works on it: 200, declared onsite', r.status === 200 && r.chargeOfBooking(NEW_ID)?.declared_method === 'onsite', said(r));
+
+  r = await call({ method: 'post', path: '/:id/decline', user: SEC, id: NEW_ID, body: { reason: DECLINED_WHY }, setup: carry(filed) });
+  check('End to end: A\'s request from POST / is declined by the real handler: 200, declined with the reason, still no charge, '
+      + 'the declined text to A',
+    r.status === 200 && r.booking(NEW_ID)?.status === 'declined' && r.booking(NEW_ID)?.decline_reason === DECLINED_WHY
+      && !r.chargeOfBooking(NEW_ID) && r.db.notifications[0]?.user_id === RES_A.user_id
+      && r.db.notifications[0]?.message === `BrgyServe: your booking request for Monobloc Chair on ${dateFmt.format(new Date(bookStart))} was declined. Reason: ${DECLINED_WHY}.`,
+    `${said(r)}; ${r.db.notifications[0]?.message}`);
+  const declinedState = r;
+  r = await read('/mine', RES_A, '', carry(declinedState));
+  const nowDeclined = (r.body?.requests || []).find((b) => b.request_id === NEW_ID);
+  check('  then My rentals reads it declined, with decline_reason, and no charges or fee_if_approved key',
+    nowDeclined?.derived_status === 'declined' && nowDeclined?.decline_reason === DECLINED_WHY
+      && !('charges' in nowDeclined) && !('fee_if_approved' in nowDeclined), JSON.stringify(nowDeclined));
+  r = await pay(NEW_ID, { setup: carry(declinedState) });
+  check('  and Pay says there is nothing to pay', r.status === 409 && r.body?.error === NOT_APPROVED_PAY, said(r));
+
+  r = await mine(NEW_ID, {}, { setup: carry(filed) });
+  check('End to end: A withdraws her own request from POST /: 200, cancelled, no charge to void, one CANCEL row pending to '
+      + 'cancelled, charge NONE, no text',
+    r.status === 200 && r.booking(NEW_ID)?.status === 'cancelled' && !r.chargeOfBooking(NEW_ID)
+      && !r.db.calls.some((c) => c.table === 'charges' && c.op !== 'select')
+      && r.db.activity_logs.length === 1 && sameJson(r.db.activity_logs[0].old_value, { status: 'pending' })
+      && r.db.activity_logs[0].new_value?.charge_outcome === 'NONE' && r.db.notifications.length === 0, said(r));
+  check('  the answer is the resident\'s view: cancelled, no decline_reason key, no fee_if_approved',
+    r.body?.request?.derived_status === 'cancelled' && !('decline_reason' in (r.body?.request ?? {})) && !('fee_if_approved' in (r.body?.request ?? {})),
+    JSON.stringify(r.body?.request && Object.keys(r.body.request)));
 
   r = await read('/', SEC, '', withPending);
   const secPending = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
@@ -1854,12 +2200,18 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
   const listed = Object.fromEntries((r.body?.requests || []).map((b) => [b.request_id, b]));
   const mineRead = await read('/mine', RES_A, '', both(withPending, chairsMarked));
   check('GET /: the item\'s funeral_eligible is in every row\'s item, true on the marked chairs; the resident\'s GET /mine '
-      + 'is unchanged, with neither funeral_eligible nor fee_if_approved',
+      + 'never carries funeral_eligible, and carries fee_if_approved only on its requests still waiting (R2c)',
     Object.values(listed).length > 0 && Object.values(listed).every((b) => 'funeral_eligible' in (b.rental_items || {}))
       && listed[630]?.rental_items?.funeral_eligible === true
-      && (mineRead.body?.requests || []).length > 0 && mineRead.body.requests.every((b) => !('fee_if_approved' in b)
+      && (mineRead.body?.requests || []).length > 0
+      && mineRead.body.requests.every((b) => ('fee_if_approved' in b) === (b.derived_status === 'pending')
         && !('funeral_eligible' in (b.rental_items || {}))),
     JSON.stringify([630, 634].map((id) => listed[id]?.rental_items?.funeral_eligible)));
+  // The resident's fee and the Secretary's are the one helper's answer.
+  const mineFees = Object.fromEntries((mineRead.body?.requests || []).filter((b) => 'fee_if_approved' in b).map((b) => [b.request_id, b.fee_if_approved]));
+  check('  and for each of resident A\'s waiting requests, My rentals\' fee_if_approved is the Secretary\'s list\'s, to the centavo',
+    Object.keys(mineFees).length === 4 && Object.entries(mineFees).every(([id, fee]) => listed[id]?.fee_if_approved === fee),
+    JSON.stringify(Object.entries(mineFees).map(([id, fee]) => [id, fee, listed[id]?.fee_if_approved])));
   const FEES = { 630: 50, 631: 50, 634: 500, 635: 10, 636: 0, 637: 50 };
   const notWaiting = Object.values(listed).filter((b) => b.derived_status !== 'pending');
   check('GET /: every request still waiting carries fee_if_approved, item fee x quantity (10 chairs PHP 50, the court PHP 500, '
@@ -1905,12 +2257,36 @@ const RENTAL_KEYS = ['cancellation_reason', 'charges', 'derived_status', 'end_da
     r.status === 200 && sameJson(r.body?.by_status?.map((s) => s.status), ['confirmed', 'cancelled', 'returned', 'returned_late', 'returned_with_issue']),
     JSON.stringify(r.body?.by_status));
   const usedBefore = r.body?.totals?.bookings_excluding_cancelled;
+  // The same tables as withPending (its Rubber Mat item included), minus the
+  // eight requests: what the report must still say with them on file.
+  const REQUEST_IDS = [630, 631, 632, 633, 634, 635, 636, 637];
+  const plain = (await utilization((db) => { withPending(db); db.rental_requests = db.rental_requests.filter((b) => !REQUEST_IDS.includes(b.request_id)); })).body;
   r = await utilization(withPending);
-  check('With pending and declined requests on file: by_status adds them, with their counts',
-    r.status === 200 && r.body?.by_status?.find((s) => s.status === 'pending')?.count === 7
-      && r.body?.by_status?.find((s) => s.status === 'declined')?.count === 1, JSON.stringify(r.body?.by_status));
+  // R2c: requests (pending, declined, expired) are listed in by_status, each
+  // in its own bucket, and are in NO total and NO usage figure. An expired
+  // request (stored pending, its start passed) is its own bucket, never
+  // counted as one still waiting. Every key name stays: the screen and the
+  // PDF read them.
+  const statusCount = (body, s) => body?.by_status?.find((x) => x.status === s)?.count;
+  check('With requests on file: by_status lists pending 6 (still waiting), declined 1 and expired 1 (#632, start passed) as '
+      + 'separate buckets, after the five, in that order',
+    r.status === 200 && sameJson(r.body?.by_status?.map((s) => s.status),
+      ['confirmed', 'cancelled', 'returned', 'returned_late', 'returned_with_issue', 'pending', 'declined', 'expired'])
+      && statusCount(r.body, 'pending') === 6 && statusCount(r.body, 'declined') === 1 && statusCount(r.body, 'expired') === 1,
+    JSON.stringify(r.body?.by_status));
   check('  and none of them counts as usage (confirmed and the three returns only)',
     r.body?.totals?.bookings_excluding_cancelled === usedBefore, `${r.body?.totals?.bookings_excluding_cancelled} against ${usedBefore}`);
+  check('  the headline is the same as with no requests on file: every total, by_item, most and least used, never used and the '
+      + 'monthly series; the five stored statuses\' counts too',
+    sameJson(r.body?.totals, plain?.totals) && sameJson(r.body?.by_item, plain?.by_item) && sameJson(r.body?.monthly, plain?.monthly)
+      && sameJson(r.body?.most_used, plain?.most_used) && sameJson(r.body?.least_used, plain?.least_used)
+      && sameJson(r.body?.never_used, plain?.never_used) && sameJson(r.body?.by_status?.slice(0, 5), plain?.by_status),
+    JSON.stringify({ with: r.body?.totals, without: plain?.totals }));
+  check('  the totals keep their five key names', sameJson(Object.keys(r.body?.totals ?? {}),
+    ['total_bookings', 'bookings_excluding_cancelled', 'cancelled', 'items_used', 'items_never_used']), JSON.stringify(Object.keys(r.body?.totals ?? {})));
+  r = await utilization((db) => { withPending(db); db.rental_requests = db.rental_requests.filter((b) => b.request_id !== 633 && (b.status !== 'pending' || b.request_id === 632)); });
+  check('  a bucket is listed only when the range holds one: an expired request alone lists "expired", never "pending" or "declined"',
+    sameJson(r.body?.by_status?.slice(5).map((s) => [s.status, s.count]), [['expired', 1]]), JSON.stringify(r.body?.by_status));
 
   // -- the resident archive warning --------------------------------------------------
   const archive = (setup) => call({ method: 'post', path: '/:id/archive', user: SEC, id: 9102, router: residentRecords,
