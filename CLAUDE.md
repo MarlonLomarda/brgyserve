@@ -449,11 +449,11 @@ Moved: **read `docs/modules/document-requests.md` BEFORE changing Document Reque
 
 ## Facility Rentals
 
-**Read `docs/modules/rental-bookings.md` BEFORE changing the Rental bookings list.** **Approval (migration 027) is built but OFF: its rules, the funeral fee (design C) and deploy order are there.**
+**Read `docs/modules/rental-bookings.md` BEFORE changing the Rental bookings list.** **Approval (migration 027) is ON for residents: its rules, the funeral fee and deploy order are there.**
 
-Residents book barangay facilities and equipment **self-service, with no approval step**: the database checks the slot at submission and the booking is **CONFIRMED instantly** if the slot and units are free, or refused with a reason. The Secretary manages bookings afterwards (view, edit, cancel); Staff have exactly one write action, marking returns; the Punong Barangay is view-only.
+A resident's booking is a **request**: stored `pending`, it holds nothing and has no charge until the Secretary approves it (`confirmed`, "Approved", charged then) or declines it. Walk-ins are confirmed at once (keyed on role). The Secretary manages bookings (view, edit, cancel); Staff have exactly one write action, marking returns; the Punong Barangay is view-only.
 
-**Stored statuses** (`backend/src/constants/rentals.js`): `confirmed | cancelled | returned | returned_late | returned_with_issue`. **`completed` and `overdue` are DERIVED at display time** from a confirmed booking whose end has passed — never stored, so there is no scheduler and GETs stay read-only. Returnability is by item type: `equipment` and `furniture` are returnable, a `facility` is not.
+**Stored statuses** (`backend/src/constants/rentals.js`): `pending | confirmed | declined | cancelled | returned | returned_late | returned_with_issue`. **`completed`/`overdue` (confirmed, past its end) and `expired` (pending, past its start) are DERIVED at display** — never stored: no scheduler, and GETs stay read-only. Returnability is by item type: `equipment` and `furniture` are returnable, a `facility` is not.
 
 **Booking rules (migration 025, step R1):** each item has its own booking hours (`booking_opens_at` / `booking_closes_at`, a close of `24:00:00` is midnight) and a booking may start at most 31 days after today in Manila (`MAX_DAYS_AHEAD`, a constant since step O43; nothing reads `rental_settings`). **Apply migration 026 (drops that table) only AFTER the O43 code is deployed.** **Enforced in the route on POST and PUT, never in migration 024's functions**, the same for every role; stored bookings are not re-checked. See the module file.
 
