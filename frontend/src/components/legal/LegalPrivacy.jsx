@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
   return (
     <>
       <h2 id="legal-modal-title">Privacy Policy</h2>
-      <p className="legal-effective">Effective: 25 October 2026</p>
+      <p className="legal-effective">Effective: 6 November 2026</p>
 
       <h3>Who we are, and what this system is</h3>
       <p>
@@ -120,15 +120,17 @@ export default function PrivacyPolicy() {
       <h4>A log of changes to records</h4>
       <p>
         BrgyServe keeps a log of the actions Barangay officials and staff take
-        on records: adding, editing, archiving and approving them, recording
-        payments, recording event attendance, recording blotter cases, and
-        sending an official a set-password link. Actions of yours that change a
-        record are logged too: registering, submitting or cancelling a request,
-        booking a facility, cancelling a rental booking, declaring a payment,
-        having a GCash payment confirmed, changing or resetting your password,
-        and setting your password from an emailed set-password link. A GCash
-        payment received after its booking was cancelled is also recorded in
-        this log.
+        on records: adding, editing, archiving, approving and declining them,
+        recording payments, recording event attendance, recording blotter
+        cases, and sending an official a set-password link. Actions of yours
+        that change a record are logged too: registering, submitting or
+        cancelling a request, requesting a facility booking, cancelling a rental
+        booking, declaring a payment, having a GCash payment confirmed, changing
+        or resetting your password, and setting your password from an emailed
+        set-password link. A GCash payment received after its booking was
+        cancelled is also recorded in this log. When a facility booking request
+        is approved or declined, the log records which official decided it and
+        when, but not the reason given for a decline.
       </p>
       <p>
         Each entry holds who took the action, what the action was, which record

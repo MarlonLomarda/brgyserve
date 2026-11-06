@@ -100,7 +100,7 @@ const FAQS = [
   },
   {
     q: "How do I pay the fee?",
-    a: "You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals as soon as it is confirmed. Then choose Pay online via GCash.",
+    a: "You can pay in cash at the Barangay Office, or online by GCash. For a document request, once it is approved, tap Pay beside it in My requests. For a rental, tap Pay beside your booking in My rentals once the Secretary approves your request. Then choose Pay online via GCash.",
   },
   {
     q: "How do I know when my document is ready?",
@@ -112,7 +112,7 @@ const FAQS = [
   },
   {
     q: "How do I reserve a barangay facility or equipment?",
-    a: "Choose the item, the date, the time and how many units you need. The system checks availability as you book and confirms the reservation immediately if the slot is free. If it is already taken, you are told why.",
+    a: "Choose the item, the date, the time and how many units you need, then send your request. The Barangay Secretary approves or declines it, and you pay only once it is approved; follow it under My rentals.",
   },
   {
     q: "What is the household QR code for?",

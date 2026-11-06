@@ -11,7 +11,11 @@ messages, were checked against the set-password code and its tests
 about where to see updates were checked on 25 October 2026 against the
 resident's pages and the notifications route, which is the Secretary's alone:
 a resident follows a request on My requests and a booking on My rentals. The
-"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Every other factual claim below was checked
+"No uploaded files" point was corrected on 24 September 2026 (`3e372e6`). Terms
+of Use §8, the Help Center's answer "How do I book a facility?" and the Privacy
+Policy's log paragraph were checked on 6 November 2026 against the rental
+approval code (a resident's booking is a request, batch R2c) and its tests
+(`rentals:test`, `activity:test`). Every other factual claim below was checked
 against the codebase on 10 September 2026. If the system changes, change this
 file and re-render the modals from it — do not edit the JSX copy directly.
 
@@ -22,7 +26,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 25 October 2026*
+*Effective: 6 November 2026*
 
 ### Who we are, and what this system is
 
@@ -90,14 +94,16 @@ addressed to, and whether it was delivered.
 #### A log of changes to records
 
 BrgyServe keeps a log of the actions Barangay officials and staff take on
-records: adding, editing, archiving and approving them, recording payments,
-recording event attendance, recording blotter cases, and sending an official a
-set-password link. Actions of yours that change a record are logged too:
-registering, submitting or cancelling a request, booking a facility,
-cancelling a rental booking, declaring a payment, having a GCash payment
-confirmed, changing or resetting your password, and setting your password from
-an emailed set-password link. A GCash payment received after its booking was
-cancelled is also recorded in this log.
+records: adding, editing, archiving, approving and declining them, recording
+payments, recording event attendance, recording blotter cases, and sending an
+official a set-password link. Actions of yours that change a record are logged
+too: registering, submitting or cancelling a request, requesting a facility
+booking, cancelling a rental booking, declaring a payment, having a GCash
+payment confirmed, changing or resetting your password, and setting your
+password from an emailed set-password link. A GCash payment received after its
+booking was cancelled is also recorded in this log. When a facility booking
+request is approved or declined, the log records which official decided it and
+when, but not the reason given for a decline.
 
 Each entry holds who took the action, what the action was, which record it was
 taken on, the time, and the values of the changed fields before and after the
@@ -241,7 +247,7 @@ received in person at the Barangay Office.
 
 ## TERMS OF USE
 
-*Effective: 25 October 2026*
+*Effective: 6 November 2026*
 
 ### 1. What BrgyServe is
 
@@ -317,11 +323,22 @@ Requirements, fees, and processing times are set by the Barangay.
 
 ### 8. Facility bookings
 
-A booking is confirmed as soon as you submit it, if the facility or the number
-of items you ask for is free for that date and time; otherwise it is refused
-with the reason. The Barangay may change or cancel a confirmed booking where the
-facility or item is needed for official use. You can check the status of your
-booking under My rentals.
+A booking of a facility or item is a request. The Barangay Secretary approves
+or declines it, and you can follow it under My rentals. If a request is
+declined, the reason is shown there.
+
+A request does not hold the date and time. More than one resident may ask for
+the same time; the slot is taken only when the Secretary approves a request.
+You cannot have two pending requests of your own for the same item at
+overlapping times. A request for a time already taken by an approved booking is
+refused at once, with the reason.
+
+The fee is billed when your request is approved. You can then pay it at the
+Barangay Office or online by GCash.
+
+A request that is not decided before its start time expires. You may cancel a
+pending request at any time before it starts. The Barangay may change or cancel
+an approved booking where the facility or item is needed for official use.
 
 You are responsible for the facility or item during the period booked. The
 conditions of use, when it must be returned, and any charge for late return or
@@ -522,8 +539,12 @@ GCash reference number.
 #### How do I book a facility?
 
 Sign in, open the bookings section, choose the facility or item, and give the
-date and time. If it is free, the booking is confirmed at once and its fee
-appears under My rentals.
+date and time. This sends a request, which the Barangay Secretary approves or
+declines; follow it under My rentals, where a declined request shows its reason.
+
+Until it is approved a request does not hold the time, and one not decided
+before its start time expires. You can cancel it any time before it starts. Its
+fee is billed once it is approved.
 
 #### My requested time was not available.
 

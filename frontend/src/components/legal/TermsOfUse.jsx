@@ -10,7 +10,7 @@ export default function TermsOfUse() {
   return (
     <>
       <h2 id="legal-modal-title">Terms of Use</h2>
-      <p className="legal-effective">Effective: 25 October 2026</p>
+      <p className="legal-effective">Effective: 6 November 2026</p>
 
       <h3>1. What BrgyServe is</h3>
       <p>
@@ -111,11 +111,26 @@ export default function TermsOfUse() {
 
       <h3>8. Facility bookings</h3>
       <p>
-        A booking is confirmed as soon as you submit it, if the facility or the
-        number of items you ask for is free for that date and time; otherwise
-        it is refused with the reason. The Barangay may change or cancel a
-        confirmed booking where the facility or item is needed for official
-        use. You can check the status of your booking under My rentals.
+        A booking of a facility or item is a request. The Barangay Secretary
+        approves or declines it, and you can follow it under My rentals. If a
+        request is declined, the reason is shown there.
+      </p>
+      <p>
+        A request does not hold the date and time. More than one resident may
+        ask for the same time; the slot is taken only when the Secretary
+        approves a request. You cannot have two pending requests of your own
+        for the same item at overlapping times. A request for a time already
+        taken by an approved booking is refused at once, with the reason.
+      </p>
+      <p>
+        The fee is billed when your request is approved. You can then pay it at
+        the Barangay Office or online by GCash.
+      </p>
+      <p>
+        A request that is not decided before its start time expires. You may
+        cancel a pending request at any time before it starts. The Barangay may
+        change or cancel an approved booking where the facility or item is
+        needed for official use.
       </p>
       <p>
         You are responsible for the facility or item during the period booked.
