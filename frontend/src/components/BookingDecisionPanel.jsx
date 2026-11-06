@@ -310,8 +310,7 @@ export function DeclineBookingPanel({ booking, overlap, onDecline, onClose }) {
             {reason.length}/{REASON_MAX}
           </div>
           <p id={helpId} className="muted">
-            The resident receives this reason by text message. Keep it short
-            and use plain letters.
+            The resident sees this reason under My rentals.
           </p>
           <button
             className="btn secondary danger pay-record"

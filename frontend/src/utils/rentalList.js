@@ -236,8 +236,8 @@ export function isDecidable(booking) {
 // The status badge as this page words it, { label, className }: a booking
 // stored confirmed reads "Approved" here (APPROVED_LABEL, batch R2b), the
 // Secretary's approval; every other status as RENTAL_META words it ("Pending",
-// "Declined", "Expired", "Overdue"…). The resident's pages keep "Confirmed"
-// until batch R2c.
+// "Declined", "Expired", "Overdue"…). Since batch R2c the resident's My
+// rentals and Book a rental use it too; the Activity Log does not.
 export function statusBadge(booking) {
   const status = displayStatus(booking);
   const meta = rentalMeta(status);

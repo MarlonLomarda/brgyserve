@@ -523,7 +523,11 @@ function RecordDetail({ id, canManage, onBack, onEdit, onChanged }) {
             ))}
             {warning.dependencies.rentals.map((b) => (
               <li key={`r${b.request_id}`} className="suggestion">
-                <span className="badge score">Active</span>
+                {/* A request still waiting for the Secretary (batch R2c) is
+                    not an active booking: it holds nothing yet. */}
+                <span className="badge score">
+                  {b.status === "pending" ? "Pending" : "Active"}
+                </span>
                 <div className="suggestion-info">
                   <strong>
                     {b.rental_items?.name || "Rental booking"} #{b.request_id}

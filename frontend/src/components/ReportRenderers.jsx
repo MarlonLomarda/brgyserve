@@ -50,10 +50,13 @@ function ChartCard({ title, children }) {
   );
 }
 
-function DataTable({ title, columns, rows }) {
+// `note`, when given, is one short line under the title, inside the block,
+// so the PDF export (which captures each data-pdf-block) carries it too.
+function DataTable({ title, note, columns, rows }) {
   return (
     <div data-pdf-block>
       <h4>{title}</h4>
+      {note && <p className="muted small-note">{note}</p>}
       {rows.length === 0 ? (
         <p className="muted">No data for this period.</p>
       ) : (
@@ -263,8 +266,11 @@ export function FacilityReport({ data }) {
         columns={['Item', 'Type', num('Bookings'), num('Units booked')]}
         rows={data.by_item.map((r) => [r.name, r.type, formatCount(r.bookings), formatCount(r.units_booked)])}
       />
+      {/* Batch R2c: pending, declined and expired rows are requests the
+          server lists after the five booking statuses; they are in no total. */}
       <DataTable
         title="By status"
+        note="Pending, declined and expired are requests, not bookings."
         columns={['Status', num('Bookings')]}
         rows={byStatus.map((r) => [r.label, formatCount(r.count)])}
       />
@@ -349,7 +355,12 @@ export function isEmpty(key, data) {
   const t = data?.totals;
   if (!t) return true;
   if (key === 'document-requests') return t.total_requests === 0;
-  if (key === 'facility-utilization') return t.total_bookings === 0;
+  // total_bookings counts bookings only (batch R2c), so a range holding only
+  // requests reads 0 there: it is empty only when no status bucket counts
+  // anything either.
+  if (key === 'facility-utilization') {
+    return t.total_bookings === 0 && !(data.by_status || []).some((s) => s.count > 0);
+  }
   if (key === 'collections') return t.paid_charges === 0 && t.unpaid_charges === 0;
   if (key === 'residents') return t.active_residents === 0 && t.archived_residents === 0;
   return false;

@@ -1463,7 +1463,7 @@ export default function RentalBookingsPage({
           warning={paidWarning(cancelling)}
           reasonLabel="Reason for cancelling"
           required
-          helper="The resident receives this reason by text message. Keep it short and use plain letters."
+          helper="The resident sees this reason under My rentals."
           onSubmit={(reason) => sendCancel(cancelling, reason)}
           onClose={closeCancel}
         />

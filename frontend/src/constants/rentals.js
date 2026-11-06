@@ -5,10 +5,11 @@
 //
 // Since migration 027 a booking can wait for the Secretary's approval:
 // pending, then confirmed or declined, and a pending request whose start has
-// passed is derived 'expired'. No booking is stored pending yet (the batch
-// that switches the approval on comes later); the Activity Log reads these
-// three through this table, and since batch R2b the Rental bookings list
-// (Pending and Not approved tabs) does too.
+// passed is derived 'expired'. Since batch R2c every resident's booking is
+// stored pending. The Activity Log reads these words through this table and
+// keeps "Confirmed" for a stored-confirmed booking; the Rental bookings list
+// (since R2b) and the resident's pages (since R2c) say "Approved" instead,
+// through statusBadge() in utils/rentalList.js.
 export const RENTAL_META = {
   pending: { label: 'Pending', className: 'status-pending' },
   confirmed: { label: 'Confirmed', className: 'status-approved' },
@@ -22,11 +23,12 @@ export const RENTAL_META = {
   cancelled: { label: 'Cancelled', className: 'status-cancelled' },
 };
 
-// The word a confirmed booking is shown with once the approval step is
-// switched on: "Approved". The stored status stays 'confirmed'. Since batch
-// R2b the Rental bookings list uses it (statusBadge in utils/rentalList.js);
-// the resident's pages keep RENTAL_META's "Confirmed" until the batch that
-// switches the approval on (R2c) puts it in RENTAL_META.confirmed.
+// The word a confirmed booking is shown with: "Approved". The stored status
+// stays 'confirmed'. The Rental bookings list (batch R2b) and the resident's
+// My rentals and Book a rental (batch R2c) use it, through statusBadge in
+// utils/rentalList.js. RENTAL_META.confirmed keeps "Confirmed" for the
+// Activity Log, whose rows describe what was stored ("Pending to
+// Confirmed"), and which is to keep its own words.
 export const APPROVED_LABEL = 'Approved';
 
 export function rentalMeta(status) {
@@ -56,6 +58,18 @@ export const RETURN_OUTCOMES = [
 
 const dateFmt = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' });
 const timeFmt = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' });
+
+// "Requested on Nov 6, 2026, 1:30 AM": when a request was made, in MANILA,
+// whatever this computer's clock (batch R2c, My rentals). null when there is
+// no time to give: the row then shows nothing, never a dash or "unknown".
+// Formatted per call, as formatDate is, so the zone is the one asked for
+// here and never the one the page happened to load in.
+export function requestedOnText(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return `Requested on ${d.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })}`;
+}
 
 // "Jul 25, 2026, 2:00 PM – 6:00 PM" — bookings run within one day.
 export function formatSchedule(start, end) {

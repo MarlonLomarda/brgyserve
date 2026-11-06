@@ -9,8 +9,8 @@ export const AVAILABILITY_DELAY_MS = 400;
 
 // What is free for an item at the form's date and times, asked of
 // GET /rental-requests/availability (migration 024's rental_availability):
-// the booking forms' advice before Book now. A read; it cancels nothing on the
-// server and the server decides again at Book now.
+// the booking forms' advice before Send request. A read; it cancels nothing on the
+// server and the server decides again at Send request.
 //
 // Asked only once there is an item and a whole slot (bookingWindow in
 // utils/bookingTimes.js), AVAILABILITY_DELAY_MS after the last change. Every

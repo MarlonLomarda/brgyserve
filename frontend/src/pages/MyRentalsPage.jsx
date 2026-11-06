@@ -7,9 +7,10 @@ import { chargeMeta, chargeOf } from "../constants/requestStatus";
 import {
   displayStatus,
   formatSchedule,
-  rentalMeta,
+  requestedOnText,
 } from "../constants/rentals";
 import { isNoFeeCharge } from "../utils/chargeMethod";
+import { statusBadge } from "../utils/rentalList";
 
 // Why a load failed, for "Could not load your bookings: …". The server's own
 // message when it sent one (the API's errors are plain sentences, never a
@@ -217,9 +218,14 @@ export default function MyRentalsPage() {
   }
 
   if (cancelling) {
+    // A pending row is a request (batch 4): its panel says "request", as the
+    // server's answer does. Decided by the row's stored status, never a role.
+    const isRequest = cancelling.status === "pending";
     return (
       <CancelBookingPanel
-        title="Cancel booking"
+        title={isRequest ? "Cancel request" : "Cancel booking"}
+        submitLabel={isRequest ? "Cancel this request" : "Cancel this booking"}
+        keepLabel={isRequest ? "Keep request" : "Keep booking"}
         lines={[
           cancelling.rental_items?.name || "—",
           formatSchedule(cancelling.start_datetime, cancelling.end_datetime),
@@ -293,9 +299,16 @@ export default function MyRentalsPage() {
               </thead>
               <tbody>
                 {requests.map((r) => {
-                  const meta = rentalMeta(displayStatus(r));
+                  // "Approved" for a stored-confirmed booking (batch R2c), as
+                  // on the Secretary's list.
+                  const meta = statusBadge(r);
+                  const shown = displayStatus(r);
+                  // A request never approved carries NO charges key (R2c), so
+                  // chargeOf() finds none and no Pay or amount is drawn: by
+                  // that fact, never by the row's status or the viewer's role.
                   const charge = chargeOf(r);
                   const noFee = isNoFeeCharge(charge);
+                  const requestedOn = requestedOnText(r.requested_at);
                   return (
                     <tr key={r.request_id}>
                       <td>
@@ -314,6 +327,31 @@ export default function MyRentalsPage() {
                         <span className={`badge ${meta.className}`}>
                           {meta.label}
                         </span>
+                        {/* The request's own lines (batch R2c), each drawn
+                            only when its key is there: when it was asked,
+                            what approving it would cost (the server's
+                            fee_if_approved, never worked out here), why it
+                            was declined, and an expired one's reason. */}
+                        {requestedOn && (
+                          <div className="muted reason-note">{requestedOn}</div>
+                        )}
+                        {"fee_if_approved" in r && (
+                          <div className="muted reason-note">
+                            {Number(r.fee_if_approved) === 0
+                              ? "No fee"
+                              : `Estimated fee ₱${Number(r.fee_if_approved).toFixed(2)}`}
+                          </div>
+                        )}
+                        {"decline_reason" in r && (
+                          <div className="muted reason-note">
+                            Declined: {r.decline_reason}
+                          </div>
+                        )}
+                        {shown === "expired" && (
+                          <div className="muted reason-note">
+                            Not decided before its start time.
+                          </div>
+                        )}
                         {r.return_note && (
                           <div className="muted reason-note">
                             Note: {r.return_note}
@@ -379,7 +417,9 @@ export default function MyRentalsPage() {
                               setCancelling(r);
                             }}
                           >
-                            Cancel booking
+                            {r.status === "pending"
+                              ? "Cancel request"
+                              : "Cancel booking"}
                           </button>
                         )}
                       </td>

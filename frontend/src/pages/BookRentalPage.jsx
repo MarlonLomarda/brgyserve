@@ -4,11 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import PageLayout from "../components/PageLayout";
 import RentalAvailability from "../components/RentalAvailability";
 import { RESIDENT_NAV } from "../constants/nav";
-import {
-  ITEM_TYPE_LABELS,
-  formatSchedule,
-  rentalMeta,
-} from "../constants/rentals";
+import { ITEM_TYPE_LABELS, formatSchedule } from "../constants/rentals";
 import useRentalAvailability from "../hooks/useRentalAvailability";
 import useRentalSettings from "../hooks/useRentalSettings";
 import {
@@ -28,6 +24,14 @@ import {
 } from "../utils/bookingTimes";
 import { clock } from "../utils/chargeFilters";
 import { bookingBlock, quantityCap } from "../utils/rentalAvailability";
+import { statusBadge } from "../utils/rentalList";
+
+// Batch R2c: a resident's booking is a REQUEST the Barangay Secretary approves
+// or declines, and it is billed only once approved. The card after sending,
+// and the line under the estimated fee, say so.
+const SENT_MESSAGE =
+  "The Barangay Secretary will review your request. You can track its status under My rentals and pay any fee once it is approved.";
+const PAY_LATER = "You pay only after the Secretary approves your request.";
 
 const EMPTY_FORM = {
   item_id: "",
@@ -82,7 +86,7 @@ function BookRentalForm({ kind, onKind }) {
   // The form's own check of the times, shown under the time fields.
   const [timeError, setTimeError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [booked, setBooked] = useState(null); // confirmed booking
+  const [booked, setBooked] = useState(null); // the request just sent (pending)
   // Numbers each load, so only the newest one may change the items.
   const loadSeq = useRef(0);
 
@@ -129,7 +133,7 @@ function BookRentalForm({ kind, onKind }) {
   const hours = selectedItem ? hoursText(selectedItem) : null;
   const limits = timeLimits(selectedItem);
 
-  // A slot that breaks the booking rules is not asked about: Book now will
+  // A slot that breaks the booking rules is not asked about: Send request will
   // refuse it in the rules' words, and a "Free for …" beside that would
   // contradict it.
   const ruleBroken = selectedItem
@@ -138,8 +142,8 @@ function BookRentalForm({ kind, onKind }) {
   const askable = selectedItem && !ruleBroken;
 
   // What is free for the chosen time, asked of the server once the item, the
-  // date and both times are set. ADVICE ONLY: the server decides at Book now.
-  // An answer caps the quantity and can block Book now, with the reason
+  // date and both times are set. ADVICE ONLY: the server decides at Send request.
+  // An answer caps the quantity and can block Send request, with the reason
   // beside it; no answer (none yet, one out, or a check that failed) leaves
   // the form as it was.
   const availability = useRentalAvailability(
@@ -170,7 +174,7 @@ function BookRentalForm({ kind, onKind }) {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    // A changed date or time may answer the check; it runs again on Book now.
+    // A changed date or time may answer the check; it runs again on Send request.
     if (name === "date" || name === "start_time" || name === "end_time") {
       setTimeError("");
     }
@@ -183,7 +187,7 @@ function BookRentalForm({ kind, onKind }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    // Book now is disabled then; this stops the Enter key too.
+    // Send request is disabled then; this stops the Enter key too.
     if (blocked) return;
     setError("");
     // CHECKED ON BOOK NOW, NOT AS YOU TYPE. A start already past, or an end
@@ -226,17 +230,14 @@ function BookRentalForm({ kind, onKind }) {
   // earliest day. In UTC, until 8 AM in Manila, it would still be yesterday.
   const today = earliestBookingDate(clock.now());
   const latest = latestBookingDate(clock.now(), maxDaysAhead);
-  const meta = booked ? rentalMeta(booked.status) : null;
+  const meta = booked ? statusBadge(booked) : null;
 
   return (
     <>
       {booked ? (
         <div className="pending-card section-card">
-          <h3>Booking confirmed</h3>
-          <div className="alert success">
-            Your slot is reserved — no further approval is needed. Please settle
-            the fee with the barangay.
-          </div>
+          <h3>Request sent</h3>
+          <div className="alert success">{SENT_MESSAGE}</div>
           <dl className="info-grid">
             <div>
               <dt>Item</dt>
@@ -259,13 +260,14 @@ function BookRentalForm({ kind, onKind }) {
               <dd>{booked.quantity_requested}</dd>
             </div>
             <div>
-              <dt>Fee</dt>
+              <dt>Estimated fee</dt>
               <dd>
                 ₱
                 {(
                   Number(booked.rental_items?.fee ?? 0) *
                   booked.quantity_requested
                 ).toFixed(2)}
+                <div className="muted small-note">{PAY_LATER}</div>
               </dd>
             </div>
             <div className="span-2">
@@ -316,7 +318,7 @@ function BookRentalForm({ kind, onKind }) {
               fields: a load that failed shows neither the empty text nor the
               form. Try again is a plain button, so pressing it inside this
               form loads the items again and submits nothing; it sits in the
-              card's actions row, as Book now does, 16px under the error
+              card's actions row, as Send request does, 16px under the error
               (index.css; the card's shared margins leave 4px). */}
           {loadError ? (
             <>
@@ -468,6 +470,7 @@ function BookRentalForm({ kind, onKind }) {
                   )}
                 </p>
               )}
+              {selectedItem && <p className="muted small-note">{PAY_LATER}</p>}
 
               <div className="actions">
                 <button
@@ -476,7 +479,7 @@ function BookRentalForm({ kind, onKind }) {
                   disabled={busy || Boolean(blocked)}
                   aria-describedby={blocked ? blockedId : undefined}
                 >
-                  {busy ? "Checking availability…" : "Book now"}
+                  {busy ? "Checking availability…" : "Send request"}
                 </button>
                 {blocked && (
                   <span id={blockedId} className="rental-block-reason">

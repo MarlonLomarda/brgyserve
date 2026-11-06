@@ -22,7 +22,7 @@ export default function useRentalSettings() {
         const data = await authFetch("/rental-settings");
         if (live && Number.isInteger(data?.max_days_ahead)) setMaxDaysAhead(data.max_days_ahead);
       } catch {
-        // Nothing is shown; the server checks at Book now.
+        // Nothing is shown; the server checks at Send request.
       }
     })();
     return () => {

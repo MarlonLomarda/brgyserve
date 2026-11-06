@@ -19,6 +19,10 @@ import { useEffect, useState } from "react";
 // server's sentence is shown with role="alert" and the panel stays open.
 // onClose(refused) tells the page whether a refusal was shown, so it can load
 // the list again: a refusal usually means the booking changed underneath.
+//
+// THE WORDS. submitLabel and keepLabel default to the booking words; My
+// rentals passes "Cancel this request" and "Keep request" for a pending row
+// (batch 4), decided by the row's status, as the server words its answer.
 const REASON_MAX = 300;
 const REASON_MIN = 3;
 
@@ -30,6 +34,8 @@ export default function CancelBookingPanel({
   reasonLabel,
   required = false,
   helper = null,
+  submitLabel = "Cancel this booking",
+  keepLabel = "Keep booking",
   onSubmit,
   onClose,
 }) {
@@ -114,7 +120,7 @@ export default function CancelBookingPanel({
             type="submit"
             disabled={busy || !ready}
           >
-            {busy ? "Cancelling…" : "Cancel this booking"}
+            {busy ? "Cancelling…" : submitLabel}
           </button>
           <button
             className="btn secondary"
@@ -122,7 +128,7 @@ export default function CancelBookingPanel({
             disabled={busy}
             onClick={() => onClose(refused)}
           >
-            Keep booking
+            {keepLabel}
           </button>
         </div>
       </form>

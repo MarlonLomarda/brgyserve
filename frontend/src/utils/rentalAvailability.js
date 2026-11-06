@@ -4,7 +4,7 @@
 //
 // THE PAGE ONLY ADVISES. Whether a slot is free is decided by the database
 // (migration 024's rental_availability, the same rule create_rental_booking
-// applies at Book now), and the server decides again on every booking. Nothing
+// applies at Send request), and the server decides again on every booking. Nothing
 // here computes availability: it words the server's numbers and blocks the
 // button only on an answer the server gave. An answer carries numbers and, for
 // a facility, that day's taken times; nothing about who booked or why, and
