@@ -592,6 +592,236 @@ router.post('/staff-accounts/:userId/send-set-password-link', async (req, res) =
   });
 });
 
+// ---------------------------------------------------------------------------
+// Deactivating and reactivating a staff-type account (step O11).
+//
+// The same accounts as the list above: Punong Barangay, Treasurer and Staff.
+// A Secretary, a resident or an unknown id is a 404, and the caller's own id
+// a 409. Deactivating blocks the account at once — authenticate re-reads
+// is_active on every request — but an official already signed in is BLOCKED,
+// not signed out: their next request is refused, and the screen they are on
+// stays until then.
+//
+// THE LAST ACTIVE STAFF ACCOUNT CANNOT BE DEACTIVATED: only Staff can mark a
+// rental return (POST /api/rental-requests/:id/return), so nobody could. The
+// Treasurer and the Punong Barangay have no such rule: the Secretary also
+// records payments, and the Punong Barangay approves nothing in the system.
+//
+// supabase-js has no transactions, so each step is one that can be undone:
+//   1. the account -> inactive, guarded on is_active = true and the role;
+//   2. Staff only: count the active Staff accounts AGAIN, since two
+//      deactivations at once could each have counted the other; none left
+//      puts the account back and answers the same 409;
+//   3. retire every unused set-password link, or one would work again the
+//      moment the account was reactivated; if that fails, the account is put
+//      back and nothing has changed.
+// Reactivating is one guarded write. It restores the account as it was —
+// same password, same must_change_password — and touches no link: the
+// links were retired on the way out, so the Secretary sends a new one.
+// ---------------------------------------------------------------------------
+
+// The role whose last active account may not be deactivated.
+const RETURNS_ROLE = 'staff';
+
+const lastStaffMessage = (username) =>
+  `@${username} is the only active Staff account. Only Staff can mark rental returns, ` +
+  'so nobody could record a return. Create or reactivate another Staff account first.';
+
+// The id from the URL, or a response already sent. The caller's own account
+// is never a Secretary-managed one, so the self check comes before the read.
+function staffTargetId(req, res) {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return null;
+  }
+  if (userId === Number(req.user.user_id)) {
+    res.status(409).json({ error: 'You cannot change your own account here.' });
+    return null;
+  }
+  return userId;
+}
+
+async function loadManagedAccount(userId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('user_id, username, role, is_active')
+    .eq('user_id', userId)
+    .in('role', MANAGED_ROLES)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load staff account: ${error.message}`);
+  }
+  return data;
+}
+
+// Active Staff accounts other than `exceptId` (or all of them, with none).
+// A failed count THROWS: read as zero it would refuse for no reason, and
+// read as anything else it would let the last one go.
+async function countActiveStaff(exceptId = null) {
+  let query = supabase
+    .from('users')
+    .select('user_id')
+    .eq('role', RETURNS_ROLE)
+    .eq('is_active', true);
+  if (exceptId !== null) query = query.neq('user_id', exceptId);
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`Failed to count active Staff accounts: ${error.message}`);
+  }
+  return data.length;
+}
+
+// Puts a deactivated account back to active, guarded on it still being
+// inactive. true when it was put back. Never throws: the caller is already
+// handling one failure, and says so loudly if this is a second.
+async function revertDeactivate(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ is_active: true })
+      .eq('user_id', userId)
+      .eq('is_active', false)
+      .select('user_id')
+      .maybeSingle();
+    return !error && !!data;
+  } catch {
+    return false;
+  }
+}
+
+const INTERRUPTED = { error: 'Deactivation was interrupted; tell the developer.' };
+const interruptedLog = (userId, why) =>
+  `[staff accounts] account ${userId} was deactivated but ${why}, and putting it back to active failed too — fix it by hand`;
+
+// POST /api/secretary/staff-accounts/:userId/deactivate
+router.post('/staff-accounts/:userId/deactivate', async (req, res) => {
+  const userId = staffTargetId(req, res);
+  if (userId === null) return;
+
+  const account = await loadManagedAccount(userId);
+  if (!account) {
+    return res.status(404).json({ error: 'Staff account not found' });
+  }
+  if (!account.is_active) {
+    return res.status(409).json({ error: `@${account.username} is already deactivated.` });
+  }
+  const isStaff = account.role === RETURNS_ROLE;
+  if (isStaff && (await countActiveStaff(userId)) === 0) {
+    return res.status(409).json({ error: lastStaffMessage(account.username), code: 'LAST_ACTIVE_STAFF' });
+  }
+
+  const { data: changed, error } = await supabase
+    .from('users')
+    .update({ is_active: false })
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .in('role', MANAGED_ROLES)
+    .select('user_id')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to deactivate account: ${error.message}`);
+  }
+  if (!changed) {
+    return res.status(409).json({ error: 'This account just changed. Refresh and try again; nothing was changed.' });
+  }
+
+  if (isStaff) {
+    let left;
+    try {
+      left = await countActiveStaff();
+    } catch (err) {
+      if (!(await revertDeactivate(userId))) {
+        console.error(interruptedLog(userId, 'the Staff recount failed'));
+        return res.status(500).json(INTERRUPTED);
+      }
+      throw err;
+    }
+    if (left === 0) {
+      if (!(await revertDeactivate(userId))) {
+        console.error(interruptedLog(userId, 'that left no active Staff account'));
+        return res.status(500).json(INTERRUPTED);
+      }
+      return res.status(409).json({ error: lastStaffMessage(account.username), code: 'LAST_ACTIVE_STAFF' });
+    }
+  }
+
+  // The same sweep sendSetPasswordLink runs on older links, for all of them.
+  const { data: retired, error: retireError } = await supabase
+    .from('password_resets')
+    .update({ used_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('used_at', null)
+    .select('reset_id');
+  if (retireError) {
+    if (!(await revertDeactivate(userId))) {
+      console.error(interruptedLog(userId, `its set-password links could not be retired (${retireError.message})`));
+      return res.status(500).json(INTERRUPTED);
+    }
+    return res.status(500).json({ error: 'Could not deactivate this account; nothing was changed.' });
+  }
+
+  // The account is named on the row (username and role, as its CREATE row
+  // has them), so the Activity Log can say which account without a lookup.
+  // Never its email. The reactivate row below does the same.
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.DEACTIVATE,
+    table: 'users',
+    recordId: userId,
+    before: { is_active: true },
+    after: { is_active: false, links_retired: retired.length, username: account.username, role: account.role },
+  });
+
+  res.json({
+    message: `@${account.username} is deactivated and cannot sign in until the account is reactivated.`,
+    user_id: userId,
+  });
+});
+
+// POST /api/secretary/staff-accounts/:userId/reactivate
+router.post('/staff-accounts/:userId/reactivate', async (req, res) => {
+  const userId = staffTargetId(req, res);
+  if (userId === null) return;
+
+  const account = await loadManagedAccount(userId);
+  if (!account) {
+    return res.status(404).json({ error: 'Staff account not found' });
+  }
+  if (account.is_active) {
+    return res.status(409).json({ error: `@${account.username} is already active.` });
+  }
+
+  const { data: changed, error } = await supabase
+    .from('users')
+    .update({ is_active: true })
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .in('role', MANAGED_ROLES)
+    .select('user_id')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to reactivate account: ${error.message}`);
+  }
+  if (!changed) {
+    return res.status(409).json({ error: 'This account just changed. Refresh and try again; nothing was changed.' });
+  }
+
+  await logActivity({
+    userId: req.user.user_id,
+    action: ACTIONS.REACTIVATE,
+    table: 'users',
+    recordId: userId,
+    before: { is_active: false },
+    after: { is_active: true, username: account.username, role: account.role },
+  });
+
+  res.json({
+    message: `@${account.username} is reactivated and can sign in again with their current password.`,
+    user_id: userId,
+  });
+});
+
 // The send route's message, by the email's status. Like the creation
 // messages, the screen words this itself and this is the fallback.
 function sentLinkMessage(status, username) {

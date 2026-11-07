@@ -219,8 +219,9 @@ router.post('/register', registerLimiter, async (req, res) => {
 //   3. PENDING      — any other resident: awaiting Secretary approval. Correct
 //                     both before and after a record is linked, since linking
 //                     and activating are separate steps.
-//   4. ANYTHING ELSE — a safe generic message rather than falling through to
-//                     one of the above and stating something untrue.
+//   4. ANYTHING ELSE — a staff-type account, which only the Secretary's
+//                     Deactivate on the Staff accounts page makes inactive
+//                     (step O11), so it is told it was deactivated.
 async function inactiveMessage(user) {
   // Decided before any query: rejection is a fact on the user row itself and
   // does not depend on whether a resident record was ever linked — which
@@ -246,7 +247,7 @@ async function inactiveMessage(user) {
   if (user.role === 'resident') {
     return 'Account is pending approval by the Barangay Secretary';
   }
-  return 'This account is inactive. Please contact the Barangay Office.';
+  return 'This account has been deactivated. Please contact the Barangay Office.';
 }
 
 // POST /api/auth/login

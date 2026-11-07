@@ -20,6 +20,10 @@ const ACTIONS = {
   LINK: 'LINK',
   ACTIVATE: 'ACTIVATE',
   DEACTIVATE: 'DEACTIVATE',
+  // The Secretary letting a deactivated official's account sign in again
+  // (step O11). Its own code, not ACTIVATE: ACTIVATE is a resident's
+  // registration approved, and the page words the two differently.
+  REACTIVATE: 'REACTIVATE',
   RELEASE: 'RELEASE',
   CLAIM: 'CLAIM',
   CANCEL: 'CANCEL',
