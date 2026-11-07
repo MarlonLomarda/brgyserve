@@ -15,7 +15,9 @@ a resident follows a request on My requests and a booking on My rentals. The
 of Use §8, the Help Center's answer "How do I book a facility?" and the Privacy
 Policy's log paragraph were checked on 6 November 2026 against the rental
 approval code (a resident's booking is a request, batch R2c) and its tests
-(`rentals:test`, `activity:test`). Every other factual claim below was checked
+(`rentals:test`, `activity:test`), and its clause on deactivating or
+reactivating an official's account on 7 November 2026 against that code
+(`staff:test`). Every other factual claim below was checked
 against the codebase on 10 September 2026. If the system changes, change this
 file and re-render the modals from it — do not edit the JSX copy directly.
 
@@ -26,7 +28,7 @@ sections are `h3`, sub-points are `h4`.
 
 ## PRIVACY POLICY
 
-*Effective: 6 November 2026*
+*Effective: 7 November 2026*
 
 ### Who we are, and what this system is
 
@@ -95,8 +97,9 @@ addressed to, and whether it was delivered.
 
 BrgyServe keeps a log of the actions Barangay officials and staff take on
 records: adding, editing, archiving, approving and declining them, recording
-payments, recording event attendance, recording blotter cases, and sending an
-official a set-password link. Actions of yours that change a record are logged
+payments, recording event attendance, recording blotter cases, sending an
+official a set-password link, and deactivating or reactivating an official's
+account. Actions of yours that change a record are logged
 too: registering, submitting or cancelling a request, requesting a facility
 booking, cancelling a rental booking, declaring a payment, having a GCash
 payment confirmed, changing or resetting your password, and setting your

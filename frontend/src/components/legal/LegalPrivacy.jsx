@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
   return (
     <>
       <h2 id="legal-modal-title">Privacy Policy</h2>
-      <p className="legal-effective">Effective: 6 November 2026</p>
+      <p className="legal-effective">Effective: 7 November 2026</p>
 
       <h3>Who we are, and what this system is</h3>
       <p>
@@ -122,8 +122,9 @@ export default function PrivacyPolicy() {
         BrgyServe keeps a log of the actions Barangay officials and staff take
         on records: adding, editing, archiving, approving and declining them,
         recording payments, recording event attendance, recording blotter
-        cases, and sending an official a set-password link. Actions of yours
-        that change a record are logged too: registering, submitting or
+        cases, sending an official a set-password link, and deactivating or
+        reactivating an official&apos;s account. Actions of yours that change a
+        record are logged too: registering, submitting or
         cancelling a request, requesting a facility booking, cancelling a rental
         booking, declaring a payment, having a GCash payment confirmed, changing
         or resetting your password, and setting your password from an emailed
