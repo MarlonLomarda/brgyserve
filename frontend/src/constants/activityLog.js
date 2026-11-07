@@ -34,6 +34,8 @@ export const ACTION_META = {
   LINK: { label: 'Linked', className: 'status-approved' },
   ACTIVATE: { label: 'Activated', className: 'status-approved' },
   DEACTIVATE: { label: 'Deactivated', className: 'status-rejected' },
+  // A deactivated official's account let back in (step O11).
+  REACTIVATE: { label: 'Reactivated', className: 'status-approved' },
   RELEASE: { label: 'Ready for release', className: 'status-ready' },
   CLAIM: { label: 'Claimed', className: 'status-claimed' },
   CANCEL: { label: 'Cancelled', className: 'status-cancelled' },
@@ -183,6 +185,15 @@ const FIELD_LABELS = {
   // An approval whose fee the Secretary waived (design C): the code
   // 'funeral', never the purpose's words.
   fee_waived: 'Fee waived',
+  // A staff deactivation's count of unused set-password links it retired
+  // (step O11), never the links themselves.
+  links_retired: 'Set-password links retired',
+  // The account a staff deactivate or reactivate row acted on (the O11
+  // follow-up), copied from the account as its CREATE row copies them. The
+  // row's summary names it; these label the keys wherever a row is listed
+  // field by field.
+  username: 'Username',
+  role: 'Role',
 };
 
 function humanize(key) {
@@ -436,10 +447,24 @@ function actionSummary(row, before, after, withheld) {
     case 'SETTLE':
     case 'REOPEN':
       return after.is_settled ? 'Open to Settled' : 'Settled to Open';
+    // On an account, ACTIVATE is a resident's registration approved, so it
+    // was pending; a staff account is deactivated and reactivated (step O11).
     case 'ACTIVATE':
     case 'DEACTIVATE':
-      if (t === 'users') return after.is_active ? 'Pending to Active' : 'Active to Inactive';
-      return after.is_active ? 'Inactive to Active' : 'Active to Inactive';
+    case 'REACTIVATE': {
+      const change = row.action === 'ACTIVATE' && t === 'users'
+        ? 'Pending to Active'
+        : after.is_active ? 'Inactive to Active' : 'Active to Inactive';
+      // A staff account's row names the account since the O11 follow-up:
+      // "@name, Barangay Treasurer: Active to Inactive". A row written before
+      // then has no username and reads as it always did.
+      const words = t === 'users' && after.username
+        ? `@${after.username}, ${ROLE_LABELS[after.role] || humanize(after.role || 'unknown')}: ${change}`
+        : change;
+      if (!('links_retired' in after)) return words;
+      const n = Number(after.links_retired) || 0;
+      return [words, n ? `${plural(n, 'unused set-password link')} retired` : 'no unused set-password link'];
+    }
     case 'ARCHIVE':
     case 'UNARCHIVE': {
       const words = after.is_archived ? 'Not archived to Archived' : 'Archived to Not archived';

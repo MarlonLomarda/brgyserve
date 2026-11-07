@@ -82,6 +82,31 @@ function accountStatus(account) {
   return { label: "Active", className: "status-claimed" };
 }
 
+// The server's refusal when the account is ALREADY in the state asked for
+// ("@name is already deactivated." / "@name is already active.", in
+// routes/secretary.js). It carries no code and shares its 409 with the
+// Secretary's own account, so the sentence is how it is told apart, and
+// test:auth fails if the routes stop saying it.
+const ALREADY_IN_STATE = /^@\S+ is already (deactivated|active)\.$/;
+
+// Reactivating, in words that are true of the account. must_change_password
+// is true for two kinds of account the list cannot tell apart: one still
+// waiting for its emailed set-password link (it has no password anyone
+// knows, and deactivating retired its links) and one on a temporary
+// password. "Their current password" is untrue for the first, so both are
+// told what to do if no password was set.
+function reactivateQuestion(account) {
+  return account.must_change_password
+    ? `Reactivate @${account.username}? If they have not set a password yet, use "Send set-password link" after reactivating.`
+    : `Reactivate @${account.username}? They can sign in again with their current password.`;
+}
+
+function reactivatedLine(account) {
+  return account.must_change_password
+    ? `@${account.username} is reactivated. If they have not set a password yet, use "Send set-password link" to send them one.`
+    : `@${account.username} is reactivated. They can sign in again with their current password.`;
+}
+
 // What the search box looks in, as each row shows it: the @username, the
 // role's label and the email. Not names: this list has none to search.
 function accountMatches(account, term) {
@@ -105,20 +130,44 @@ function accountMatches(account, term) {
 // a row left out is mounted again when it matches again, and an open "send a
 // link?" question in it would take the focus from the box, because Cancel
 // has autoFocus.
+//
+// Each row's SECOND button deactivates an active account or reactivates an
+// inactive one (step O11), after a question in the row like the send one.
+// It comes after the send button and is a direct child of the row, as that
+// one is. While either question is open, or a request is in flight, both of
+// the row's buttons are disabled. Deactivating blocks an official at once,
+// but one already signed in is blocked, not signed out, so the question says
+// "blocked".
 function StaffAccountList({ reloadToken }) {
   const { authFetch } = useAuth();
   const [accounts, setAccounts] = useState(null); // null = loading, or failed
   const [error, setError] = useState("");
   const [sendingId, setSendingId] = useState(null);
+  // The account being deactivated or reactivated right now, if any.
+  const [statusBusyId, setStatusBusyId] = useState(null);
   const [notices, setNotices] = useState({}); // user_id -> { type, text }
-  // The ACTIVE account whose "send a link?" question is open, if any.
-  const [confirmingId, setConfirmingId] = useState(null);
-  // Each row's "Send set-password link" button, so Cancel can hand focus back
-  // to it instead of dropping it to the page.
+  // The one question open in the list, if any: { id, kind }, where kind is
+  // "send" (a link to an ACTIVE account) or "status" (deactivate or
+  // reactivate).
+  const [asking, setAsking] = useState(null);
+  // Each row's two buttons, so closing a question can hand focus back to the
+  // button that opened it instead of dropping it to the page.
   const sendButtons = useRef({});
+  const statusButtons = useRef({});
+  // The button to focus once the row is re-rendered: it is disabled while
+  // its question is open, and a disabled button cannot take the focus.
+  const focusNext = useRef(null);
   // The search box's text, as typed.
   const [query, setQuery] = useState("");
   const searchBox = useRef(null);
+
+  useEffect(() => {
+    const el = focusNext.current;
+    if (el && !el.disabled) {
+      focusNext.current = null;
+      el.focus();
+    }
+  });
 
   const load = useCallback(async () => {
     setError("");
@@ -154,17 +203,70 @@ function StaffAccountList({ reloadToken }) {
     if (account.must_change_password) {
       sendLink(account);
     } else {
-      setConfirmingId(account.user_id);
+      setAsking({ id: account.user_id, kind: "send" });
     }
   }
 
   function cancelSend(account) {
-    setConfirmingId(null);
-    sendButtons.current[account.user_id]?.focus();
+    setAsking(null);
+    focusNext.current = sendButtons.current[account.user_id] ?? null;
+  }
+
+  // A success can make another row's notice untrue (a refusal naming the
+  // only active Staff account, once another is reactivated), so it clears
+  // every other row's notice and leaves only its own.
+  function showOnly(userId, notice) {
+    setNotices({ [userId]: notice });
+  }
+
+  function startStatus(account) {
+    setNotices((n) => ({ ...n, [account.user_id]: null }));
+    setAsking({ id: account.user_id, kind: "status" });
+  }
+
+  function cancelStatus(account) {
+    setAsking(null);
+    focusNext.current = statusButtons.current[account.user_id] ?? null;
+  }
+
+  // Deactivates an active account or reactivates an inactive one, then
+  // reloads the list so the row shows its new state. The words are the
+  // screen's own; a refusal (the last active Staff account, say) shows the
+  // server's sentence.
+  async function changeStatus(account) {
+    const deactivating = account.is_active;
+    setAsking(null);
+    setStatusBusyId(account.user_id);
+    try {
+      await authFetch(
+        `/secretary/staff-accounts/${account.user_id}/${deactivating ? "deactivate" : "reactivate"}`,
+        { method: "POST" },
+      );
+      showOnly(account.user_id, {
+        type: "success",
+        text: deactivating
+          ? `@${account.username} is deactivated. They cannot sign in until you reactivate the account.`
+          : reactivatedLine(account),
+      });
+      await load();
+    } catch (err) {
+      setNotices((n) => ({
+        ...n,
+        [account.user_id]: { type: "error", text: err.message },
+      }));
+      // The account was already in the state asked for, so the row is out of
+      // date (another tab changed it): reload so it shows its real state,
+      // the refusal staying on it. No other refusal says anything about the
+      // row, so none reloads.
+      if (err.status === 409 && ALREADY_IN_STATE.test(err.message)) await load();
+    } finally {
+      focusNext.current = statusButtons.current[account.user_id] ?? null;
+      setStatusBusyId(null);
+    }
   }
 
   async function sendLink(account) {
-    setConfirmingId(null);
+    setAsking(null);
     setSendingId(account.user_id);
     setNotices((n) => ({ ...n, [account.user_id]: null }));
     try {
@@ -172,13 +274,10 @@ function StaffAccountList({ reloadToken }) {
         `/secretary/staff-accounts/${account.user_id}/send-set-password-link`,
         { method: "POST" },
       );
-      setNotices((n) => ({
-        ...n,
-        [account.user_id]: linkEmailNotice(
-          data.set_password_email?.status,
-          account.email,
-        ),
-      }));
+      showOnly(
+        account.user_id,
+        linkEmailNotice(data.set_password_email?.status, account.email),
+      );
       await load();
     } catch (err) {
       // A 429 is the 15-minute cooldown, and the server's sentence says when
@@ -264,7 +363,11 @@ function StaffAccountList({ reloadToken }) {
               const status = accountStatus(a);
               const notice = notices[a.user_id];
               const sending = sendingId === a.user_id;
-              const confirming = confirmingId === a.user_id;
+              const changing = statusBusyId === a.user_id;
+              const confirming = asking?.id === a.user_id && asking.kind === "send";
+              const askingStatus = asking?.id === a.user_id && asking.kind === "status";
+              // A question open in this row, or a request in flight from it.
+              const rowLocked = confirming || askingStatus || sending || changing;
               return (
                 <li key={a.user_id} className="suggestion" hidden={!matches(a)}>
                   <div className="suggestion-info">
@@ -321,20 +424,63 @@ function StaffAccountList({ reloadToken }) {
                         </div>
                       </div>
                     )}
+                    {askingStatus && (
+                      <div className="alert info">
+                        {a.is_active
+                          ? `Deactivate @${a.username}? They are blocked at once and cannot sign in until you reactivate the account. Nothing they recorded is removed.`
+                          : reactivateQuestion(a)}
+                        <div className="actions">
+                          <button
+                            className={a.is_active ? "btn secondary danger" : "btn"}
+                            type="button"
+                            onClick={() => changeStatus(a)}
+                          >
+                            {a.is_active ? "Deactivate" : "Reactivate"}
+                          </button>
+                          <button
+                            className="btn secondary"
+                            type="button"
+                            autoFocus
+                            onClick={() => cancelStatus(a)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {notice && (
                       <div className={`alert ${notice.type}`}>{notice.text}</div>
                     )}
                   </div>
+                  {/* Send stays the row's FIRST button, and both are direct
+                      children of the row. */}
                   <button
                     ref={(el) => {
                       sendButtons.current[a.user_id] = el;
                     }}
                     className="btn secondary"
                     type="button"
-                    disabled={sending || !a.is_active}
+                    disabled={rowLocked || !a.is_active}
                     onClick={() => startSend(a)}
                   >
                     {sending ? "Sending…" : "Send set-password link"}
+                  </button>
+                  <button
+                    ref={(el) => {
+                      statusButtons.current[a.user_id] = el;
+                    }}
+                    className={a.is_active ? "btn secondary danger" : "btn secondary"}
+                    type="button"
+                    disabled={rowLocked}
+                    onClick={() => startStatus(a)}
+                  >
+                    {changing
+                      ? a.is_active
+                        ? "Deactivating…"
+                        : "Reactivating…"
+                      : a.is_active
+                        ? "Deactivate"
+                        : "Reactivate"}
                   </button>
                 </li>
               );
