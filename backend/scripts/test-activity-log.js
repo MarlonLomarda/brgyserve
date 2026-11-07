@@ -215,6 +215,15 @@ const fakeFrom = (table) => {
       !!await written({ userId: 7, action: ACTIONS.CREATE, table: 'events', recordId: 90, before: {}, after: {} }));
     check('IMPORT with {} / {} is still logged',
       !!await written({ userId: 7, action: ACTIONS.IMPORT, table: 'resident_records', before: {}, after: {} }));
+    // Step O11: the staff deactivate and reactivate rows are not UPDATEs and
+    // never carry empty values, so the empty-edit rule cannot swallow them.
+    const off = await written({ userId: 7, action: ACTIONS.DEACTIVATE, table: 'users', recordId: 31,
+      before: { is_active: true }, after: { is_active: false, links_retired: 0 } });
+    const on = await written({ userId: 7, action: ACTIONS.REACTIVATE, table: 'users', recordId: 31,
+      before: { is_active: false }, after: { is_active: true } });
+    check('a staff DEACTIVATE (links_retired: 0) and a REACTIVATE are both logged, values intact',
+      JSON.stringify(off?.new_value) === '{"is_active":false,"links_retired":0}' && JSON.stringify(on?.new_value) === '{"is_active":true}',
+      `${JSON.stringify(off?.new_value)} / ${JSON.stringify(on?.new_value)}`);
     const credential = await written({ ...edit, table: 'users', recordId: 7, before: { password_hash: 'a' }, after: { password_hash: 'b' } });
     check('the rule reads the caller\'s values BEFORE scrub: a change only to a credential is logged, its values removed',
       !!credential && JSON.stringify(credential.old_value) === '{}' && JSON.stringify(credential.new_value) === '{}');
@@ -297,8 +306,8 @@ const fakeFrom = (table) => {
   const declineRoute = fs.readFileSync(path.join(ROUTES, 'rentalRequests.js'), 'utf8').replace(/\r/g, '');
   const declineAt = declineRoute.indexOf("router.post('/:id/decline'");
   const declineEnd = declineRoute.indexOf('\nrouter.', declineAt + 1);
-  check('DECLINE is an ACTIONS constant, and the vocabulary is 30 codes', ACTIONS.DECLINE === 'DECLINE'
-    && Object.keys(ACTIONS).length === 30, `${Object.keys(ACTIONS).length} codes`);
+  check('DECLINE is an ACTIONS constant, and the vocabulary is 31 codes (REACTIVATE since step O11)', ACTIONS.DECLINE === 'DECLINE'
+    && Object.keys(ACTIONS).length === 31, `${Object.keys(ACTIONS).length} codes`);
   check('  written at exactly one call site: the decline route in rentalRequests.js, on rental_requests, with reason_given',
     declineSites.length === 1 && declineSites[0].file === 'rentalRequests.js' && declineAt !== -1
       && declineRoute.slice(declineAt, declineEnd === -1 ? undefined : declineEnd).includes('action: ACTIONS.DECLINE')
@@ -308,6 +317,22 @@ const fakeFrom = (table) => {
   check('  labelled on the Activity Log page', /^\s*DECLINE:\s*\{\s*label:\s*'Declined'/m.test(
     fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'constants', 'activityLog.js'), 'utf8')),
     'frontend/src/constants/activityLog.js');
+
+  // REACTIVATE (step O11, 7 Nov 2026): the Secretary letting a deactivated
+  // official sign in again. One call site, on users, with is_active only.
+  const reactivateSites = calls.filter((c) => /action:\s*ACTIONS\.REACTIVATE\b/.test(c.body));
+  check('REACTIVATE is written at exactly one call site: secretary.js, on users, is_active false to true',
+    ACTIONS.REACTIVATE === 'REACTIVATE' && reactivateSites.length === 1 && reactivateSites[0].file === 'secretary.js'
+      && /table:\s*'users'/.test(reactivateSites[0].body)
+      && /before:\s*\{\s*is_active:\s*false\s*\}/.test(reactivateSites[0].body)
+      && /after:\s*\{\s*is_active:\s*true,\s*username:\s*account\.username,\s*role:\s*account\.role\s*\}/.test(reactivateSites[0].body),
+    reactivateSites.map((c) => `${c.file}:${c.line}`).join(', ') || 'none');
+  // The O11 follow-up: both staff rows name the account, from the account the
+  // route loaded, and nothing else about it.
+  const staffStatusSites = calls.filter((c) => c.file === 'secretary.js' && /action:\s*ACTIONS\.(DEACTIVATE|REACTIVATE)\b/.test(c.body));
+  check('  secretary.js\'s DEACTIVATE and REACTIVATE rows both log username: account.username and role: account.role, never email',
+    staffStatusSites.length === 2 && staffStatusSites.every((c) => /username:\s*account\.username,\s*role:\s*account\.role\s*\}/.test(c.body)
+      && !/email/.test(c.body)), staffStatusSites.map((c) => `${c.file}:${c.line}`).join(', ') || 'none');
 
   // The funeral waiver (design C, 29 Oct 2026): the approve route's APPROVE
   // row carries fee_waived, a code taken from PURPOSE_TYPE and only when the
@@ -364,8 +389,14 @@ const fakeFrom = (table) => {
   // The rental cancel's facts (25 Oct 2026) and the webhook's late-payment
   // row are markers too: none is a column the page already knows.
   // fee_waived: an approval whose fee the Secretary waived (design C).
+  // links_retired: a staff deactivation's count of set-password links it
+  // retired (step O11). username and role: the account a staff DEACTIVATE or
+  // REACTIVATE row acted on (the O11 follow-up). They are copied from the
+  // account, as the CREATE row copies them, but on those rows they name the
+  // record rather than a change, so the page must word them itself.
   const LOG_MARKERS = ['parties_renamed', 'charge_outcome', 'refund_due', 'session_expired',
-    'session_expire_failure', 'reason_given', 'gateway_payment_id', 'fee_waived'];
+    'session_expire_failure', 'reason_given', 'gateway_payment_id', 'fee_waived', 'links_retired',
+    'username', 'role'];
   const markersMissing = LOG_MARKERS.filter((m) => !new RegExp(`^\\s*${m}:\\s*'`, 'm').test(frontendVocab)
     || !fs.readdirSync(ROUTES).some((f) => fs.readFileSync(path.join(ROUTES, f), 'utf8').includes(m)));
   check('every log marker a route writes is labelled in the frontend', markersMissing.length === 0,

@@ -225,7 +225,8 @@
 // document request (Pay once it is approved) apart from a rental (Pay once
 // the Secretary approves the request, since batch R2c, as "How do I reserve
 // a barangay facility or equipment?" also says). docs/legal-copy.md says the
-// same words; the Terms and the Privacy Policy are dated 6 November 2026.
+// same words; the Terms are dated 6 November 2026 and the Privacy Policy 7
+// November 2026 (step O11).
 //
 // Section AL is Book a rental's two messages and its Try again: the server's
 // refusal of a booking is read out (role="alert"), as the time message and
@@ -14102,7 +14103,10 @@ const root = () => dom.window.document.getElementById('root');
     // declining, and a facility booking request), so its date moved too.
     // Section AM reads the paragraph.
     const TERMS_DATE = 'Effective: 6 November 2026';
-    const PRIVACY_DATE = 'Effective: 6 November 2026';
+    // Step O11 (7 Nov 2026) added deactivating and reactivating an official's
+    // account to the log paragraph, so the Privacy Policy's date moved; the
+    // Terms did not change.
+    const PRIVACY_DATE = 'Effective: 7 November 2026';
     const lines = (blocks) => blocks.map((b) => `${b.tag}: ${b.text}`);
     const has = (blocks, o) => blocks.some((b) => b.text.includes(o));
 
@@ -14212,7 +14216,7 @@ const root = () => dom.window.document.getElementById('root');
     check(`the Terms of Use are dated "${TERMS_DATE}", in the modal and in docs/legal-copy.md, since they changed`,
       terms.effective === TERMS_DATE && termsMd.raw.includes(`*${TERMS_DATE}*`),
       said({ modal: terms.effective, md: termsMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
-    check(`the Privacy Policy is dated "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since step B2 changed it`,
+    check(`the Privacy Policy is dated "${PRIVACY_DATE}", in the modal and in docs/legal-copy.md, since step O11 changed it`,
       privacy.effective === PRIVACY_DATE && privacyMd.raw.includes(`*${PRIVACY_DATE}*`),
       said({ modal: privacy.effective, md: privacyMd.raw.find((l) => /^\*Effective/.test(l)) ?? null }));
     check('opening the three modals sent no request', terms.sent + help.sent + privacy.sent === 0,
@@ -15029,8 +15033,8 @@ const root = () => dom.window.document.getElementById('root');
     // request, so the paragraph names both.
     const LOG_PARA = 'BrgyServe keeps a log of the actions Barangay officials and staff take on records: adding, editing, '
       + 'archiving, approving and declining them, recording payments, recording event attendance, recording blotter cases, '
-      + 'and sending an official a set-password link. Actions of yours that change a record are logged too: registering, '
-      + 'submitting or cancelling a request, requesting a facility booking, cancelling a rental booking, declaring a '
+      + "sending an official a set-password link, and deactivating or reactivating an official's account. Actions of yours "
+      + 'that change a record are logged too: registering, submitting or cancelling a request, requesting a facility booking, cancelling a rental booking, declaring a '
       + 'payment, having a GCash payment confirmed, changing or resetting your password, and setting your password from an '
       + 'emailed set-password link. A GCash payment received after its booking was cancelled is also recorded in this log. '
       + 'When a facility booking request is approved or declined, the log records which official decided it and when, but '
@@ -18732,6 +18736,371 @@ const root = () => dom.window.document.getElementById('root');
       said({ writes: methods.filter((m) => m !== 'GET'), jsdom: domStorage.writes - kept.dom }));
     if (previousTZAW === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZAW;
+  }
+
+  // =========================================================================
+  // AX. The Staff accounts page: Deactivate and Reactivate (step O11)
+  // =========================================================================
+  // Each row's second button deactivates an active account or reactivates an
+  // inactive one, after a question in the row. Send stays the row's FIRST
+  // direct-child button (sendButtonOf, section L, depends on it). While a
+  // question is open or a request is in flight, both of the row's buttons are
+  // disabled. The question says "blocked", never "signed out": an official
+  // already signed in is refused on their next request, not signed out. A
+  // refusal shows the server's own sentence; the last active Staff account's
+  // must be readable. The Privacy Policy's log paragraph names the action, in
+  // the modal and in docs/legal-copy.md (section AM compares them whole).
+  console.log('\n--- Staff accounts: Deactivate and Reactivate (step O11) ---');
+  {
+    const fs = require('fs');
+    const said = (v) => JSON.stringify(v);
+    const flat = (t) => (t ?? '').replace(/\s+/g, ' ').trim();
+    const rowButtons = (page, u) => [...(rowOf(page, u)?.children || [])].filter((c) => c.tagName === 'BUTTON');
+    const statusButtonOf = (page, u) => rowButtons(page, u)[1] ?? null;
+    // The question's own words, without its buttons' labels.
+    const questionWords = (page, u) => {
+      const q = questionIn(page, u);
+      return q ? flat([...q.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('')) : null;
+    };
+    const DEACT_Q = (u) => `Deactivate @${u}? They are blocked at once and cannot sign in until you reactivate the account. Nothing they recorded is removed.`;
+    const REACT_Q = (u) => `Reactivate @${u}? They can sign in again with their current password.`;
+    const DEACT_OK = (u) => `@${u} is deactivated. They cannot sign in until you reactivate the account.`;
+    const REACT_OK = (u) => `@${u} is reactivated. They can sign in again with their current password.`;
+    const LAST_STAFF = '@staff_mabini is the only active Staff account. Only Staff can mark rental returns, so nobody could '
+      + 'record a return. Create or reactivate another Staff account first.';
+    const path_ = (c) => `${c.method} ${c.url.replace(/^https?:\/\/[^/]+\/api/, '')}`;
+    const methods = [];
+    const kept = { sets: store.sets, dom: domStorage.writes };
+
+    // A list the stub keeps, so a reload after a change shows the new state.
+    let list = STAFF_LIST.map((a) => ({ ...a }));
+    let refuse = null; // { status, body } to answer the next status change with
+    const statusReply = (url, method) => {
+      const m = method === 'POST' && url.match(/\/secretary\/staff-accounts\/(\d+)\/(deactivate|reactivate)$/);
+      if (!m) return undefined;
+      if (refuse) return undefined;
+      const id = Number(m[1]);
+      list = list.map((a) => (a.user_id === id ? { ...a, is_active: m[2] === 'reactivate' } : a));
+      return { message: 'server words, not shown', user_id: id };
+    };
+    seedSession(VALID);
+    resetNet(200, (url, method) => statusReply(url, method)
+      ?? (method === 'GET' && url.endsWith('/secretary/staff-accounts') ? { accounts: list } : answer(STAFF_PROFILE)(url, method)));
+    let page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await page.settle();
+
+    const labels = STAFF_LIST.map((a) => `${a.username}: ${rowButtons(page, a.username).map((b) => b.textContent).join(' | ')}`);
+    check('every row has exactly two buttons, both direct children of the row: "Send set-password link" FIRST, then '
+        + '"Deactivate" on an active account and "Reactivate" on an inactive one',
+      said(labels) === said([
+        'staff_old: Send set-password link | Reactivate',
+        'staff_mabini: Send set-password link | Deactivate',
+        'treasurer_dela_cruz: Send set-password link | Deactivate',
+        'kap_reyes: Send set-password link | Deactivate',
+      ]) && STAFF_LIST.every((a) => sendButtonOf(page, a.username)?.textContent === 'Send set-password link'),
+      said(labels));
+    check('  the inactive row keeps its grey "Inactive" badge and its disabled Send, and its Reactivate is enabled',
+      rowOf(page, 'staff_old')?.querySelector('.badge.gray')?.textContent === 'Inactive'
+        && sendButtonOf(page, 'staff_old')?.disabled === true && statusButtonOf(page, 'staff_old')?.disabled === false);
+
+    // --- Deactivate: the question, Cancel, and the focus ---
+    let callsSoFar = net.calls.length;
+    await clickIf(page, statusButtonOf(page, 'staff_mabini'));
+    check('Deactivate asks first, in its row, word for word, and sends nothing',
+      questionWords(page, 'staff_mabini') === DEACT_Q('staff_mabini') && net.calls.length === callsSoFar,
+      said(questionWords(page, 'staff_mabini')));
+    check('  it never says "signed out"', !!questionIn(page, 'staff_mabini') && !/signed out/i.test(questionIn(page, 'staff_mabini').textContent));
+    check('  the focus is on Cancel, and both of the row\'s buttons are disabled while it is open',
+      page.active()?.textContent === 'Cancel' && !!questionIn(page, 'staff_mabini')?.contains(page.active())
+        && rowButtons(page, 'staff_mabini').length === 2 && rowButtons(page, 'staff_mabini').every((b) => b.disabled),
+      said({ focus: page.active()?.textContent ?? null, disabled: rowButtons(page, 'staff_mabini').map((b) => b.disabled) }));
+    await clickIf(page, questionIn(page, 'staff_mabini') && buttonNamed(questionIn(page, 'staff_mabini'), 'Cancel'));
+    check('  Cancel closes it, sends nothing, and hands the focus back to the row\'s Deactivate',
+      !questionIn(page, 'staff_mabini') && net.calls.length === callsSoFar && !!statusButtonOf(page, 'staff_mabini')
+        && page.active() === statusButtonOf(page, 'staff_mabini') && rowButtons(page, 'staff_mabini').every((b) => !b.disabled),
+      said(page.active()?.textContent ?? null));
+
+    // --- Deactivate: confirmed ---
+    await clickIf(page, statusButtonOf(page, 'staff_mabini'));
+    callsSoFar = net.calls.length;
+    await clickIf(page, questionIn(page, 'staff_mabini') && buttonNamed(questionIn(page, 'staff_mabini'), 'Deactivate'));
+    await page.settle();
+    let sent = net.calls.slice(callsSoFar).map(path_);
+    check('  confirming posts once to /deactivate, then reloads the list',
+      said(sent) === said(['POST /secretary/staff-accounts/63/deactivate', 'GET /secretary/staff-accounts']), said(sent));
+    check('  the row shows the short success line, the "Inactive" badge, "Reactivate", and a disabled Send',
+      rowOf(page, 'staff_mabini')?.querySelector('.alert.success')?.textContent === DEACT_OK('staff_mabini')
+        && rowOf(page, 'staff_mabini')?.querySelector('.badge')?.textContent === 'Inactive'
+        && statusButtonOf(page, 'staff_mabini')?.textContent === 'Reactivate' && sendButtonOf(page, 'staff_mabini')?.disabled === true,
+      said(rowOf(page, 'staff_mabini')?.querySelector('.alert')?.textContent ?? null));
+    check('  and the focus is on that row\'s button again', page.active() === statusButtonOf(page, 'staff_mabini'),
+      said(page.active()?.textContent ?? null));
+
+    // --- Reactivate ---
+    await clickIf(page, statusButtonOf(page, 'staff_old'));
+    check('Reactivate asks first, word for word, with the focus on Cancel and both row buttons disabled',
+      questionWords(page, 'staff_old') === REACT_Q('staff_old') && page.active()?.textContent === 'Cancel'
+        && rowButtons(page, 'staff_old').every((b) => b.disabled),
+      said(questionWords(page, 'staff_old')));
+    await clickIf(page, questionIn(page, 'staff_old') && buttonNamed(questionIn(page, 'staff_old'), 'Cancel'));
+    check('  Cancel hands the focus back to the row\'s Reactivate', !questionIn(page, 'staff_old') && page.active() === statusButtonOf(page, 'staff_old'));
+    await clickIf(page, statusButtonOf(page, 'staff_old'));
+    callsSoFar = net.calls.length;
+    await clickIf(page, questionIn(page, 'staff_old') && buttonNamed(questionIn(page, 'staff_old'), 'Reactivate'));
+    await page.settle();
+    sent = net.calls.slice(callsSoFar).map(path_);
+    check('  confirming posts once to /reactivate and reloads; the row says so, shows "Deactivate", and Send is enabled again',
+      said(sent) === said(['POST /secretary/staff-accounts/64/reactivate', 'GET /secretary/staff-accounts'])
+        && rowOf(page, 'staff_old')?.querySelector('.alert.success')?.textContent === REACT_OK('staff_old')
+        && statusButtonOf(page, 'staff_old')?.textContent === 'Deactivate' && sendButtonOf(page, 'staff_old')?.disabled === false,
+      said({ sent, line: rowOf(page, 'staff_old')?.querySelector('.alert')?.textContent ?? null }));
+
+    // --- the send question locks the row too, and one question at a time ---
+    await clickIf(page, sendButtonOf(page, 'kap_reyes'));
+    const sendLocks = !!questionIn(page, 'kap_reyes') && statusButtonOf(page, 'kap_reyes')?.disabled === true;
+    await clickIf(page, statusButtonOf(page, 'treasurer_dela_cruz'));
+    check('the "send a link?" question disables the row\'s Deactivate too, and opening another row\'s question closes it',
+      sendLocks && !questionIn(page, 'kap_reyes') && questionWords(page, 'treasurer_dela_cruz') === DEACT_Q('treasurer_dela_cruz'),
+      said({ sendLocks, kap: !!questionIn(page, 'kap_reyes') }));
+    await clickIf(page, questionIn(page, 'treasurer_dela_cruz') && buttonNamed(questionIn(page, 'treasurer_dela_cruz'), 'Cancel'));
+
+    // --- a refusal: the last active Staff account ---
+    list = list.map((a) => (a.user_id === 63 ? { ...a, is_active: true } : a));
+    await page.unmount();
+    methods.push(...net.calls.map((c) => c.method));
+    refuse = { status: 409, body: { error: LAST_STAFF, code: 'LAST_ACTIVE_STAFF' } };
+    seedSession(VALID);
+    resetNet(200);
+    net.hold = true;
+    page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    release(0, 200, { accounts: list });
+    await page.settle();
+    await clickIf(page, statusButtonOf(page, 'staff_mabini'));
+    await clickIf(page, questionIn(page, 'staff_mabini') && buttonNamed(questionIn(page, 'staff_mabini'), 'Deactivate'));
+    await page.settle();
+    check('while the request is in flight, the question is closed, both row buttons are disabled and the button says "Deactivating…"',
+      !questionIn(page, 'staff_mabini') && rowButtons(page, 'staff_mabini').every((b) => b.disabled)
+        && statusButtonOf(page, 'staff_mabini')?.textContent === 'Deactivating…',
+      said(rowButtons(page, 'staff_mabini').map((b) => `${b.textContent}${b.disabled ? ' (disabled)' : ''}`)));
+    release(1, 409, refuse.body);
+    await page.settle();
+    check('the last active Staff account\'s refusal shows the server\'s sentence in the row, as an error, readable whole',
+      rowOf(page, 'staff_mabini')?.querySelector('.alert.error')?.textContent === LAST_STAFF,
+      said(rowOf(page, 'staff_mabini')?.querySelector('.alert')?.textContent ?? null));
+    check('  nothing reloaded, the row still says "Deactivate" and is usable, and the focus is back on it',
+      net.calls.length === 2 && statusButtonOf(page, 'staff_mabini')?.textContent === 'Deactivate'
+        && rowButtons(page, 'staff_mabini').every((b) => !b.disabled) && page.active() === statusButtonOf(page, 'staff_mabini'),
+      said({ calls: net.calls.map(path_), focus: page.active()?.textContent ?? null }));
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // --- an inactive account that may never have set a password ---
+    // must_change_password is on every row of GET /secretary/staff-accounts.
+    // It is true both for an account still waiting for its emailed link and
+    // for one on a temporary password, and nothing in the list tells the two
+    // apart, so the words hold for both. Deactivating retired its links, so
+    // "their current password" would be untrue for the first kind.
+    const WAITING = { user_id: 65, username: 'staff_never_set', role: 'staff', email: 'never.set@example.invalid',
+      is_active: false, must_change_password: true, last_link_sent_at: '2026-10-20T01:00:00Z' };
+    const WAIT_Q = 'Reactivate @staff_never_set? If they have not set a password yet, use "Send set-password link" after reactivating.';
+    const WAIT_OK = '@staff_never_set is reactivated. If they have not set a password yet, use "Send set-password link" to send them one.';
+    list = [{ ...WAITING }, ...STAFF_LIST.map((a) => ({ ...a }))];
+    refuse = null;
+    seedSession(VALID);
+    resetNet(200, (url, method) => statusReply(url, method)
+      ?? (method === 'GET' && url.endsWith('/secretary/staff-accounts') ? { accounts: list } : answer(STAFF_PROFILE)(url, method)));
+    page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+    await page.settle();
+    await clickIf(page, statusButtonOf(page, 'staff_never_set'));
+    check('Reactivate on an account still on must_change_password says to send a set-password link, never "their current password"',
+      questionWords(page, 'staff_never_set') === WAIT_Q && !/current password/.test(questionIn(page, 'staff_never_set')?.textContent || 'current password'),
+      said(questionWords(page, 'staff_never_set')));
+    await clickIf(page, questionIn(page, 'staff_never_set') && buttonNamed(questionIn(page, 'staff_never_set'), 'Reactivate'));
+    await page.settle();
+    check('  and its success line says the same, with Send enabled again to do it',
+      rowOf(page, 'staff_never_set')?.querySelector('.alert.success')?.textContent === WAIT_OK
+        && sendButtonOf(page, 'staff_never_set')?.disabled === false,
+      said(rowOf(page, 'staff_never_set')?.querySelector('.alert')?.textContent ?? null));
+    await clickIf(page, statusButtonOf(page, 'staff_old'));
+    check('  while an account not on must_change_password keeps "They can sign in again with their current password."',
+      questionWords(page, 'staff_old') === REACT_Q('staff_old'), said(questionWords(page, 'staff_old')));
+    await clickIf(page, questionIn(page, 'staff_old') && buttonNamed(questionIn(page, 'staff_old'), 'Cancel'));
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+
+    // --- the O11 follow-up: an out-of-date row, and notices that go stale ---
+    // A refusal because the account is ALREADY in the state asked for means
+    // the row on screen is out of date (another tab changed it), so the list
+    // reloads and the row shows its real state, the refusal still on it. No
+    // other refusal says anything about the row, so none reloads. A success on
+    // any row clears every OTHER row's notice: it may have made one untrue.
+    {
+      const ALREADY_OFF = '@staff_mabini is already deactivated.';
+      const ALREADY_ON = '@staff_old is already active.';
+      const OWN = 'You cannot change your own account here.';
+      const LAST_OLD = LAST_STAFF.replace('@staff_mabini', '@staff_old');
+      const errorIn = (u) => rowOf(page, u)?.querySelector('.alert.error')?.textContent ?? null;
+      const badgeOf = (u) => rowOf(page, u)?.querySelector('.badge')?.textContent ?? null;
+      const withState = (base, changes) => base.map((a) => (a.user_id in changes ? { ...a, is_active: changes[a.user_id] } : a));
+      // Answers the request in flight (every one is held), then the reload if
+      // the page sent one. Never assumes an index, so the old code's missing
+      // reload fails checks instead of jamming the rest of the run.
+      const answerLatest = (status, body) => release(net.held.length - 1, status, body);
+      const refuseThen = async (u, label, status, body, reloadList) => {
+        await clickIf(page, statusButtonOf(page, u));
+        await clickIf(page, questionIn(page, u) && buttonNamed(questionIn(page, u), label));
+        await page.settle();
+        const at = net.calls.length;
+        answerLatest(status, body);
+        await page.settle();
+        if (net.calls.length > at && reloadList) {
+          answerLatest(200, { accounts: reloadList });
+          await page.settle();
+        }
+        return net.calls.slice(at - 1).map(path_);
+      };
+      const shown = STAFF_LIST.map((a) => ({ ...a })); // staff_old inactive, the other three active
+      const real1 = withState(shown, { 63: false }); // another tab deactivated staff_mabini
+      const real2 = withState(shown, { 63: false, 64: true }); // and reactivated staff_old
+      seedSession(VALID);
+      resetNet(200);
+      net.hold = true;
+      page = await globalThis.mountInteractive(root(), '/secretary/staff-accounts');
+      answerLatest(200, { accounts: shown });
+      await page.settle();
+
+      let seen = await refuseThen('staff_mabini', 'Deactivate', 409, { error: ALREADY_OFF }, real1);
+      check('"already deactivated" (another tab got there first): the page reloads the list after the refusal',
+        said(seen) === said(['POST /secretary/staff-accounts/63/deactivate', 'GET /secretary/staff-accounts']), said(seen));
+      check('  and the row shows its real state, "Inactive" with a Reactivate button, keeping the refusal in the row',
+        badgeOf('staff_mabini') === 'Inactive' && statusButtonOf(page, 'staff_mabini')?.textContent === 'Reactivate'
+          && errorIn('staff_mabini') === ALREADY_OFF,
+        said({ badge: badgeOf('staff_mabini'), button: statusButtonOf(page, 'staff_mabini')?.textContent, error: errorIn('staff_mabini') }));
+      seen = await refuseThen('staff_old', 'Reactivate', 409, { error: ALREADY_ON }, real2);
+      check('"already active" on Reactivate: the same, the list reloads',
+        said(seen) === said(['POST /secretary/staff-accounts/64/reactivate', 'GET /secretary/staff-accounts']), said(seen));
+      check('  and the row shows "Active" with a Deactivate button, keeping the refusal',
+        badgeOf('staff_old') === 'Active' && statusButtonOf(page, 'staff_old')?.textContent === 'Deactivate' && errorIn('staff_old') === ALREADY_ON,
+        said({ badge: badgeOf('staff_old'), button: statusButtonOf(page, 'staff_old')?.textContent, error: errorIn('staff_old') }));
+      // The page recognises the two sentences, so they must still be the
+      // server's: a rewording there would silently stop the reload.
+      const routeSrc = fs.readFileSync(path.join(HERE, '..', '..', 'backend', 'src', 'routes', 'secretary.js'), 'utf8');
+      check('  the two sentences the page recognises are still the routes\' own (routes/secretary.js)',
+        routeSrc.includes('`@${account.username} is already deactivated.`') && routeSrc.includes('`@${account.username} is already active.`'));
+
+      const refusals = [
+        await refuseThen('treasurer_dela_cruz', 'Deactivate', 404, { error: 'Staff account not found' }, real2),
+        await refuseThen('kap_reyes', 'Deactivate', 409, { error: OWN }, real2),
+        await refuseThen('staff_old', 'Deactivate', 409, { error: LAST_OLD, code: 'LAST_ACTIVE_STAFF' }, real2),
+        await refuseThen('staff_mabini', 'Reactivate', 500, { error: 'Something went wrong on the server.' }, real2),
+      ];
+      check('the other refusals do NOT reload: not found (404), your own account (409), the last active Staff (409), a server error (500)',
+        refusals.every((s) => s.length === 1 && s[0].startsWith('POST ')), said(refusals));
+      check('  and each shows its own sentence in its own row',
+        errorIn('treasurer_dela_cruz') === 'Staff account not found' && errorIn('kap_reyes') === OWN
+          && errorIn('staff_old') === LAST_OLD && errorIn('staff_mabini') === 'Something went wrong on the server.',
+        said(['treasurer_dela_cruz', 'kap_reyes', 'staff_old', 'staff_mabini'].map(errorIn)));
+
+      // @staff2's walkthrough: a refusal naming the last active Staff account
+      // outlived the reactivation that made it untrue.
+      const real3 = withState(real2, { 63: true });
+      seen = await refuseThen('staff_mabini', 'Reactivate', 200, { message: 'server words, not shown', user_id: 63 }, real3);
+      check('a success on one row clears the notices on every OTHER row (here @staff_old\'s "only active Staff account")',
+        said(seen) === said(['POST /secretary/staff-accounts/63/reactivate', 'GET /secretary/staff-accounts'])
+          && ['treasurer_dela_cruz', 'kap_reyes', 'staff_old'].every((u) => !rowOf(page, u)?.querySelector('.alert')),
+        said({ seen, left: ['treasurer_dela_cruz', 'kap_reyes', 'staff_old'].map((u) => rowOf(page, u)?.querySelector('.alert')?.textContent ?? null) }));
+      check('  while its own success line stays', rowOf(page, 'staff_mabini')?.querySelector('.alert.success')?.textContent === REACT_OK('staff_mabini'),
+        said(rowOf(page, 'staff_mabini')?.querySelector('.alert')?.textContent ?? null));
+
+      // A link sent is a success too.
+      await refuseThen('treasurer_dela_cruz', 'Deactivate', 404, { error: 'Staff account not found' }, real3);
+      await clickIf(page, sendButtonOf(page, 'kap_reyes'));
+      await clickIf(page, questionIn(page, 'kap_reyes') && buttonNamed(questionIn(page, 'kap_reyes'), 'Send link'));
+      await page.settle();
+      let at = net.calls.length;
+      answerLatest(200, { set_password_email: { ok: true, status: 'SIMULATED' } });
+      await page.settle();
+      if (net.calls.length > at) { answerLatest(200, { accounts: real3 }); await page.settle(); }
+      check('  so is a link sent from another row: it clears @treasurer_dela_cruz\'s refusal and keeps its own notice',
+        !rowOf(page, 'treasurer_dela_cruz')?.querySelector('.alert') && !!rowOf(page, 'kap_reyes')?.querySelector('.alert'),
+        said({ tdc: rowOf(page, 'treasurer_dela_cruz')?.querySelector('.alert')?.textContent ?? null,
+          kap: rowOf(page, 'kap_reyes')?.querySelector('.alert')?.textContent ?? null }));
+      methods.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // --- the Activity Log names the account a staff row acted on ---
+    // Since the O11 follow-up a staff DEACTIVATE or REACTIVATE row carries the
+    // account's username and role. Rows written before then have neither and
+    // read exactly as they did; the CREATE row and other tables are unchanged.
+    {
+      const ACTOR = { user_id: 1, name: 'Sec One', username: 'secretary1', role: 'secretary' };
+      const logRow = (log_id, action, table_name, record_id, old_value, new_value) => ({
+        log_id, action, table_name, record_id, old_value, new_value, actor: ACTOR, timestamp: '2026-11-07T02:00:00Z' });
+      const LOGS = [
+        logRow(1, 'DEACTIVATE', 'users', 146, { is_active: true }, { is_active: false, links_retired: 0, username: 'jeeeffooord', role: 'treasurer' }),
+        logRow(2, 'REACTIVATE', 'users', 15, { is_active: false }, { is_active: true, username: 'staff2', role: 'staff' }),
+        logRow(3, 'DEACTIVATE', 'users', 146, { is_active: true }, { is_active: false, links_retired: 0 }),
+        logRow(4, 'REACTIVATE', 'users', 15, { is_active: false }, { is_active: true }),
+        logRow(5, 'CREATE', 'users', 146, null, { username: 'jeeeffooord', role: 'treasurer', delivery: 'email', email_status: 'SENT' }),
+        logRow(6, 'DEACTIVATE', 'document_types', 3, { is_active: true }, { is_active: false }),
+      ];
+      const WANT = [
+        ['Account #146', '@jeeeffooord, Barangay Treasurer: Active to Inactive · no unused set-password link'],
+        ['Account #15', '@staff2, Barangay Staff: Inactive to Active'],
+        ['Account #146', 'Active to Inactive · no unused set-password link'],
+        ['Account #15', 'Inactive to Active'],
+        ['Account #146', 'Barangay Treasurer account @jeeeffooord · set-password link emailed'],
+        ['Document type #3', 'Active to Inactive'],
+      ];
+      seedSession(VALID);
+      resetNet(200, (url, method) => (method === 'GET' && /\/activity-logs\?/.test(url)
+        ? { logs: LOGS, total: LOGS.length, page: 1, per_page: 25, total_pages: 1 } : answer(STAFF_PROFILE)(url, method)));
+      page = await globalThis.mountInteractive(root(), '/secretary/activity-log');
+      await page.settle();
+      const cells = page.queryAll('table.data-table tbody tr').map((tr) => [
+        flat(tr.querySelector('td[data-label="Record"]')?.textContent), flat(tr.querySelector('td[data-label="Change"] .cell-clamp')?.textContent)]);
+      check('the Activity Log names the account on a new staff Deactivate or Reactivate row: "@jeeeffooord, Barangay Treasurer: '
+          + 'Active to Inactive · no unused set-password link", "@staff2, Barangay Staff: Inactive to Active"',
+        said(cells.slice(0, 2)) === said(WANT.slice(0, 2)), said(cells.slice(0, 2)));
+      check('  a row written before (no username) reads exactly as it did, with no blank and no crash',
+        said(cells.slice(2, 4)) === said(WANT.slice(2, 4)), said(cells.slice(2, 4)));
+      check('  the staff CREATE row and another table\'s Deactivate are unchanged',
+        said(cells.slice(4)) === said(WANT.slice(4)), said(cells.slice(4)));
+      const L = globalThis.activityLog || {};
+      const sum = (action, table, before, after) => (typeof L.summarize === 'function'
+        ? L.summarize({ action, table_name: table, record_id: 9, old_value: before, new_value: after }) : null);
+      check('  with links retired: "@kap_reyes, Punong Barangay: Active to Inactive · 2 unused set-password links retired"',
+        sum('DEACTIVATE', 'users', { is_active: true }, { is_active: false, links_retired: 2, username: 'kap_reyes', role: 'punong_barangay' })
+          === '@kap_reyes, Punong Barangay: Active to Inactive · 2 unused set-password links retired');
+      check('  and a resident\'s ACTIVATE still reads "Pending to Active"',
+        sum('ACTIVATE', 'users', { is_active: false }, { is_active: true }) === 'Pending to Active');
+      methods.push(...net.calls.map((c) => c.method));
+      await page.unmount();
+    }
+
+    // --- the Privacy Policy names the action, in the modal and the markdown ---
+    const CLAUSE = "sending an official a set-password link, and deactivating or reactivating an official's account.";
+    seedSession(null);
+    resetNet(200);
+    page = await globalThis.mountInteractive(root(), '/login');
+    await page.settle();
+    await clickIf(page, page.queryAll('.legal-links a').find((a) => a.textContent.trim() === 'Privacy Policy'));
+    const logHeading = page.queryAll('.legal-modal-body h4').find((h) => flat(h.textContent) === 'A log of changes to records');
+    const modalPara = flat(logHeading?.nextElementSibling?.textContent);
+    methods.push(...net.calls.map((c) => c.method));
+    await page.unmount();
+    const md = fs.readFileSync(path.join(HERE, '..', '..', 'docs', 'legal-copy.md'), 'utf8').replace(/\r\n/g, '\n');
+    const mdAt = md.indexOf('#### A log of changes to records');
+    const mdPara = mdAt < 0 ? null : flat(md.slice(mdAt).split('\n\n')[1]);
+    check('the Privacy Policy\'s log paragraph names "deactivating or reactivating an official\'s account", in the modal '
+        + '(LegalPrivacy.jsx) and in docs/legal-copy.md alike',
+      modalPara.includes(CLAUSE) && !!mdPara && mdPara.includes(CLAUSE) && modalPara === mdPara, said({ modalPara, mdPara }));
+
+    check('section AX\'s only writes were its thirteen POSTs (status changes, refusals and one link sent), each answered by '
+        + 'the fetch stub; nothing kept in the browser',
+      said(methods.filter((m) => m !== 'GET')) === said(Array(13).fill('POST')) && domStorage.writes === kept.dom,
+      said({ writes: methods.filter((m) => m !== 'GET'), jsdom: domStorage.writes - kept.dom }));
   }
 
   console.error = origError;

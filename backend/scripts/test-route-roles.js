@@ -38,6 +38,12 @@
 // rentals:test's job; this file checks who reaches each route at all, and
 // that /mine and /availability are declared before /:id.
 //
+// secretary.js joined with step O11 (7 Nov 2026), when the Staff accounts
+// page gained Deactivate and Reactivate. Like charges.js it guards at the
+// ROUTER level, router.use(authenticate, requireRole('secretary')), so every
+// route in it is the Secretary's and a route added later fails closed.
+// Which accounts each route may change is staff:test's job.
+//
 // WHY THIS EXISTS. Both files used to be Secretary-only: residentRecords.js
 // opened with `router.use(authenticate, requireRole('secretary'))`, so every
 // route in it failed closed by default. Giving the Punong Barangay and Staff
@@ -70,6 +76,7 @@ const activityLogs = require(path.join(__dirname, '..', 'src', 'routes', 'activi
 const charges = require(path.join(__dirname, '..', 'src', 'routes', 'charges.js'));
 const rentalRequests = require(path.join(__dirname, '..', 'src', 'routes', 'rentalRequests.js'));
 const rentalSettings = require(path.join(__dirname, '..', 'src', 'routes', 'rentalSettings.js'));
+const secretary = require(path.join(__dirname, '..', 'src', 'routes', 'secretary.js'));
 const supabase = require(path.join(__dirname, '..', 'src', 'config', 'supabase.js'));
 const { withholdPersonal } = require(path.join(__dirname, '..', 'src', 'services', 'activityLog.js'));
 const { isSensitiveKey, isPersonalKey, PERSONAL_FIELDS } = require(path.join(__dirname, '..', 'src', 'constants', 'activityLog.js'));
@@ -163,6 +170,20 @@ const EXPECTED = {
     'POST /:id/approve': SECRETARY_ONLY,     // a pending request: confirmed, with its charge (migration 027)
     'POST /:id/decline': SECRETARY_ONLY,     // a pending request: declined, with a reason (migration 027)
     'POST /:id/return': STAFF_ONLY,          // Staff's one write action
+  },
+  'secretary.js': {
+    'POST /accounts': SECRETARY_ONLY,
+    'GET /staff-accounts': SECRETARY_ONLY,
+    'POST /staff-accounts/:userId/send-set-password-link': SECRETARY_ONLY,
+    'POST /staff-accounts/:userId/deactivate': SECRETARY_ONLY,   // step O11
+    'POST /staff-accounts/:userId/reactivate': SECRETARY_ONLY,   // step O11
+    'GET /pending-residents': SECRETARY_ONLY,
+    'GET /pending-residents/:userId/match-suggestions': SECRETARY_ONLY,
+    'POST /pending-residents/:userId/link': SECRETARY_ONLY,
+    'POST /pending-residents/:userId/create-resident': SECRETARY_ONLY,
+    'POST /pending-residents/:userId/activate': SECRETARY_ONLY,
+    'POST /pending-residents/:userId/reject': SECRETARY_ONLY,
+    'POST /pending-residents/:userId/unreject': SECRETARY_ONLY,
   },
   'rentalSettings.js': {
     'GET /': ALL_ROLES,                      // how far ahead a booking may start (a constant since step O43): every booking form shows it
@@ -301,10 +322,11 @@ const asUser = (role) => ({ user_id: 1, username: `probe_${role}`, role });
   auditRouter('charges.js', charges);
   auditRouter('rentalRequests.js', rentalRequests);
   auditRouter('rentalSettings.js', rentalSettings);
+  auditRouter('secretary.js', secretary);
 
   // -- every route carries authenticate at the router level -----------------
   section('router-level authenticate');
-  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges], ['rentalRequests.js', rentalRequests], ['rentalSettings.js', rentalSettings]]) {
+  for (const [label, router] of [['residentRecords.js', residentRecords], ['documentRequests.js', documentRequests], ['disputes.js', disputes], ['activityLogs.js', activityLogs], ['charges.js', charges], ['rentalRequests.js', rentalRequests], ['rentalSettings.js', rentalSettings], ['secretary.js', secretary]]) {
     const hasAuth = router.stack.some((l) => !l.route && l.handle?.name === 'authenticate');
     check(`${label} mounts authenticate at the router level`, hasAuth);
   }
